@@ -213,6 +213,22 @@ function sectionTitle(text: string): Paragraph {
   });
 }
 
+function unnumberedTitle(text: string): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 240, after: 240, line: ONE_AND_HALF_LINE },
+    children: [
+      new TextRun({
+        text: text.toUpperCase(),
+        bold: true,
+        font: UFLA_RULES.typography.fontFamily,
+        size: BODY_SIZE,
+        color: BLACK,
+      }),
+    ],
+  });
+}
+
 function pageBreak(): Paragraph {
   return new Paragraph({ children: [new PageBreak()] });
 }
@@ -312,6 +328,30 @@ function hasEditorHeading(blocks: EditorBlock[], heading: string): boolean {
   );
 }
 
+function normalizedHeadingBase(text: string): string {
+  return normalizeForDetection(text).replace(/^\d+(?:\.\d+)*\s*/, "");
+}
+
+function isConclusionEquivalentHeading(text: string): boolean {
+  return ["CONCLUSAO", "CONSIDERACOES FINAIS"].includes(normalizedHeadingBase(text));
+}
+
+function hasEditorConclusionHeading(blocks: EditorBlock[]): boolean {
+  return blocks.some(
+    (block) =>
+      (block.type === "heading1" || block.type === "heading2") &&
+      isConclusionEquivalentHeading(block.text),
+  );
+}
+
+function usesFinalConsiderationsHeading(blocks: EditorBlock[]): boolean {
+  return blocks.some(
+    (block) =>
+      (block.type === "heading1" || block.type === "heading2") &&
+      normalizedHeadingBase(block.text) === "CONSIDERACOES FINAIS",
+  );
+}
+
 function fieldSectionBlocks(fields: AcademicFields, bodyBlocks: EditorBlock[]): EditorBlock[] {
   const nextBlocks = [...bodyBlocks];
 
@@ -322,14 +362,56 @@ function fieldSectionBlocks(fields: AcademicFields, bodyBlocks: EditorBlock[]): 
     );
   }
 
-  if (fields.conclusao && !hasEditorHeading(nextBlocks, "CONCLUSAO")) {
+  if (fields.conclusao && !hasEditorConclusionHeading(nextBlocks)) {
     nextBlocks.push(
-      { type: "heading1", text: "CONCLUSÃO" },
+      {
+        type: "heading1",
+        text: usesFinalConsiderationsHeading(nextBlocks) ? "6 CONSIDERAÇÕES FINAIS" : "CONCLUSÃO",
+      },
       ...splitParagraphs(fields.conclusao).map((text) => ({ type: "paragraph" as const, text })),
     );
   }
 
   return nextBlocks;
+}
+
+function buildSummary(
+  bodyBlocks: EditorBlock[],
+  references: string[],
+  fields: AcademicFields,
+): Paragraph[] {
+  const entries = bodyBlocks
+    .filter((block) => block.type === "heading1" || block.type === "heading2")
+    .map((block) => ({
+      level: block.type === "heading2" ? 2 : 1,
+      text: block.text.toUpperCase(),
+    }));
+
+  if (references.length) entries.push({ level: 1, text: "REFERÊNCIAS" });
+  if (fields.apendices) entries.push({ level: 1, text: "APÊNDICES" });
+  if (fields.anexos) entries.push({ level: 1, text: "ANEXOS" });
+
+  if (!entries.length) return [];
+
+  return [
+    pageBreak(),
+    unnumberedTitle("Sumário"),
+    ...entries.map(
+      (entry) =>
+        new Paragraph({
+          spacing: { line: ONE_AND_HALF_LINE, after: 80 },
+          indent: { left: entry.level === 2 ? 360 : 0 },
+          children: [
+            new TextRun({
+              text: entry.text,
+              font: UFLA_RULES.typography.fontFamily,
+              size: BODY_SIZE,
+              color: BLACK,
+            }),
+          ],
+        }),
+    ),
+  ];
 }
 
 function coverChildren(fields: AcademicFields, logo?: DocxLogoAsset): Paragraph[] {
@@ -432,6 +514,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
     pageBreak(),
     ...titlePageChildren(fields),
     ...preTextualChildren(fields),
+    ...buildSummary(bodyBlocks, references, fields),
   ];
 
   const textualAndPostTextualChildren: Paragraph[] = [
@@ -499,6 +582,9 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
               left: UFLA_RULES.margins.leftTwip,
               bottom: UFLA_RULES.margins.bottomTwip,
               right: UFLA_RULES.margins.rightTwip,
+            },
+            pageNumbers: {
+              start: 1,
             },
           },
         },

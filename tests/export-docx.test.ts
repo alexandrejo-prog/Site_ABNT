@@ -20,11 +20,14 @@ const fields = {
   referencias: "SILVA, M. Qualidade do café. Lavras: UFLA, 2024.",
 };
 
-async function generatedXml(inputFields = fields) {
+async function generatedXml(
+  inputFields = fields,
+  editorText = "# 1 Introdução\nTexto comum.\n> Citação longa.",
+) {
   const logoPath = join(process.cwd(), "public", "assets", "ufla-logo.jpeg");
   const blob = await generateDocxBlob({
     fields: inputFields,
-    editorText: "# 1 Introdução\nTexto comum.\n> Citação longa.",
+    editorText,
     logo: {
       data: readFileSync(logoPath),
       width: 120,
@@ -61,6 +64,18 @@ function runXmlContaining(paragraphXml: string, text: string): string {
   const run = textRunsIn(paragraphXml).find((item) => item.includes(text));
   expect(run).toBeTruthy();
   return run ?? "";
+}
+
+function countText(value: string, text: string): number {
+  return value.split(text).length - 1;
+}
+
+function lastParagraphIndexContaining(documentXml: string, text: string): number {
+  const paragraphs = paragraphsIn(documentXml);
+  for (let index = paragraphs.length - 1; index >= 0; index -= 1) {
+    if (paragraphs[index].includes(text)) return index;
+  }
+  return -1;
 }
 
 describe("exportação DOCX", () => {
@@ -125,11 +140,41 @@ describe("exportação DOCX", () => {
     expect(etAlRun).toContain("<w:i");
 
     const paragraphs = paragraphsIn(documentXml);
-    const referencesTitleIndex = paragraphs.findIndex((paragraph) =>
-      paragraph.includes("REFERÊNCIAS"),
-    );
+    const referencesTitleIndex = lastParagraphIndexContaining(documentXml, "REFERÊNCIAS");
     expect(referencesTitleIndex).toBeGreaterThan(0);
     expect(paragraphs[referencesTitleIndex - 1]).toMatch(/<w:br\s+w:type="page"\/>/);
+  });
+
+  it("inicia a numeração visível da seção textual em 1", async () => {
+    const { documentXml } = await generatedXml({
+      ...fields,
+      indicadoresImpacto: "Indicador de impacto.",
+      impactIndicators: "Impact indicator.",
+    });
+
+    expect(documentXml).toContain("SUMÁRIO");
+    expect(documentXml).toMatch(/<w:pgNumType\b[^>]*w:start="1"/);
+  });
+
+  it("não duplica conclusão quando o corpo já tem considerações finais", async () => {
+    const { documentXml } = await generatedXml(
+      {
+        ...fields,
+        conclusao: "Texto final importado do campo.",
+      },
+      "# 1 Introdução\nTexto comum.\n# 6 Considerações finais\nTexto final do editor.",
+    );
+    const text = textFromXml(documentXml);
+    const finalConsiderationsHeadings = paragraphsIn(documentXml).filter(
+      (paragraph) =>
+        paragraph.includes("6 CONSIDERAÇÕES FINAIS") &&
+        paragraph.includes('<w:pStyle w:val="Heading1"'),
+    );
+
+    expect(countText(text, "6 CONSIDERAÇÕES FINAIS")).toBe(2);
+    expect(finalConsiderationsHeadings).toHaveLength(1);
+    expect(text).not.toContain("CONCLUSÃO");
+    expect(text).not.toContain("Texto final importado do campo.");
   });
 
   it("não aplica cor azul ao resumo ou abstract", async () => {

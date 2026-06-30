@@ -59,4 +59,26 @@ describe("validação normativa", () => {
     const issues = validateWork(baseFields());
     expect(issues.filter((issue) => issue.severity === "error")).toHaveLength(0);
   });
+
+  it("resume alertas repetidos de referências", () => {
+    const issues = validateWork(
+      baseFields({
+        referencias: [
+          "REFERENCIA AMBIGUA SEM TITULO IDENTIFICAVEL 2024",
+          "OUTRA REFERENCIA AMBIGUA SEM TITULO IDENTIFICAVEL 2025",
+          "TERCEIRA REFERENCIA AMBIGUA SEM TITULO IDENTIFICAVEL 2026",
+          "BRASIL. Lei normativa preservada sem destaque automático. 2024.",
+          "MINAS GERAIS. Decreto normativo preservado sem destaque automático. 2025.",
+        ].join("\n"),
+      }),
+    );
+
+    const highlightIssues = issues.filter((issue) => issue.code === "reference-highlight-missing");
+    const normativeIssues = issues.filter((issue) => issue.code === "reference-normative-preserved");
+
+    expect(highlightIssues).toHaveLength(1);
+    expect(highlightIssues[0].message).toContain("Há 3 referência(s)");
+    expect(normativeIssues).toHaveLength(1);
+    expect(normativeIssues[0].message).toContain("Há 2 referência(s) normativas");
+  });
 });

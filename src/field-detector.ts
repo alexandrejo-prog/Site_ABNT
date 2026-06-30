@@ -251,6 +251,44 @@ function coverTextLines(blocks: ImportedBlock[]): string[] {
     .filter((line) => !line.startsWith("[Imagem detectada"));
 }
 
+function hasUnsafeYearContext(value: string): boolean {
+  return /\b(refer[êe]ncias?|doi|https?:\/\/|www\.|dispon[ií]vel em|acesso em|lei|decreto|portaria|resolu[cç][aã]o|cita[cç][aã]o)\b/i.test(
+    value,
+  );
+}
+
+export function detectYearFromCover(blocks: ImportedBlock[]): {
+  value: string;
+  confidence: Confidence;
+} {
+  const coverLines = coverTextLines(blocks);
+
+  for (const line of coverLines) {
+    const labelMatch = line.match(/^\s*ano\s*[:\-]\s*((?:19|20)\d{2})\s*$/i);
+    if (labelMatch?.[1]) {
+      return { value: labelMatch[1], confidence: "alta" };
+    }
+  }
+
+  const candidates = coverLines.flatMap((line) => {
+    if (hasUnsafeYearContext(line)) return [];
+    return [...line.matchAll(/\b(?:19|20)\d{2}\b/g)].map((match) => ({
+      value: match[0],
+      exactLine: line.trim() === match[0],
+    }));
+  });
+
+  const lastCandidate = candidates.at(-1);
+  if (lastCandidate) {
+    return {
+      value: lastCandidate.value,
+      confidence: lastCandidate.exactLine ? "alta" : "media",
+    };
+  }
+
+  return { value: new Date().getFullYear().toString(), confidence: "baixa" };
+}
+
 function detectAuthorFromCover(blocks: ImportedBlock[], allLines: string[]): {
   value: string;
   confidence: Confidence;
@@ -437,14 +475,23 @@ function collectReferences(blocks: ImportedBlock[]): string {
   return collectAfterHeading(blocks, start, (block) => isAnnexHeading(block) || isAppendixHeading(block));
 }
 
+function findPostReferencesHeadingIndex(
+  blocks: ImportedBlock[],
+  predicate: (block: ImportedBlock) => boolean,
+): number {
+  const referencesIndex = findHeadingIndex(blocks, isReferenceHeading);
+  if (referencesIndex < 0) return -1;
+  return blocks.findIndex((block, index) => index > referencesIndex && predicate(block));
+}
+
 function collectAnnexes(blocks: ImportedBlock[]): string {
-  const start = findHeadingIndex(blocks, isAnnexHeading);
+  const start = findPostReferencesHeadingIndex(blocks, isAnnexHeading);
   return collectAfterHeading(blocks, start, isAppendixHeading);
 }
 
 function collectAppendices(blocks: ImportedBlock[]): string {
-  const start = findHeadingIndex(blocks, isAppendixHeading);
-  return collectAfterHeading(blocks, start, () => false);
+  const start = findPostReferencesHeadingIndex(blocks, isAppendixHeading);
+  return collectAfterHeading(blocks, start, isAnnexHeading);
 }
 
 function collectPreTextualSection(blocks: ImportedBlock[], headings: string[]): string {
@@ -556,7 +603,6 @@ export function detectAcademicFieldsFromStructure(
   fields.course = findByLabel(text, [/^\s*curso\s*[:\-]\s*(.+)$/im]);
   fields.program = findByLabel(text, [/^\s*programa\s*[:\-]\s*(.+)$/im]);
   fields.location = findByLabel(text, [/^\s*(?:local|cidade)\s*[:\-]\s*(.+)$/im]);
-  fields.year = findByLabel(text, [/^\s*ano\s*[:\-]\s*((?:19|20)\d{2})\s*$/im]);
 
   for (const key of ACADEMIC_FIELD_KEYS) {
     if (fields[key]) {
@@ -580,10 +626,9 @@ export function detectAcademicFieldsFromStructure(
     fields.location = coverTextLines(structure.blocks).find(isLocation) ?? "";
   }
 
-  if (!fields.year) {
-    const years = text.match(/\b(19|20)\d{2}\b/g) ?? [];
-    fields.year = years.length ? years[years.length - 1] : "";
-  }
+  const coverYear = detectYearFromCover(structure.blocks);
+  fields.year = coverYear.value;
+  confidence.year = coverYear.confidence;
 
   fields.advisor =
     findByLabel(text, [/^\s*orientador(?:a)?\s*[:\-]\s*(.+)$/im]) ||
