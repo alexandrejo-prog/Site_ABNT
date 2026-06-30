@@ -53,6 +53,18 @@ function hasLikelyUnmarkedLongQuote(text: string): boolean {
     });
 }
 
+function referenceIssueMessage(code: string, message: string): string {
+  if (code === "reference-normative-preserved") {
+    return `${message} Isso pode estar correto para leis, portarias e resoluções, mas confira no Word antes da entrega.`;
+  }
+
+  if (code === "reference-access-missing" || code === "reference-highlight-missing") {
+    return `${message} Revise antes da versão final.`;
+  }
+
+  return message;
+}
+
 export function validateWork(
   fields: AcademicFields,
   editorText = "",
@@ -117,7 +129,7 @@ export function validateWork(
       issues.push({
         severity: "warning",
         code: referenceIssue.code,
-        message: `${referenceIssue.message} Documento ainda não está plenamente conforme o Manual UFLA enquanto houver alertas normativos fortes.`,
+        message: referenceIssueMessage(referenceIssue.code, referenceIssue.message),
       });
     }
   }
@@ -142,7 +154,7 @@ export function validateWork(
     issues.push({
       severity: "warning",
       code: "image-caption-warning",
-      message: "Há possível imagem sem legenda.",
+      message: "Imagem detectada sem legenda provável. Confira posição, qualidade e legenda antes da versão final.",
     });
   }
 
@@ -150,7 +162,7 @@ export function validateWork(
     issues.push({
       severity: "warning",
       code: "long-quote-warning",
-      message: "Há possível citação longa não marcada como citação longa.",
+      message: "Há possível citação longa não marcada como citação longa. Revise antes da versão final.",
     });
   }
 
@@ -158,7 +170,7 @@ export function validateWork(
     issues.push({
       severity: "warning",
       code: "imported-image-warning",
-      message: fields.imageWarnings,
+      message: `${fields.imageWarnings} Confira posição, qualidade e legenda antes da versão final.`,
     });
   }
 
@@ -166,7 +178,7 @@ export function validateWork(
     issues.push({
       severity: "warning",
       code: "annex-image-partial",
-      message: "Há imagem detectada em anexos; confira o arquivo gerado.",
+      message: "Há imagem detectada em anexos; confira posição, qualidade e legenda antes da versão final.",
     });
   }
 
@@ -174,7 +186,7 @@ export function validateWork(
     issues.push({
       severity: "warning",
       code: "appendix-image-partial",
-      message: "Há imagem detectada em apêndices; confira o arquivo gerado.",
+      message: "Há imagem detectada em apêndices; confira posição, qualidade e legenda antes da versão final.",
     });
   }
 
