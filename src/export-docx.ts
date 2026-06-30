@@ -414,6 +414,31 @@ function buildSummary(
   ];
 }
 
+function hasText(value: string): boolean {
+  return value.trim().length > 0;
+}
+
+export function calculateTextualStartPage(
+  fields: AcademicFields,
+  hasSummary: boolean,
+): number {
+  const impactRequired = fields.workType === "dissertacao" || fields.workType === "tese";
+  let countedPreTextualPages = 1; // Folha de rosto. Capa e ficha catalográfica não contam.
+
+  if (hasText(fields.dedicatoria)) countedPreTextualPages += 1;
+  if (hasText(fields.agradecimentos)) countedPreTextualPages += 1;
+  if (hasText(fields.epigrafe)) countedPreTextualPages += 1;
+
+  countedPreTextualPages += 1; // Resumo gerado pelo exportador.
+  countedPreTextualPages += 1; // Abstract gerado pelo exportador.
+
+  if (hasText(fields.indicadoresImpacto) || impactRequired) countedPreTextualPages += 1;
+  if (hasText(fields.impactIndicators) || impactRequired) countedPreTextualPages += 1;
+  if (hasSummary) countedPreTextualPages += 1;
+
+  return countedPreTextualPages + 1;
+}
+
 function coverChildren(fields: AcademicFields, logo?: DocxLogoAsset): Paragraph[] {
   return [
     ...logoParagraph(logo),
@@ -508,13 +533,15 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
     .filter((block) => block.type === "reference")
     .map((block) => block.text);
   const references = [...splitParagraphs(fields.referencias), ...editorReferences];
+  const summaryChildren = buildSummary(bodyBlocks, references, fields);
+  const textualStartPage = calculateTextualStartPage(fields, summaryChildren.length > 0);
 
   const preTextualChildrenList: Paragraph[] = [
     ...coverChildren(fields, input.logo),
     pageBreak(),
     ...titlePageChildren(fields),
     ...preTextualChildren(fields),
-    ...buildSummary(bodyBlocks, references, fields),
+    ...summaryChildren,
   ];
 
   const textualAndPostTextualChildren: Paragraph[] = [
@@ -584,7 +611,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
               right: UFLA_RULES.margins.rightTwip,
             },
             pageNumbers: {
-              start: 1,
+              start: textualStartPage,
             },
           },
         },

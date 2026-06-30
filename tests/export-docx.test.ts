@@ -2,12 +2,16 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
-import { generateDocxBlob, parseEditorContent } from "../src/export-docx";
-import { UFLA_RULES, emptyAcademicFields } from "../src/ufla-rules";
+import {
+  calculateTextualStartPage,
+  generateDocxBlob,
+  parseEditorContent,
+} from "../src/export-docx";
+import { UFLA_RULES, emptyAcademicFields, type AcademicFields } from "../src/ufla-rules";
 
-const fields = {
+const fields: AcademicFields = {
   ...emptyAcademicFields(),
-  workType: "artigo" as const,
+  workType: "artigo",
   author: "Maria Silva",
   title: "Qualidade do café no sul de Minas",
   location: "Lavras - MG",
@@ -104,6 +108,23 @@ describe("exportação DOCX", () => {
     expect(UFLA_RULES.margins.rightCm).toBe(2);
   });
 
+  it("calcula a numeração inicial textual conforme pré-textuais UFLA", () => {
+    expect(calculateTextualStartPage(fields, true)).toBe(5);
+    expect(calculateTextualStartPage({ ...fields, workType: "dissertacao" }, true)).toBe(7);
+    expect(
+      calculateTextualStartPage(
+        {
+          ...fields,
+          workType: "dissertacao",
+          dedicatoria: "À minha família.",
+          agradecimentos: "Agradeço às pessoas que contribuíram.",
+          epigrafe: "Uma epígrafe.",
+        },
+        true,
+      ),
+    ).toBe(10);
+  });
+
   it("inclui campos acadêmicos principais no DOCX gerado", async () => {
     const { documentXml } = await generatedXml();
     expect(documentXml).toContain("Maria Silva");
@@ -145,15 +166,15 @@ describe("exportação DOCX", () => {
     expect(paragraphs[referencesTitleIndex - 1]).toMatch(/<w:br\s+w:type="page"\/>/);
   });
 
-  it("inicia a numeração visível da seção textual em 1", async () => {
+  it("configura no XML a numeração textual calculada pelas pré-textuais UFLA", async () => {
     const { documentXml } = await generatedXml({
       ...fields,
-      indicadoresImpacto: "Indicador de impacto.",
-      impactIndicators: "Impact indicator.",
+      workType: "dissertacao",
     });
 
     expect(documentXml).toContain("SUMÁRIO");
-    expect(documentXml).toMatch(/<w:pgNumType\b[^>]*w:start="1"/);
+    expect(documentXml).toMatch(/<w:pgNumType\b[^>]*w:start="7"/);
+    expect(documentXml).not.toMatch(/<w:pgNumType\b[^>]*w:start="1"/);
   });
 
   it("não duplica conclusão quando o corpo já tem considerações finais", async () => {
