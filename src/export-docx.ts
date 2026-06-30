@@ -10,6 +10,7 @@ import {
   SectionType,
   TextRun,
   Header,
+  PageNumber,
 } from "docx";
 import type { IParagraphOptions } from "docx";
 import { AcademicFields, UFLA_RULES } from "./ufla-rules";
@@ -202,9 +203,26 @@ function pageBreak(): Paragraph {
   return new Paragraph({ children: [new PageBreak()] });
 }
 
-function blockToParagraph(block: EditorBlock): Paragraph {
+function blockToParagraph(block: EditorBlock, isFirstTextualBlock: boolean = false): Paragraph[] {
   if (block.type === "heading1") {
-    return new Paragraph({
+    // Seções primárias (exceto a primeira) devem iniciar em nova página
+    if (!isFirstTextualBlock) {
+      return [pageBreak(), new Paragraph({
+        heading: HeadingLevel.HEADING_1,
+        spacing: { before: 240, after: 180, line: ONE_AND_HALF_LINE },
+        children: [
+          new TextRun({
+            text: block.text.toUpperCase(),
+            bold: true,
+            font: UFLA_RULES.typography.fontFamily,
+            size: BODY_SIZE,
+            color: BLACK,
+          }),
+        ],
+      })];
+    }
+
+    return [new Paragraph({
       heading: HeadingLevel.HEADING_1,
       spacing: { before: 240, after: 180, line: ONE_AND_HALF_LINE },
       children: [
@@ -216,11 +234,11 @@ function blockToParagraph(block: EditorBlock): Paragraph {
           color: BLACK,
         }),
       ],
-    });
+    })];
   }
 
   if (block.type === "heading2") {
-    return new Paragraph({
+    return [new Paragraph({
       heading: HeadingLevel.HEADING_2,
       spacing: { before: 180, after: 120, line: ONE_AND_HALF_LINE },
       children: [
@@ -232,19 +250,19 @@ function blockToParagraph(block: EditorBlock): Paragraph {
           color: BLACK,
         }),
       ],
-    });
+    })];
   }
 
   if (block.type === "longQuote") {
-    return new Paragraph({
+    return [new Paragraph({
       alignment: AlignmentType.BOTH,
       spacing: { line: SINGLE_LINE, after: 120 },
       indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
       children: textRunsFromMarkup(block.text, LONG_QUOTE_SIZE),
-    });
+    })];
   }
 
-  return textParagraph(block.text);
+  return [textParagraph(block.text)];
 }
 
 function splitParagraphs(value: string): string[] {
@@ -399,8 +417,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   ];
 
   const textualAndPostTextualChildren: Paragraph[] = [
-    pageBreak(),
-    ...bodyBlocks.map(blockToParagraph),
+    ...bodyBlocks.flatMap((block, index) => blockToParagraph(block, index === 0)),
     pageBreak(),
     sectionTitle("Referências"),
     ...buildReferences(references),
@@ -412,18 +429,13 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
       : []),
   ];
 
-  // Numeração de páginas dinâmica não é suportada diretamente pela versão
-  // atual da biblioteca docx sem inserir campos OOXML customizados.
-  // Como solução honesta e não-fictícia, inserimos um texto fixo "1" no
-  // cabeçalho da seção textual e deixamos um aviso para o usuário atualizar
-  // o campo no Word, se necessário.
   const pageNumberHeader = new Header({
     children: [
       new Paragraph({
         alignment: AlignmentType.RIGHT,
         children: [
           new TextRun({
-            text: "1",
+            children: [PageNumber.CURRENT],
             font: UFLA_RULES.typography.fontFamily,
             size: UFLA_RULES.typography.pageNumberFontSizePt * 2,
             color: BLACK,

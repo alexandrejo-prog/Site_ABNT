@@ -28,6 +28,44 @@ interface TextLine {
 }
 
 const TITLE_STOP_WORDS = new Set(["LAVRAS", "LAVRAS - MG"]);
+
+const INSTITUTIONAL_TERMS = new Set([
+  "UNIVERSIDADE",
+  "UNIVERSIDADE FEDERAL",
+  "UFLA",
+  "INSTITUTO",
+  "INSTITUTO DE CIÊNCIAS",
+  "INSTITUTO DE CIENCIAS",
+  "DEPARTAMENTO",
+  "FACULDADE",
+  "ESCOLA",
+  "PROGRAMA",
+  "PROGRAMA DE PÓS-GRADUAÇÃO",
+  "PROGRAMA DE POS-GRADUACAO",
+  "PÓS-GRADUAÇÃO",
+  "POS-GRADUACAO",
+  "GRADUAÇÃO",
+  "GRADUACAO",
+  "CURSO",
+  "ÁREA DE CONCENTRAÇÃO",
+  "AREA DE CONCENTRACAO",
+  "LINHA DE PESQUISA",
+  "LAVRAS",
+  "MINAS GERAIS",
+  "MG",
+  "BRASIL",
+  "FICHA CATALOGRÁFICA",
+  "FICHA CATALOGRAFICA",
+  "RESUMO",
+  "ABSTRACT",
+  "SUMÁRIO",
+  "SUMARIO",
+  "ORIENTADOR",
+  "ORIENTADORA",
+  "COORIENTADOR",
+  "COORIENTADORA",
+]);
+
 const GENERIC_COVER_WORDS = new Set([
   "UNIVERSIDADE FEDERAL DE LAVRAS",
   "UFLA",
@@ -186,6 +224,14 @@ function isLikelyAuthorName(value: string): boolean {
     )
   ) {
     return false;
+  }
+
+  // Rejeitar termos institucionais
+  const upperValue = value.toUpperCase();
+  for (const term of INSTITUTIONAL_TERMS) {
+    if (upperValue.includes(term)) {
+      return false;
+    }
   }
 
   const words = value.split(/\s+/).filter(Boolean);
