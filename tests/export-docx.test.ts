@@ -215,32 +215,44 @@ describe("exportação DOCX", () => {
     expect(Object.keys(zip.files).some((name) => name.startsWith("word/media/"))).toBe(true);
   });
 
-  it("define estilos TOC1/TOC2/TOC3 sem negrito no styles.xml", async () => {
-    const { zip } = await generatedXml();
-    const stylesXml = await zip.file("word/styles.xml")?.async("string");
-    expect(stylesXml).toBeTruthy();
+  it("mantem heading1 e heading2 em negrito e heading3 sem negrito", async () => {
+    const { documentXml } = await generatedXml(
+      fields,
+      "# 1 Introdu\u00e7\u00e3o\nTexto.\n## 1.3 Objetivos\nTexto.\n### 1.3.1 Objetivo geral\nTexto.",
+    );
 
-    // Verificar TOC1
-    expect(stylesXml).toContain('w:styleId="TOC1"');
-    expect(stylesXml).toContain('w:val="toc 1"');
-    // TOC1 deve ter w:b w:val="false" (explicitamente sem negrito)
-    const toc1Match = stylesXml!.match(/w:styleId="TOC1"[\s\S]*?<\/w:style>/);
-    expect(toc1Match).toBeTruthy();
-    expect(toc1Match![0]).toContain('w:b w:val="false"');
+    const heading1 = paragraphXmlContaining(documentXml, "1 INTRODU\u00c7\u00c3O");
+    const heading2 = paragraphXmlContaining(documentXml, "1.3 Objetivos");
+    const heading3 = paragraphXmlContaining(documentXml, "1.3.1 Objetivo geral");
 
-    // Verificar TOC2
-    expect(stylesXml).toContain('w:styleId="TOC2"');
-    const toc2Match = stylesXml!.match(/w:styleId="TOC2"[\s\S]*?<\/w:style>/);
-    expect(toc2Match).toBeTruthy();
-    expect(toc2Match![0]).toContain('w:b w:val="false"');
+    expect(heading1).toContain("<w:b");
+    expect(heading2).toContain("<w:b");
+    expect(heading3).not.toContain("<w:b");
+  });
 
-    // Verificar TOC3
-    expect(stylesXml).toContain('w:styleId="TOC3"');
-    const toc3Match = stylesXml!.match(/w:styleId="TOC3"[\s\S]*?<\/w:style>/);
-    expect(toc3Match).toBeTruthy();
-    expect(toc3Match![0]).toContain('w:b w:val="false"');
+  it("mantem sumario atualizavel por campo TOC da biblioteca", async () => {
+    const { documentXml } = await generatedXml();
 
-    // Verificar fonte Times New Roman
-    expect(stylesXml).toContain("Times New Roman");
+    expect(documentXml).toContain("SUM\u00c1RIO");
+    expect(documentXml).toContain("TOC");
+    expect(documentXml).toContain("\\o");
+    expect(documentXml).toContain("1-3");
+    expect(documentXml).toContain("\\h");
+    expect(documentXml).toContain("\\z");
+    expect(documentXml).toContain("\\u");
+    expect(documentXml).not.toContain("TOC \\f \\h \\z");
+    expect(documentXml).not.toContain("TC &quot;");
+  });
+
+  it("nao reintroduz pos-processamento XML ou campos TC no exportador", () => {
+    const source = readFileSync("src/export-docx.ts", "utf8");
+    expect(source).not.toContain('import JSZip from "jszip"');
+    expect(source).not.toContain("postProcessDocumentXml");
+    expect(source).not.toContain("postProcessDocxBlob");
+    expect(source).not.toContain("replaceTocInstruction");
+    expect(source).not.toContain("tcFieldXml");
+    expect(source).not.toContain("TC &quot;");
+    expect(source).not.toContain("createTocStyles");
+    expect(source).not.toContain("styles: createTocStyles");
   });
 });

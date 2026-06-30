@@ -294,7 +294,6 @@ function blockToParagraph(block: EditorBlock, isFirstTextualBlock: boolean = fal
       children: [
         new TextRun({
           text: block.text,
-          bold: true,
           font: UFLA_RULES.typography.fontFamily,
           size: BODY_SIZE,
           color: BLACK,
@@ -546,49 +545,6 @@ function preTextualChildren(fields: AcademicFields): Paragraph[] {
   ];
 }
 
-/**
- * Cria definições de estilos de parágrafo para TOC1, TOC2 e TOC3.
- * Esses estilos são aplicados pelo Word ao gerar o sumário via F9,
- * garantindo que as entradas fiquem em Times New Roman 12pt, sem negrito.
- */
-function createTocStyles(): {
-  paragraphStyles: Array<{
-    id: string;
-    name: string;
-    basedOn: string;
-    next: string;
-    run: {
-      font: string;
-      size: number;
-      bold: boolean;
-      italics: boolean;
-      color: string;
-    };
-    paragraph: {
-      spacing: { after: number };
-    };
-  }>;
-} {
-  const font = UFLA_RULES.typography.fontFamily;
-  const tocSize = UFLA_RULES.typography.bodyFontSizePt * 2; // 24 half-points = 12pt
-  const tocRun = {
-    font,
-    size: tocSize,
-    bold: false,
-    italics: false,
-    color: BLACK,
-  };
-  const tocParagraph = { spacing: { after: 0 } };
-
-  return {
-    paragraphStyles: [
-      { id: "TOC1", name: "toc 1", basedOn: "Normal", next: "Normal", run: tocRun, paragraph: tocParagraph },
-      { id: "TOC2", name: "toc 2", basedOn: "Normal", next: "Normal", run: tocRun, paragraph: tocParagraph },
-      { id: "TOC3", name: "toc 3", basedOn: "Normal", next: "Normal", run: tocRun, paragraph: tocParagraph },
-    ],
-  };
-}
-
 export function createDocxDocument(input: DocxGenerationInput): Document {
   const { fields } = input;
   const parsedBlocks = parseEditorContent(input.editorText);
@@ -644,7 +600,6 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
     creator: "UFLA DOCX Acadêmico",
     title: fields.title || "Trabalho acadêmico",
     description: "Documento acadêmico gerado conforme regras centrais da UFLA.",
-    styles: createTocStyles(),
     features: {
       updateFields: true,
     },
