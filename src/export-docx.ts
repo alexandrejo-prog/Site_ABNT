@@ -14,6 +14,7 @@ import {
 } from "docx";
 import type { IParagraphOptions } from "docx";
 import { AcademicFields, UFLA_RULES } from "./ufla-rules";
+import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { normalizeForDetection } from "./word-structure-extractor";
 
 export type EditorBlockType =
@@ -47,6 +48,8 @@ const LONG_QUOTE_SIZE = UFLA_RULES.typography.longQuoteFontSizePt * 2;
 const ONE_AND_HALF_LINE = 360;
 const SINGLE_LINE = 240;
 const BLACK = "000000";
+const REFERENCE_FONT = "Times New Roman";
+const REFERENCE_SIZE = 12 * 2;
 
 export function parseEditorContent(editorText: string): EditorBlock[] {
   return editorText
@@ -76,6 +79,17 @@ function plainRun(text: string, size = BODY_SIZE): TextRun {
     text,
     font: UFLA_RULES.typography.fontFamily,
     size,
+    color: BLACK,
+  });
+}
+
+function referenceRunToTextRun(run: ReferenceRun): TextRun {
+  return new TextRun({
+    text: run.text,
+    bold: run.bold,
+    italics: run.italics,
+    font: REFERENCE_FONT,
+    size: REFERENCE_SIZE,
     color: BLACK,
   });
 }
@@ -277,10 +291,14 @@ function buildSimpleParagraphs(value: string): Paragraph[] {
 }
 
 function buildReferences(references: string[]): Paragraph[] {
-  return references.map((reference) =>
-    simpleParagraph(reference, {
-      alignment: AlignmentType.BOTH,
+  return normalizeReferences(references).map((reference) =>
+    new Paragraph({
+      alignment: AlignmentType.LEFT,
+      spacing: { line: SINGLE_LINE, after: 120 },
       indent: { firstLine: 0, left: 0 },
+      children: reference.runs.length
+        ? reference.runs.map(referenceRunToTextRun)
+        : [referenceRunToTextRun({ text: reference.text || " " })],
     }),
   );
 }

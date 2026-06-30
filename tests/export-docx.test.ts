@@ -20,10 +20,10 @@ const fields = {
   referencias: "SILVA, M. Qualidade do café. Lavras: UFLA, 2024.",
 };
 
-async function generatedXml() {
+async function generatedXml(inputFields = fields) {
   const logoPath = join(process.cwd(), "public", "assets", "ufla-logo.jpeg");
   const blob = await generateDocxBlob({
-    fields,
+    fields: inputFields,
     editorText: "# 1 Introdução\nTexto comum.\n> Citação longa.",
     logo: {
       data: readFileSync(logoPath),
@@ -35,6 +35,32 @@ async function generatedXml() {
   const documentXml = await zip.file("word/document.xml")?.async("string");
   if (!documentXml) throw new Error("DOCX sem document.xml.");
   return { zip, documentXml };
+}
+
+function paragraphsIn(documentXml: string): string[] {
+  return documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? [];
+}
+
+function textFromXml(documentXml: string): string {
+  return [...documentXml.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)]
+    .map((match) => match[1])
+    .join("");
+}
+
+function paragraphXmlContaining(documentXml: string, text: string): string {
+  const paragraph = paragraphsIn(documentXml).find((item) => item.includes(text));
+  expect(paragraph).toBeTruthy();
+  return paragraph ?? "";
+}
+
+function textRunsIn(paragraphXml: string): string[] {
+  return paragraphXml.match(/<w:r\b[\s\S]*?<\/w:r>/g) ?? [];
+}
+
+function runXmlContaining(paragraphXml: string, text: string): string {
+  const run = textRunsIn(paragraphXml).find((item) => item.includes(text));
+  expect(run).toBeTruthy();
+  return run ?? "";
 }
 
 describe("exportação DOCX", () => {
@@ -70,7 +96,40 @@ describe("exportação DOCX", () => {
     expect(documentXml).toContain("Resumo do trabalho.");
     expect(documentXml).toContain("Abstract text.");
     expect(documentXml).toContain("Texto comum.");
-    expect(documentXml).toContain("SILVA, M. Qualidade do café.");
+    expect(textFromXml(documentXml)).toContain("SILVA, M. Qualidade do café.");
+  });
+
+  it("aplica normalização de referências no XML do DOCX", async () => {
+    const { documentXml } = await generatedXml({
+      ...fields,
+      referencias: [
+        "SILVA, M. Qualidade do café. Lavras: UFLA, 2024.",
+        "SOUZA, J. Manual academico. Lavras: UFLA, 2025. et al.",
+      ].join("\n"),
+    });
+
+    const referenceParagraph = paragraphXmlContaining(documentXml, "SILVA, M.");
+    expect(referenceParagraph).toContain("Qualidade do café");
+
+    const titleRun = runXmlContaining(referenceParagraph, "Qualidade do café");
+    expect(titleRun).toContain("<w:b");
+
+    const referenceRuns = textRunsIn(referenceParagraph).filter((run) => run.includes("<w:t"));
+    const boldRuns = referenceRuns.filter((run) => run.includes("<w:b"));
+    expect(referenceRuns.length).toBeGreaterThan(1);
+    expect(boldRuns.length).toBeLessThan(referenceRuns.length);
+    expect(runXmlContaining(referenceParagraph, "SILVA, M. ")).not.toContain("<w:b");
+
+    const etAlParagraph = paragraphXmlContaining(documentXml, "et al.");
+    const etAlRun = runXmlContaining(etAlParagraph, "et al.");
+    expect(etAlRun).toContain("<w:i");
+
+    const paragraphs = paragraphsIn(documentXml);
+    const referencesTitleIndex = paragraphs.findIndex((paragraph) =>
+      paragraph.includes("REFERÊNCIAS"),
+    );
+    expect(referencesTitleIndex).toBeGreaterThan(0);
+    expect(paragraphs[referencesTitleIndex - 1]).toMatch(/<w:br\s+w:type="page"\/>/);
   });
 
   it("não aplica cor azul ao resumo ou abstract", async () => {
