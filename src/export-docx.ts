@@ -5,14 +5,14 @@ import {
   ImageRun,
   Packer,
   PageBreak,
+  PageNumber,
   PageOrientation,
   Paragraph,
-  SectionType,
   TextRun,
   Header,
-  PageNumber,
 } from "docx";
 import type { IParagraphOptions } from "docx";
+import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { AcademicFields, UFLA_RULES } from "./ufla-rules";
 import { normalizeForDetection } from "./word-structure-extractor";
 
@@ -74,6 +74,17 @@ export function parseEditorContent(editorText: string): EditorBlock[] {
 function plainRun(text: string, size = BODY_SIZE): TextRun {
   return new TextRun({
     text,
+    font: UFLA_RULES.typography.fontFamily,
+    size,
+    color: BLACK,
+  });
+}
+
+function styledRun(run: ReferenceRun, size = BODY_SIZE): TextRun {
+  return new TextRun({
+    text: run.text,
+    bold: run.bold,
+    italics: run.italics,
     font: UFLA_RULES.typography.fontFamily,
     size,
     color: BLACK,
@@ -182,10 +193,11 @@ function logoParagraph(logo?: DocxLogoAsset): Paragraph[] {
   ];
 }
 
-function sectionTitle(text: string): Paragraph {
+function sectionTitle(text: string, pageBreakBefore = false): Paragraph {
   return new Paragraph({
     heading: HeadingLevel.HEADING_1,
     alignment: AlignmentType.CENTER,
+    pageBreakBefore,
     spacing: { before: 240, after: 240, line: ONE_AND_HALF_LINE },
     children: [
       new TextRun({
@@ -203,63 +215,57 @@ function pageBreak(): Paragraph {
   return new Paragraph({ children: [new PageBreak()] });
 }
 
-function blockToParagraph(block: EditorBlock, isFirstTextualBlock: boolean = false): Paragraph[] {
-  if (block.type === "heading1") {
-    // Seções primárias (exceto a primeira) devem iniciar em nova página
-    if (!isFirstTextualBlock) {
-      return [pageBreak(), new Paragraph({
-        heading: HeadingLevel.HEADING_1,
-        spacing: { before: 240, after: 180, line: ONE_AND_HALF_LINE },
-        children: [
-          new TextRun({
-            text: block.text.toUpperCase(),
-            bold: true,
-            font: UFLA_RULES.typography.fontFamily,
-            size: BODY_SIZE,
-            color: BLACK,
-          }),
-        ],
-      })];
-    }
+function primaryHeading(text: string, pageBreakBefore: boolean): Paragraph {
+  return new Paragraph({
+    heading: HeadingLevel.HEADING_1,
+    pageBreakBefore,
+    spacing: { before: 240, after: 180, line: ONE_AND_HALF_LINE },
+    children: [
+      new TextRun({
+        text: text.toUpperCase(),
+        bold: true,
+        font: UFLA_RULES.typography.fontFamily,
+        size: BODY_SIZE,
+        color: BLACK,
+      }),
+    ],
+  });
+}
 
-    return [new Paragraph({
-      heading: HeadingLevel.HEADING_1,
-      spacing: { before: 240, after: 180, line: ONE_AND_HALF_LINE },
-      children: [
-        new TextRun({
-          text: block.text.toUpperCase(),
-          bold: true,
-          font: UFLA_RULES.typography.fontFamily,
-          size: BODY_SIZE,
-          color: BLACK,
-        }),
-      ],
-    })];
+function secondaryHeading(text: string): Paragraph {
+  return new Paragraph({
+    heading: HeadingLevel.HEADING_2,
+    spacing: { before: 180, after: 120, line: ONE_AND_HALF_LINE },
+    children: [
+      new TextRun({
+        text,
+        bold: true,
+        font: UFLA_RULES.typography.fontFamily,
+        size: BODY_SIZE,
+        color: BLACK,
+      }),
+    ],
+  });
+}
+
+function blockToParagraph(block: EditorBlock, isFirstTextualBlock = false): Paragraph[] {
+  if (block.type === "heading1") {
+    return [primaryHeading(block.text, !isFirstTextualBlock)];
   }
 
   if (block.type === "heading2") {
-    return [new Paragraph({
-      heading: HeadingLevel.HEADING_2,
-      spacing: { before: 180, after: 120, line: ONE_AND_HALF_LINE },
-      children: [
-        new TextRun({
-          text: block.text,
-          bold: true,
-          font: UFLA_RULES.typography.fontFamily,
-          size: BODY_SIZE,
-          color: BLACK,
-        }),
-      ],
-    })];
+    return [secondaryHeading(block.text)];
   }
 
   if (block.type === "longQuote") {
-    return [new Paragraph({
-      alignment: AlignmentType.BOTH,
-      spacing: { line: SINGLE_LINE, after: 120 },
-      indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
-      children: textRunsFromMarkup(block.text, LONG_QUOTE_SIZE),
-    })];
+    return [
+      new Paragraph({
+        alignment: AlignmentType.BOTH,
+        spacing: { line: SINGLE_LINE, after: 120 },
+        indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
+        children: textRunsFromMarkup(block.text, LONG_QUOTE_SIZE),
+      }),
+    ];
   }
 
   return [textParagraph(block.text)];
@@ -277,11 +283,19 @@ function buildSimpleParagraphs(value: string): Paragraph[] {
 }
 
 function buildReferences(references: string[]): Paragraph[] {
-  return references.map((reference) =>
-    simpleParagraph(reference, {
-      alignment: AlignmentType.BOTH,
-      indent: { firstLine: 0, left: 0 },
-    }),
+  const normalized = normalizeReferences(references);
+  if (!normalized.length) return [simpleParagraph(" ")];
+
+  return normalized.map(
+    (reference) =>
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        spacing: { line: SINGLE_LINE, after: 240 },
+        indent: { firstLine: 0, left: 0 },
+        children: reference.runs.length
+          ? reference.runs.map((run) => styledRun(run))
+          : [plainRun(reference.text || " ")],
+      }),
   );
 }
 
@@ -318,13 +332,13 @@ function coverChildren(fields: AcademicFields, logo?: DocxLogoAsset): Paragraph[
   return [
     ...logoParagraph(logo),
     new Paragraph({ spacing: { before: 1200 } }),
-    centeredParagraph(fields.author || "AUTOR"),
+    centeredParagraph((fields.author || "AUTOR").toUpperCase(), true),
     new Paragraph({ spacing: { before: 1800 } }),
     centeredParagraph((fields.title || "TÍTULO DO TRABALHO").toUpperCase(), true),
-    ...(fields.subtitle ? [centeredParagraph(fields.subtitle.toUpperCase(), true)] : []),
+    ...(fields.subtitle ? [centeredParagraph(fields.subtitle.toUpperCase())] : []),
     new Paragraph({ spacing: { before: 2200 } }),
-    centeredParagraph(fields.location || "LAVRAS - MG"),
-    centeredParagraph(fields.year || new Date().getFullYear().toString()),
+    centeredParagraph((fields.location || "LAVRAS - MG").toUpperCase(), true),
+    centeredParagraph(fields.year || new Date().getFullYear().toString(), true),
   ];
 }
 
@@ -334,10 +348,10 @@ function titlePageChildren(fields: AcademicFields): Paragraph[] {
     "Trabalho apresentado à Universidade Federal de Lavras como requisito acadêmico, conforme dados revisados pelo usuário.";
 
   return [
-    centeredParagraph(fields.author || "AUTOR"),
+    centeredParagraph((fields.author || "AUTOR").toUpperCase(), true),
     new Paragraph({ spacing: { before: 1500 } }),
     centeredParagraph((fields.title || "TÍTULO DO TRABALHO").toUpperCase(), true),
-    ...(fields.subtitle ? [centeredParagraph(fields.subtitle.toUpperCase(), true)] : []),
+    ...(fields.subtitle ? [centeredParagraph(fields.subtitle.toUpperCase())] : []),
     new Paragraph({ spacing: { before: 900 } }),
     textParagraph(nature, {
       indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
@@ -354,8 +368,8 @@ function titlePageChildren(fields: AcademicFields): Paragraph[] {
         .join("\n"),
     ),
     new Paragraph({ spacing: { before: 1500 } }),
-    centeredParagraph(fields.location || "LAVRAS - MG"),
-    centeredParagraph(fields.year || new Date().getFullYear().toString()),
+    centeredParagraph((fields.location || "LAVRAS - MG").toUpperCase(), true),
+    centeredParagraph(fields.year || new Date().getFullYear().toString(), true),
   ];
 }
 
@@ -418,14 +432,13 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
 
   const textualAndPostTextualChildren: Paragraph[] = [
     ...bodyBlocks.flatMap((block, index) => blockToParagraph(block, index === 0)),
-    pageBreak(),
-    sectionTitle("Referências"),
+    sectionTitle("Referências", true),
     ...buildReferences(references),
     ...(fields.anexos
-      ? [pageBreak(), sectionTitle("Anexos"), ...buildSimpleParagraphs(fields.anexos)]
+      ? [sectionTitle("Anexos", true), ...buildSimpleParagraphs(fields.anexos)]
       : []),
     ...(fields.apendices
-      ? [pageBreak(), sectionTitle("Apêndices"), ...buildSimpleParagraphs(fields.apendices)]
+      ? [sectionTitle("Apêndices", true), ...buildSimpleParagraphs(fields.apendices)]
       : []),
   ];
 
