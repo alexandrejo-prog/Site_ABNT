@@ -100,7 +100,8 @@ function stripInlineMarkup(value: string): string {
 }
 
 function rowsForField(key: AcademicFieldKey): number {
-  if (key === "referencias" || key === "anexos" || key === "apendices") return 7;
+  if (key === "referencias") return 12;
+  if (key === "anexos" || key === "apendices") return 7;
   if (key === "workNature" || key === "imageWarnings") return 4;
   return LONG_FIELDS.has(key) ? 5 : 1;
 }
@@ -367,6 +368,16 @@ export default function App() {
                   value={fields[key]}
                   onChange={(event) => updateField(key, event.target.value)}
                 />
+              )}
+              {key === "referencias" && (
+                <div className="field-note">
+                  <p>
+                    Revise as referências antes de gerar a versão final. O sistema aplica destaques automaticamente apenas quando há segurança. Use **negrito** e *itálico* para marcação manual.
+                  </p>
+                  <p>
+                    Para editar: altere o texto acima. Para marcar manualmente: use **título em negrito** e *periódico em itálico*. Se houver [REF] no editor textual, elas são incorporadas automaticamente.
+                  </p>
+                </div>
               )}
             </div>
           ))}

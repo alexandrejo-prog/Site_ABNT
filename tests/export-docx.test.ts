@@ -192,7 +192,11 @@ describe("exportação DOCX", () => {
         paragraph.includes('<w:pStyle w:val="Heading1"'),
     );
 
-    expect(countText(text, "6 CONSIDERAÇÕES FINAIS")).toBe(2);
+    // O sumário usa campo TOC do Word com instrução de campo (instrText),
+    // não texto estático <w:t>. Portanto "6 CONSIDERAÇÕES FINAIS" aparece
+    // apenas 1x como texto renderizado (no título do corpo).
+    // Os 2 títulos existem: 1 no corpo (Heading1) + 1 na instrução do TOC (instrText)
+    expect(countText(text, "6 CONSIDERAÇÕES FINAIS")).toBe(1);
     expect(finalConsiderationsHeadings).toHaveLength(1);
     expect(text).not.toContain("CONCLUSÃO");
     expect(text).not.toContain("Texto final importado do campo.");

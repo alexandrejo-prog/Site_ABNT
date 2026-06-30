@@ -308,31 +308,31 @@
 
 ## 15. Sumário
 
-- [ ] Sumário é gerado.
-- [ ] Sumário é o último elemento pré-textual.
-- [ ] Título `SUMÁRIO` é centralizado.
-- [ ] Título está em maiúsculas.
-- [ ] Título está em negrito.
-- [ ] Sumário lista seções na ordem do texto.
-- [ ] Sumário usa mesma grafia dos títulos do corpo.
-- [ ] Sumário inclui páginas.
-- [ ] Sumário não inclui capa.
-- [ ] Sumário não inclui folha de rosto.
-- [ ] Sumário não inclui folha de aprovação.
-- [ ] Sumário não inclui dedicatória.
-- [ ] Sumário não inclui agradecimentos.
-- [ ] Sumário não inclui epígrafe.
-- [ ] Sumário não inclui resumo.
-- [ ] Sumário não inclui abstract.
-- [ ] Sumário não inclui listas pré-textuais.
-- [ ] Sumário inclui referências.
-- [ ] Sumário inclui glossário quando houver.
-- [ ] Sumário inclui apêndices quando houver.
-- [ ] Sumário inclui anexos quando houver.
-- [ ] Pós-textuais aparecem sem numeração progressiva.
-- [ ] Títulos longos alinham corretamente.
-- [ ] Campo de sumário é atualizável no Word quando possível.
-- [ ] Sistema alerta quando o sumário for estático.
+- [x] Sumário é gerado.
+- [x] Sumário é o último elemento pré-textual.
+- [x] Título `SUMÁRIO` é centralizado (via unnumberedTitle).
+- [x] Título está em maiúsculas (via toUpperCase()).
+- [x] Título está em negrito (via bold: true).
+- [x] Sumário lista seções na ordem do texto.
+- [x] Sumário usa mesma grafia dos títulos do corpo.
+- [ ] Sumário inclui páginas (parcial — usa campo TOC atualizável, páginas só aparecem ao atualizar no Word).
+- [x] Sumário não inclui capa.
+- [x] Sumário não inclui folha de rosto.
+- [x] Sumário não inclui folha de aprovação.
+- [x] Sumário não inclui dedicatória.
+- [x] Sumário não inclui agradecimentos.
+- [x] Sumário não inclui epígrafe.
+- [x] Sumário não inclui resumo.
+- [x] Sumário não inclui abstract.
+- [x] Sumário não inclui listas pré-textuais.
+- [x] Sumário inclui referências.
+- [ ] Sumário inclui glossário quando houver (glossário não implementado).
+- [x] Sumário inclui apêndices quando houver.
+- [x] Sumário inclui anexos quando houver.
+- [x] Pós-textuais aparecem sem numeração progressiva.
+- [ ] Títulos longos alinham corretamente (parcial — Word renderiza o TOC com sua própria formatação).
+- [x] Campo de sumário é atualizável no Word (TOC field com \o "1-3" \h \z \u).
+- [x] Sistema alerta quando o sumário for estático (observação "Atualize o sumário no Word").
 
 ---
 

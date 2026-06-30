@@ -217,6 +217,16 @@ button:focus-visible,
   background: #e7ece9;
 }
 
+.field-note {
+  margin: 4px 0 0;
+  color: #5d4300;
+  background: #fff0bf;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
 .toolbar {
   display: flex;
   align-items: center;

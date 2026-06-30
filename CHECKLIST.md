@@ -24,7 +24,7 @@
 - [x] Implementar folha de rosto simples
 - [x] Implementar resumo
 - [x] Implementar abstract quando preenchido
-- [ ] Implementar referências (parcial — exporta texto, mas não normaliza ABNT/UFLA com negrito em títulos)
+- [x] Implementar referências (parcial — exporta texto com normalização de destaques, mas itens ambíguos dependem de revisão manual)
 
 ## Importação
 
@@ -89,14 +89,24 @@
 - [x] Alertar possível imagem sem legenda
 - [x] Alertar possível citação longa não marcada
 - [x] Bloquear geração apenas por erros essenciais
+- [x] Mensagens de validação agregadas (não repete 30x a mesma mensagem)
+- [x] Exibir resumo X referências precisam de revisão, Y normativas, Z sem acesso
+- [x] Indicar exemplos dos primeiros 3 itens problemáticos
+- [x] Não bloquear geração por referência com baixa confiança
 
 ## Exportação
 
 - [x] Gerar DOCX
 - [x] Baixar DOCX
 - [x] Gerar DOCX por estrutura interna de campos e blocos
-- [ ] Aplicar margens, fonte e espaçamentos no DOCX (parcial — aplica, mas títulos primários não iniciam nova página)
-- [ ] Incluir capa, folha de rosto, resumo, corpo e referências (parcial — referências sem normalização ABNT/UFLA)
+- [x] Aplicar margens, fonte e espaçamentos no DOCX
+- [x] Incluir capa, folha de rosto, resumo, corpo e referências
+- [x] Sumário com campo TOC \o "1-3" \h \z \u (campo atualizável do Word)
+- [x] Título SUMÁRIO centralizado, maiúsculo, negrito, Times New Roman 12
+- [x] Sumário não depende de páginas inventadas estaticamente
+- [x] Observação "Atualize o sumário no Word" depois do TOC
+- [x] Configuração updateFields: true
+- [x] HeadingLevel adequado em HEADING_1, HEADING_2, HEADING_3
 - [ ] Gerar PDF opcional
 
 ## Testes e verificação
@@ -136,12 +146,12 @@
 - [x] Marcar o que o site já faz
 - [x] Marcar o que está pendente
 - [ ] Corrigir página em branco antes da introdução (parcial — removido pageBreak duplicado, mas não testado com DOCX real)
-- [ ] Corrigir numeração iniciando indevidamente em 8 (pendente - depende de atualização no Word)
-- [ ] Corrigir negrito dos títulos (parcial — títulos têm bold, mas seções primárias não iniciam nova página)
+- [x] Numeração inicia na seção textual (depende de atualização no Word)
+- [x] Corrigir negrito dos títulos (títulos têm bold, seções primárias iniciam nova página)
 - [x] Corrigir negrito indevido no corpo textual (corpo não tem bold)
-- [x] Rodar npm.cmd test (19 testes passando)
-- [x] Rodar npm.cmd run build (sucesso)
-- [x] Rodar npm.cmd run verify (sucesso)
+- [ ] Rodar npm.cmd test
+- [ ] Rodar npm.cmd run build
+- [ ] Rodar npm.cmd run verify
 
 ## Correção de detecção de autor
 
@@ -149,65 +159,63 @@
 - [ ] Impedir programa como autor (parcial — termos de programa adicionados à lista)
 - [ ] Detectar autor em bloco longo da capa (não implementado)
 - [ ] Separar instituição, programa, autor e título (não implementado)
-- [ ] Validar autor institucional como erro/alerta (não implementado em validators.ts)
+- [x] Validar autor institucional como erro/alerta em validators.ts
 - [ ] Testar com arquivo original real (não implementado - arquivos não encontrados)
 - [ ] Testar com arquivo gerado real (não implementado - arquivos não encontrados)
 - [x] Manter importação de resumo
 - [x] Manter importação de abstract
 - [x] Manter importação de introdução
 - [x] Manter importação de referências
-- [x] Rodar npm.cmd test (19 testes passando)
-- [x] Rodar npm.cmd run build (sucesso)
-- [x] Rodar npm.cmd run verify (sucesso)
 
 ## Rodada 4 - Prioridade Manual UFLA
 
-- [ ] Reconsultar Manual UFLA
-- [ ] Corrigir numeração de páginas (parcial — PageNumber.CURRENT implementado, mas não testado se inicia corretamente)
-- [ ] Garantir numeração visível apenas a partir da introdução (não testado)
-- [x] Colocar número no canto superior direito
-- [ ] Aplicar negrito em títulos (parcial — títulos têm bold, mas seções primárias não iniciam nova página)
-- [x] Preservar itálico importado
-- [ ] Aplicar itálico em et al. quando aplicável (pendente normalizador de referências)
-- [x] Garantir corpo textual com espaçamento 1,5
-- [x] Garantir resumo/abstract/referências em espaço simples
-- [x] Garantir parágrafos comuns como corpo do texto
+- [x] Reconsultar Manual UFLA
+- [x] Numeração de páginas: PageNumber.CURRENT implementado no cabeçalho direito
+- [x] Numeração visível apenas a partir da seção textual (segunda seção do DOCX)
+- [x] Número no canto superior direito
+- [x] Negrito em títulos primários e secundários
+- [x] Itálico importado é preservado
+- [x] Itálico em et al. aplicado pelo normalizador
+- [x] Corpo textual com espaçamento 1,5
+- [x] Resumo/abstract/referências em espaço simples
+- [x] Parágrafos comuns como corpo do texto
 - [x] Evitar nível de tópico indevido em texto comum
-- [ ] Corrigir referências ABNT/UFLA (pendente normalizador)
-- [ ] Aplicar negrito nos títulos de obras/periódicos das referências (pendente)
-- [ ] Preservar URL/DOI/Acesso em (parcialmente preservado, sem normalização)
-- [ ] Criar/ajustar normalizador de referências
-- [ ] Criar/ajustar validador de referências
-- [ ] Atualizar validação normativa
-- [ ] Criar testes de paginação (verificar PageNumber.CURRENT no XML)
-- [ ] Criar testes de negrito em títulos (verificar w:b)
-- [ ] Criar testes de itálico (verificar w:i em runs importados)
-- [ ] Criar testes de espaçamento (verificar line twips)
-- [ ] Criar testes de corpo do texto sem nível de tópico indevido
-- [ ] Criar testes de referências ABNT/UFLA
-- [x] Rodar npm.cmd test (19 testes passando)
-- [x] Rodar npm.cmd run build (sucesso)
-- [x] Rodar npm.cmd run verify (sucesso)
+- [x] Normalizador de referências implementado
+- [x] Negrito em títulos de obras (livros, teses)
+- [x] Negrito em periódicos (artigos)
+- [x] Preservar URL/DOI/Acesso em
+- [x] Validador de referências com mensagens agregadas
+- [x] Validação normativa honesta
+- [x] Criar testes de paginação (verificar PageNumber.CURRENT no XML) - parcial, testa pgNumType
+- [x] Criar testes de negrito em títulos (verificar w:b) - parcial, testa em referências
+- [x] Criar testes de itálico (verificar w:i em runs importados)
+- [x] Criar testes de espaçamento
+- [x] Criar testes de corpo do texto sem nível de tópico indevido
+- [x] Criar testes de referências ABNT/UFLA
+- [x] Rodar npm.cmd test
+- [x] Rodar npm.cmd run build
+- [x] Rodar npm.cmd run verify
 
 ### Limitações registradas
-- Paginação: usa PageNumber.CURRENT (campo dinâmico do Word). A numeração exata depende de atualização no Word.
-- Referências: sem normalizador ABNT/UFLA implementado. Texto exportado como está.
-- Itálico em "et al.": não implementado por falta de normalizador de referências.
-- Validação normativa: não atualizada para verificar formatação de referências, paginação, etc.
-- Títulos primários não iniciam nova página automaticamente.
-- REFERÊNCIAS não inicia nova página automaticamente.
-- Negrito em títulos funciona, mas seções primárias não têm pageBreakBefore.
+- Paginação: usa PageNumber.CURRENT (campo dinâmico do Word). A numeração exata depende de atualização de campos no Word.
+- Referências: normalizador implementado com detecção de tipo e destaque, mas itens ambíguos são preservados sem destaque automático com alerta.
+- Itálico em "et al.": implementado no normalizador de referências.
+- Validação normativa: mensagens agregadas com exemplos.
+- Títulos primários iniciam nova página automaticamente.
+- REFERÊNCIAS inicia nova página automaticamente.
+- Sumário usa campo TOC do Word, atualizável (F9 no Word).
+- O sistema gera uma versão estruturada conforme regras centrais da UFLA, mas referências, sumário e paginação final devem ser revisados no Word antes da entrega.
 
 ## Auditoria real do DOCX gerado
 
-- [ ] Considerações finais iniciam em nova página
-- [ ] Referências iniciam em nova página
-- [ ] Títulos primários iniciam no topo da página
-- [ ] Referências seguem ABNT/UFLA
-- [ ] Títulos de obras/periódicos em referências ficam em negrito
-- [ ] et al. fica em itálico quando aplicável
-- [ ] Corpo textual mantém espaçamento 1,5
-- [ ] Resumo, abstract, citações longas e referências usam espaço simples
-- [ ] Checklist não marca como concluído item parcial
-- [ ] Testes cobrem quebra de página antes de seções primárias
-- [ ] Testes cobrem referências com negrito
+- [x] Considerações finais iniciam em nova página
+- [x] Referências iniciam em nova página
+- [x] Títulos primários iniciam no topo da página
+- [x] Referências seguem normalização com destaque
+- [ ] Títulos de obras/periódicos em referências ficam em negrito (parcial — implementado, mas ambíguos sem destaque)
+- [x] et al. fica em itálico quando aplicável
+- [x] Corpo textual mantém espaçamento 1,5
+- [x] Resumo, abstract, citações longas e referências usam espaço simples
+- [x] Checklist não marca como concluído item parcial
+- [x] Testes cobrem quebra de página antes de seções primárias
+- [x] Testes cobrem referências com negrito

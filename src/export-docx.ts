@@ -8,6 +8,7 @@ import {
   PageOrientation,
   Paragraph,
   SectionType,
+  TableOfContents,
   TextRun,
   Header,
   PageNumber,
@@ -21,6 +22,7 @@ export type EditorBlockType =
   | "paragraph"
   | "heading1"
   | "heading2"
+  | "heading3"
   | "longQuote"
   | "reference";
 
@@ -59,6 +61,9 @@ export function parseEditorContent(editorText: string): EditorBlock[] {
       if (!trimmed) return null;
       if (trimmed.startsWith("## ")) {
         return { type: "heading2", text: trimmed.replace(/^##\s+/, "") };
+      }
+      if (trimmed.startsWith("### ")) {
+        return { type: "heading3", text: trimmed.replace(/^###\s+/, "") };
       }
       if (trimmed.startsWith("# ")) {
         return { type: "heading1", text: trimmed.replace(/^#\s+/, "") };
@@ -283,6 +288,22 @@ function blockToParagraph(block: EditorBlock, isFirstTextualBlock: boolean = fal
     })];
   }
 
+  if (block.type === "heading3") {
+    return [new Paragraph({
+      heading: HeadingLevel.HEADING_3,
+      spacing: { before: 120, after: 100, line: ONE_AND_HALF_LINE },
+      children: [
+        new TextRun({
+          text: block.text,
+          bold: true,
+          font: UFLA_RULES.typography.fontFamily,
+          size: BODY_SIZE,
+          color: BLACK,
+        }),
+      ],
+    })];
+  }
+
   if (block.type === "longQuote") {
     return [new Paragraph({
       alignment: AlignmentType.BOTH,
@@ -379,38 +400,42 @@ function buildSummary(
   bodyBlocks: EditorBlock[],
   references: string[],
   fields: AcademicFields,
-): Paragraph[] {
-  const entries = bodyBlocks
-    .filter((block) => block.type === "heading1" || block.type === "heading2")
-    .map((block) => ({
-      level: block.type === "heading2" ? 2 : 1,
-      text: block.text.toUpperCase(),
-    }));
+): Array<Paragraph | TableOfContents> {
+  const hasEntries =
+    bodyBlocks.some(
+      (block) =>
+        block.type === "heading1" || block.type === "heading2" || block.type === "heading3",
+    ) ||
+    references.length > 0 ||
+    Boolean(fields.apendices || fields.anexos);
 
-  if (references.length) entries.push({ level: 1, text: "REFERÊNCIAS" });
-  if (fields.apendices) entries.push({ level: 1, text: "APÊNDICES" });
-  if (fields.anexos) entries.push({ level: 1, text: "ANEXOS" });
-
-  if (!entries.length) return [];
+  if (!hasEntries) return [];
 
   return [
     pageBreak(),
+    // Título SUMÁRIO centralizado, maiúsculo, negrito, Times New Roman, tamanho 12
     unnumberedTitle("Sumário"),
-    ...entries.map(
-      (entry) =>
-        new Paragraph({
-          spacing: { line: ONE_AND_HALF_LINE, after: 80 },
-          indent: { left: entry.level === 2 ? 360 : 0 },
-          children: [
-            new TextRun({
-              text: entry.text,
-              font: UFLA_RULES.typography.fontFamily,
-              size: BODY_SIZE,
-              color: BLACK,
-            }),
-          ],
+    // TOC field: TOC \o "1-3" \h \z \u
+    new TableOfContents("SUMÁRIO", {
+      headingStyleRange: "1-3",
+      hyperlink: true,
+      hideTabAndPageNumbersInWebView: true,
+      useAppliedParagraphOutlineLevel: true,
+    }),
+    // Observação discreta sobre atualização do sumário
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 120, after: 120 },
+      children: [
+        new TextRun({
+          text: "Atualize o sumário no Word antes da versão final (selecione o sumário e pressione F9 ou clique em 'Atualizar campo').",
+          font: UFLA_RULES.typography.fontFamily,
+          size: UFLA_RULES.typography.noteFontSizePt * 2,
+          italics: true,
+          color: BLACK,
         }),
-    ),
+      ],
+    }),
   ];
 }
 
@@ -536,7 +561,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   const summaryChildren = buildSummary(bodyBlocks, references, fields);
   const textualStartPage = calculateTextualStartPage(fields, summaryChildren.length > 0);
 
-  const preTextualChildrenList: Paragraph[] = [
+  const preTextualChildrenList: Array<Paragraph | TableOfContents> = [
     ...coverChildren(fields, input.logo),
     pageBreak(),
     ...titlePageChildren(fields),
@@ -577,6 +602,9 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
     creator: "UFLA DOCX Acadêmico",
     title: fields.title || "Trabalho acadêmico",
     description: "Documento acadêmico gerado conforme regras centrais da UFLA.",
+    features: {
+      updateFields: true,
+    },
     sections: [
       {
         properties: {
