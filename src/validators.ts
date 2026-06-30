@@ -3,6 +3,7 @@ import {
   WorkTypeValue,
   isAdvisorRequired,
 } from "./ufla-rules";
+import { validateReferencesText } from "./references-validator";
 
 export type ValidationSeverity = "error" | "warning";
 
@@ -14,6 +15,22 @@ export interface ValidationIssue {
 
 function hasValue(value: string | WorkTypeValue): boolean {
   return value.trim().length > 0;
+}
+
+function normalizeForValidation(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function looksInstitutionalAuthor(value: string): boolean {
+  const normalized = normalizeForValidation(value);
+  return /\b(UNIVERSIDADE|UFLA|INSTITUTO|PROGRAMA|POS-GRADUACAO|PÓS-GRADUAÇÃO|CURSO|DEPARTAMENTO|FACULDADE|ESCOLA|LAVRAS|MINAS GERAIS|\bMG\b)\b/.test(
+    normalized,
+  );
 }
 
 function hasLikelyImageWithoutCaption(text: string): boolean {
@@ -64,6 +81,13 @@ export function validateWork(
       code: "author-required",
       message: "Informe o autor do trabalho.",
     });
+  } else if (looksInstitutionalAuthor(fields.author)) {
+    issues.push({
+      severity: "error",
+      code: "author-institutional",
+      message:
+        "O campo autor parece conter uma instituição, programa, unidade ou localidade, não um nome de pessoa. Revise a identificação automática.",
+    });
   }
 
   if (isAdvisorRequired(fields.workType) && !hasValue(fields.advisor)) {
@@ -88,6 +112,14 @@ export function validateWork(
       code: "references-required",
       message: "Inclua as referências do trabalho.",
     });
+  } else {
+    for (const referenceIssue of validateReferencesText(fields.referencias)) {
+      issues.push({
+        severity: "warning",
+        code: referenceIssue.code,
+        message: `${referenceIssue.message} Documento ainda não está plenamente conforme o Manual UFLA enquanto houver alertas normativos fortes.`,
+      });
+    }
   }
 
   if (!hasValue(fields.introducao)) {
