@@ -60,7 +60,7 @@ describe("validação normativa", () => {
     expect(issues.filter((issue) => issue.severity === "error")).toHaveLength(0);
   });
 
-  it("resume alertas repetidos de referências", () => {
+  it("resume alertas repetidos de referências sem frase forte repetida", () => {
     const issues = validateWork(
       baseFields({
         referencias: [
@@ -75,10 +75,27 @@ describe("validação normativa", () => {
 
     const highlightIssues = issues.filter((issue) => issue.code === "reference-highlight-missing");
     const normativeIssues = issues.filter((issue) => issue.code === "reference-normative-preserved");
+    const repeatedStrongPhrase = issues.filter((issue) =>
+      issue.message.includes("Documento ainda não está plenamente conforme"),
+    );
 
     expect(highlightIssues).toHaveLength(1);
     expect(highlightIssues[0].message).toContain("Há 3 referência(s)");
+    expect(highlightIssues[0].message).toContain("Revise antes da versão final");
     expect(normativeIssues).toHaveLength(1);
     expect(normativeIssues[0].message).toContain("Há 2 referência(s) normativas");
+    expect(normativeIssues[0].message).toContain("Isso pode estar correto para leis");
+    expect(repeatedStrongPhrase).toHaveLength(0);
+  });
+
+  it("mantém alerta de imagem como conferência informativa", () => {
+    const issues = validateWork(
+      baseFields({ imageWarnings: "1 imagem(ns) detectada(s)." }),
+    );
+    const imageIssues = issues.filter((issue) => issue.code === "imported-image-warning");
+
+    expect(imageIssues).toHaveLength(1);
+    expect(imageIssues[0].message).toContain("Confira posição, qualidade e legenda");
+    expect(imageIssues[0].message).not.toContain("Documento ainda não está plenamente conforme");
   });
 });
