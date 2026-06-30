@@ -17,3 +17,5 @@ fix-runs.cjs
 .env.*.local
 
 tsconfig.tsbuildinfo
+
+tsconfig.tsbuildinfo
