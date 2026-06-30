@@ -1,4 +1,4 @@
-import JSZip from "jszip";
+﻿import JSZip from "jszip";
 import {
   AlignmentType,
   Document,
@@ -369,7 +369,7 @@ function fieldSectionBlocks(fields: AcademicFields, bodyBlocks: EditorBlock[]): 
 
   if (fields.introducao && !hasEditorHeading(nextBlocks, "INTRODUCAO")) {
     nextBlocks.unshift(
-      { type: "heading1", text: "1 INTRODUÇÃO" },
+      { type: "heading1", text: "1 INTRODUÃ‡ÃƒO" },
       ...splitParagraphs(fields.introducao).map((text) => ({ type: "paragraph" as const, text })),
     );
   }
@@ -378,7 +378,7 @@ function fieldSectionBlocks(fields: AcademicFields, bodyBlocks: EditorBlock[]): 
     nextBlocks.push(
       {
         type: "heading1",
-        text: usesFinalConsiderationsHeading(nextBlocks) ? "6 CONSIDERAÇÕES FINAIS" : "CONCLUSÃO",
+        text: usesFinalConsiderationsHeading(nextBlocks) ? "6 CONSIDERAÃ‡Ã•ES FINAIS" : "CONCLUSÃƒO",
       },
       ...splitParagraphs(fields.conclusao).map((text) => ({ type: "paragraph" as const, text })),
     );
@@ -404,7 +404,7 @@ function buildSummary(
 
   return [
     pageBreak(),
-    unnumberedTitle("Sumário"),
+    unnumberedTitle("SumÃ¡rio"),
     new TableOfContents("", {
       headingStyleRange: "1-3",
       hyperlink: true,
@@ -416,7 +416,7 @@ function buildSummary(
       spacing: { before: 120, after: 120 },
       children: [
         new TextRun({
-          text: "Após abrir no Word, atualize o sumário com F9 para recalcular páginas.",
+          text: "ApÃ³s abrir no Word, atualize o sumÃ¡rio com F9 para recalcular pÃ¡ginas.",
           font: UFLA_RULES.typography.fontFamily,
           size: UFLA_RULES.typography.noteFontSizePt * 2,
           italics: true,
@@ -436,7 +436,7 @@ export function calculateTextualStartPage(
   hasSummary: boolean,
 ): number {
   const impactRequired = fields.workType === "dissertacao" || fields.workType === "tese";
-  let countedPreTextualPages = 1; // Folha de rosto. Capa e ficha catalográfica não contam.
+  let countedPreTextualPages = 1; // Folha de rosto. Capa e ficha catalogrÃ¡fica nÃ£o contam.
 
   if (hasText(fields.dedicatoria)) countedPreTextualPages += 1;
   if (hasText(fields.agradecimentos)) countedPreTextualPages += 1;
@@ -458,7 +458,7 @@ function coverChildren(fields: AcademicFields, logo?: DocxLogoAsset): Paragraph[
     new Paragraph({ spacing: { before: 1200 } }),
     centeredParagraph(fields.author || "AUTOR"),
     new Paragraph({ spacing: { before: 1800 } }),
-    centeredParagraph((fields.title || "TÍTULO DO TRABALHO").toUpperCase(), true),
+    centeredParagraph((fields.title || "TÃTULO DO TRABALHO").toUpperCase(), true),
     ...(fields.subtitle ? [centeredParagraph(fields.subtitle.toUpperCase(), true)] : []),
     new Paragraph({ spacing: { before: 2200 } }),
     centeredParagraph(fields.location || "LAVRAS - MG"),
@@ -469,12 +469,12 @@ function coverChildren(fields: AcademicFields, logo?: DocxLogoAsset): Paragraph[
 function titlePageChildren(fields: AcademicFields): Paragraph[] {
   const nature =
     fields.workNature ||
-    "Trabalho apresentado à Universidade Federal de Lavras como requisito acadêmico, conforme dados revisados pelo usuário.";
+    "Trabalho apresentado Ã  Universidade Federal de Lavras como requisito acadÃªmico, conforme dados revisados pelo usuÃ¡rio.";
 
   return [
     centeredParagraph(fields.author || "AUTOR"),
     new Paragraph({ spacing: { before: 1500 } }),
-    centeredParagraph((fields.title || "TÍTULO DO TRABALHO").toUpperCase(), true),
+    centeredParagraph((fields.title || "TÃTULO DO TRABALHO").toUpperCase(), true),
     ...(fields.subtitle ? [centeredParagraph(fields.subtitle.toUpperCase(), true)] : []),
     new Paragraph({ spacing: { before: 900 } }),
     textParagraph(nature, {
@@ -506,20 +506,20 @@ function preTextualChildren(fields: AcademicFields): Paragraph[] {
   const impactRequired = fields.workType === "dissertacao" || fields.workType === "tese";
   const indicadores =
     fields.indicadoresImpacto ||
-    (impactRequired ? "Espaço reservado aos indicadores de impacto." : "");
+    (impactRequired ? "EspaÃ§o reservado aos indicadores de impacto." : "");
   const impactIndicators =
     fields.impactIndicators ||
     (impactRequired ? "Reserved space for impact indicators." : "");
 
   return [
     pageBreak(),
-    sectionTitle("Ficha catalográfica"),
+    sectionTitle("Ficha catalogrÃ¡fica"),
     simpleParagraph(
-      "Espaço reservado para ficha catalográfica elaborada pela Biblioteca Universitária da UFLA.",
+      "EspaÃ§o reservado para ficha catalogrÃ¡fica elaborada pela Biblioteca UniversitÃ¡ria da UFLA.",
     ),
-    ...optionalPage("Dedicatória", fields.dedicatoria),
+    ...optionalPage("DedicatÃ³ria", fields.dedicatoria),
     ...optionalPage("Agradecimentos", fields.agradecimentos),
-    ...optionalPage("Epígrafe", fields.epigrafe),
+    ...optionalPage("EpÃ­grafe", fields.epigrafe),
     pageBreak(),
     sectionTitle("Resumo"),
     simpleParagraph(fields.resumo || " "),
@@ -560,13 +560,13 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   const textualAndPostTextualChildren: Paragraph[] = [
     ...bodyBlocks.flatMap((block, index) => blockToParagraph(block, index === 0)),
     pageBreak(),
-    sectionTitle("Referências"),
+    sectionTitle("ReferÃªncias"),
     ...buildReferences(references),
     ...(fields.anexos
       ? [pageBreak(), sectionTitle("Anexos"), ...buildSimpleParagraphs(fields.anexos)]
       : []),
     ...(fields.apendices
-      ? [pageBreak(), sectionTitle("Apêndices"), ...buildSimpleParagraphs(fields.apendices)]
+      ? [pageBreak(), sectionTitle("ApÃªndices"), ...buildSimpleParagraphs(fields.apendices)]
       : []),
   ];
 
@@ -587,9 +587,9 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   });
 
   return new Document({
-    creator: "UFLA DOCX Acadêmico",
-    title: fields.title || "Trabalho acadêmico",
-    description: "Documento acadêmico gerado conforme regras centrais da UFLA.",
+    creator: "UFLA DOCX AcadÃªmico",
+    title: fields.title || "Trabalho acadÃªmico",
+    description: "Documento acadÃªmico gerado conforme regras centrais da UFLA.",
     features: {
       updateFields: true,
     },
@@ -691,8 +691,18 @@ function insertTcField(paragraphXml: string, title: string, level: number): stri
 
 function replaceTocInstruction(documentXml: string): string {
   return documentXml
-    .replace(/TOC\s+\\o\s+(?:&quot;|")1-3(?:&quot;|")\s+\\h\s+\\z\s+\\u/g, "TOC \\f \\h \\z")
-    .replace(/TOC\s+\\o\s+(?:&quot;|")1-3(?:&quot;|")\s+\\h\s+\\z/g, "TOC \\f \\h \\z");
+    .replace(
+      /TOC\s+\\h\s+\\o\s+(?:&quot;|")1-3(?:&quot;|")\s+\\u\s+\\z/g,
+      "TOC \\f \\h \\z",
+    )
+    .replace(
+      /TOC\s+\\o\s+(?:&quot;|")1-3(?:&quot;|")\s+\\h\s+\\z\s+\\u/g,
+      "TOC \\f \\h \\z",
+    )
+    .replace(
+      /TOC\s+\\o\s+(?:&quot;|")1-3(?:&quot;|")\s+\\h\s+\\z/g,
+      "TOC \\f \\h \\z",
+    );
 }
 
 function postProcessDocumentXml(documentXml: string): string {
@@ -709,7 +719,7 @@ function postProcessDocumentXml(documentXml: string): string {
 
     next = removeHeadingMarkup(next);
 
-    if (text.includes("Após abrir no Word, atualize o sumário")) {
+    if (text.includes("ApÃ³s abrir no Word, atualize o sumÃ¡rio")) {
       afterSummaryInstruction = true;
     }
 
@@ -754,3 +764,4 @@ export async function generateDocxBlob(input: DocxGenerationInput): Promise<Blob
   const blob = await Packer.toBlob(createDocxDocument({ ...input, logo }));
   return postProcessDocxBlob(blob);
 }
+
