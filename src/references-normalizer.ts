@@ -16,14 +16,19 @@ export interface NormalizedReference {
   detectedType:
     | "artigo"
     | "livro"
-    | "trabalho-academico"
-    | "documento-eletronico"
+    | "tese-dissertacao"
+    | "documento-institucional"
     | "legislacao"
-    | "indefinido";
+    | "site"
+    | "desconhecido";
 }
 
 function cleanReference(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function fold(value: string): string {
+  return value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 }
 
 function splitReferenceItems(value: string): string[] {
@@ -34,28 +39,36 @@ function splitReferenceItems(value: string): string[] {
 }
 
 function hasYear(value: string): boolean {
-  return /\b(19|20)\d{2}\b/.test(value);
+  return /\b(19|20)\d{2}\b/u.test(value);
 }
 
 function isLikelyLegislation(value: string): boolean {
-  return /^(BRASIL|MINAS GERAIS|LAVRAS|UNIVERSIDADE FEDERAL DE LAVRAS)\./i.test(value) ||
-    /\b(lei|decreto|portaria|resolu[cç][aã]o|instru[cç][aã]o normativa)\b/i.test(value);
+  const text = fold(value);
+  return /^(brasil|minas gerais|lavras)\./u.test(text) ||
+    /\b(lei|decreto|portaria|resolucao|instrucao normativa|norma|nbr)\b/u.test(text);
 }
 
 function isLikelyAcademicWork(value: string): boolean {
-  return /\b(disserta[cç][aã]o|tese|monografia|trabalho de conclus[aã]o de curso)\b/i.test(value);
+  return /\b(dissertacao|tese|monografia|trabalho de conclusao de curso)\b/u.test(fold(value));
 }
 
 function isLikelyElectronic(value: string): boolean {
-  return /(https?:\/\/|doi\b|dispon[ií]vel em:|acesso em:)/i.test(value);
+  return /(https?:\/\/|doi\b|disponivel em:|acesso em:)/u.test(fold(value));
 }
 
-function splitSentences(value: string): string[] {
-  return value
-    .split(/\.\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part, index, parts) => (index < parts.length - 1 ? part : part.replace(/\.$/, "")));
+function isLikelyInstitutionalDocument(value: string): boolean {
+  const text = fold(value);
+  return /^(universidade|instituto|ministerio|associacao|fundacao|conselho|ufla|abnt)\b/u.test(text);
+}
+
+function sentenceBreakIndexes(value: string): number[] {
+  const indexes: number[] = [];
+  const pattern = /\.\s+/gu;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(value)) !== null) {
+    indexes.push(match.index);
+  }
+  return indexes;
 }
 
 function firstBeforeComma(value: string): string {
@@ -63,13 +76,80 @@ function firstBeforeComma(value: string): string {
 }
 
 function looksLikeAuthorSegment(segment: string): boolean {
-  return /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s.;,'-]+$/.test(segment.trim());
+  const text = segment.trim();
+  if (!text.includes(",")) return false;
+  if (!/^\p{Lu}/u.test(text)) return false;
+  const surname = firstBeforeComma(text);
+  return surname.length >= 2 && /^\p{Lu}/u.test(surname);
 }
 
-function looksLikeArticle(reference: string, sentences: string[]): boolean {
-  if (sentences.length < 3) return false;
-  const third = sentences[2] ?? "";
-  return /,/.test(third) && !/:/.test(third) && !/^Dispon[ií]vel em:/i.test(third) && !isLikelyLegislation(reference);
+function splitAuthorAndRemainder(reference: string): { author: string; remainder: string } | undefined {
+  for (const index of sentenceBreakIndexes(reference)) {
+    const author = reference.slice(0, index).trim();
+    const remainder = cleanReference(reference.slice(index + 1));
+    if (/^et\s+al\./iu.test(remainder)) continue;
+    if (looksLikeAuthorSegment(author) && remainder.length > 3) {
+      return { author, remainder };
+    }
+  }
+  return undefined;
+}
+
+function looksLikeArticleTail(value: string): boolean {
+  const commaIndex = value.indexOf(",");
+  if (commaIndex < 0) return false;
+
+  const periodical = value.slice(0, commaIndex).trim();
+  const tail = value.slice(commaIndex);
+  if (periodical.length < 4 || !/^\p{Lu}/u.test(periodical)) return false;
+
+  return /,\s*[^,]{2,},\s*(?:v|n|p)\.\s*/iu.test(tail) ||
+    /,\s*(?:v|n|p)\.\s*/iu.test(tail);
+}
+
+function detectArticleHighlight(remainder: string): string | undefined {
+  for (const index of sentenceBreakIndexes(remainder)) {
+    const tail = cleanReference(remainder.slice(index + 1));
+    if (!looksLikeArticleTail(tail)) continue;
+
+    const periodical = firstBeforeComma(tail);
+    if (periodical.length > 3) return periodical;
+  }
+  return undefined;
+}
+
+function stripTrailingAcademicData(value: string): string {
+  let title = value.trim();
+  let previous = "";
+  while (title && title !== previous) {
+    previous = title;
+    title = title.replace(/\.\s*\d+\s*p\.?\s*$/iu, "").trim();
+    title = title.replace(/\.\s*(?:19|20)\d{2}\s*$/u, "").trim();
+  }
+  return title.replace(/\.$/u, "").trim();
+}
+
+function detectAcademicHighlight(remainder: string): string | undefined {
+  const markerIndex = fold(remainder).search(/\b(tese|dissertacao|monografia|trabalho de conclusao de curso)\s*\(/u);
+  if (markerIndex < 0) return undefined;
+
+  const title = stripTrailingAcademicData(remainder.slice(0, markerIndex));
+  return title.length > 3 ? title : undefined;
+}
+
+function looksLikePublicationInfo(value: string): boolean {
+  return /^[\p{Lu}][\p{L}\s.'-]*(?:,\s*\p{Lu}{2})?\s*:\s*.+,\s*(?:19|20)\d{2}/u.test(value);
+}
+
+function detectBookHighlight(remainder: string): string | undefined {
+  for (const index of sentenceBreakIndexes(remainder)) {
+    const title = remainder.slice(0, index).trim();
+    const publicationInfo = cleanReference(remainder.slice(index + 1));
+    if (title.length > 3 && looksLikePublicationInfo(publicationInfo)) {
+      return title;
+    }
+  }
+  return undefined;
 }
 
 function detectHighlight(reference: string): {
@@ -78,8 +158,6 @@ function detectHighlight(reference: string): {
   detectedType: NormalizedReference["detectedType"];
   warning?: string;
 } {
-  const sentences = splitSentences(reference);
-
   if (isLikelyLegislation(reference)) {
     return {
       confidence: "baixa",
@@ -88,40 +166,57 @@ function detectHighlight(reference: string): {
     };
   }
 
-  if (looksLikeArticle(reference, sentences)) {
-    const periodical = firstBeforeComma(sentences[2]);
-    if (periodical.length > 3) {
-      return { highlight: periodical, confidence: "media", detectedType: "artigo" };
-    }
-  }
-
-  if (isLikelyAcademicWork(reference) && sentences[1]) {
+  const parsed = splitAuthorAndRemainder(reference);
+  if (!parsed) {
     return {
-      highlight: sentences[1],
-      confidence: "media",
-      detectedType: "trabalho-academico",
-    };
-  }
-
-  if (isLikelyElectronic(reference) && sentences[1]) {
-    return {
-      highlight: sentences[1],
       confidence: "baixa",
-      detectedType: "documento-eletronico",
+      detectedType: "desconhecido",
+      warning: "Não foi possível identificar com segurança o título da obra ou periódico para aplicar negrito.",
     };
   }
 
-  if (sentences.length >= 2 && looksLikeAuthorSegment(sentences[0]) && sentences[1].length > 3) {
+  const article = detectArticleHighlight(parsed.remainder);
+  if (article) {
+    return { highlight: article, confidence: "media", detectedType: "artigo" };
+  }
+
+  const academic = detectAcademicHighlight(parsed.remainder);
+  if (academic || isLikelyAcademicWork(reference)) {
     return {
-      highlight: sentences[1],
-      confidence: "media",
-      detectedType: "livro",
+      highlight: academic,
+      confidence: academic ? "media" : "baixa",
+      detectedType: "tese-dissertacao",
+      warning: academic ? undefined : "Referência acadêmica preservada sem destaque automático por baixa confiança.",
     };
+  }
+
+  if (isLikelyInstitutionalDocument(reference)) {
+    const documentTitle = detectBookHighlight(parsed.remainder);
+    return {
+      highlight: documentTitle,
+      confidence: documentTitle ? "media" : "baixa",
+      detectedType: "documento-institucional",
+      warning: documentTitle ? undefined : "Documento institucional preservado sem destaque automático por baixa confiança.",
+    };
+  }
+
+  if (isLikelyElectronic(reference)) {
+    const electronicTitle = detectBookHighlight(parsed.remainder);
+    return {
+      highlight: electronicTitle,
+      confidence: electronicTitle ? "baixa" : "baixa",
+      detectedType: "site",
+    };
+  }
+
+  const book = detectBookHighlight(parsed.remainder);
+  if (book) {
+    return { highlight: book, confidence: "media", detectedType: "livro" };
   }
 
   return {
     confidence: "baixa",
-    detectedType: "indefinido",
+    detectedType: "desconhecido",
     warning: "Não foi possível identificar com segurança o título da obra ou periódico para aplicar negrito.",
   };
 }
@@ -131,19 +226,63 @@ function escapeRegExp(value: string): string {
 }
 
 function splitRunByEtAl(run: ReferenceRun): ReferenceRun[] {
-  const parts = run.text.split(/(et\s+al\.)/gi).filter((part) => part.length > 0);
+  const parts = run.text.split(/(et\s+al\.)/giu).filter((part) => part.length > 0);
   return parts.map((part) => ({
     text: part,
     bold: run.bold,
-    italics: /et\s+al\./i.test(part) ? true : run.italics,
+    italics: /et\s+al\./iu.test(part) ? true : run.italics,
   }));
 }
 
-function applyHighlightAndEtAl(text: string, highlight?: string): ReferenceRun[] {
-  if (!highlight) return splitRunByEtAl({ text });
+function mergeRuns(runs: ReferenceRun[]): ReferenceRun[] {
+  const merged: ReferenceRun[] = [];
+  for (const run of runs.filter((item) => item.text.length > 0)) {
+    const previous = merged[merged.length - 1];
+    if (previous && previous.bold === run.bold && previous.italics === run.italics) {
+      previous.text += run.text;
+    } else {
+      merged.push({ ...run });
+    }
+  }
+  return merged;
+}
 
-  const match = text.match(new RegExp(escapeRegExp(highlight), "i"));
-  if (!match || match.index === undefined) return splitRunByEtAl({ text });
+function parseManualMarkup(text: string): { runs: ReferenceRun[]; highlighted?: string; hasManual: boolean } {
+  const runs: ReferenceRun[] = [];
+  const tokenPattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/gu;
+  let cursor = 0;
+  let highlighted: string | undefined;
+  let match: RegExpExecArray | null;
+
+  while ((match = tokenPattern.exec(text)) !== null) {
+    if (match.index > cursor) runs.push({ text: text.slice(cursor, match.index) });
+
+    const token = match[0];
+    const bold = token.startsWith("**");
+    const content = bold ? token.slice(2, -2) : token.slice(1, -1);
+    if (!highlighted && content.trim()) highlighted = content.trim();
+    runs.push({ text: content, bold, italics: !bold });
+    cursor = match.index + token.length;
+  }
+
+  if (cursor < text.length) runs.push({ text: text.slice(cursor) });
+
+  return {
+    runs: mergeRuns(runs.flatMap(splitRunByEtAl)),
+    highlighted,
+    hasManual: Boolean(highlighted),
+  };
+}
+
+function plainTextFromRuns(runs: ReferenceRun[]): string {
+  return runs.map((run) => run.text).join("");
+}
+
+function applyHighlightAndEtAl(text: string, highlight?: string): ReferenceRun[] {
+  if (!highlight) return mergeRuns(splitRunByEtAl({ text }));
+
+  const match = text.match(new RegExp(escapeRegExp(highlight), "iu"));
+  if (!match || match.index === undefined) return mergeRuns(splitRunByEtAl({ text }));
 
   const start = match.index;
   const end = start + match[0].length;
@@ -153,11 +292,13 @@ function applyHighlightAndEtAl(text: string, highlight?: string): ReferenceRun[]
   runs.push({ text: text.slice(start, end), bold: true });
   if (end < text.length) runs.push({ text: text.slice(end) });
 
-  return runs.flatMap(splitRunByEtAl).filter((run) => run.text.length > 0);
+  return mergeRuns(runs.flatMap(splitRunByEtAl));
 }
 
 export function normalizeReference(reference: string): NormalizedReference {
-  const text = cleanReference(reference);
+  const originalText = cleanReference(reference);
+  const manual = parseManualMarkup(originalText);
+  const text = cleanReference(plainTextFromRuns(manual.runs));
   const warnings: string[] = [];
 
   if (!text) {
@@ -167,29 +308,32 @@ export function normalizeReference(reference: string): NormalizedReference {
       runs: [],
       confidence: "baixa",
       warnings: ["Referência vazia."],
-      detectedType: "indefinido",
+      detectedType: "desconhecido",
     };
   }
 
   if (text.length < 25) warnings.push("Referência muito curta para validação segura.");
   if (!hasYear(text)) warnings.push("Referência sem ano detectável.");
-  if (/(https?:\/\/|dispon[ií]vel em:)/i.test(text) && !/acesso em:/i.test(text)) {
+  if (/(https?:\/\/|disponivel em:)/u.test(fold(text)) && !/acesso em:/u.test(fold(text))) {
     warnings.push("Referência online sem 'Acesso em:' detectado.");
   }
 
   const detection = detectHighlight(text);
   if (detection.warning) warnings.push(detection.warning);
-  if (!detection.highlight) {
+  if (!detection.highlight && !manual.hasManual) {
     warnings.push("Referência preservada sem negrito automático por baixa confiança.");
   }
+
+  const detectedHighlight = manual.highlighted ?? detection.highlight;
+  const runs = manual.hasManual ? manual.runs : applyHighlightAndEtAl(text, detection.highlight);
 
   return {
     original: reference,
     text,
-    runs: applyHighlightAndEtAl(text, detection.highlight),
-    confidence: detection.confidence,
+    runs,
+    confidence: manual.hasManual ? "alta" : detection.confidence,
     warnings,
-    detectedHighlight: detection.highlight,
+    detectedHighlight,
     detectedType: detection.detectedType,
   };
 }
