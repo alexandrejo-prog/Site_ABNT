@@ -69,7 +69,7 @@ function looksLikeAuthorSegment(segment: string): boolean {
 function looksLikeArticle(reference: string, sentences: string[]): boolean {
   if (sentences.length < 3) return false;
   const third = sentences[2] ?? "";
-  return /,/.test(third) && !/^Dispon[ií]vel em:/i.test(third) && !isLikelyLegislation(reference);
+  return /,/.test(third) && !/:/.test(third) && !/^Dispon[ií]vel em:/i.test(third) && !isLikelyLegislation(reference);
 }
 
 function detectHighlight(reference: string): {
