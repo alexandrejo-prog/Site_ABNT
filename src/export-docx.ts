@@ -1,17 +1,17 @@
+import JSZip from "jszip";
 import {
   AlignmentType,
   Document,
   HeadingLevel,
+  Header,
   ImageRun,
   Packer,
   PageBreak,
+  PageNumber,
   PageOrientation,
   Paragraph,
-  SectionType,
   TableOfContents,
   TextRun,
-  Header,
-  PageNumber,
 } from "docx";
 import type { IParagraphOptions } from "docx";
 import { AcademicFields, UFLA_RULES } from "./ufla-rules";
@@ -240,24 +240,7 @@ function pageBreak(): Paragraph {
 
 function blockToParagraph(block: EditorBlock, isFirstTextualBlock: boolean = false): Paragraph[] {
   if (block.type === "heading1") {
-    // Seções primárias (exceto a primeira) devem iniciar em nova página
-    if (!isFirstTextualBlock) {
-      return [pageBreak(), new Paragraph({
-        heading: HeadingLevel.HEADING_1,
-        spacing: { before: 240, after: 180, line: ONE_AND_HALF_LINE },
-        children: [
-          new TextRun({
-            text: block.text.toUpperCase(),
-            bold: true,
-            font: UFLA_RULES.typography.fontFamily,
-            size: BODY_SIZE,
-            color: BLACK,
-          }),
-        ],
-      })];
-    }
-
-    return [new Paragraph({
+    const title = new Paragraph({
       heading: HeadingLevel.HEADING_1,
       spacing: { before: 240, after: 180, line: ONE_AND_HALF_LINE },
       children: [
@@ -269,48 +252,56 @@ function blockToParagraph(block: EditorBlock, isFirstTextualBlock: boolean = fal
           color: BLACK,
         }),
       ],
-    })];
+    });
+
+    return isFirstTextualBlock ? [title] : [pageBreak(), title];
   }
 
   if (block.type === "heading2") {
-    return [new Paragraph({
-      heading: HeadingLevel.HEADING_2,
-      spacing: { before: 180, after: 120, line: ONE_AND_HALF_LINE },
-      children: [
-        new TextRun({
-          text: block.text,
-          bold: true,
-          font: UFLA_RULES.typography.fontFamily,
-          size: BODY_SIZE,
-          color: BLACK,
-        }),
-      ],
-    })];
+    return [
+      new Paragraph({
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 180, after: 120, line: ONE_AND_HALF_LINE },
+        children: [
+          new TextRun({
+            text: block.text,
+            bold: true,
+            font: UFLA_RULES.typography.fontFamily,
+            size: BODY_SIZE,
+            color: BLACK,
+          }),
+        ],
+      }),
+    ];
   }
 
   if (block.type === "heading3") {
-    return [new Paragraph({
-      heading: HeadingLevel.HEADING_3,
-      spacing: { before: 120, after: 100, line: ONE_AND_HALF_LINE },
-      children: [
-        new TextRun({
-          text: block.text,
-          bold: true,
-          font: UFLA_RULES.typography.fontFamily,
-          size: BODY_SIZE,
-          color: BLACK,
-        }),
-      ],
-    })];
+    return [
+      new Paragraph({
+        heading: HeadingLevel.HEADING_3,
+        spacing: { before: 120, after: 100, line: ONE_AND_HALF_LINE },
+        children: [
+          new TextRun({
+            text: block.text,
+            bold: true,
+            font: UFLA_RULES.typography.fontFamily,
+            size: BODY_SIZE,
+            color: BLACK,
+          }),
+        ],
+      }),
+    ];
   }
 
   if (block.type === "longQuote") {
-    return [new Paragraph({
-      alignment: AlignmentType.BOTH,
-      spacing: { line: SINGLE_LINE, after: 120 },
-      indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
-      children: textRunsFromMarkup(block.text, LONG_QUOTE_SIZE),
-    })];
+    return [
+      new Paragraph({
+        alignment: AlignmentType.BOTH,
+        spacing: { line: SINGLE_LINE, after: 120 },
+        indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
+        children: textRunsFromMarkup(block.text, LONG_QUOTE_SIZE),
+      }),
+    ];
   }
 
   return [textParagraph(block.text)];
@@ -413,22 +404,19 @@ function buildSummary(
 
   return [
     pageBreak(),
-    // Título SUMÁRIO centralizado, maiúsculo, negrito, Times New Roman, tamanho 12
     unnumberedTitle("Sumário"),
-    // TOC field: TOC \o "1-3" \h \z \u
-    new TableOfContents("SUMÁRIO", {
+    new TableOfContents("", {
       headingStyleRange: "1-3",
       hyperlink: true,
       hideTabAndPageNumbersInWebView: true,
       useAppliedParagraphOutlineLevel: true,
     }),
-    // Observação discreta sobre atualização do sumário
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { before: 120, after: 120 },
       children: [
         new TextRun({
-          text: "Atualize o sumário no Word antes da versão final (selecione o sumário e pressione F9 ou clique em 'Atualizar campo').",
+          text: "Após abrir no Word, atualize o sumário com F9 para recalcular páginas.",
           font: UFLA_RULES.typography.fontFamily,
           size: UFLA_RULES.typography.noteFontSizePt * 2,
           italics: true,
@@ -652,6 +640,99 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   });
 }
 
+function decodeXmlText(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+function escapeXmlText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function textFromParagraphXml(paragraphXml: string): string {
+  return [...paragraphXml.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)]
+    .map((match) => decodeXmlText(match[1]))
+    .join("")
+    .trim();
+}
+
+function headingLevelFromParagraphXml(paragraphXml: string): number | undefined {
+  const match = paragraphXml.match(/<w:pStyle\s+w:val="Heading([123])"\s*\/>/);
+  return match ? Number(match[1]) : undefined;
+}
+
+function removeHeadingMarkup(paragraphXml: string): string {
+  return paragraphXml
+    .replace(/<w:pStyle\s+w:val="Heading[123]"\s*\/>/g, "")
+    .replace(/<w:outlineLvl\s+w:val="[0-9]+"\s*\/>/g, "");
+}
+
+function tcFieldXml(title: string, level: number): string {
+  const safeTitle = escapeXmlText(title);
+  return [
+    '<w:r><w:rPr><w:vanish/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>',
+    `<w:r><w:rPr><w:vanish/></w:rPr><w:instrText xml:space="preserve"> TC &quot;${safeTitle}&quot; \\l ${level} </w:instrText></w:r>`,
+    '<w:r><w:rPr><w:vanish/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r>',
+    '<w:r><w:rPr><w:vanish/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>',
+  ].join("");
+}
+
+function insertTcField(paragraphXml: string, title: string, level: number): string {
+  return paragraphXml.replace(/(<w:p\b[^>]*>)/, `$1${tcFieldXml(title, level)}`);
+}
+
+function replaceTocInstruction(documentXml: string): string {
+  return documentXml
+    .replace(/TOC\s+\\o\s+(?:&quot;|")1-3(?:&quot;|")\s+\\h\s+\\z\s+\\u/g, "TOC \\f \\h \\z")
+    .replace(/TOC\s+\\o\s+(?:&quot;|")1-3(?:&quot;|")\s+\\h\s+\\z/g, "TOC \\f \\h \\z");
+}
+
+function postProcessDocumentXml(documentXml: string): string {
+  let afterSummaryInstruction = false;
+
+  const processed = documentXml.replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraphXml) => {
+    const level = headingLevelFromParagraphXml(paragraphXml);
+    const text = textFromParagraphXml(paragraphXml);
+    let next = paragraphXml;
+
+    if (level && afterSummaryInstruction && text) {
+      next = insertTcField(next, text, level);
+    }
+
+    next = removeHeadingMarkup(next);
+
+    if (text.includes("Após abrir no Word, atualize o sumário")) {
+      afterSummaryInstruction = true;
+    }
+
+    return next;
+  });
+
+  return replaceTocInstruction(processed);
+}
+
+async function postProcessDocxBlob(blob: Blob): Promise<Blob> {
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  const documentFile = zip.file("word/document.xml");
+  if (!documentFile) return blob;
+
+  const documentXml = await documentFile.async("string");
+  zip.file("word/document.xml", postProcessDocumentXml(documentXml));
+
+  return zip.generateAsync({
+    type: "blob",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
+}
+
 export async function loadDefaultLogoAsset(): Promise<DocxLogoAsset | undefined> {
   if (typeof fetch !== "function") return undefined;
 
@@ -670,5 +751,6 @@ export async function loadDefaultLogoAsset(): Promise<DocxLogoAsset | undefined>
 
 export async function generateDocxBlob(input: DocxGenerationInput): Promise<Blob> {
   const logo = input.logo ?? (await loadDefaultLogoAsset());
-  return Packer.toBlob(createDocxDocument({ ...input, logo }));
+  const blob = await Packer.toBlob(createDocxDocument({ ...input, logo }));
+  return postProcessDocxBlob(blob);
 }
