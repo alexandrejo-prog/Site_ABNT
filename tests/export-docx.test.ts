@@ -149,7 +149,7 @@ describe("DOCX export", () => {
     const documentXml = await generatedXml("# 1 Introducao\nTexto comum.\n## 1.1 Contexto\nTexto.");
     const tocInstruction = fieldInstructionRuns(documentXml);
 
-    expect(documentXml).toContain("Maria Silva");
+    expect(documentXml).toContain("MARIA SILVA");
     expect(documentXml).toContain("QUALIDADE DO CAFE NO SUL DE MINAS");
     expect(documentXml).toContain("Resumo do trabalho.");
     expect(tocInstruction).toContain("TOC");
