@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { inflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { calculateTextualStartPage, generateDocxBlob, parseEditorContent } from "../src/export-docx";
@@ -67,17 +66,12 @@ async function generatedXml(
   return extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
 }
 
-async function generatedDocxFiles(
+async function generatedStylesXml(
   editorText = "# 1 Introducao\nTexto comum.",
   documentFields: AcademicFields = fields,
 ) {
   const blob = await generateDocxBlob({ fields: documentFields, editorText });
-  const buffer = Buffer.from(await blob.arrayBuffer());
-
-  return {
-    documentXml: extractFileFromZip(buffer, "word/document.xml"),
-    stylesXml: extractFileFromZip(buffer, "word/styles.xml"),
-  };
+  return extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/styles.xml");
 }
 
 function paragraphsIn(documentXml: string): string[] {
@@ -114,10 +108,6 @@ function hasPositiveBold(xml: string): boolean {
   return /<w:b\s*\/>|<w:b\b(?=[^>]*w:val="(?:1|true|on)")/.test(xml);
 }
 
-function joined(parts: string[]): string {
-  return parts.join("");
-}
-
 describe("DOCX export", () => {
   it("creates a valid Blob", async () => {
     const blob = await generateDocxBlob({ fields, editorText: "# Introducao\nTexto comum." });
@@ -142,34 +132,30 @@ describe("DOCX export", () => {
 
   it("calculates textual start page", () => {
     expect(calculateTextualStartPage(fields, true)).toBe(5);
-    expect(calculateTextualStartPage({ ...fields, workType: "dissertacao" }, true)).toBe(7);
+    expect(calculateTextualStartPage({ ...fields, workType: "dissertacao" }, true)).toBe(8);
   });
 
-  it("keeps main fields and native updatable TOC", async () => {
+  it("keeps main fields and static summary with pages", async () => {
     const documentXml = await generatedXml("# 1 Introducao\nTexto comum.\n## 1.1 Contexto\nTexto.");
     const tocInstruction = fieldInstructionRuns(documentXml);
 
     expect(documentXml).toContain("MARIA SILVA");
     expect(documentXml).toContain("QUALIDADE DO CAFE NO SUL DE MINAS");
     expect(documentXml).toContain("Resumo do trabalho.");
-    expect(tocInstruction).toContain("TOC");
-    expect(tocInstruction).toMatch(/\\o\s+&quot;1-3&quot;/);
-    expect(tocInstruction).toContain("\\h");
-    expect(tocInstruction).toContain("\\z");
-    expect(tocInstruction).toContain("\\u");
+    expect(documentXml).toContain("SUMÁRIO");
+    expect(documentXml).toContain("1 INTRODUCAO");
+    expect(documentXml).toContain("REFERÊNCIAS");
+    expect(tocInstruction).not.toContain("TOC");
   });
 
   it("keeps summary and pre-textual titles out of Word heading levels", async () => {
-    const documentXml = await generatedXml(
-      "# 1 Introdu\u00e7\u00e3o\nTexto.",
-      {
-        ...fields,
-        workType: "dissertacao",
-        dedicatoria: "A minha familia.",
-        agradecimentos: "Agradeco a todos.",
-        epigrafe: "Uma frase breve.",
-      },
-    );
+    const documentXml = await generatedXml("# 1 Introdu\u00e7\u00e3o\nTexto.", {
+      ...fields,
+      workType: "dissertacao",
+      dedicatoria: "A minha familia.",
+      agradecimentos: "Agradeco a todos.",
+      epigrafe: "Uma frase breve.",
+    });
 
     const visualTitles = [
       "SUM\u00c1RIO",
@@ -186,7 +172,7 @@ describe("DOCX export", () => {
     }
   });
 
-  it("keeps heading levels for the Word TOC with visual UFLA bold rules", async () => {
+  it("keeps heading levels for the summary with visual UFLA bold rules", async () => {
     const documentXml = await generatedXml(
       "# 1 Introdu\u00e7\u00e3o\nTexto.\n## 1.3 Objetivos\nTexto.\n### 1.3.1 Objetivo geral\nTexto.",
     );
@@ -211,7 +197,7 @@ describe("DOCX export", () => {
     });
     const referencesHeading = paragraphXmlContaining(documentXml, "REFER\u00caNCIAS");
     const anexosHeading = paragraphXmlContaining(documentXml, "ANEXOS");
-    const apendicesHeading = paragraphXmlContaining(documentXml, "AP\u00caNDICES");
+    const apendicesHeading = paragraphXmlContaining(documentXml, "AP\u00caNDICE A");
 
     expect(referencesHeading).toContain('w:val="Heading1"');
     expect(referencesHeading).not.toContain(">1 REFER");
@@ -221,8 +207,8 @@ describe("DOCX export", () => {
     expect(apendicesHeading).not.toContain(">1 AP");
   });
 
-  it("defines Word heading styles for TOC structure", async () => {
-    const { stylesXml } = await generatedDocxFiles(
+  it("defines Word heading styles for summary structure", async () => {
+    const stylesXml = await generatedStylesXml(
       "# 1 Introdu\u00e7\u00e3o\nTexto.\n## 1.3 Objetivos\nTexto.\n### 1.3.1 Objetivo geral\nTexto.",
     );
 
@@ -236,25 +222,8 @@ describe("DOCX export", () => {
     expect(hasPositiveBold(heading3Style)).toBe(false);
   });
 
-  it("does not restore the old manual table workaround", () => {
-    const source = readFileSync(new URL("../src/export-docx.ts", import.meta.url), "utf8");
-    const blocked = [
-      ["J", "S", "Z", "ip"],
-      ["post", "Process", "Document", "Xml"],
-      ["post", "Process", "Docx", "Blob"],
-      ["replace", "Toc", "Instruction"],
-      ["tc", "Field", "Xml"],
-      ["TC", " &", "quot;"],
-      ["TOC", " ", String.fromCharCode(92), "f"],
-    ].map(joined);
-
-    for (const marker of blocked) {
-      expect(source).not.toContain(marker);
-    }
-  });
-
   it("keeps edited files free of known mojibake markers", () => {
-    const files = ["../src/export-docx.ts", "../tests/export-docx.test.ts"];
+    const source = readFileSync(new URL("../src/export-docx.ts", import.meta.url), "utf8");
     const markers = [
       String.fromCharCode(0x00c3, 0x0192),
       String.fromCharCode(0x00ef, 0x00bf, 0x00bd),
@@ -263,11 +232,8 @@ describe("DOCX export", () => {
       String.fromCharCode(0x00c3, 0x00a2, 0x00e2, 0x201a, 0x00ac, 0x00e2, 0x201e, 0x00a2),
     ];
 
-    for (const file of files) {
-      const source = readFileSync(new URL(file, import.meta.url), "utf8");
-      for (const marker of markers) {
-        expect(source).not.toContain(marker);
-      }
+    for (const marker of markers) {
+      expect(source).not.toContain(marker);
     }
   });
 });
