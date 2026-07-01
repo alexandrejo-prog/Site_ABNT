@@ -93,7 +93,7 @@ function normalizeNumberedHeading(number: string, label: string): { heading: str
 function findNextMarker(text: string): InlineMarker | undefined {
   const candidates: InlineMarker[] = [];
 
-  const resumo = text.match(/\bResumo\b\s*[:.\-]?\s*/i);
+  const resumo = text.match(/(?:^|\s)(?:RESUMO|Resumo)\b\s*[:.\-]?\s*/);
   if (resumo?.index !== undefined) {
     candidates.push({
       index: resumo.index,
@@ -105,7 +105,7 @@ function findNextMarker(text: string): InlineMarker | undefined {
     });
   }
 
-  const abstract = text.match(/\bAbstract\b\s*[:.\-]?\s*/i);
+  const abstract = text.match(/(?:^|\s)(?:ABSTRACT|Abstract)\b\s*[:.\-]?\s*/);
   if (abstract?.index !== undefined) {
     candidates.push({
       index: abstract.index,
@@ -117,7 +117,7 @@ function findNextMarker(text: string): InlineMarker | undefined {
     });
   }
 
-  const referencias = text.match(/\bRefer[êe]ncias\b\s*[:.\-]?\s*/i);
+  const referencias = text.match(/(?:^|\s)(?:REFERÊNCIAS|REFERENCIAS|Referências)\b\s*[:.\-]?\s*/);
   if (referencias?.index !== undefined) {
     candidates.push({
       index: referencias.index,

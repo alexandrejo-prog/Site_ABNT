@@ -143,7 +143,7 @@ describe("DOCX export", () => {
     expect(calculateTextualStartPage({ ...fields, workType: "dissertacao" }, true)).toBe(8);
   });
 
-  it("keeps main fields and static summary with pages", async () => {
+  it("keeps main fields and native updatable TOC", async () => {
     const documentXml = await generatedXml("# 1 Introducao\nTexto comum.\n## 1.1 Contexto\nTexto.");
     const tocInstruction = fieldInstructionRuns(documentXml);
 
@@ -151,9 +151,11 @@ describe("DOCX export", () => {
     expect(documentXml).toContain("QUALIDADE DO CAFE NO SUL DE MINAS");
     expect(documentXml).toContain("Resumo do trabalho.");
     expect(documentXml).toContain("SUMÁRIO");
-    expect(documentXml).toContain("1 INTRODUCAO");
-    expect(documentXml).toContain("REFERÊNCIAS");
-    expect(tocInstruction).not.toContain("TOC");
+    expect(tocInstruction).toContain("TOC");
+    expect(tocInstruction).toMatch(/\\o\s+&quot;1-3&quot;/);
+    expect(tocInstruction).toContain("\\h");
+    expect(tocInstruction).toContain("\\z");
+    expect(tocInstruction).toContain("\\u");
   });
 
   it("keeps summary and pre-textual titles out of Word heading levels", async () => {

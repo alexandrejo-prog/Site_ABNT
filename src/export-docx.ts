@@ -11,6 +11,7 @@ import {
   PageOrientation,
   Paragraph,
   Table,
+  TableOfContents,
   TableCell,
   TableRow,
   TextRun,
@@ -47,12 +48,6 @@ export interface DocxGenerationInput {
   logo?: DocxLogoAsset;
 }
 
-interface SummaryEntry {
-  title: string;
-  level: 1 | 2 | 3;
-  page: number;
-}
-
 interface ScheduleRow {
   etapa: string;
   meses: string;
@@ -73,7 +68,6 @@ const REFERENCE_FONT = "Times New Roman";
 const REFERENCE_SIZE = 12 * 2;
 const UFLA_LOGO_WIDTH_PX = 265;
 const UFLA_LOGO_HEIGHT_PX = 108;
-const ESTIMATED_CHARS_PER_PAGE = 2550;
 
 const DOCUMENT_STYLES: IStylesOptions = {
   paragraphStyles: [
@@ -723,20 +717,6 @@ function fieldSectionBlocks(fields: AcademicFields, bodyBlocks: EditorBlock[]): 
   return nextBlocks;
 }
 
-function headingLevel(block: EditorBlock): 1 | 2 | 3 | null {
-  if (block.type === "heading1") return 1;
-  if (block.type === "heading2") return 2;
-  if (block.type === "heading3") return 3;
-  return null;
-}
-
-function blockTextWeight(block: EditorBlock): number {
-  if (block.type === "heading1" || block.type === "heading2" || block.type === "heading3") return 160;
-  if (block.type === "scheduleTable") return 900;
-  if (block.type === "longQuote") return block.text.length * 0.85;
-  return block.text.length + 60;
-}
-
 function appendixTitle(fields: AcademicFields): string {
   const normalized = normalizeForDetection(fields.apendices);
   if (normalized.includes("ROTEIRO") && normalized.includes("ENTREVISTA")) {
@@ -745,83 +725,14 @@ function appendixTitle(fields: AcademicFields): string {
   return "APÊNDICE A";
 }
 
-function buildSummaryEntries(
-  bodyBlocks: EditorBlock[],
-  references: string[],
-  fields: AcademicFields,
-  textualStartPage: number,
-): SummaryEntry[] {
-  const entries: SummaryEntry[] = [];
-  let currentPage = textualStartPage;
-  let pageWeight = 0;
-  let hasFirstHeading = false;
-
-  for (const block of bodyBlocks) {
-    const level = headingLevel(block);
-
-    if (level === 1 && hasFirstHeading) {
-      currentPage += Math.max(1, Math.ceil(pageWeight / ESTIMATED_CHARS_PER_PAGE));
-      pageWeight = 0;
-    }
-
-    if (level) {
-      entries.push({ title: level === 1 ? block.text.toUpperCase() : block.text, level, page: currentPage });
-      hasFirstHeading = true;
-    }
-
-    pageWeight += blockTextWeight(block);
-    while (pageWeight > ESTIMATED_CHARS_PER_PAGE) {
-      currentPage += 1;
-      pageWeight -= ESTIMATED_CHARS_PER_PAGE;
-    }
-  }
-
-  const referencesPage = currentPage + Math.max(1, Math.ceil(pageWeight / ESTIMATED_CHARS_PER_PAGE));
-  entries.push({ title: "REFERÊNCIAS", level: 1, page: referencesPage });
-
-  const referenceWeight = references.join("\n").length;
-  let nextPage = referencesPage + Math.max(1, Math.ceil(referenceWeight / 2200));
-
-  if (fields.anexos) {
-    entries.push({ title: "ANEXOS", level: 1, page: nextPage });
-    nextPage += Math.max(1, Math.ceil(fields.anexos.length / 2200));
-  }
-
-  if (fields.apendices) {
-    entries.push({ title: appendixTitle(fields), level: 1, page: nextPage });
-  }
-
-  return entries;
-}
-
-function summaryEntryParagraph(entry: SummaryEntry): Paragraph {
-  const indent = entry.level === 1 ? "" : entry.level === 2 ? "   " : "      ";
-  const page = String(entry.page);
-  const maxTitleLength = entry.level === 1 ? 62 : entry.level === 2 ? 58 : 54;
-  const normalizedTitle = `${indent}${entry.title}`;
-  const dots = ".".repeat(Math.max(6, maxTitleLength - normalizedTitle.length));
-
-  return new Paragraph({
-    alignment: AlignmentType.LEFT,
-    spacing: { line: SINGLE_LINE, after: 0 },
-    children: [
-      new TextRun({
-        text: `${normalizedTitle} ${dots} ${page}`,
-        font: UFLA_RULES.typography.fontFamily,
-        size: BODY_SIZE,
-        bold: entry.level < 3,
-        color: BLACK,
-      }),
-    ],
-  });
-}
-
 function buildSummary(
   bodyBlocks: EditorBlock[],
   references: string[],
   fields: AcademicFields,
   textualStartPage: number,
-): Paragraph[] {
+): Array<Paragraph | TableOfContents> {
+  void textualStartPage;
+
   const hasEntries =
     bodyBlocks.some(
       (block) =>
@@ -835,7 +746,12 @@ function buildSummary(
   return [
     pageBreak(),
     unnumberedTitle("Sumário"),
-    ...buildSummaryEntries(bodyBlocks, references, fields, textualStartPage).map(summaryEntryParagraph),
+    new TableOfContents("", {
+      headingStyleRange: "1-3",
+      hyperlink: true,
+      hideTabAndPageNumbersInWebView: true,
+      useAppliedParagraphOutlineLevel: true,
+    }),
   ];
 }
 
@@ -1141,7 +1057,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   const textualStartPage = calculateTextualStartPage(fields, hasSummary);
   const summaryChildren = buildSummary(bodyBlocks, references, fields, textualStartPage);
 
-  const preTextualChildrenList: Paragraph[] = [
+  const preTextualChildrenList: Array<Paragraph | TableOfContents> = [
     ...coverChildren(fields, input.logo),
     pageBreak(),
     ...titlePageChildren(fields),
