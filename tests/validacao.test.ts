@@ -60,15 +60,15 @@ describe("validação normativa", () => {
     expect(issues.filter((issue) => issue.severity === "error")).toHaveLength(0);
   });
 
-  it("resume alertas repetidos de referências sem frase forte repetida", () => {
+  it("resume alertas repetidos de referências e não alerta normas destacadas automaticamente", () => {
     const issues = validateWork(
       baseFields({
         referencias: [
           "REFERENCIA AMBIGUA SEM TITULO IDENTIFICAVEL 2024",
           "OUTRA REFERENCIA AMBIGUA SEM TITULO IDENTIFICAVEL 2025",
           "TERCEIRA REFERENCIA AMBIGUA SEM TITULO IDENTIFICAVEL 2026",
-          "BRASIL. Lei normativa preservada sem destaque automático. 2024.",
-          "MINAS GERAIS. Decreto normativo preservado sem destaque automático. 2025.",
+          "BRASIL. Lei nº 9.795, de 27 de abril de 1999. Dispõe sobre a educação ambiental. Brasília, DF, 1999.",
+          "MINAS GERAIS. Decreto nº 48.636, de 19 de junho de 2023. Regulamenta procedimentos administrativos. Belo Horizonte, MG, 2023.",
         ].join("\n"),
       }),
     );
@@ -82,9 +82,7 @@ describe("validação normativa", () => {
     expect(highlightIssues).toHaveLength(1);
     expect(highlightIssues[0].message).toContain("Há 3 referência(s)");
     expect(highlightIssues[0].message).toContain("Revise antes da versão final");
-    expect(normativeIssues).toHaveLength(1);
-    expect(normativeIssues[0].message).toContain("Há 2 referência(s) normativas");
-    expect(normativeIssues[0].message).toContain("Isso pode estar correto para leis");
+    expect(normativeIssues).toHaveLength(0);
     expect(repeatedStrongPhrase).toHaveLength(0);
   });
 
