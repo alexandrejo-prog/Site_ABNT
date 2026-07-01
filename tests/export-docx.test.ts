@@ -188,7 +188,7 @@ describe("DOCX export", () => {
     }
   });
 
-  it("keeps heading levels for the Word TOC without direct bold on title runs", async () => {
+  it("keeps heading levels for the Word TOC with visual UFLA bold rules", async () => {
     const documentXml = await generatedXml(
       "# 1 Introdu\u00e7\u00e3o\nTexto.\n## 1.3 Objetivos\nTexto.\n### 1.3.1 Objetivo geral\nTexto.",
     );
@@ -200,9 +200,9 @@ describe("DOCX export", () => {
     expect(heading1).toContain('w:val="Heading1"');
     expect(heading2).toContain('w:val="Heading2"');
     expect(heading3).toContain('w:val="Heading3"');
-    expect(heading1).not.toContain("<w:b");
-    expect(heading2).not.toContain("<w:b");
-    expect(heading3).not.toContain("<w:b");
+    expect(hasPositiveBold(heading1)).toBe(true);
+    expect(hasPositiveBold(heading2)).toBe(true);
+    expect(hasPositiveBold(heading3)).toBe(false);
   });
 
   it("keeps non-numbered post-textual titles as headings", async () => {
@@ -223,7 +223,7 @@ describe("DOCX export", () => {
     expect(apendicesHeading).not.toContain(">1 AP");
   });
 
-  it("defines visual bold through Word heading styles", async () => {
+  it("defines Word heading styles for TOC structure", async () => {
     const { stylesXml } = await generatedDocxFiles(
       "# 1 Introdu\u00e7\u00e3o\nTexto.\n## 1.3 Objetivos\nTexto.\n### 1.3.1 Objetivo geral\nTexto.",
     );
@@ -232,8 +232,9 @@ describe("DOCX export", () => {
     const heading2Style = styleXmlById(stylesXml, "Heading2");
     const heading3Style = styleXmlById(stylesXml, "Heading3");
 
-    expect(hasPositiveBold(heading1Style)).toBe(true);
-    expect(hasPositiveBold(heading2Style)).toBe(true);
+    expect(heading1Style).toContain('w:styleId="Heading1"');
+    expect(heading2Style).toContain('w:styleId="Heading2"');
+    expect(heading3Style).toContain('w:styleId="Heading3"');
     expect(hasPositiveBold(heading3Style)).toBe(false);
   });
 

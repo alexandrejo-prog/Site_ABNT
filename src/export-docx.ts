@@ -51,12 +51,18 @@ const SINGLE_LINE = 240;
 const BLACK = "000000";
 const REFERENCE_FONT = "Times New Roman";
 const REFERENCE_SIZE = 12 * 2;
+
 const DOCUMENT_STYLES: IStylesOptions = {
-  default: {
-    heading1: {
+  paragraphStyles: [
+    {
+      id: "TOC1",
+      name: "toc 1",
+      basedOn: "Normal",
+      next: "Normal",
+      quickFormat: true,
       run: {
-        font: UFLA_RULES.typography.fontFamily,
-        size: BODY_SIZE,
+        font: "Times New Roman",
+        size: 24,
         bold: true,
         color: BLACK,
       },
@@ -64,10 +70,15 @@ const DOCUMENT_STYLES: IStylesOptions = {
         spacing: { before: 0, after: 0 },
       },
     },
-    heading2: {
+    {
+      id: "TOC2",
+      name: "toc 2",
+      basedOn: "Normal",
+      next: "Normal",
+      quickFormat: true,
       run: {
-        font: UFLA_RULES.typography.fontFamily,
-        size: BODY_SIZE,
+        font: "Times New Roman",
+        size: 24,
         bold: true,
         color: BLACK,
       },
@@ -75,10 +86,15 @@ const DOCUMENT_STYLES: IStylesOptions = {
         spacing: { before: 0, after: 0 },
       },
     },
-    heading3: {
+    {
+      id: "TOC3",
+      name: "toc 3",
+      basedOn: "Normal",
+      next: "Normal",
+      quickFormat: true,
       run: {
-        font: UFLA_RULES.typography.fontFamily,
-        size: BODY_SIZE,
+        font: "Times New Roman",
+        size: 24,
         bold: false,
         color: BLACK,
       },
@@ -86,8 +102,66 @@ const DOCUMENT_STYLES: IStylesOptions = {
         spacing: { before: 0, after: 0 },
       },
     },
-  },
+    {
+      id: "Heading1",
+      name: "Heading 1",
+      basedOn: "Normal",
+      next: "Normal",
+      quickFormat: true,
+      run: {
+        font: "Times New Roman",
+        size: 24,
+        bold: true,
+        color: BLACK,
+      },
+      paragraph: {
+        spacing: { before: 0, after: 0 },
+      },
+    },
+    {
+      id: "Heading2",
+      name: "Heading 2",
+      basedOn: "Normal",
+      next: "Normal",
+      quickFormat: true,
+      run: {
+        font: "Times New Roman",
+        size: 24,
+        bold: true,
+        color: BLACK,
+      },
+      paragraph: {
+        spacing: { before: 0, after: 0 },
+      },
+    },
+    {
+      id: "Heading3",
+      name: "Heading 3",
+      basedOn: "Normal",
+      next: "Normal",
+      quickFormat: true,
+      run: {
+        font: "Times New Roman",
+        size: 24,
+        bold: false,
+        color: BLACK,
+      },
+      paragraph: {
+        spacing: { before: 0, after: 0 },
+      },
+    },
+  ],
 };
+
+function headingTypeFromNumberedTitle(text: string, fallback: EditorBlockType): EditorBlockType {
+  const normalized = text.trim();
+
+  if (/^\d+(?:\.\d+){2,}(?:\s|$)/.test(normalized)) return "heading3";
+  if (/^\d+\.\d+(?:\s|$)/.test(normalized)) return "heading2";
+  if (/^\d+(?:\s|$)/.test(normalized)) return "heading1";
+
+  return fallback;
+}
 
 export function parseEditorContent(editorText: string): EditorBlock[] {
   return editorText
@@ -95,21 +169,30 @@ export function parseEditorContent(editorText: string): EditorBlock[] {
     .map((line): EditorBlock | null => {
       const trimmed = line.trim();
       if (!trimmed) return null;
-      if (trimmed.startsWith("## ")) {
-        return { type: "heading2", text: trimmed.replace(/^##\s+/, "") };
-      }
+
       if (trimmed.startsWith("### ")) {
-        return { type: "heading3", text: trimmed.replace(/^###\s+/, "") };
+        const text = trimmed.replace(/^###\s+/, "");
+        return { type: headingTypeFromNumberedTitle(text, "heading3"), text };
       }
+
+      if (trimmed.startsWith("## ")) {
+        const text = trimmed.replace(/^##\s+/, "");
+        return { type: headingTypeFromNumberedTitle(text, "heading2"), text };
+      }
+
       if (trimmed.startsWith("# ")) {
-        return { type: "heading1", text: trimmed.replace(/^#\s+/, "") };
+        const text = trimmed.replace(/^#\s+/, "");
+        return { type: headingTypeFromNumberedTitle(text, "heading1"), text };
       }
+
       if (trimmed.startsWith("> ")) {
         return { type: "longQuote", text: trimmed.replace(/^>\s+/, "") };
       }
+
       if (/^\[REF\]\s+/i.test(trimmed)) {
         return { type: "reference", text: trimmed.replace(/^\[REF\]\s+/i, "") };
       }
+
       return { type: "paragraph", text: trimmed };
     })
     .filter((block): block is EditorBlock => Boolean(block));
@@ -245,6 +328,7 @@ function sectionTitle(text: string): Paragraph {
     children: [
       new TextRun({
         text: text.toUpperCase(),
+        bold: true,
         font: UFLA_RULES.typography.fontFamily,
         size: BODY_SIZE,
         color: BLACK,
@@ -281,6 +365,7 @@ function blockToParagraph(block: EditorBlock, isFirstTextualBlock: boolean = fal
       children: [
         new TextRun({
           text: block.text.toUpperCase(),
+          bold: true,
           font: UFLA_RULES.typography.fontFamily,
           size: BODY_SIZE,
           color: BLACK,
@@ -299,6 +384,7 @@ function blockToParagraph(block: EditorBlock, isFirstTextualBlock: boolean = fal
         children: [
           new TextRun({
             text: block.text,
+            bold: true,
             font: UFLA_RULES.typography.fontFamily,
             size: BODY_SIZE,
             color: BLACK,
@@ -316,6 +402,7 @@ function blockToParagraph(block: EditorBlock, isFirstTextualBlock: boolean = fal
         children: [
           new TextRun({
             text: block.text,
+            bold: false,
             font: UFLA_RULES.typography.fontFamily,
             size: BODY_SIZE,
             color: BLACK,
@@ -401,7 +488,7 @@ function fieldSectionBlocks(fields: AcademicFields, bodyBlocks: EditorBlock[]): 
 
   if (fields.introducao && !hasEditorHeading(nextBlocks, "INTRODUCAO")) {
     nextBlocks.unshift(
-      { type: "heading1", text: "1 INTRODU\u00c7\u00c3O" },
+      { type: "heading1", text: "1 INTRODUÇÃO" },
       ...splitParagraphs(fields.introducao).map((text) => ({ type: "paragraph" as const, text })),
     );
   }
@@ -410,7 +497,7 @@ function fieldSectionBlocks(fields: AcademicFields, bodyBlocks: EditorBlock[]): 
     nextBlocks.push(
       {
         type: "heading1",
-        text: usesFinalConsiderationsHeading(nextBlocks) ? "6 CONSIDERA\u00c7\u00d5ES FINAIS" : "CONCLUS\u00c3O",
+        text: usesFinalConsiderationsHeading(nextBlocks) ? "6 CONSIDERAÇÕES FINAIS" : "CONCLUSÃO",
       },
       ...splitParagraphs(fields.conclusao).map((text) => ({ type: "paragraph" as const, text })),
     );
@@ -672,7 +759,6 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
     ],
   });
 }
-
 
 export async function loadDefaultLogoAsset(): Promise<DocxLogoAsset | undefined> {
   if (typeof fetch !== "function") return undefined;
