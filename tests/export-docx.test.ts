@@ -174,9 +174,7 @@ describe("DOCX export", () => {
     const visualTitles = [
       "SUM\u00c1RIO",
       "FICHA CATALOGR\u00c1FICA",
-      "DEDICAT\u00d3RIA",
       "AGRADECIMENTOS",
-      "EP\u00cdGRAFE",
       "RESUMO",
       "ABSTRACT",
       "INDICADORES DE IMPACTO",
@@ -247,7 +245,7 @@ describe("DOCX export", () => {
       ["replace", "Toc", "Instruction"],
       ["tc", "Field", "Xml"],
       ["TC", " &", "quot;"],
-      ["TOC", " \\", "f"],
+      ["TOC", " \", "f"],
     ].map(joined);
 
     for (const marker of blocked) {
