@@ -1,5 +1,6 @@
 import {
   AlignmentType,
+  BorderStyle,
   Document,
   HeadingLevel,
   Header,
@@ -9,8 +10,11 @@ import {
   PageNumber,
   PageOrientation,
   Paragraph,
-  TableOfContents,
+  Table,
+  TableCell,
+  TableRow,
   TextRun,
+  WidthType,
 } from "docx";
 import type { IParagraphOptions, IStylesOptions } from "docx";
 import { AcademicFields, UFLA_RULES } from "./ufla-rules";
@@ -23,6 +27,7 @@ export type EditorBlockType =
   | "heading2"
   | "heading3"
   | "longQuote"
+  | "scheduleTable"
   | "reference";
 
 export interface EditorBlock {
@@ -42,6 +47,19 @@ export interface DocxGenerationInput {
   logo?: DocxLogoAsset;
 }
 
+interface SummaryEntry {
+  title: string;
+  level: 1 | 2 | 3;
+  page: number;
+}
+
+interface ScheduleRow {
+  etapa: string;
+  meses: string;
+  periodo: string;
+  atividades: string;
+}
+
 export const DEFAULT_UFLA_LOGO_PATH = "/assets/ufla-logo.jpeg";
 
 const BODY_SIZE = UFLA_RULES.typography.bodyFontSizePt * 2;
@@ -55,6 +73,7 @@ const REFERENCE_FONT = "Times New Roman";
 const REFERENCE_SIZE = 12 * 2;
 const UFLA_LOGO_WIDTH_PX = 265;
 const UFLA_LOGO_HEIGHT_PX = 108;
+const ESTIMATED_CHARS_PER_PAGE = 2550;
 
 const DOCUMENT_STYLES: IStylesOptions = {
   paragraphStyles: [
@@ -167,39 +186,73 @@ function headingTypeFromNumberedTitle(text: string, fallback: EditorBlockType): 
   return fallback;
 }
 
+function looksLikeScheduleRow(value: string): boolean {
+  return /^[1-4][ºª]?\s+semestre\b/i.test(value.trim());
+}
+
+function shouldStartScheduleTable(value: string): boolean {
+  return /^Quadro\s+\d+\s+-\s+Cronograma/i.test(value.trim());
+}
+
 export function parseEditorContent(editorText: string): EditorBlock[] {
-  return editorText
+  const lines = editorText
     .split(/\r?\n/)
-    .map((line): EditorBlock | null => {
-      const trimmed = line.trim();
-      if (!trimmed) return null;
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const blocks: EditorBlock[] = [];
 
-      if (trimmed.startsWith("### ")) {
-        const text = trimmed.replace(/^###\s+/, "");
-        return { type: headingTypeFromNumberedTitle(text, "heading3"), text };
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = lines[index];
+
+    if (shouldStartScheduleTable(trimmed)) {
+      const tableLines = [trimmed];
+      let cursor = index + 1;
+
+      while (cursor < lines.length) {
+        const nextLine = lines[cursor];
+        tableLines.push(nextLine);
+        cursor += 1;
+        if (/^Fonte:/i.test(nextLine)) break;
+        if (/^5\.2\s+/i.test(lines[cursor] ?? "")) break;
       }
 
-      if (trimmed.startsWith("## ")) {
-        const text = trimmed.replace(/^##\s+/, "");
-        return { type: headingTypeFromNumberedTitle(text, "heading2"), text };
-      }
+      blocks.push({ type: "scheduleTable", text: tableLines.join("\n") });
+      index = cursor - 1;
+      continue;
+    }
 
-      if (trimmed.startsWith("# ")) {
-        const text = trimmed.replace(/^#\s+/, "");
-        return { type: headingTypeFromNumberedTitle(text, "heading1"), text };
-      }
+    if (trimmed.startsWith("### ")) {
+      const text = trimmed.replace(/^###\s+/, "");
+      blocks.push({ type: headingTypeFromNumberedTitle(text, "heading3"), text });
+      continue;
+    }
 
-      if (trimmed.startsWith("> ")) {
-        return { type: "longQuote", text: trimmed.replace(/^>\s+/, "") };
-      }
+    if (trimmed.startsWith("## ")) {
+      const text = trimmed.replace(/^##\s+/, "");
+      blocks.push({ type: headingTypeFromNumberedTitle(text, "heading2"), text });
+      continue;
+    }
 
-      if (/^\[REF\]\s+/i.test(trimmed)) {
-        return { type: "reference", text: trimmed.replace(/^\[REF\]\s+/i, "") };
-      }
+    if (trimmed.startsWith("# ")) {
+      const text = trimmed.replace(/^#\s+/, "");
+      blocks.push({ type: headingTypeFromNumberedTitle(text, "heading1"), text });
+      continue;
+    }
 
-      return { type: "paragraph", text: trimmed };
-    })
-    .filter((block): block is EditorBlock => Boolean(block));
+    if (trimmed.startsWith("> ")) {
+      blocks.push({ type: "longQuote", text: trimmed.replace(/^>\s+/, "") });
+      continue;
+    }
+
+    if (/^\[REF\]\s+/i.test(trimmed)) {
+      blocks.push({ type: "reference", text: trimmed.replace(/^\[REF\]\s+/i, "") });
+      continue;
+    }
+
+    blocks.push({ type: "paragraph", text: trimmed });
+  }
+
+  return blocks;
 }
 
 function plainRun(text: string, size = BODY_SIZE): TextRun {
@@ -373,7 +426,148 @@ function pageBreak(): Paragraph {
   return new Paragraph({ children: [new PageBreak()] });
 }
 
-function blockToParagraph(block: EditorBlock, isFirstTextualBlock: boolean = false): Paragraph[] {
+function scheduleCaptionParagraph(text: string): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 120, after: 120, line: SINGLE_LINE },
+    children: [
+      new TextRun({
+        text,
+        font: UFLA_RULES.typography.fontFamily,
+        size: BODY_SIZE,
+        color: BLACK,
+      }),
+    ],
+  });
+}
+
+function tableTextParagraph(text: string, bold = false): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.LEFT,
+    spacing: { line: SINGLE_LINE, after: 0 },
+    children: [
+      new TextRun({
+        text,
+        bold,
+        font: UFLA_RULES.typography.fontFamily,
+        size: 20,
+        color: BLACK,
+      }),
+    ],
+  });
+}
+
+function tableCell(text: string, width: number, bold = false): TableCell {
+  return new TableCell({
+    width: { size: width, type: WidthType.PERCENTAGE },
+    margins: { top: 80, bottom: 80, left: 80, right: 80 },
+    children: [tableTextParagraph(text, bold)],
+  });
+}
+
+function parseScheduleRow(line: string): ScheduleRow | null {
+  const normalized = line.replace(/\s+/g, " ").trim();
+  const match = normalized.match(
+    /^(1º semestre|2º semestre|3º semestre|4º semestre)\s+(\d+\s+a\s+\d+)\s+(.+?\/\d{4}\s+a\s+.+?\/\d{4})(.*)$/i,
+  );
+
+  if (!match) return null;
+
+  return {
+    etapa: match[1],
+    meses: match[2],
+    periodo: match[3].trim(),
+    atividades: match[4].trim(),
+  };
+}
+
+function scheduleRowsFromBlock(text: string): { caption: string; rows: ScheduleRow[]; source: string } {
+  const lines = text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const caption = lines[0] || "Quadro 1 - Cronograma de execução da pesquisa";
+  const rows: ScheduleRow[] = [];
+  let source = "Fonte: elaborado pelo autor (2026).";
+
+  for (const line of lines.slice(1)) {
+    if (/^Fonte:/i.test(line)) {
+      source = line;
+      continue;
+    }
+
+    if (/^Etapa\s+Meses\s+Per/i.test(line)) continue;
+
+    if (looksLikeScheduleRow(line)) {
+      const row = parseScheduleRow(line);
+      if (row) rows.push(row);
+      continue;
+    }
+
+    if (rows.length) {
+      rows[rows.length - 1].atividades = `${rows[rows.length - 1].atividades} ${line}`.trim();
+    }
+  }
+
+  return { caption, rows, source };
+}
+
+function scheduleTableBlock(text: string): Array<Paragraph | Table> {
+  const { caption, rows, source } = scheduleRowsFromBlock(text);
+  const header = new TableRow({
+    children: [
+      tableCell("Etapa", 17, true),
+      tableCell("Meses", 13, true),
+      tableCell("Período", 24, true),
+      tableCell("Atividades principais", 46, true),
+    ],
+  });
+
+  const tableRows = rows.map(
+    (row) =>
+      new TableRow({
+        children: [
+          tableCell(row.etapa, 17),
+          tableCell(row.meses, 13),
+          tableCell(row.periodo, 24),
+          tableCell(row.atividades, 46),
+        ],
+      }),
+  );
+
+  return [
+    scheduleCaptionParagraph(caption),
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
+        bottom: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
+        left: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
+        right: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
+        insideVertical: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
+      },
+      rows: [header, ...tableRows],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.LEFT,
+      spacing: { before: 120, after: 120, line: SINGLE_LINE },
+      children: [
+        new TextRun({
+          text: source,
+          font: UFLA_RULES.typography.fontFamily,
+          size: 20,
+          color: BLACK,
+        }),
+      ],
+    }),
+  ];
+}
+
+function blockToParagraph(
+  block: EditorBlock,
+  isFirstTextualBlock: boolean = false,
+): Array<Paragraph | Table> {
   if (block.type === "heading1") {
     const title = new Paragraph({
       heading: HeadingLevel.HEADING_1,
@@ -437,6 +631,10 @@ function blockToParagraph(block: EditorBlock, isFirstTextualBlock: boolean = fal
         children: textRunsFromMarkup(block.text, LONG_QUOTE_SIZE),
       }),
     ];
+  }
+
+  if (block.type === "scheduleTable") {
+    return scheduleTableBlock(block.text);
   }
 
   return [textParagraph(block.text)];
@@ -525,11 +723,105 @@ function fieldSectionBlocks(fields: AcademicFields, bodyBlocks: EditorBlock[]): 
   return nextBlocks;
 }
 
+function headingLevel(block: EditorBlock): 1 | 2 | 3 | null {
+  if (block.type === "heading1") return 1;
+  if (block.type === "heading2") return 2;
+  if (block.type === "heading3") return 3;
+  return null;
+}
+
+function blockTextWeight(block: EditorBlock): number {
+  if (block.type === "heading1" || block.type === "heading2" || block.type === "heading3") return 160;
+  if (block.type === "scheduleTable") return 900;
+  if (block.type === "longQuote") return block.text.length * 0.85;
+  return block.text.length + 60;
+}
+
+function appendixTitle(fields: AcademicFields): string {
+  const normalized = normalizeForDetection(fields.apendices);
+  if (normalized.includes("ROTEIRO") && normalized.includes("ENTREVISTA")) {
+    return "APÊNDICE A - ROTEIRO PRELIMINAR DE ENTREVISTA";
+  }
+  return "APÊNDICE A";
+}
+
+function buildSummaryEntries(
+  bodyBlocks: EditorBlock[],
+  references: string[],
+  fields: AcademicFields,
+  textualStartPage: number,
+): SummaryEntry[] {
+  const entries: SummaryEntry[] = [];
+  let currentPage = textualStartPage;
+  let pageWeight = 0;
+  let hasFirstHeading = false;
+
+  for (const block of bodyBlocks) {
+    const level = headingLevel(block);
+
+    if (level === 1 && hasFirstHeading) {
+      currentPage += Math.max(1, Math.ceil(pageWeight / ESTIMATED_CHARS_PER_PAGE));
+      pageWeight = 0;
+    }
+
+    if (level) {
+      entries.push({ title: level === 1 ? block.text.toUpperCase() : block.text, level, page: currentPage });
+      hasFirstHeading = true;
+    }
+
+    pageWeight += blockTextWeight(block);
+    while (pageWeight > ESTIMATED_CHARS_PER_PAGE) {
+      currentPage += 1;
+      pageWeight -= ESTIMATED_CHARS_PER_PAGE;
+    }
+  }
+
+  const referencesPage = currentPage + Math.max(1, Math.ceil(pageWeight / ESTIMATED_CHARS_PER_PAGE));
+  entries.push({ title: "REFERÊNCIAS", level: 1, page: referencesPage });
+
+  const referenceWeight = references.join("\n").length;
+  let nextPage = referencesPage + Math.max(1, Math.ceil(referenceWeight / 2200));
+
+  if (fields.anexos) {
+    entries.push({ title: "ANEXOS", level: 1, page: nextPage });
+    nextPage += Math.max(1, Math.ceil(fields.anexos.length / 2200));
+  }
+
+  if (fields.apendices) {
+    entries.push({ title: appendixTitle(fields), level: 1, page: nextPage });
+  }
+
+  return entries;
+}
+
+function summaryEntryParagraph(entry: SummaryEntry): Paragraph {
+  const indent = entry.level === 1 ? "" : entry.level === 2 ? "   " : "      ";
+  const page = String(entry.page);
+  const maxTitleLength = entry.level === 1 ? 62 : entry.level === 2 ? 58 : 54;
+  const normalizedTitle = `${indent}${entry.title}`;
+  const dots = ".".repeat(Math.max(6, maxTitleLength - normalizedTitle.length));
+
+  return new Paragraph({
+    alignment: AlignmentType.LEFT,
+    spacing: { line: SINGLE_LINE, after: 0 },
+    children: [
+      new TextRun({
+        text: `${normalizedTitle} ${dots} ${page}`,
+        font: UFLA_RULES.typography.fontFamily,
+        size: BODY_SIZE,
+        bold: entry.level < 3,
+        color: BLACK,
+      }),
+    ],
+  });
+}
+
 function buildSummary(
   bodyBlocks: EditorBlock[],
   references: string[],
   fields: AcademicFields,
-): Array<Paragraph | TableOfContents> {
+  textualStartPage: number,
+): Paragraph[] {
   const hasEntries =
     bodyBlocks.some(
       (block) =>
@@ -543,30 +835,16 @@ function buildSummary(
   return [
     pageBreak(),
     unnumberedTitle("Sumário"),
-    new TableOfContents("", {
-      headingStyleRange: "1-3",
-      hyperlink: true,
-      hideTabAndPageNumbersInWebView: true,
-      useAppliedParagraphOutlineLevel: true,
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 120, after: 120 },
-      children: [
-        new TextRun({
-          text: "Após abrir no Word, atualize o sumário com F9 para recalcular páginas.",
-          font: UFLA_RULES.typography.fontFamily,
-          size: UFLA_RULES.typography.noteFontSizePt * 2,
-          italics: true,
-          color: BLACK,
-        }),
-      ],
-    }),
+    ...buildSummaryEntries(bodyBlocks, references, fields, textualStartPage).map(summaryEntryParagraph),
   ];
 }
 
 function hasText(value: string): boolean {
   return value.trim().length > 0;
+}
+
+function hasApprovalPage(fields: AcademicFields): boolean {
+  return fields.workType === "monografia" || fields.workType === "dissertacao" || fields.workType === "tese";
 }
 
 export function calculateTextualStartPage(
@@ -576,6 +854,7 @@ export function calculateTextualStartPage(
   const impactRequired = fields.workType === "dissertacao" || fields.workType === "tese";
   let countedPreTextualPages = 1; // Folha de rosto. Capa e ficha catalográfica não contam.
 
+  if (hasApprovalPage(fields)) countedPreTextualPages += 1;
   if (hasText(fields.dedicatoria)) countedPreTextualPages += 1;
   if (hasText(fields.agradecimentos)) countedPreTextualPages += 1;
   if (hasText(fields.epigrafe)) countedPreTextualPages += 1;
@@ -597,6 +876,28 @@ function natureParagraph(text: string): Paragraph {
     spacing: { line: SINGLE_LINE, after: 180 },
     children: textRunsFromMarkup(text || " "),
   });
+}
+
+function normalizeNatureForWorkType(nature: string, fields: AcademicFields): string {
+  if (fields.workType === "tese") {
+    return nature
+      .replace(/obtenção do título de Mestre/gi, "obtenção do título de Doutor")
+      .replace(/título de Mestre/gi, "título de Doutor")
+      .replace(/Mestre em/gi, "Doutor em")
+      .replace(/Mestrado/gi, "Doutorado")
+      .replace(/dissertação/gi, "tese");
+  }
+
+  if (fields.workType === "dissertacao") {
+    return nature
+      .replace(/obtenção do título de Doutor/gi, "obtenção do título de Mestre")
+      .replace(/título de Doutor/gi, "título de Mestre")
+      .replace(/Doutor em/gi, "Mestre em")
+      .replace(/Doutorado/gi, "Mestrado")
+      .replace(/tese/gi, "dissertação");
+  }
+
+  return nature;
 }
 
 function coverChildren(fields: AcademicFields, logo?: DocxLogoAsset): Paragraph[] {
@@ -644,10 +945,16 @@ function buildTitlePageSupplementalLines(fields: AcademicFields, nature: string)
   ].filter(Boolean);
 }
 
-function titlePageChildren(fields: AcademicFields): Paragraph[] {
-  const nature =
+function workNature(fields: AcademicFields): string {
+  return normalizeNatureForWorkType(
     fields.workNature ||
-    "Trabalho apresentado à Universidade Federal de Lavras como requisito acadêmico, conforme dados revisados pelo usuário.";
+      "Trabalho apresentado à Universidade Federal de Lavras como requisito acadêmico, conforme dados revisados pelo usuário.",
+    fields,
+  );
+}
+
+function titlePageChildren(fields: AcademicFields): Paragraph[] {
+  const nature = workNature(fields);
   const supplementalLines = buildTitlePageSupplementalLines(fields, nature);
 
   return [
@@ -674,6 +981,56 @@ function titlePageChildren(fields: AcademicFields): Paragraph[] {
       centeredParagraph(line, false, BODY_SIZE, { after: 0, line: SINGLE_LINE }),
     ),
     new Paragraph({ spacing: { before: 1500 } }),
+    centeredParagraph((fields.location || "LAVRAS - MG").toUpperCase(), false, BODY_SIZE, {
+      after: 120,
+      line: SINGLE_LINE,
+    }),
+    centeredParagraph(fields.year || new Date().getFullYear().toString(), false, BODY_SIZE, {
+      after: 0,
+      line: SINGLE_LINE,
+    }),
+  ];
+}
+
+function approvalPageChildren(fields: AcademicFields): Paragraph[] {
+  if (!hasApprovalPage(fields)) return [];
+
+  return [
+    pageBreak(),
+    centeredParagraph((fields.author || "AUTOR").toUpperCase(), true, BODY_SIZE, {
+      after: 0,
+      line: SINGLE_LINE,
+    }),
+    new Paragraph({ spacing: { before: 900 } }),
+    centeredParagraph((fields.title || "TÍTULO DO TRABALHO").toUpperCase(), true, BODY_SIZE, {
+      after: 0,
+      line: ONE_AND_HALF_LINE,
+    }),
+    new Paragraph({ spacing: { before: 600 } }),
+    natureParagraph(workNature(fields)),
+    simpleParagraph("Aprovado em: ____ de ____________________ de ______.", {
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 480, after: 240, line: SINGLE_LINE },
+    }),
+    centeredParagraph("BANCA EXAMINADORA", true, BODY_SIZE, { after: 480, line: SINGLE_LINE }),
+    centeredParagraph("________________________________________", false, BODY_SIZE, { after: 0, line: SINGLE_LINE }),
+    centeredParagraph(fields.advisor || "Prof. Dr. [nome do orientador]", false, BODY_SIZE, {
+      after: 0,
+      line: SINGLE_LINE,
+    }),
+    centeredParagraph("Orientador(a) - UFLA", false, BODY_SIZE, { after: 360, line: SINGLE_LINE }),
+    centeredParagraph("________________________________________", false, BODY_SIZE, { after: 0, line: SINGLE_LINE }),
+    centeredParagraph("Prof. Dr. [nome do membro da banca]", false, BODY_SIZE, {
+      after: 0,
+      line: SINGLE_LINE,
+    }),
+    centeredParagraph("Instituição", false, BODY_SIZE, { after: 360, line: SINGLE_LINE }),
+    centeredParagraph("________________________________________", false, BODY_SIZE, { after: 0, line: SINGLE_LINE }),
+    centeredParagraph("Prof. Dr. [nome do membro da banca]", false, BODY_SIZE, {
+      after: 0,
+      line: SINGLE_LINE,
+    }),
+    centeredParagraph("Instituição", false, BODY_SIZE, { after: 600, line: SINGLE_LINE }),
     centeredParagraph((fields.location || "LAVRAS - MG").toUpperCase(), false, BODY_SIZE, {
       after: 120,
       line: SINGLE_LINE,
@@ -712,21 +1069,28 @@ function optionalUntitledRightPage(content: string, italics = false): Paragraph[
   ];
 }
 
+function defaultImpactIndicators(fields: AcademicFields): string {
+  const topic = fields.title || "a pesquisa proposta";
+  return `Esta pesquisa apresenta impacto social e institucional ao analisar ${topic} no contexto da Universidade Federal de Lavras, considerando relações entre gestão, trabalho, saúde, participação e produção do conhecimento. Ao investigar percepções dos Servidores Técnico-Administrativos em Educação sobre o Programa de Gestão e Desempenho, o estudo poderá subsidiar práticas de avaliação mais democráticas, sensíveis à complexidade do trabalho real e comprometidas com a função pública da universidade. Seus resultados poderão contribuir para o aprimoramento de políticas de gestão de pessoas, para a valorização dos saberes técnico-administrativos e para a prevenção de processos de sobrecarga e adoecimento relacionados à organização do trabalho. O impacto esperado alcança a comunidade universitária, gestores, trabalhadores, pesquisadores da área de Educação Ambiental Crítica e instituições públicas que adotam modelos de gestão por desempenho. A pesquisa também dialoga com os Objetivos de Desenvolvimento Sustentável relacionados à saúde e bem-estar, trabalho decente, educação de qualidade e instituições eficazes, ao tratar o ambiente universitário como espaço socioambiental de vida, trabalho e formação humana.`;
+}
+
+function defaultImpactIndicatorsEnglish(fields: AcademicFields): string {
+  const topic = fields.title || "the proposed research";
+  return `This research has social and institutional impact by analyzing ${topic} in the context of the Federal University of Lavras, considering relations among management, work, health, participation and knowledge production. By investigating the perceptions of Technical-Administrative Education Staff regarding the Management and Performance Program, the study may support more democratic evaluation practices, sensitive to the complexity of real work and committed to the public role of the university. Its results may contribute to improving people management policies, valuing technical-administrative knowledge and preventing overload and illness processes related to work organization. The expected impact reaches the university community, managers, workers, researchers in Critical Environmental Education and public institutions that adopt performance-based management models. The research also dialogues with the Sustainable Development Goals related to health and well-being, decent work, quality education and effective institutions, by understanding the university environment as a socio-environmental space of life, work and human formation.`;
+}
+
 function preTextualChildren(fields: AcademicFields): Paragraph[] {
   const impactRequired = fields.workType === "dissertacao" || fields.workType === "tese";
-  const indicadores =
-    fields.indicadoresImpacto ||
-    (impactRequired ? "Espaço reservado aos indicadores de impacto." : "");
-  const impactIndicators =
-    fields.impactIndicators ||
-    (impactRequired ? "Reserved space for impact indicators." : "");
+  const indicadores = fields.indicadoresImpacto || (impactRequired ? defaultImpactIndicators(fields) : "");
+  const impactIndicators = fields.impactIndicators || (impactRequired ? defaultImpactIndicatorsEnglish(fields) : "");
 
   return [
     pageBreak(),
     unnumberedTitle("Ficha catalográfica"),
     simpleParagraph(
-      "Espaço reservado para ficha catalográfica elaborada pela Biblioteca Universitária da UFLA.",
+      "Inserir aqui a ficha catalográfica oficial gerada pela Biblioteca Universitária da UFLA. Não substitua por texto manual na versão final.",
     ),
+    ...approvalPageChildren(fields),
     ...optionalUntitledRightPage(fields.dedicatoria),
     ...optionalPage("Agradecimentos", fields.agradecimentos),
     ...optionalUntitledRightPage(fields.epigrafe, true),
@@ -767,10 +1131,17 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
     .filter((block) => block.type === "reference")
     .map((block) => block.text);
   const references = [...splitParagraphs(fields.referencias), ...editorReferences];
-  const summaryChildren = buildSummary(bodyBlocks, references, fields);
-  const textualStartPage = calculateTextualStartPage(fields, summaryChildren.length > 0);
+  const hasSummary =
+    bodyBlocks.some(
+      (block) =>
+        block.type === "heading1" || block.type === "heading2" || block.type === "heading3",
+    ) ||
+    references.length > 0 ||
+    Boolean(fields.apendices || fields.anexos);
+  const textualStartPage = calculateTextualStartPage(fields, hasSummary);
+  const summaryChildren = buildSummary(bodyBlocks, references, fields, textualStartPage);
 
-  const preTextualChildrenList: Array<Paragraph | TableOfContents> = [
+  const preTextualChildrenList: Paragraph[] = [
     ...coverChildren(fields, input.logo),
     pageBreak(),
     ...titlePageChildren(fields),
@@ -778,7 +1149,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
     ...summaryChildren,
   ];
 
-  const textualAndPostTextualChildren: Paragraph[] = [
+  const textualAndPostTextualChildren: Array<Paragraph | Table> = [
     ...bodyBlocks.flatMap((block, index) => blockToParagraph(block, index === 0)),
     pageBreak(),
     sectionTitle("Referências"),
@@ -787,7 +1158,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
       ? [pageBreak(), sectionTitle("Anexos"), ...buildSimpleParagraphs(fields.anexos)]
       : []),
     ...(fields.apendices
-      ? [pageBreak(), sectionTitle("Apêndices"), ...buildSimpleParagraphs(fields.apendices)]
+      ? [pageBreak(), sectionTitle(appendixTitle(fields)), ...buildSimpleParagraphs(fields.apendices)]
       : []),
   ];
 
