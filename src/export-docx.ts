@@ -1,4 +1,3 @@
-﻿import JSZip from "jszip";
 import {
   AlignmentType,
   Document,
@@ -13,7 +12,7 @@ import {
   TableOfContents,
   TextRun,
 } from "docx";
-import type { IParagraphOptions } from "docx";
+import type { IParagraphOptions, IStylesOptions } from "docx";
 import { AcademicFields, UFLA_RULES } from "./ufla-rules";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { normalizeForDetection } from "./word-structure-extractor";
@@ -52,6 +51,43 @@ const SINGLE_LINE = 240;
 const BLACK = "000000";
 const REFERENCE_FONT = "Times New Roman";
 const REFERENCE_SIZE = 12 * 2;
+const DOCUMENT_STYLES: IStylesOptions = {
+  default: {
+    heading1: {
+      run: {
+        font: UFLA_RULES.typography.fontFamily,
+        size: BODY_SIZE,
+        bold: true,
+        color: BLACK,
+      },
+      paragraph: {
+        spacing: { before: 0, after: 0 },
+      },
+    },
+    heading2: {
+      run: {
+        font: UFLA_RULES.typography.fontFamily,
+        size: BODY_SIZE,
+        bold: true,
+        color: BLACK,
+      },
+      paragraph: {
+        spacing: { before: 0, after: 0 },
+      },
+    },
+    heading3: {
+      run: {
+        font: UFLA_RULES.typography.fontFamily,
+        size: BODY_SIZE,
+        bold: false,
+        color: BLACK,
+      },
+      paragraph: {
+        spacing: { before: 0, after: 0 },
+      },
+    },
+  },
+};
 
 export function parseEditorContent(editorText: string): EditorBlock[] {
   return editorText
@@ -209,7 +245,6 @@ function sectionTitle(text: string): Paragraph {
     children: [
       new TextRun({
         text: text.toUpperCase(),
-        bold: true,
         font: UFLA_RULES.typography.fontFamily,
         size: BODY_SIZE,
         color: BLACK,
@@ -246,7 +281,6 @@ function blockToParagraph(block: EditorBlock, isFirstTextualBlock: boolean = fal
       children: [
         new TextRun({
           text: block.text.toUpperCase(),
-          bold: true,
           font: UFLA_RULES.typography.fontFamily,
           size: BODY_SIZE,
           color: BLACK,
@@ -265,7 +299,6 @@ function blockToParagraph(block: EditorBlock, isFirstTextualBlock: boolean = fal
         children: [
           new TextRun({
             text: block.text,
-            bold: true,
             font: UFLA_RULES.typography.fontFamily,
             size: BODY_SIZE,
             color: BLACK,
@@ -283,7 +316,6 @@ function blockToParagraph(block: EditorBlock, isFirstTextualBlock: boolean = fal
         children: [
           new TextRun({
             text: block.text,
-            bold: true,
             font: UFLA_RULES.typography.fontFamily,
             size: BODY_SIZE,
             color: BLACK,
@@ -369,7 +401,7 @@ function fieldSectionBlocks(fields: AcademicFields, bodyBlocks: EditorBlock[]): 
 
   if (fields.introducao && !hasEditorHeading(nextBlocks, "INTRODUCAO")) {
     nextBlocks.unshift(
-      { type: "heading1", text: "1 INTRODUÃ‡ÃƒO" },
+      { type: "heading1", text: "1 INTRODU\u00c7\u00c3O" },
       ...splitParagraphs(fields.introducao).map((text) => ({ type: "paragraph" as const, text })),
     );
   }
@@ -378,7 +410,7 @@ function fieldSectionBlocks(fields: AcademicFields, bodyBlocks: EditorBlock[]): 
     nextBlocks.push(
       {
         type: "heading1",
-        text: usesFinalConsiderationsHeading(nextBlocks) ? "6 CONSIDERAÃ‡Ã•ES FINAIS" : "CONCLUSÃƒO",
+        text: usesFinalConsiderationsHeading(nextBlocks) ? "6 CONSIDERA\u00c7\u00d5ES FINAIS" : "CONCLUS\u00c3O",
       },
       ...splitParagraphs(fields.conclusao).map((text) => ({ type: "paragraph" as const, text })),
     );
@@ -404,7 +436,7 @@ function buildSummary(
 
   return [
     pageBreak(),
-    unnumberedTitle("SumÃ¡rio"),
+    unnumberedTitle("Sumário"),
     new TableOfContents("", {
       headingStyleRange: "1-3",
       hyperlink: true,
@@ -416,7 +448,7 @@ function buildSummary(
       spacing: { before: 120, after: 120 },
       children: [
         new TextRun({
-          text: "ApÃ³s abrir no Word, atualize o sumÃ¡rio com F9 para recalcular pÃ¡ginas.",
+          text: "Após abrir no Word, atualize o sumário com F9 para recalcular páginas.",
           font: UFLA_RULES.typography.fontFamily,
           size: UFLA_RULES.typography.noteFontSizePt * 2,
           italics: true,
@@ -436,7 +468,7 @@ export function calculateTextualStartPage(
   hasSummary: boolean,
 ): number {
   const impactRequired = fields.workType === "dissertacao" || fields.workType === "tese";
-  let countedPreTextualPages = 1; // Folha de rosto. Capa e ficha catalogrÃ¡fica nÃ£o contam.
+  let countedPreTextualPages = 1; // Folha de rosto. Capa e ficha catalográfica não contam.
 
   if (hasText(fields.dedicatoria)) countedPreTextualPages += 1;
   if (hasText(fields.agradecimentos)) countedPreTextualPages += 1;
@@ -458,7 +490,7 @@ function coverChildren(fields: AcademicFields, logo?: DocxLogoAsset): Paragraph[
     new Paragraph({ spacing: { before: 1200 } }),
     centeredParagraph(fields.author || "AUTOR"),
     new Paragraph({ spacing: { before: 1800 } }),
-    centeredParagraph((fields.title || "TÃTULO DO TRABALHO").toUpperCase(), true),
+    centeredParagraph((fields.title || "TÍTULO DO TRABALHO").toUpperCase(), true),
     ...(fields.subtitle ? [centeredParagraph(fields.subtitle.toUpperCase(), true)] : []),
     new Paragraph({ spacing: { before: 2200 } }),
     centeredParagraph(fields.location || "LAVRAS - MG"),
@@ -469,12 +501,12 @@ function coverChildren(fields: AcademicFields, logo?: DocxLogoAsset): Paragraph[
 function titlePageChildren(fields: AcademicFields): Paragraph[] {
   const nature =
     fields.workNature ||
-    "Trabalho apresentado Ã  Universidade Federal de Lavras como requisito acadÃªmico, conforme dados revisados pelo usuÃ¡rio.";
+    "Trabalho apresentado à Universidade Federal de Lavras como requisito acadêmico, conforme dados revisados pelo usuário.";
 
   return [
     centeredParagraph(fields.author || "AUTOR"),
     new Paragraph({ spacing: { before: 1500 } }),
-    centeredParagraph((fields.title || "TÃTULO DO TRABALHO").toUpperCase(), true),
+    centeredParagraph((fields.title || "TÍTULO DO TRABALHO").toUpperCase(), true),
     ...(fields.subtitle ? [centeredParagraph(fields.subtitle.toUpperCase(), true)] : []),
     new Paragraph({ spacing: { before: 900 } }),
     textParagraph(nature, {
@@ -499,35 +531,35 @@ function titlePageChildren(fields: AcademicFields): Paragraph[] {
 
 function optionalPage(title: string, content: string): Paragraph[] {
   if (!content.trim()) return [];
-  return [pageBreak(), sectionTitle(title), ...buildSimpleParagraphs(content)];
+  return [pageBreak(), unnumberedTitle(title), ...buildSimpleParagraphs(content)];
 }
 
 function preTextualChildren(fields: AcademicFields): Paragraph[] {
   const impactRequired = fields.workType === "dissertacao" || fields.workType === "tese";
   const indicadores =
     fields.indicadoresImpacto ||
-    (impactRequired ? "EspaÃ§o reservado aos indicadores de impacto." : "");
+    (impactRequired ? "Espaço reservado aos indicadores de impacto." : "");
   const impactIndicators =
     fields.impactIndicators ||
     (impactRequired ? "Reserved space for impact indicators." : "");
 
   return [
     pageBreak(),
-    sectionTitle("Ficha catalogrÃ¡fica"),
+    unnumberedTitle("Ficha catalográfica"),
     simpleParagraph(
-      "EspaÃ§o reservado para ficha catalogrÃ¡fica elaborada pela Biblioteca UniversitÃ¡ria da UFLA.",
+      "Espaço reservado para ficha catalográfica elaborada pela Biblioteca Universitária da UFLA.",
     ),
-    ...optionalPage("DedicatÃ³ria", fields.dedicatoria),
+    ...optionalPage("Dedicatória", fields.dedicatoria),
     ...optionalPage("Agradecimentos", fields.agradecimentos),
-    ...optionalPage("EpÃ­grafe", fields.epigrafe),
+    ...optionalPage("Epígrafe", fields.epigrafe),
     pageBreak(),
-    sectionTitle("Resumo"),
+    unnumberedTitle("Resumo"),
     simpleParagraph(fields.resumo || " "),
     ...(fields.palavrasChave
       ? [simpleParagraph(`Palavras-chave: ${fields.palavrasChave}`)]
       : []),
     pageBreak(),
-    sectionTitle("Abstract"),
+    unnumberedTitle("Abstract"),
     simpleParagraph(fields.abstractText || " "),
     ...(fields.keywords ? [simpleParagraph(`Keywords: ${fields.keywords}`)] : []),
     ...optionalPage("Indicadores de impacto", indicadores),
@@ -560,13 +592,13 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   const textualAndPostTextualChildren: Paragraph[] = [
     ...bodyBlocks.flatMap((block, index) => blockToParagraph(block, index === 0)),
     pageBreak(),
-    sectionTitle("ReferÃªncias"),
+    sectionTitle("Referências"),
     ...buildReferences(references),
     ...(fields.anexos
       ? [pageBreak(), sectionTitle("Anexos"), ...buildSimpleParagraphs(fields.anexos)]
       : []),
     ...(fields.apendices
-      ? [pageBreak(), sectionTitle("ApÃªndices"), ...buildSimpleParagraphs(fields.apendices)]
+      ? [pageBreak(), sectionTitle("Apêndices"), ...buildSimpleParagraphs(fields.apendices)]
       : []),
   ];
 
@@ -587,12 +619,13 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   });
 
   return new Document({
-    creator: "UFLA DOCX AcadÃªmico",
-    title: fields.title || "Trabalho acadÃªmico",
-    description: "Documento acadÃªmico gerado conforme regras centrais da UFLA.",
+    creator: "UFLA DOCX Acadêmico",
+    title: fields.title || "Trabalho acadêmico",
+    description: "Documento acadêmico gerado conforme regras centrais da UFLA.",
     features: {
       updateFields: true,
     },
+    styles: DOCUMENT_STYLES,
     sections: [
       {
         properties: {
@@ -640,108 +673,6 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   });
 }
 
-function decodeXmlText(value: string): string {
-  return value
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&");
-}
-
-function escapeXmlText(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function textFromParagraphXml(paragraphXml: string): string {
-  return [...paragraphXml.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)]
-    .map((match) => decodeXmlText(match[1]))
-    .join("")
-    .trim();
-}
-
-function headingLevelFromParagraphXml(paragraphXml: string): number | undefined {
-  const match = paragraphXml.match(/<w:pStyle\s+w:val="Heading([123])"\s*\/>/);
-  return match ? Number(match[1]) : undefined;
-}
-
-function removeHeadingMarkup(paragraphXml: string): string {
-  return paragraphXml
-    .replace(/<w:pStyle\s+w:val="Heading[123]"\s*\/>/g, "")
-    .replace(/<w:outlineLvl\s+w:val="[0-9]+"\s*\/>/g, "");
-}
-
-function tcFieldXml(title: string, level: number): string {
-  const safeTitle = escapeXmlText(title);
-  return [
-    '<w:r><w:rPr><w:vanish/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>',
-    `<w:r><w:rPr><w:vanish/></w:rPr><w:instrText xml:space="preserve"> TC &quot;${safeTitle}&quot; \\l ${level} </w:instrText></w:r>`,
-    '<w:r><w:rPr><w:vanish/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r>',
-    '<w:r><w:rPr><w:vanish/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>',
-  ].join("");
-}
-
-function insertTcField(paragraphXml: string, title: string, level: number): string {
-  return paragraphXml.replace(/(<w:p\b[^>]*>)/, `$1${tcFieldXml(title, level)}`);
-}
-
-function replaceTocInstruction(documentXml: string): string {
-  return documentXml
-    .replace(
-      /TOC\s+\\h\s+\\o\s+(?:&quot;|")1-3(?:&quot;|")\s+\\u\s+\\z/g,
-      "TOC \\f \\h \\z",
-    )
-    .replace(
-      /TOC\s+\\o\s+(?:&quot;|")1-3(?:&quot;|")\s+\\h\s+\\z\s+\\u/g,
-      "TOC \\f \\h \\z",
-    )
-    .replace(
-      /TOC\s+\\o\s+(?:&quot;|")1-3(?:&quot;|")\s+\\h\s+\\z/g,
-      "TOC \\f \\h \\z",
-    );
-}
-
-function postProcessDocumentXml(documentXml: string): string {
-  let afterSummaryInstruction = false;
-
-  const processed = documentXml.replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraphXml) => {
-    const level = headingLevelFromParagraphXml(paragraphXml);
-    const text = textFromParagraphXml(paragraphXml);
-    let next = paragraphXml;
-
-    if (level && afterSummaryInstruction && text) {
-      next = insertTcField(next, text, level);
-    }
-
-    next = removeHeadingMarkup(next);
-
-    if (text.includes("ApÃ³s abrir no Word, atualize o sumÃ¡rio")) {
-      afterSummaryInstruction = true;
-    }
-
-    return next;
-  });
-
-  return replaceTocInstruction(processed);
-}
-
-async function postProcessDocxBlob(blob: Blob): Promise<Blob> {
-  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
-  const documentFile = zip.file("word/document.xml");
-  if (!documentFile) return blob;
-
-  const documentXml = await documentFile.async("string");
-  zip.file("word/document.xml", postProcessDocumentXml(documentXml));
-
-  return zip.generateAsync({
-    type: "blob",
-    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  });
-}
 
 export async function loadDefaultLogoAsset(): Promise<DocxLogoAsset | undefined> {
   if (typeof fetch !== "function") return undefined;
@@ -761,7 +692,5 @@ export async function loadDefaultLogoAsset(): Promise<DocxLogoAsset | undefined>
 
 export async function generateDocxBlob(input: DocxGenerationInput): Promise<Blob> {
   const logo = input.logo ?? (await loadDefaultLogoAsset());
-  const blob = await Packer.toBlob(createDocxDocument({ ...input, logo }));
-  return postProcessDocxBlob(blob);
+  return Packer.toBlob(createDocxDocument({ ...input, logo }));
 }
-
