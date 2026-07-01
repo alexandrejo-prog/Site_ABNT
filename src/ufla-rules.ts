@@ -133,10 +133,9 @@ export const UFLA_RULES = {
     pageNumberFontSizePt: 11,
     lineSpacing: 1.5,
     simpleLineSpacing: 1,
-    paragraphFirstLineCm: 1.5,
-    paragraphFirstLineTwip: cmToTwip(1.5),
-    // O template oficial inspecionado usa 1,25 cm em trechos do corpo textual.
-    // A configuração atual de 1,5 cm fica centralizada para ajuste/revisão manual.
+    // O template/Manual UFLA usa recuo de primeira linha de 1,25 cm no corpo textual.
+    paragraphFirstLineCm: 1.25,
+    paragraphFirstLineTwip: cmToTwip(1.25),
     paragraphFirstLineTemplateCm: 1.25,
     paragraphFirstLineTemplateTwip: cmToTwip(1.25),
     longQuoteLeftIndentCm: 4,
@@ -145,7 +144,7 @@ export const UFLA_RULES = {
   spacing: {
     bodyLineTwip: 360,
     singleLineTwip: 240,
-    afterParagraphTwip: 120,
+    afterParagraphTwip: 0,
     beforePrimaryTitleTwip: 240,
     afterPrimaryTitleTwip: 240,
   },
@@ -215,22 +214,19 @@ export const UFLA_RULES = {
     "Fonte Times New Roman ou similar, texto 12, citações longas/notas/fontes 11.",
     "Espaçamento 1,5 no corpo e simples em referências, citações longas, legendas e fontes.",
     "Capa, folha de rosto, resumo, abstract, indicadores, listas, sumário, corpo, referências, anexos e apêndices no fluxo DOCX.",
-    "Sumário estático com campos PAGEREF atualizáveis pelo Word para as páginas.",
+    "Sumário com campo atualizável pelo Word.",
     "Numeração visível apenas na seção textual/pós-textual, no cabeçalho superior direito.",
     "Detecção de runs OOXML com negrito, itálico e sublinhado.",
-    "Lista de ilustrações e lista de tabelas geradas quando há legendas detectadas.",
-    "Imagens importadas por relacionamento OOXML reinseridas quando há mídia preservada.",
-    "Tabelas tabuladas/importadas exportadas como tabelas nativas do Word.",
-    "Referências mantidas sem invenção de dados, com destaque em negrito quando o título é detectável e et al. em itálico.",
-  ],
-  pendingRules: [
-    "Cálculo perfeito de páginas no navegador depende da atualização de campos no Word.",
-    "Ficha catalográfica é criada como página reservada; a ficha oficial deve ser inserida pelo usuário.",
-    "Folha de aprovação e errata completas ainda dependem de dados fornecidos pelo usuário.",
-    "Quebras de página exatas para imagens/tabelas multipágina ainda exigem revisão no Word.",
-    "Normalização ABNT/UFLA de referências é determinística e conservadora; itens ambíguos são preservados com alerta.",
   ],
 } as const;
+
+export function isAdvisorRequired(workType: WorkTypeValue): boolean {
+  return workType === "monografia" || workType === "dissertacao" || workType === "tese";
+}
+
+export function requiresImpactIndicators(workType: WorkTypeValue): boolean {
+  return workType === "dissertacao" || workType === "tese";
+}
 
 export function emptyAcademicFields(): AcademicFields {
   return {
@@ -243,8 +239,8 @@ export function emptyAcademicFields(): AcademicFields {
     program: "",
     advisor: "",
     coadvisor: "",
-    location: "",
-    year: "",
+    location: "Lavras - MG",
+    year: new Date().getFullYear().toString(),
     resumo: "",
     palavrasChave: "",
     abstractText: "",
@@ -261,22 +257,4 @@ export function emptyAcademicFields(): AcademicFields {
     impactIndicators: "",
     imageWarnings: "",
   };
-}
-
-export function emptyConfidenceMap(): Record<AcademicFieldKey, Confidence> {
-  return ACADEMIC_FIELD_KEYS.reduce(
-    (map, key) => ({
-      ...map,
-      [key]: "nao-identificado" as Confidence,
-    }),
-    {} as Record<AcademicFieldKey, Confidence>,
-  );
-}
-
-export function isAdvisorRequired(workType: WorkTypeValue): boolean {
-  return (
-    workType === "monografia" ||
-    workType === "dissertacao" ||
-    workType === "tese"
-  );
 }
