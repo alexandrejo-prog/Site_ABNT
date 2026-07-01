@@ -67,14 +67,28 @@ describe("references normalizer", () => {
     );
   });
 
-  it("preserva legislacao sem destaque automatico quando ha baixa confianca", () => {
-    const normalized = normalizeReference(
+  it("detecta legislacao e destaca o ato normativo", () => {
+    expectDetectedBold(
       "BRASIL. Lei nº 9.394, de 20 de dezembro de 1996. Estabelece as diretrizes e bases da educação nacional. Brasília, DF, 1996.",
+      "legislacao",
+      "Lei nº 9.394, de 20 de dezembro de 1996",
     );
-    expect(normalized.detectedType).toBe("legislacao");
-    expect(normalized.detectedHighlight).toBeUndefined();
-    expect(normalized.runs.some((run) => run.bold)).toBe(false);
-    expect(normalized.warnings.some((warning) => warning.includes("normativa preservada"))).toBe(true);
+  });
+
+  it("detecta legislacao com orgao intermediario e destaca a resolucao", () => {
+    expectDetectedBold(
+      "BRASIL. Conselho Nacional de Saúde. Resolução nº 510, de 7 de abril de 2016. Dispõe sobre as normas aplicáveis a pesquisas em Ciências Humanas e Sociais. Brasília, DF: Conselho Nacional de Saúde, 2016.",
+      "legislacao",
+      "Resolução nº 510, de 7 de abril de 2016",
+    );
+  });
+
+  it("detecta instrucao normativa conjunta e destaca o ato normativo", () => {
+    expectDetectedBold(
+      "BRASIL. Instrução Normativa Conjunta SGP-SRT-SEGES/MGI nº 24, de 28 de julho de 2023. Estabelece orientações a serem observadas pelos órgãos e entidades integrantes do SIPEC e do SIORG relativas à implementação e execução do Programa de Gestão e Desempenho. Brasília, DF, 2023.",
+      "legislacao",
+      "Instrução Normativa Conjunta SGP-SRT-SEGES/MGI nº 24, de 28 de julho de 2023",
+    );
   });
 
   it("preserva marcacao manual em negrito sem aplicar destaque conflitante", () => {

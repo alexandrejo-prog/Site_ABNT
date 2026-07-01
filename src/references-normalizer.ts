@@ -152,6 +152,18 @@ function detectBookHighlight(remainder: string): string | undefined {
   return undefined;
 }
 
+function detectLegislationHighlight(reference: string): string | undefined {
+  const sentences = reference
+    .split(/\.\s+/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return sentences.find((sentence) => {
+    const text = fold(sentence);
+    return /^(constituicao|emenda constitucional|lei|lei complementar|decreto|decreto-lei|portaria|resolucao|instrucao normativa|instrucao normativa conjunta|norma|nbr)\b/u.test(text);
+  });
+}
+
 function detectHighlight(reference: string): {
   highlight?: string;
   confidence: ReferenceConfidence;
@@ -159,6 +171,16 @@ function detectHighlight(reference: string): {
   warning?: string;
 } {
   if (isLikelyLegislation(reference)) {
+    const legislation = detectLegislationHighlight(reference);
+
+    if (legislation) {
+      return {
+        highlight: legislation,
+        confidence: "media",
+        detectedType: "legislacao",
+      };
+    }
+
     return {
       confidence: "baixa",
       detectedType: "legislacao",
