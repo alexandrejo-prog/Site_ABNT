@@ -211,13 +211,32 @@ function textFromBlock(block: ImportedBlock): string[] {
   return [block.text];
 }
 
+function shouldForcePageBreakBefore(block: ImportedBlock): boolean {
+  if (block.type !== "heading") return false;
+  return /^(RESUMO|ABSTRACT|REFERÊNCIAS|REFERENCIAS)$/i.test(block.text) || /^1\s+Introdu/i.test(block.text);
+}
+
 function normalizeBlocks(blocks: ImportedBlock[]): ImportedBlock[] {
-  return blocks.flatMap(normalizeBlock);
+  const split = blocks.flatMap(normalizeBlock);
+  const normalized: ImportedBlock[] = [];
+
+  for (const block of split) {
+    if (shouldForcePageBreakBefore(block) && !shouldSuppressPageBreak(normalized)) {
+      normalized.push(pageBreakBlock());
+    }
+    normalized.push(block);
+  }
+
+  return normalized;
 }
 
 function hasStructuralChange(before: ImportedBlock[], after: ImportedBlock[]): boolean {
   if (before.length !== after.length) return true;
-  return before.some((block, index) => block.type !== after[index]?.type || textFromBlock(block).join("\n") !== textFromBlock(after[index] ?? block).join("\n"));
+  return before.some(
+    (block, index) =>
+      block.type !== after[index]?.type ||
+      textFromBlock(block).join("\n") !== textFromBlock(after[index] ?? block).join("\n"),
+  );
 }
 
 export function normalizePlainAcademicText(text: string): ImportNormalizationResult {
