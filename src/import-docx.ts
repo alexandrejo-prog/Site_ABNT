@@ -12,6 +12,10 @@ import {
   ImportedBlock,
   extractDocxStructure,
 } from "./word-structure-extractor";
+import {
+  normalizeImportedStructure,
+  normalizePlainAcademicText,
+} from "./import-normalizer";
 
 export interface ImportResult {
   text: string;
@@ -36,7 +40,8 @@ function docxOpenError(fileName: string): Error {
 export function identifyAcademicFields(
   text: string,
 ): Omit<ImportResult, "text" | "editorText" | "messages" | "blocks"> {
-  const identified = detectAcademicFieldsFromText(text);
+  const normalized = normalizePlainAcademicText(text);
+  const identified = detectAcademicFieldsFromStructure(normalized.structure);
   return {
     fields: identified.fields,
     confidence: identified.confidence,
@@ -69,31 +74,36 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
 
     try {
       const structure = await extractDocxStructure(arrayBuffer);
-      const text = structure.text || mammothText;
-      const detected = detectAcademicFieldsFromStructure({ ...structure, text });
+      const normalized = normalizeImportedStructure({
+        ...structure,
+        text: structure.text || mammothText,
+      });
+      const detected = detectAcademicFieldsFromStructure(normalized.structure);
 
       return {
-        text,
-        editorText: detected.editorText || text,
+        text: normalized.text,
+        editorText: detected.editorText || normalized.text,
         fields: detected.fields,
         confidence: detected.confidence,
-        messages: [...messages, ...detected.messages],
-        blocks: structure.blocks,
+        messages: [...messages, ...normalized.messages, ...detected.messages],
+        blocks: normalized.structure.blocks,
       };
     } catch {
       if (mammothText.trim()) {
-        const detected = detectAcademicFieldsFromText(mammothText);
+        const normalized = normalizePlainAcademicText(mammothText);
+        const detected = detectAcademicFieldsFromStructure(normalized.structure);
         return {
-          text: mammothText,
-          editorText: detected.editorText || mammothText,
+          text: normalized.text,
+          editorText: detected.editorText || normalized.text,
           fields: detected.fields,
           confidence: detected.confidence,
           messages: [
             ...messages,
             "Não foi possível ler a estrutura OOXML; o arquivo foi importado apenas como texto bruto.",
+            ...normalized.messages,
             ...detected.messages,
           ],
-          blocks: [],
+          blocks: normalized.structure.blocks,
         };
       }
 
@@ -103,14 +113,15 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
 
   if (extension === "txt" || extension === "md") {
     const text = await file.text();
-    const detected = detectAcademicFieldsFromText(text);
+    const normalized = normalizePlainAcademicText(text);
+    const detected = detectAcademicFieldsFromStructure(normalized.structure);
     return {
-      text,
-      editorText: detected.editorText || text,
+      text: normalized.text,
+      editorText: detected.editorText || normalized.text,
       fields: detected.fields,
       confidence: detected.confidence,
-      messages: detected.messages,
-      blocks: [],
+      messages: [...normalized.messages, ...detected.messages],
+      blocks: normalized.structure.blocks,
     };
   }
 
