@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { inflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { calculateTextualStartPage, generateDocxBlob, parseEditorContent } from "../src/export-docx";
@@ -37,7 +38,6 @@ function extractFileFromZip(buffer: Buffer, fileName: string): string {
 
     const compression = readUInt16(buffer, offset + 8);
     const compressedSize = readUInt32(buffer, offset + 18);
-    const uncompressedSize = readUInt32(buffer, offset + 22);
     const fileNameLength = readUInt16(buffer, offset + 26);
     const extraLength = readUInt16(buffer, offset + 28);
     const nameStart = offset + 30;
@@ -52,7 +52,7 @@ function extractFileFromZip(buffer: Buffer, fileName: string): string {
       throw new Error(`Compactacao nao suportada: ${compression}.`);
     }
 
-    offset = dataEnd + (uncompressedSize === 0 ? 1 : 0);
+    offset = dataEnd;
   }
 
   throw new Error(`Arquivo nao encontrado no DOCX: ${fileName}.`);
@@ -80,6 +80,14 @@ function paragraphsIn(documentXml: string): string[] {
 
 function paragraphXmlContaining(documentXml: string, text: string): string {
   const paragraph = paragraphsIn(documentXml).find((item) => item.includes(text));
+  expect(paragraph).toBeTruthy();
+  return paragraph ?? "";
+}
+
+function paragraphXmlContainingStyle(documentXml: string, text: string, styleId: string): string {
+  const paragraph = paragraphsIn(documentXml).find(
+    (item) => item.includes(text) && item.includes(`w:val="${styleId}"`),
+  );
   expect(paragraph).toBeTruthy();
   return paragraph ?? "";
 }
@@ -172,18 +180,15 @@ describe("DOCX export", () => {
     }
   });
 
-  it("keeps heading levels for the summary with visual UFLA bold rules", async () => {
+  it("keeps heading levels for body titles with visual UFLA bold rules", async () => {
     const documentXml = await generatedXml(
       "# 1 Introdu\u00e7\u00e3o\nTexto.\n## 1.3 Objetivos\nTexto.\n### 1.3.1 Objetivo geral\nTexto.",
     );
 
-    const heading1 = paragraphXmlContaining(documentXml, "1 INTRODU\u00c7\u00c3O");
-    const heading2 = paragraphXmlContaining(documentXml, "1.3 Objetivos");
-    const heading3 = paragraphXmlContaining(documentXml, "1.3.1 Objetivo geral");
+    const heading1 = paragraphXmlContainingStyle(documentXml, "1 INTRODU\u00c7\u00c3O", "Heading1");
+    const heading2 = paragraphXmlContainingStyle(documentXml, "1.3 Objetivos", "Heading2");
+    const heading3 = paragraphXmlContainingStyle(documentXml, "1.3.1 Objetivo geral", "Heading3");
 
-    expect(heading1).toContain('w:val="Heading1"');
-    expect(heading2).toContain('w:val="Heading2"');
-    expect(heading3).toContain('w:val="Heading3"');
     expect(hasPositiveBold(heading1)).toBe(true);
     expect(hasPositiveBold(heading2)).toBe(true);
     expect(hasPositiveBold(heading3)).toBe(false);
@@ -195,15 +200,12 @@ describe("DOCX export", () => {
       anexos: "Material complementar de terceiro.",
       apendices: "Instrumento elaborado pelo autor.",
     });
-    const referencesHeading = paragraphXmlContaining(documentXml, "REFER\u00caNCIAS");
-    const anexosHeading = paragraphXmlContaining(documentXml, "ANEXOS");
-    const apendicesHeading = paragraphXmlContaining(documentXml, "AP\u00caNDICE A");
+    const referencesHeading = paragraphXmlContainingStyle(documentXml, "REFER\u00caNCIAS", "Heading1");
+    const anexosHeading = paragraphXmlContainingStyle(documentXml, "ANEXOS", "Heading1");
+    const apendicesHeading = paragraphXmlContainingStyle(documentXml, "AP\u00caNDICE A", "Heading1");
 
-    expect(referencesHeading).toContain('w:val="Heading1"');
     expect(referencesHeading).not.toContain(">1 REFER");
-    expect(anexosHeading).toContain('w:val="Heading1"');
     expect(anexosHeading).not.toContain(">1 ANEX");
-    expect(apendicesHeading).toContain('w:val="Heading1"');
     expect(apendicesHeading).not.toContain(">1 AP");
   });
 
