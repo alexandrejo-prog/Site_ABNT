@@ -258,3 +258,13 @@ export function emptyAcademicFields(): AcademicFields {
     imageWarnings: "",
   };
 }
+
+export function emptyConfidenceMap(): Record<AcademicFieldKey, Confidence> {
+  return ACADEMIC_FIELD_KEYS.reduce(
+    (map, key) => ({
+      ...map,
+      [key]: "nao-identificado" as Confidence,
+    }),
+    {} as Record<AcademicFieldKey, Confidence>,
+  );
+}
