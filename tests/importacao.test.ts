@@ -76,6 +76,24 @@ SILVA, M. Produção sustentável. Lavras: UFLA, 2024.
     expect(result.confidence.title).toBe("alta");
   });
 
+  it("separa título, resumo e introdução em arquivo mal segmentado", () => {
+    const result = identifyAcademicFields(`
+A COISIFICAÇÃO DO TRABALHO NA UNIVERSIDADE GERENCIALISTA: AS CONTRADIÇÕES DO PGD E A SOBRECARGA DOS TÉCNICO-ADMINISTRATIVOS DA UFLA SOB A LENTE DA PEDAGOGIA HISTÓRICO-CRÍTICA
+Resumo Este projeto de pesquisa propõe uma análise crítica sobre a cultura da sobrecarga de trabalho imposta aos Servidores Técnico-Administrativos em Educação da Universidade Federal de Lavras.
+1. Introdução 1.1. Tema O estudo aborda as mudanças na administração das universidades públicas no Brasil e o impacto na rotina dos servidores.
+1.2. Problema de Pesquisa De que maneira a Pedagogia Histórico-Crítica possibilita analisar criticamente a coisificação do trabalho?
+REFERÊNCIAS
+`);
+
+    expect(result.fields.title).toBe(
+      "A COISIFICAÇÃO DO TRABALHO NA UNIVERSIDADE GERENCIALISTA: AS CONTRADIÇÕES DO PGD E A SOBRECARGA DOS TÉCNICO-ADMINISTRATIVOS DA UFLA SOB A LENTE DA PEDAGOGIA HISTÓRICO-CRÍTICA",
+    );
+    expect(result.fields.title).not.toContain("Resumo");
+    expect(result.fields.resumo).toContain("Este projeto de pesquisa propõe");
+    expect(result.fields.resumo).not.toContain("1. Introdução");
+    expect(result.fields.introducao).toContain("O estudo aborda as mudanças");
+  });
+
   it("detecta autor no template oficial", async () => {
     const result = await detectTemplate();
     expect(result.fields.author).toBe("NOME E SOBRENOME DO AUTOR");
