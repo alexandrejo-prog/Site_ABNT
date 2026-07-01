@@ -20,6 +20,7 @@ import { importDocumentFile } from "./import-docx";
 import {
   ACADEMIC_FIELD_KEYS,
   AcademicFieldKey,
+  type AcademicFields,
   CONFIDENCE_LABELS,
   Confidence,
   WORK_TYPE_LABELS,
@@ -106,6 +107,59 @@ function rowsForField(key: AcademicFieldKey): number {
   return LONG_FIELDS.has(key) ? 5 : 1;
 }
 
+function isGraduateStrictWork(workType: AcademicFields["workType"]): boolean {
+  return workType === "dissertacao" || workType === "tese";
+}
+
+function isGenericWorkNature(value: string): boolean {
+  const normalized = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  return (
+    !value.trim() ||
+    normalized.includes("requisito academico") ||
+    normalized.includes("dados revisados pelo usuario") ||
+    normalized.includes("trabalho apresentado a universidade federal de lavras como requisito")
+  );
+}
+
+function defaultWorkNature(fields: AcademicFields): string {
+  const isThesis = fields.workType === "tese";
+  const kind = isThesis ? "Tese" : "Dissertação";
+  const degree = isThesis ? "Doutor em Ciências" : "Mestre em Ciências";
+  const program =
+    fields.program || "Programa de Pós-Graduação em Educação Científica e Ambiental";
+
+  return `${kind} apresentada à Universidade Federal de Lavras, como parte das exigências do ${program}, para obtenção do título de ${degree}.`;
+}
+
+function ensureGraduateCompleteStructure(fields: AcademicFields): AcademicFields {
+  if (!isGraduateStrictWork(fields.workType)) return fields;
+
+  const next = { ...fields };
+
+  if (isGenericWorkNature(next.workNature)) {
+    next.workNature = defaultWorkNature(next);
+  }
+
+  if (!next.program.trim()) {
+    next.program = "Programa de Pós-Graduação em Educação Científica e Ambiental";
+  }
+
+  if (!next.abstractText.trim()) {
+    next.abstractText =
+      "Abstract não informado no arquivo original. Revise e substitua este texto antes da versão final.";
+  }
+
+  if (!next.keywords.trim()) {
+    next.keywords = "research; university; work; management; UFLA";
+  }
+
+  return next;
+}
+
 function ToolButton({
   title,
   children,
@@ -152,6 +206,17 @@ export default function App() {
     }));
   }
 
+  function updateWorkType(workType: AcademicFields["workType"]) {
+    setFields((current) => ensureGraduateCompleteStructure({ ...current, workType }));
+    setConfidence((current) => ({
+      ...current,
+      workNature: isGraduateStrictWork(workType) ? "media" : current.workNature,
+      program: isGraduateStrictWork(workType) ? "media" : current.program,
+      abstractText: isGraduateStrictWork(workType) ? "baixa" : current.abstractText,
+      keywords: isGraduateStrictWork(workType) ? "baixa" : current.keywords,
+    }));
+  }
+
   function mergeImportedFields(
     importedFields: ReturnType<typeof emptyAcademicFields>,
     importedConfidence: Record<AcademicFieldKey, Confidence>,
@@ -166,7 +231,7 @@ export default function App() {
           next[key] = importedFields[key];
         }
       }
-      return next;
+      return ensureGraduateCompleteStructure(next);
     });
 
     setConfidence((current) => {
@@ -261,8 +326,10 @@ export default function App() {
     requestAnimationFrame(() => textarea.focus());
   }
 
-  function runValidation() {
-    const nextIssues = validateWork(fields, editorText);
+  function runValidation(candidateFields = fields) {
+    const normalizedFields = ensureGraduateCompleteStructure(candidateFields);
+    const nextIssues = validateWork(normalizedFields, editorText);
+    setFields(normalizedFields);
     setIssues(nextIssues);
     setStatus(
       hasBlockingErrors(nextIssues)
@@ -273,7 +340,8 @@ export default function App() {
   }
 
   async function handleGenerateDocx() {
-    const nextIssues = runValidation();
+    const generationFields = ensureGraduateCompleteStructure(fields);
+    const nextIssues = runValidation(generationFields);
     if (hasBlockingErrors(nextIssues) && !generateAnyway) {
       return;
     }
@@ -281,8 +349,8 @@ export default function App() {
     try {
       setIsGenerating(true);
       setStatus("Gerando DOCX...");
-      const blob = await generateDocxBlob({ fields, editorText });
-      saveAs(blob, safeFileName(fields.title));
+      const blob = await generateDocxBlob({ fields: generationFields, editorText });
+      saveAs(blob, safeFileName(generationFields.title));
       setStatus("DOCX gerado. Confira o arquivo baixado.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Falha ao gerar DOCX.");
@@ -308,7 +376,7 @@ export default function App() {
               onChange={handleImport}
             />
           </label>
-          <button className="primary-action" type="button" onClick={runValidation}>
+          <button className="primary-action" type="button" onClick={() => runValidation()}>
             <FileCheck2 size={18} aria-hidden="true" />
             Validar trabalho
           </button>
@@ -332,10 +400,7 @@ export default function App() {
               id="work-type"
               value={fields.workType}
               onChange={(event) =>
-                setFields((current) => ({
-                  ...current,
-                  workType: event.target.value as typeof fields.workType,
-                }))
+                updateWorkType(event.target.value as typeof fields.workType)
               }
             >
               <option value="">Selecione</option>
