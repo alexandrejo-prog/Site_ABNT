@@ -46,11 +46,15 @@ export const DEFAULT_UFLA_LOGO_PATH = "/assets/ufla-logo.jpeg";
 
 const BODY_SIZE = UFLA_RULES.typography.bodyFontSizePt * 2;
 const LONG_QUOTE_SIZE = UFLA_RULES.typography.longQuoteFontSizePt * 2;
-const ONE_AND_HALF_LINE = 360;
-const SINGLE_LINE = 240;
+const COVER_AUTHOR_SIZE = UFLA_RULES.typography.coverAuthorFontSizePt * 2;
+const COVER_TITLE_SIZE = UFLA_RULES.typography.coverTitleFontSizePt * 2;
+const ONE_AND_HALF_LINE = UFLA_RULES.spacing.bodyLineTwip;
+const SINGLE_LINE = UFLA_RULES.spacing.singleLineTwip;
 const BLACK = "000000";
 const REFERENCE_FONT = "Times New Roman";
 const REFERENCE_SIZE = 12 * 2;
+const UFLA_LOGO_WIDTH_PX = 265;
+const UFLA_LOGO_HEIGHT_PX = 108;
 
 const DOCUMENT_STYLES: IStylesOptions = {
   paragraphStyles: [
@@ -263,7 +267,7 @@ function textRunsFromMarkup(text: string, size = BODY_SIZE): TextRun[] {
 function textParagraph(text: string, options: Partial<IParagraphOptions> = {}): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.BOTH,
-    spacing: { line: ONE_AND_HALF_LINE, after: 120 },
+    spacing: { line: ONE_AND_HALF_LINE, after: UFLA_RULES.spacing.afterParagraphTwip },
     indent: { firstLine: UFLA_RULES.typography.paragraphFirstLineTwip },
     children: textRunsFromMarkup(text || " "),
     ...options,
@@ -273,22 +277,27 @@ function textParagraph(text: string, options: Partial<IParagraphOptions> = {}): 
 function simpleParagraph(text: string, options: Partial<IParagraphOptions> = {}): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.BOTH,
-    spacing: { line: SINGLE_LINE, after: 120 },
+    spacing: { line: SINGLE_LINE, after: UFLA_RULES.spacing.afterParagraphTwip },
     children: textRunsFromMarkup(text || " "),
     ...options,
   });
 }
 
-function centeredParagraph(text: string, bold = false): Paragraph {
+function centeredParagraph(
+  text: string,
+  bold = false,
+  size = BODY_SIZE,
+  spacing: NonNullable<IParagraphOptions["spacing"]> = { after: 240 },
+): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.CENTER,
-    spacing: { after: 240 },
+    spacing,
     children: [
       new TextRun({
         text,
         bold,
         font: UFLA_RULES.typography.fontFamily,
-        size: BODY_SIZE,
+        size,
         color: BLACK,
       }),
     ],
@@ -296,18 +305,25 @@ function centeredParagraph(text: string, bold = false): Paragraph {
 }
 
 function logoParagraph(logo?: DocxLogoAsset): Paragraph[] {
-  if (!logo) return [centeredParagraph("UNIVERSIDADE FEDERAL DE LAVRAS", true)];
+  if (!logo) {
+    return [
+      centeredParagraph("UNIVERSIDADE FEDERAL DE LAVRAS", true, COVER_AUTHOR_SIZE, {
+        after: 0,
+        line: SINGLE_LINE,
+      }),
+    ];
+  }
 
   return [
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 240 },
+      spacing: { after: 0 },
       children: [
         new ImageRun({
           data: logo.data,
           transformation: {
-            width: logo.width ?? 170,
-            height: logo.height ?? 62,
+            width: logo.width ?? UFLA_LOGO_WIDTH_PX,
+            height: logo.height ?? UFLA_LOGO_HEIGHT_PX,
           },
           altText: {
             title: "Logo UFLA",
@@ -361,7 +377,7 @@ function blockToParagraph(block: EditorBlock, isFirstTextualBlock: boolean = fal
   if (block.type === "heading1") {
     const title = new Paragraph({
       heading: HeadingLevel.HEADING_1,
-      spacing: { before: 240, after: 180, line: ONE_AND_HALF_LINE },
+      spacing: { before: 0, after: 240, line: ONE_AND_HALF_LINE },
       children: [
         new TextRun({
           text: block.text.toUpperCase(),
@@ -380,7 +396,7 @@ function blockToParagraph(block: EditorBlock, isFirstTextualBlock: boolean = fal
     return [
       new Paragraph({
         heading: HeadingLevel.HEADING_2,
-        spacing: { before: 180, after: 120, line: ONE_AND_HALF_LINE },
+        spacing: { before: 240, after: 240, line: ONE_AND_HALF_LINE },
         children: [
           new TextRun({
             text: block.text,
@@ -398,7 +414,7 @@ function blockToParagraph(block: EditorBlock, isFirstTextualBlock: boolean = fal
     return [
       new Paragraph({
         heading: HeadingLevel.HEADING_3,
-        spacing: { before: 120, after: 100, line: ONE_AND_HALF_LINE },
+        spacing: { before: 240, after: 240, line: ONE_AND_HALF_LINE },
         children: [
           new TextRun({
             text: block.text,
@@ -438,16 +454,19 @@ function buildSimpleParagraphs(value: string): Paragraph[] {
 }
 
 function buildReferences(references: string[]): Paragraph[] {
-  return normalizeReferences(references).map((reference) =>
-    new Paragraph({
-      alignment: AlignmentType.LEFT,
-      spacing: { line: SINGLE_LINE, after: 120 },
-      indent: { firstLine: 0, left: 0 },
-      children: reference.runs.length
-        ? reference.runs.map(referenceRunToTextRun)
-        : [referenceRunToTextRun({ text: reference.text || " " })],
-    }),
-  );
+  return normalizeReferences(references)
+    .sort((a, b) => a.text.localeCompare(b.text, "pt-BR", { sensitivity: "base" }))
+    .map(
+      (reference) =>
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { line: SINGLE_LINE, after: SINGLE_LINE },
+          indent: { firstLine: 0, left: 0 },
+          children: reference.runs.length
+            ? reference.runs.map(referenceRunToTextRun)
+            : [referenceRunToTextRun({ text: reference.text || " " })],
+        }),
+    );
 }
 
 function hasEditorHeading(blocks: EditorBlock[], heading: string): boolean {
@@ -571,54 +590,126 @@ export function calculateTextualStartPage(
   return countedPreTextualPages + 1;
 }
 
+function natureParagraph(text: string): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.BOTH,
+    indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
+    spacing: { line: SINGLE_LINE, after: 180 },
+    children: textRunsFromMarkup(text || " "),
+  });
+}
+
 function coverChildren(fields: AcademicFields, logo?: DocxLogoAsset): Paragraph[] {
   return [
     ...logoParagraph(logo),
-    new Paragraph({ spacing: { before: 1200 } }),
-    centeredParagraph(fields.author || "AUTOR"),
-    new Paragraph({ spacing: { before: 1800 } }),
-    centeredParagraph((fields.title || "TÍTULO DO TRABALHO").toUpperCase(), true),
-    ...(fields.subtitle ? [centeredParagraph(fields.subtitle.toUpperCase(), true)] : []),
+    new Paragraph({ spacing: { before: 1100 } }),
+    centeredParagraph((fields.author || "AUTOR").toUpperCase(), true, COVER_AUTHOR_SIZE, {
+      after: 0,
+      line: SINGLE_LINE,
+    }),
+    new Paragraph({ spacing: { before: 1700 } }),
+    centeredParagraph((fields.title || "TÍTULO DO TRABALHO").toUpperCase(), true, COVER_TITLE_SIZE, {
+      after: 0,
+      line: ONE_AND_HALF_LINE,
+    }),
+    ...(fields.subtitle
+      ? [
+          centeredParagraph(fields.subtitle.toUpperCase(), false, COVER_TITLE_SIZE, {
+            after: 0,
+            line: ONE_AND_HALF_LINE,
+          }),
+        ]
+      : []),
     new Paragraph({ spacing: { before: 2200 } }),
-    centeredParagraph(fields.location || "LAVRAS - MG"),
-    centeredParagraph(fields.year || new Date().getFullYear().toString()),
+    centeredParagraph((fields.location || "LAVRAS - MG").toUpperCase(), true, COVER_AUTHOR_SIZE, {
+      after: 120,
+      line: SINGLE_LINE,
+    }),
+    centeredParagraph(fields.year || new Date().getFullYear().toString(), true, COVER_AUTHOR_SIZE, {
+      after: 0,
+      line: SINGLE_LINE,
+    }),
   ];
+}
+
+function buildTitlePageSupplementalLines(fields: AcademicFields, nature: string): string[] {
+  const normalizedNature = normalizeForDetection(nature);
+  return [
+    fields.course && !normalizedNature.includes("CURSO") ? `Curso: ${fields.course}` : "",
+    fields.program && !normalizedNature.includes("PROGRAMA") ? `Programa: ${fields.program}` : "",
+    fields.advisor && !normalizedNature.includes("ORIENTADOR") ? `Orientador(a): ${fields.advisor}` : "",
+    fields.coadvisor && !normalizedNature.includes("COORIENTADOR")
+      ? `Coorientador(a): ${fields.coadvisor}`
+      : "",
+  ].filter(Boolean);
 }
 
 function titlePageChildren(fields: AcademicFields): Paragraph[] {
   const nature =
     fields.workNature ||
     "Trabalho apresentado à Universidade Federal de Lavras como requisito acadêmico, conforme dados revisados pelo usuário.";
+  const supplementalLines = buildTitlePageSupplementalLines(fields, nature);
 
   return [
-    centeredParagraph(fields.author || "AUTOR"),
-    new Paragraph({ spacing: { before: 1500 } }),
-    centeredParagraph((fields.title || "TÍTULO DO TRABALHO").toUpperCase(), true),
-    ...(fields.subtitle ? [centeredParagraph(fields.subtitle.toUpperCase(), true)] : []),
-    new Paragraph({ spacing: { before: 900 } }),
-    textParagraph(nature, {
-      indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
-      spacing: { line: SINGLE_LINE, after: 180 },
+    centeredParagraph((fields.author || "AUTOR").toUpperCase(), true, BODY_SIZE, {
+      after: 0,
+      line: SINGLE_LINE,
     }),
-    ...buildSimpleParagraphs(
-      [
-        fields.course ? `Curso: ${fields.course}` : "",
-        fields.program ? `Programa: ${fields.program}` : "",
-        fields.advisor ? `Orientador(a): ${fields.advisor}` : "",
-        fields.coadvisor ? `Coorientador(a): ${fields.coadvisor}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
+    new Paragraph({ spacing: { before: 1500 } }),
+    centeredParagraph((fields.title || "TÍTULO DO TRABALHO").toUpperCase(), true, BODY_SIZE, {
+      after: 0,
+      line: ONE_AND_HALF_LINE,
+    }),
+    ...(fields.subtitle
+      ? [
+          centeredParagraph(fields.subtitle.toUpperCase(), false, BODY_SIZE, {
+            after: 0,
+            line: ONE_AND_HALF_LINE,
+          }),
+        ]
+      : []),
+    new Paragraph({ spacing: { before: 900 } }),
+    natureParagraph(nature),
+    ...supplementalLines.map((line) =>
+      centeredParagraph(line, false, BODY_SIZE, { after: 0, line: SINGLE_LINE }),
     ),
     new Paragraph({ spacing: { before: 1500 } }),
-    centeredParagraph(fields.location || "LAVRAS - MG"),
-    centeredParagraph(fields.year || new Date().getFullYear().toString()),
+    centeredParagraph((fields.location || "LAVRAS - MG").toUpperCase(), false, BODY_SIZE, {
+      after: 120,
+      line: SINGLE_LINE,
+    }),
+    centeredParagraph(fields.year || new Date().getFullYear().toString(), false, BODY_SIZE, {
+      after: 0,
+      line: SINGLE_LINE,
+    }),
   ];
 }
 
 function optionalPage(title: string, content: string): Paragraph[] {
   if (!content.trim()) return [];
   return [pageBreak(), unnumberedTitle(title), ...buildSimpleParagraphs(content)];
+}
+
+function optionalUntitledRightPage(content: string, italics = false): Paragraph[] {
+  if (!content.trim()) return [];
+  return [
+    pageBreak(),
+    new Paragraph({ spacing: { before: 4200 } }),
+    new Paragraph({
+      alignment: AlignmentType.RIGHT,
+      indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
+      spacing: { line: SINGLE_LINE, after: 0 },
+      children: [
+        new TextRun({
+          text: content,
+          italics,
+          font: UFLA_RULES.typography.fontFamily,
+          size: BODY_SIZE,
+          color: BLACK,
+        }),
+      ],
+    }),
+  ];
 }
 
 function preTextualChildren(fields: AcademicFields): Paragraph[] {
@@ -636,9 +727,9 @@ function preTextualChildren(fields: AcademicFields): Paragraph[] {
     simpleParagraph(
       "Espaço reservado para ficha catalográfica elaborada pela Biblioteca Universitária da UFLA.",
     ),
-    ...optionalPage("Dedicatória", fields.dedicatoria),
+    ...optionalUntitledRightPage(fields.dedicatoria),
     ...optionalPage("Agradecimentos", fields.agradecimentos),
-    ...optionalPage("Epígrafe", fields.epigrafe),
+    ...optionalUntitledRightPage(fields.epigrafe, true),
     pageBreak(),
     unnumberedTitle("Resumo"),
     simpleParagraph(fields.resumo || " "),
@@ -652,6 +743,17 @@ function preTextualChildren(fields: AcademicFields): Paragraph[] {
     ...optionalPage("Indicadores de impacto", indicadores),
     ...optionalPage("Impact indicators", impactIndicators),
   ];
+}
+
+function pageMargins() {
+  return {
+    top: UFLA_RULES.margins.topTwip,
+    left: UFLA_RULES.margins.leftTwip,
+    bottom: UFLA_RULES.margins.bottomTwip,
+    right: UFLA_RULES.margins.rightTwip,
+    header: UFLA_RULES.header.distanceFromTopTwip,
+    footer: UFLA_RULES.footer.distanceFromBottomTwip,
+  };
 }
 
 export function createDocxDocument(input: DocxGenerationInput): Document {
@@ -722,12 +824,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
               width: UFLA_RULES.page.widthTwip,
               height: UFLA_RULES.page.heightTwip,
             },
-            margin: {
-              top: UFLA_RULES.margins.topTwip,
-              left: UFLA_RULES.margins.leftTwip,
-              bottom: UFLA_RULES.margins.bottomTwip,
-              right: UFLA_RULES.margins.rightTwip,
-            },
+            margin: pageMargins(),
           },
         },
         children: preTextualChildrenList,
@@ -740,12 +837,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
               width: UFLA_RULES.page.widthTwip,
               height: UFLA_RULES.page.heightTwip,
             },
-            margin: {
-              top: UFLA_RULES.margins.topTwip,
-              left: UFLA_RULES.margins.leftTwip,
-              bottom: UFLA_RULES.margins.bottomTwip,
-              right: UFLA_RULES.margins.rightTwip,
-            },
+            margin: pageMargins(),
             pageNumbers: {
               start: textualStartPage,
             },
@@ -768,8 +860,8 @@ export async function loadDefaultLogoAsset(): Promise<DocxLogoAsset | undefined>
     if (!response.ok) return undefined;
     return {
       data: await response.arrayBuffer(),
-      width: 170,
-      height: 62,
+      width: UFLA_LOGO_WIDTH_PX,
+      height: UFLA_LOGO_HEIGHT_PX,
     };
   } catch {
     return undefined;
