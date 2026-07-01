@@ -245,7 +245,7 @@ describe("DOCX export", () => {
       ["replace", "Toc", "Instruction"],
       ["tc", "Field", "Xml"],
       ["TC", " &", "quot;"],
-      ["TOC", " \", "f"],
+      ["TOC", " ", String.fromCharCode(92), "f"],
     ].map(joined);
 
     for (const marker of blocked) {
