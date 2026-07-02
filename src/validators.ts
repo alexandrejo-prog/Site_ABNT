@@ -2,6 +2,7 @@ import {
   AcademicFields,
   WorkTypeValue,
   isAdvisorRequired,
+  isCpgWork,
 } from "./ufla-rules";
 import { validateReferencesText } from "./references-validator";
 
@@ -65,6 +66,73 @@ function referenceIssueMessage(code: string, message: string): string {
   return message;
 }
 
+function estimatePages(fields: AcademicFields, editorText: string): number {
+  const text = [
+    fields.title,
+    fields.author,
+    fields.abstractText,
+    fields.keywords,
+    fields.resumo,
+    fields.palavrasChave,
+    editorText,
+    fields.referencias,
+  ].join("\n");
+  return Math.max(1, Math.ceil(text.length / 3200));
+}
+
+function addCpgWarnings(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
+  if (!isCpgWork(fields.workType)) return;
+
+  issues.push({
+    severity: "warning",
+    code: "cpg-mode-selected",
+    message:
+      "Modo CPG/UFLA selecionado: não use capa, folha de rosto, ficha catalográfica, folha de aprovação, indicadores de impacto, sumário, cabeçalho, rodapé ou número de página. A submissão final deve ser em PDF.",
+  });
+
+  if (fields.workType === "resumo_cpg") {
+    issues.push({
+      severity: "warning",
+      code: "cpg-resumo-one-page",
+      message:
+        "Resumo CPG/UFLA deve ter apenas 1 página, em português, A4, coluna simples, margens 3,5 cm superior, 2,5 cm inferior e 3 cm laterais.",
+    });
+  }
+
+  if (fields.workType === "resumo_expandido_cpg") {
+    issues.push({
+      severity: "warning",
+      code: "cpg-expanded-pages",
+      message: "Resumo expandido CPG/UFLA deve ter de 4 a 6 páginas e conter abstract e resumo na primeira página.",
+    });
+  }
+
+  if (fields.workType === "artigo_completo_cpg") {
+    issues.push({
+      severity: "warning",
+      code: "cpg-full-pages",
+      message: "Artigo completo CPG/UFLA deve ter de 8 a 14 páginas e conter abstract e resumo na primeira página.",
+    });
+  }
+
+  const pages = estimatePages(fields, editorText);
+  if (fields.workType === "resumo_expandido_cpg" && (pages < 4 || pages > 6)) {
+    issues.push({
+      severity: "warning",
+      code: "cpg-expanded-estimated-pages",
+      message: `Estimativa atual: ${pages} página(s). Para resumo expandido CPG, ajuste para 4 a 6 páginas.`,
+    });
+  }
+
+  if (fields.workType === "artigo_completo_cpg" && (pages < 8 || pages > 14)) {
+    issues.push({
+      severity: "warning",
+      code: "cpg-full-estimated-pages",
+      message: `Estimativa atual: ${pages} página(s). Para artigo completo CPG, ajuste para 8 a 14 páginas.`,
+    });
+  }
+}
+
 export function validateWork(
   fields: AcademicFields,
   editorText = "",
@@ -118,13 +186,13 @@ export function validateWork(
     });
   }
 
-  if (!hasValue(fields.referencias)) {
+  if (!hasValue(fields.referencias) && !isCpgWork(fields.workType)) {
     issues.push({
       severity: "warning",
       code: "references-required",
       message: "Inclua as referências do trabalho.",
     });
-  } else {
+  } else if (hasValue(fields.referencias)) {
     for (const referenceIssue of validateReferencesText(fields.referencias)) {
       issues.push({
         severity: "warning",
@@ -134,7 +202,7 @@ export function validateWork(
     }
   }
 
-  if (!hasValue(fields.introducao)) {
+  if (!hasValue(fields.introducao) && !isCpgWork(fields.workType)) {
     issues.push({
       severity: "warning",
       code: "intro-required",
@@ -142,13 +210,15 @@ export function validateWork(
     });
   }
 
-  if (!hasValue(fields.abstractText)) {
+  if (!hasValue(fields.abstractText) && fields.workType !== "resumo_cpg") {
     issues.push({
       severity: "warning",
       code: "abstract-recommended",
       message: "Inclua o abstract quando exigido pelo trabalho.",
     });
   }
+
+  addCpgWarnings(fields, editorText, issues);
 
   if (hasLikelyImageWithoutCaption(editorText)) {
     issues.push({
