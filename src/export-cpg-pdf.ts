@@ -170,7 +170,7 @@ function addTextLine(
 function addParagraph(state: LayoutState, text: string, options: ParagraphOptions = {}): void {
   const size = options.size ?? 12;
   const baseFont = options.font ?? "Times-Roman";
-  const lineHeight = options.lineHeight ?? size * 1.5;
+  const lineHeight = options.lineHeight ?? size * 1.15;
   const spacingBefore = options.spacingBefore ?? 6;
   const leftIndent = options.leftIndent ?? 0;
   const rightIndent = options.rightIndent ?? 0;

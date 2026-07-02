@@ -178,7 +178,7 @@ function decodedPdfText(pdfBytes: Buffer): string {
 }
 
 function longCpgText(): string {
-  return Array.from({ length: 90 }, (_, index) =>
+  return Array.from({ length: 45 }, (_, index) =>
     `# ${index + 1} Secao de teste\nEste paragrafo trata de Pos-Graduacao, Educacao, Ciencias, Docencia e Praxis com conteudo suficiente para validar quebra de pagina, margens e ausencia de sobreposicao no PDF CPG gerado.`,
   ).join("\n");
 }
@@ -347,6 +347,7 @@ describe("DOCX export", () => {
     const pdfText = decodedPdfText(Buffer.from(await blob.arrayBuffer()));
 
     expect(layout.pageCount).toBeGreaterThan(1);
+    expect(layout.pageCount).toBeLessThanOrEqual(6);
     expect(layout.duplicateYPositions).toBeLessThan(8);
     expect(pdfText).toContain("Pós-Graduação");
     expect(pdfText).toContain("Educação");
