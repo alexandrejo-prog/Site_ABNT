@@ -63,7 +63,8 @@ function latin1Bytes(value: string): number[] {
 }
 
 function escapePdfLiteral(value: string): string {
-  return latin1Bytes(value)
+  const normalized = normalizePdfText(value);
+  return latin1Bytes(normalized)
     .map((byte) => {
       if (byte === 0x28 || byte === 0x29 || byte === 0x5c) return `\\${String.fromCharCode(byte)}`;
       if (byte < 0x20 || byte > 0x7e) return `\\${byte.toString(8).padStart(3, "0")}`;
@@ -80,8 +81,21 @@ function normalizePdfText(value: string): string {
 }
 
 function measureText(text: string, size: number, isBold: boolean = false): number {
-  const factor = isBold ? 0.6 : 0.5;
-  return text.length * size * factor;
+  let width = 0;
+  for (const char of text) {
+    let charWidth;
+    if (char === ' ') {
+      charWidth = size * 0.25;
+    } else if (char === 'i' || char === 'I' || char === 'l' || char === 't' || char === 'f' || char === 'r') {
+      charWidth = size * (isBold ? 0.35 : 0.3);
+    } else if (char === 'm' || char === 'M' || char === 'w' || char === 'W') {
+      charWidth = size * (isBold ? 0.75 : 0.65);
+    } else {
+      charWidth = size * (isBold ? 0.5 : 0.45);
+    }
+    width += charWidth;
+  }
+  return width;
 }
 
 function wrapText(text: string, width: number, size: number): string[] {
@@ -156,7 +170,7 @@ function addTextLine(
 function addParagraph(state: LayoutState, text: string, options: ParagraphOptions = {}): void {
   const size = options.size ?? 12;
   const baseFont = options.font ?? "Times-Roman";
-  const lineHeight = options.lineHeight ?? size * 1.25;
+  const lineHeight = options.lineHeight ?? size * 1.5;
   const spacingBefore = options.spacingBefore ?? 6;
   const leftIndent = options.leftIndent ?? 0;
   const rightIndent = options.rightIndent ?? 0;
@@ -176,6 +190,7 @@ function addParagraph(state: LayoutState, text: string, options: ParagraphOption
     const indent = index === 0 ? firstLineIndent : options.hangingIndent ? options.hangingIndent : 0;
     const lineWidth = measureText(line, size);
     let x = MARGIN_LEFT + leftIndent + indent;
+
     if (options.align === "center") {
       x = MARGIN_LEFT + leftIndent + Math.max(0, (width - lineWidth) / 2);
     }
@@ -248,6 +263,8 @@ function addEditorBlocks(state: LayoutState, blocks: EditorBlock[]): void {
     addParagraph(state, block.text, {
       align: "justify",
       firstLineIndent: firstParagraphInSection ? 0 : 1.27 * CM_TO_PT,
+      leftIndent: 0,
+      rightIndent: 0,
     });
     firstParagraphInSection = false;
   }
@@ -285,7 +302,8 @@ function addReferences(state: LayoutState, references: string[]): void {
       spacingBefore: 6,
       firstLineIndent: 0,
       hangingIndent: REFERENCE_HANGING,
-      leftIndent: REFERENCE_HANGING,
+      leftIndent: 0,
+      rightIndent: 0,
     });
   }
 }
