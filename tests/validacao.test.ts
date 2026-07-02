@@ -96,4 +96,47 @@ describe("validação normativa", () => {
     expect(imageIssues[0].message).toContain("Confira posição, qualidade e legenda");
     expect(imageIssues[0].message).not.toContain("Documento ainda não está plenamente conforme");
   });
+
+  it("alerta PDF obrigatorio para todos os modos CPG", () => {
+    for (const workType of ["resumo_cpg", "resumo_expandido_cpg", "artigo_completo_cpg"] as const) {
+      const issues = validateWork(baseFields({ workType }), "Texto do corpo.");
+      expect(issues).toContainEqual(
+        expect.objectContaining({
+          severity: "warning",
+          code: "cpg-mode-selected",
+        }),
+      );
+      expect(issues.find((issue) => issue.code === "cpg-mode-selected")?.message).toContain("PDF");
+    }
+  });
+
+  it("alerta limite de 1 pagina para resumo CPG", () => {
+    const issues = validateWork(baseFields({ workType: "resumo_cpg" }), "Texto do resumo.");
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        severity: "warning",
+        code: "cpg-resumo-one-page",
+      }),
+    );
+  });
+
+  it("alerta faixa de 4 a 6 paginas para resumo expandido CPG", () => {
+    const issues = validateWork(baseFields({ workType: "resumo_expandido_cpg" }), "Texto curto.");
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        severity: "warning",
+        code: "cpg-expanded-pages",
+      }),
+    );
+  });
+
+  it("alerta faixa de 8 a 14 paginas para artigo completo CPG", () => {
+    const issues = validateWork(baseFields({ workType: "artigo_completo_cpg" }), "Texto curto.");
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        severity: "warning",
+        code: "cpg-full-pages",
+      }),
+    );
+  });
 });

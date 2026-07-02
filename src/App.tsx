@@ -6,6 +6,7 @@ import {
   Eraser,
   FileCheck2,
   FileDown,
+  FileText,
   Heading1,
   Heading2,
   Italic,
@@ -15,6 +16,9 @@ import {
   Upload,
 } from "lucide-react";
 import { AI_PROVIDERS } from "./ai-assistant";
+import { generateArticleDocxBlob } from "./export-article-docx";
+import { generateCpgDocxBlob } from "./export-cpg-docx";
+import { generateCpgPdfBlob } from "./export-cpg-pdf";
 import { generateDocxBlob } from "./export-docx";
 import { importDocumentFile } from "./import-docx";
 import {
@@ -27,6 +31,7 @@ import {
   WORK_TYPES,
   emptyAcademicFields,
   emptyConfidenceMap,
+  isCpgWork,
 } from "./ufla-rules";
 import {
   ValidationIssue,
@@ -87,6 +92,10 @@ function safeFileName(title: string): string {
     .replace(/^-+|-+$/g, "")
     .toLowerCase();
   return `${normalized || "trabalho-ufla"}.docx`;
+}
+
+function safePdfFileName(title: string): string {
+  return safeFileName(title).replace(/\.docx$/i, ".pdf");
 }
 
 function stripBlockMarker(line: string): string {
@@ -197,6 +206,7 @@ export default function App() {
     () => issues.filter((issue) => issue.severity === "warning"),
     [issues],
   );
+  const isCpgSelected = isCpgWork(fields.workType);
 
   function updateField(key: AcademicFieldKey, value: string) {
     setFields((current) => ({ ...current, [key]: value }));
@@ -349,11 +359,40 @@ export default function App() {
     try {
       setIsGenerating(true);
       setStatus("Gerando DOCX...");
-      const blob = await generateDocxBlob({ fields: generationFields, editorText });
+      const blob = isCpgWork(generationFields.workType)
+        ? await generateCpgDocxBlob({ fields: generationFields, editorText })
+        : generationFields.workType === "artigo"
+          ? await generateArticleDocxBlob({ fields: generationFields, editorText })
+          : await generateDocxBlob({ fields: generationFields, editorText });
       saveAs(blob, safeFileName(generationFields.title));
       setStatus("DOCX gerado. Confira o arquivo baixado.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Falha ao gerar DOCX.");
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  async function handleGeneratePdf() {
+    const generationFields = ensureGraduateCompleteStructure(fields);
+    const nextIssues = runValidation(generationFields);
+    if (hasBlockingErrors(nextIssues) && !generateAnyway) {
+      return;
+    }
+
+    if (!isCpgWork(generationFields.workType)) {
+      setStatus("PDF direto esta disponivel nesta versao para modelos CPG/UFLA.");
+      return;
+    }
+
+    try {
+      setIsGenerating(true);
+      setStatus("Gerando PDF CPG...");
+      const blob = await generateCpgPdfBlob({ fields: generationFields, editorText });
+      saveAs(blob, safePdfFileName(generationFields.title));
+      setStatus("PDF CPG gerado. Revise o arquivo antes da submissao final.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Falha ao gerar PDF.");
     } finally {
       setIsGenerating(false);
     }
@@ -389,6 +428,18 @@ export default function App() {
             <FileDown size={18} aria-hidden="true" />
             {isGenerating ? "Gerando..." : "Gerar DOCX"}
           </button>
+          {isCpgSelected && (
+            <button
+              className="primary-action strong"
+              type="button"
+              onClick={handleGeneratePdf}
+              disabled={isGenerating}
+              title="Formato final obrigatorio para submissao CPG/UFLA"
+            >
+              <FileText size={18} aria-hidden="true" />
+              {isGenerating ? "Gerando..." : "Gerar PDF"}
+            </button>
+          )}
         </div>
       </header>
 
@@ -411,6 +462,42 @@ export default function App() {
               ))}
             </select>
           </div>
+
+          {fields.workType === "artigo" && (
+            <div className="mode-panel">
+              <h2>Artigo academico simples</h2>
+              <p>
+                Artigo simples nao usa capa, folha de rosto, ficha catalografica, folha de aprovacao, indicadores de impacto nem sumario.
+              </p>
+            </div>
+          )}
+
+          {isCpgSelected && (
+            <div className="mode-panel">
+              <h2>Modo CPG/UFLA selecionado</h2>
+              <p>
+                Este modelo e diferente de monografia, dissertacao e tese. Nao usa capa, folha de rosto, ficha catalografica, folha de aprovacao, indicadores de impacto, sumario, cabecalho, rodape nem numero de pagina. A submissao final deve ser feita em PDF.
+              </p>
+              {fields.workType === "resumo_cpg" && (
+                <p>
+                  Resumo de 1 pagina, em portugues, A4, coluna simples, Times 12, margens 3,5 cm superior, 2,5 cm inferior e 3 cm laterais.
+                </p>
+              )}
+              {fields.workType === "resumo_expandido_cpg" && (
+                <p>
+                  Resumo expandido de 4 a 6 paginas. Primeira pagina com titulo, autores, enderecos, e-mails, abstract, keywords, resumo e palavras-chave.
+                </p>
+              )}
+              {fields.workType === "artigo_completo_cpg" && (
+                <p>
+                  Artigo completo de 8 a 14 paginas. Primeira pagina com titulo, autores, enderecos, e-mails, abstract, keywords, resumo e palavras-chave.
+                </p>
+              )}
+              <p>
+                O campo Autor pode receber multiplos autores separados por virgula. Use Programa como endereco ou afiliacao institucional e Curso para e-mails ou informacoes adicionais nesta rodada.
+              </p>
+            </div>
+          )}
 
           {ACADEMIC_FIELD_KEYS.map((key) => (
             <div className="field-group" key={key}>

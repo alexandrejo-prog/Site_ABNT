@@ -1,8 +1,10 @@
 import { readFileSync } from "node:fs";
 import { inflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
+import { generateArticleDocxBlob } from "../src/export-article-docx";
+import { generateCpgDocxBlob } from "../src/export-cpg-docx";
 import { calculateTextualStartPage, generateDocxBlob, parseEditorContent } from "../src/export-docx";
-import { UFLA_RULES, emptyAcademicFields, type AcademicFields } from "../src/ufla-rules";
+import { CPG_RULES, UFLA_RULES, emptyAcademicFields, type AcademicFields } from "../src/ufla-rules";
 
 const fields: AcademicFields = {
   ...emptyAcademicFields(),
@@ -66,6 +68,22 @@ async function generatedXml(
   return extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
 }
 
+async function generatedArticleXml(
+  editorText = "# 1 Introducao\nTexto comum.",
+  documentFields: AcademicFields = fields,
+) {
+  const blob = await generateArticleDocxBlob({ fields: documentFields, editorText });
+  return extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
+}
+
+async function generatedCpgXml(
+  editorText = "# Introducao\nTexto comum.",
+  documentFields: AcademicFields,
+) {
+  const blob = await generateCpgDocxBlob({ fields: documentFields, editorText });
+  return extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
+}
+
 async function generatedStylesXml(
   editorText = "# 1 Introducao\nTexto comum.",
   documentFields: AcademicFields = fields,
@@ -116,6 +134,28 @@ function hasPositiveBold(xml: string): boolean {
   return /<w:b\s*\/>|<w:b\b(?=[^>]*w:val="(?:1|true|on)")/.test(xml);
 }
 
+function expectNoGraduateOnlyElements(documentXml: string): void {
+  for (const forbidden of [
+    "SUMÃRIO",
+    "SUM\u00c1RIO",
+    "FICHA CATALOGR",
+    "FOLHA DE APROVA",
+    "INDICADORES DE IMPACTO",
+    "IMPACT INDICATORS",
+    "Disserta",
+    "Tese apresentada",
+  ]) {
+    expect(documentXml).not.toContain(forbidden);
+  }
+}
+
+function expectCpgMargins(documentXml: string): void {
+  expect(documentXml).toContain(`w:top="${CPG_RULES.margins.topTwip}"`);
+  expect(documentXml).toContain(`w:bottom="${CPG_RULES.margins.bottomTwip}"`);
+  expect(documentXml).toContain(`w:left="${CPG_RULES.margins.leftTwip}"`);
+  expect(documentXml).toContain(`w:right="${CPG_RULES.margins.rightTwip}"`);
+}
+
 describe("DOCX export", () => {
   it("creates a valid Blob", async () => {
     const blob = await generateDocxBlob({ fields, editorText: "# Introducao\nTexto comum." });
@@ -156,6 +196,79 @@ describe("DOCX export", () => {
     expect(tocInstruction).toContain("\\h");
     expect(tocInstruction).toContain("\\z");
     expect(tocInstruction).toContain("\\u");
+  });
+
+  it("generates simple article without graduate pre-textual structure", async () => {
+    const documentXml = await generatedArticleXml("# Introducao\nTexto do artigo.\n[REF] SOUZA, J. Texto. Lavras: UFLA, 2025.");
+
+    expect(documentXml).toContain("QUALIDADE DO CAFE NO SUL DE MINAS");
+    expect(documentXml).toContain("Maria Silva");
+    expect(documentXml).toContain("Resumo do trabalho.");
+    expect(documentXml).toContain("Palavras-chave");
+    expect(documentXml).toContain("Abstract text.");
+    expect(documentXml).toContain("Keywords");
+    expect(documentXml).toContain("Referencias");
+    expectNoGraduateOnlyElements(documentXml);
+  });
+
+  it("generates CPG summary without graduate structure or page numbers and with CPG margins", async () => {
+    const documentXml = await generatedCpgXml("Texto complementar.", {
+      ...fields,
+      workType: "resumo_cpg",
+      program: "Universidade Federal de Lavras",
+      course: "maria@ufla.br",
+    });
+
+    expect(documentXml).toContain("Qualidade do cafe no sul de Minas");
+    expect(documentXml).toContain("Maria Silva");
+    expect(documentXml).toContain("Resumo do trabalho.");
+    expect(documentXml).toContain("Palavras-chave");
+    expect(documentXml).not.toContain("PageNumber");
+    expectNoGraduateOnlyElements(documentXml);
+    expectCpgMargins(documentXml);
+  });
+
+  it("generates expanded CPG with first page abstracts and CPG margins", async () => {
+    const documentXml = await generatedCpgXml("# Introducao\nTexto comum.", {
+      ...fields,
+      workType: "resumo_expandido_cpg",
+    });
+
+    expect(documentXml).toContain("Abstract");
+    expect(documentXml).toContain("Keywords");
+    expect(documentXml).toContain("Resumo");
+    expect(documentXml).toContain("Palavras-chave");
+    expectNoGraduateOnlyElements(documentXml);
+    expectCpgMargins(documentXml);
+  });
+
+  it("generates complete CPG article without dissertation-only elements", async () => {
+    const documentXml = await generatedCpgXml("# Introducao\nTexto comum.", {
+      ...fields,
+      workType: "artigo_completo_cpg",
+    });
+
+    expect(documentXml).toContain("Abstract");
+    expect(documentXml).toContain("Resumo");
+    expectNoGraduateOnlyElements(documentXml);
+    expectCpgMargins(documentXml);
+  });
+
+  it("keeps dissertation and thesis complete UFLA structure", async () => {
+    for (const workType of ["dissertacao", "tese"] as const) {
+      const documentXml = await generatedXml("# 1 Introducao\nTexto comum.", {
+        ...fields,
+        workType,
+        indicadoresImpacto: "Impacto social informado.",
+        impactIndicators: "Social impact text.",
+      });
+
+      expect(documentXml).toContain("SUMÁRIO");
+      expect(documentXml).toContain("FICHA CATALOGR");
+      expect(documentXml).toContain("Aprovado em:");
+      expect(documentXml).toContain("INDICADORES DE IMPACTO");
+      expect(documentXml).toContain("IMPACT INDICATORS");
+    }
   });
 
   it("keeps summary and pre-textual titles out of Word heading levels", async () => {
