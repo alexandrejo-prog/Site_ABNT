@@ -11,6 +11,9 @@ const ABSTRACT_INDENT = 0.8 * CM_TO_PT;
 const REFERENCE_HANGING = 0.5 * CM_TO_PT;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
 
+const MIN_JUSTIFY_SPACES = 2;
+const MAX_EXTRA_WORD_SPACING = 3.5;
+
 type FontName = "Times-Roman" | "Times-Bold" | "Times-Italic" | "Courier" | "Helvetica-Bold";
 type Align = "left" | "center" | "justify";
 
@@ -84,11 +87,11 @@ function measureText(text: string, size: number, isBold: boolean = false): numbe
   let width = 0;
   for (const char of text) {
     let charWidth;
-    if (char === ' ') {
+    if (char === " ") {
       charWidth = size * 0.25;
-    } else if (char === 'i' || char === 'I' || char === 'l' || char === 't' || char === 'f' || char === 'r') {
+    } else if (char === "i" || char === "I" || char === "l" || char === "t" || char === "f" || char === "r") {
       charWidth = size * (isBold ? 0.35 : 0.3);
-    } else if (char === 'm' || char === 'M' || char === 'w' || char === 'W') {
+    } else if (char === "m" || char === "M" || char === "w" || char === "W") {
       charWidth = size * (isBold ? 0.75 : 0.65);
     } else {
       charWidth = size * (isBold ? 0.5 : 0.45);
@@ -115,6 +118,20 @@ function wrapText(text: string, width: number, size: number): string[] {
 
   if (current) lines.push(current);
   return lines.length ? lines : [""];
+}
+
+function countSpaces(text: string): number {
+  return (text.match(/ /g) ?? []).length;
+}
+
+function justifyWordSpacing(line: string, lineWidth: number, targetWidth: number): number | undefined {
+  const spaceCount = countSpaces(line);
+  if (spaceCount < MIN_JUSTIFY_SPACES) return undefined;
+
+  const extraSpacing = (targetWidth - lineWidth) / spaceCount;
+  if (extraSpacing <= 0 || extraSpacing > MAX_EXTRA_WORD_SPACING) return undefined;
+
+  return extraSpacing;
 }
 
 function newPage(): PdfPage {
@@ -161,9 +178,16 @@ function addTextLine(
   y: number,
   font: FontName,
   size: number,
+  wordSpacing?: number,
 ): void {
   setFont(state.currentPage, font, size);
+  if (wordSpacing !== undefined) {
+    state.currentPage.commands.push(`${wordSpacing.toFixed(3)} Tw`);
+  }
   state.currentPage.commands.push(`1 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)} Tm (${escapePdfLiteral(normalizePdfText(text))}) Tj`);
+  if (wordSpacing !== undefined) {
+    state.currentPage.commands.push("0 Tw");
+  }
   state.currentPage.yPositions.push(Number(y.toFixed(2)));
 }
 
@@ -187,12 +211,17 @@ function addParagraph(state: LayoutState, text: string, options: ParagraphOption
 
   lines.forEach((line, index) => {
     ensureSpace(state, lineHeight);
+    const isLastLine = index === lines.length - 1;
     const indent = index === 0 ? firstLineIndent : options.hangingIndent ? options.hangingIndent : 0;
+    const availableLineWidth = Math.max(0, width - indent);
     const lineWidth = measureText(line, size);
     let x = MARGIN_LEFT + leftIndent + indent;
+    let wordSpacing: number | undefined;
 
     if (options.align === "center") {
       x = MARGIN_LEFT + leftIndent + Math.max(0, (width - lineWidth) / 2);
+    } else if (options.align === "justify" && !isLastLine && !label) {
+      wordSpacing = justifyWordSpacing(line, lineWidth, availableLineWidth);
     }
 
     if (label && index === 0 && line.startsWith(label)) {
@@ -200,7 +229,7 @@ function addParagraph(state: LayoutState, text: string, options: ParagraphOption
       addTextLine(state, label, x, state.cursorY, "Times-Bold", size);
       addTextLine(state, line.slice(label.length), x + labelWidth, state.cursorY, baseFont, size);
     } else {
-      addTextLine(state, line, x, state.cursorY, baseFont, size);
+      addTextLine(state, line, x, state.cursorY, baseFont, size, wordSpacing);
     }
     state.cursorY -= lineHeight;
   });
