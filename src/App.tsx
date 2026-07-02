@@ -18,7 +18,7 @@ import {
 import { AI_PROVIDERS } from "./ai-assistant";
 import { generateArticleDocxBlob } from "./export-article-docx";
 import { generateCpgDocxBlob } from "./export-cpg-docx";
-import { generateCpgPdfBlob } from "./export-cpg-pdf";
+import { openCpgPrintPreview } from "./export-cpg-print";
 import { generateDocxBlob } from "./export-docx";
 import { importDocumentFile } from "./import-docx";
 import {
@@ -92,10 +92,6 @@ function safeFileName(title: string): string {
     .replace(/^-+|-+$/g, "")
     .toLowerCase();
   return `${normalized || "trabalho-ufla"}.docx`;
-}
-
-function safePdfFileName(title: string): string {
-  return safeFileName(title).replace(/\.docx$/i, ".pdf");
 }
 
 function stripBlockMarker(line: string): string {
@@ -373,7 +369,7 @@ export default function App() {
     }
   }
 
-  async function handleGeneratePdf() {
+  function handleGeneratePdf() {
     const generationFields = ensureGraduateCompleteStructure(fields);
     const nextIssues = runValidation(generationFields);
     if (hasBlockingErrors(nextIssues) && !generateAnyway) {
@@ -381,20 +377,15 @@ export default function App() {
     }
 
     if (!isCpgWork(generationFields.workType)) {
-      setStatus("PDF direto esta disponivel nesta versao para modelos CPG/UFLA.");
+      setStatus("A prévia imprimível está disponível nesta versão para modelos CPG/UFLA.");
       return;
     }
 
     try {
-      setIsGenerating(true);
-      setStatus("Gerando PDF CPG...");
-      const blob = await generateCpgPdfBlob({ fields: generationFields, editorText });
-      saveAs(blob, safePdfFileName(generationFields.title));
-      setStatus("PDF CPG gerado. Revise o arquivo antes da submissao final.");
+      openCpgPrintPreview({ fields: generationFields, editorText });
+      setStatus("Prévia experimental aberta. Use Imprimir / Salvar como PDF no navegador.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Falha ao gerar PDF.");
-    } finally {
-      setIsGenerating(false);
+      setStatus(error instanceof Error ? error.message : "Falha ao abrir prévia imprimível.");
     }
   }
 
@@ -428,16 +419,16 @@ export default function App() {
             <FileDown size={18} aria-hidden="true" />
             {isGenerating ? "Gerando..." : "Gerar DOCX"}
           </button>
-           {isCpgSelected && (
+          {isCpgSelected && (
             <button
               className="primary-action strong"
               type="button"
               onClick={handleGeneratePdf}
               disabled={isGenerating}
-              title="PDF direto experimental; para submissão final, exporte o DOCX pelo Word ou LibreOffice."
+              title="Prévia experimental imprimível; para submissão final, exporte o DOCX pelo Word ou LibreOffice."
             >
               <FileText size={18} aria-hidden="true" />
-              {isGenerating ? "Gerando..." : "Gerar PDF experimental"}
+              {isGenerating ? "Gerando..." : "Abrir prévia PDF experimental"}
             </button>
           )}
         </div>
@@ -497,7 +488,7 @@ export default function App() {
                 O campo Autor pode receber multiplos autores separados por virgula. Use Programa como endereco ou afiliacao institucional e Curso para e-mails ou informacoes adicionais nesta rodada.
               </p>
               <p>
-                <strong>Para submissão final em PDF:</strong> gere primeiro o DOCX e exporte/salve como PDF pelo Word ou LibreOffice. O PDF direto do navegador é experimental e pode apresentar diferenças de paginação e alinhamento.
+                <strong>Para submissão final em PDF:</strong> gere primeiro o DOCX e exporte/salve como PDF pelo Word ou LibreOffice. A prévia PDF experimental usa a impressão do navegador e pode apresentar diferenças de paginação.
               </p>
             </div>
           )}
