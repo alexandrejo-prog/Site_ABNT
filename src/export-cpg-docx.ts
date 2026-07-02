@@ -6,6 +6,7 @@ import {
   PageOrientation,
   Paragraph,
   TextRun,
+  VerticalAlign,
 } from "docx";
 import type { IParagraphOptions } from "docx";
 import { parseEditorContent, type DocxGenerationInput, type EditorBlock } from "./export-docx";
@@ -252,8 +253,13 @@ function referenceParagraphs(references: string[]): Paragraph[] {
   ];
 }
 
+function compactFirstPage(children: Paragraph[]): Paragraph[] {
+  const firstContentIndex = children.findIndex((paragraph) => JSON.stringify(paragraph).includes("w:t"));
+  return firstContentIndex > 0 ? children.slice(firstContentIndex) : children;
+}
+
 function cpgResumoChildren(input: DocxGenerationInput): Paragraph[] {
-  return [
+  return compactFirstPage([
     titleParagraph(input.fields.title),
     centered(input.fields.author || "Autores", true),
     ...affiliationParagraphs(input.fields.program),
@@ -278,7 +284,7 @@ function cpgResumoChildren(input: DocxGenerationInput): Paragraph[] {
           ),
         ]
       : []),
-  ];
+  ]);
 }
 
 function cpgFullChildren(input: DocxGenerationInput): Paragraph[] {
@@ -290,7 +296,7 @@ function cpgFullChildren(input: DocxGenerationInput): Paragraph[] {
   ];
   let firstParagraphInSection = true;
 
-  return [
+  return compactFirstPage([
     titleParagraph(input.fields.title),
     centered(input.fields.author || "Autores", true),
     ...affiliationParagraphs(input.fields.program),
@@ -310,7 +316,7 @@ function cpgFullChildren(input: DocxGenerationInput): Paragraph[] {
       return paragraphs;
     }),
     ...referenceParagraphs(references),
-  ];
+  ]);
 }
 
 function createCpgDocument(input: DocxGenerationInput): Document {
@@ -335,6 +341,7 @@ function createCpgDocument(input: DocxGenerationInput): Document {
               right: CPG_RULES.margins.rightTwip,
             },
           },
+          verticalAlign: VerticalAlign.TOP,
         },
         children: isResumo ? cpgResumoChildren(input) : cpgFullChildren(input),
       },
