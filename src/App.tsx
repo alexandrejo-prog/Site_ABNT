@@ -6,7 +6,6 @@ import {
   Eraser,
   FileCheck2,
   FileDown,
-  FileText,
   Heading1,
   Heading2,
   Italic,
@@ -18,7 +17,6 @@ import {
 import { AI_PROVIDERS } from "./ai-assistant";
 import { generateArticleDocxBlob } from "./export-article-docx";
 import { generateCpgDocxBlob } from "./export-cpg-docx";
-import { openCpgPrintPreview } from "./export-cpg-print";
 import { generateDocxBlob } from "./export-docx";
 import { importDocumentFile } from "./import-docx";
 import {
@@ -369,26 +367,6 @@ export default function App() {
     }
   }
 
-  function handleGeneratePdf() {
-    const generationFields = ensureGraduateCompleteStructure(fields);
-    const nextIssues = runValidation(generationFields);
-    if (hasBlockingErrors(nextIssues) && !generateAnyway) {
-      return;
-    }
-
-    if (!isCpgWork(generationFields.workType)) {
-      setStatus("A prévia imprimível está disponível nesta versão para modelos CPG/UFLA.");
-      return;
-    }
-
-    try {
-      openCpgPrintPreview({ fields: generationFields, editorText });
-      setStatus("Prévia experimental aberta. Use Imprimir / Salvar como PDF no navegador.");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Falha ao abrir prévia imprimível.");
-    }
-  }
-
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -419,18 +397,6 @@ export default function App() {
             <FileDown size={18} aria-hidden="true" />
             {isGenerating ? "Gerando..." : "Gerar DOCX"}
           </button>
-          {isCpgSelected && (
-            <button
-              className="primary-action strong"
-              type="button"
-              onClick={handleGeneratePdf}
-              disabled={isGenerating}
-              title="Prévia experimental imprimível; para submissão final, exporte o DOCX pelo Word ou LibreOffice."
-            >
-              <FileText size={18} aria-hidden="true" />
-              {isGenerating ? "Gerando..." : "Abrir prévia PDF experimental"}
-            </button>
-          )}
         </div>
       </header>
 
@@ -467,7 +433,7 @@ export default function App() {
             <div className="mode-panel">
               <h2>Modo CPG/UFLA selecionado</h2>
               <p>
-                Este modelo e diferente de monografia, dissertacao e tese. Nao usa capa, folha de rosto, ficha catalografica, folha de aprovacao, indicadores de impacto, sumario, cabecalho, rodape nem numero de pagina. A submissao final deve ser feita em PDF.
+                Este modelo e diferente de monografia, dissertacao e tese. Nao usa capa, folha de rosto, ficha catalografica, folha de aprovacao, indicadores de impacto, sumario, cabecalho, rodape nem numero de pagina.
               </p>
               {fields.workType === "resumo_cpg" && (
                 <p>
@@ -488,7 +454,7 @@ export default function App() {
                 O campo Autor pode receber multiplos autores separados por virgula. Use Programa como endereco ou afiliacao institucional e Curso para e-mails ou informacoes adicionais nesta rodada.
               </p>
               <p>
-                <strong>Para submissão final em PDF:</strong> gere primeiro o DOCX e exporte/salve como PDF pelo Word ou LibreOffice. A prévia PDF experimental usa a impressão do navegador e pode apresentar diferenças de paginação.
+                <strong>Saída do sistema:</strong> gere o DOCX e, se precisar de PDF, exporte pelo Word ou LibreOffice fora do sistema.
               </p>
             </div>
           )}
