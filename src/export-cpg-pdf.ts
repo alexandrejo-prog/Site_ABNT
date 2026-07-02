@@ -83,32 +83,37 @@ function normalizePdfText(value: string): string {
     .replace(/[\u2013\u2014]/g, "-");
 }
 
+function glyphWidthFactor(char: string, isBold: boolean): number {
+  if (char === " ") return 0.25;
+  if (".,:;!|'`".includes(char)) return 0.28;
+  if ("()[]{}".includes(char)) return 0.33;
+  if ("ijlI".includes(char)) return isBold ? 0.35 : 0.28;
+  if ("ft".includes(char)) return isBold ? 0.38 : 0.32;
+  if ("r".includes(char)) return isBold ? 0.40 : 0.34;
+  if ("-–—".includes(char)) return 0.33;
+  if ("mwMW".includes(char)) return isBold ? 0.88 : 0.78;
+  if ("ABCDEFGHKNOPQRSTUVXYZÁÂÃÀÉÊÍÓÔÕÚÇ".includes(char)) return isBold ? 0.72 : 0.66;
+  if ("abcdghnopquvxyzáâãàéêíóôõúç".includes(char)) return isBold ? 0.55 : 0.50;
+  if ("es".includes(char)) return isBold ? 0.50 : 0.44;
+  return isBold ? 0.58 : 0.52;
+}
+
 function measureText(text: string, size: number, isBold: boolean = false): number {
   let width = 0;
-  for (const char of text) {
-    let charWidth;
-    if (char === " ") {
-      charWidth = size * 0.25;
-    } else if (char === "i" || char === "I" || char === "l" || char === "t" || char === "f" || char === "r") {
-      charWidth = size * (isBold ? 0.35 : 0.3);
-    } else if (char === "m" || char === "M" || char === "w" || char === "W") {
-      charWidth = size * (isBold ? 0.75 : 0.65);
-    } else {
-      charWidth = size * (isBold ? 0.5 : 0.45);
-    }
-    width += charWidth;
+  for (const char of normalizePdfText(text)) {
+    width += size * glyphWidthFactor(char, isBold);
   }
   return width;
 }
 
-function wrapText(text: string, width: number, size: number): string[] {
+function wrapText(text: string, width: number, size: number, isBold: boolean = false): string[] {
   const words = stripMarkup(text).split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let current = "";
 
   for (const word of words) {
     const next = current ? `${current} ${word}` : word;
-    if (measureText(next, size) > width && current) {
+    if (measureText(next, size, isBold) > width && current) {
       lines.push(current);
       current = word;
     } else {
@@ -194,6 +199,7 @@ function addTextLine(
 function addParagraph(state: LayoutState, text: string, options: ParagraphOptions = {}): void {
   const size = options.size ?? 12;
   const baseFont = options.font ?? "Times-Roman";
+  const isBoldBase = baseFont === "Times-Bold" || baseFont === "Helvetica-Bold";
   const lineHeight = options.lineHeight ?? size * 1.15;
   const spacingBefore = options.spacingBefore ?? 6;
   const leftIndent = options.leftIndent ?? 0;
@@ -204,7 +210,7 @@ function addParagraph(state: LayoutState, text: string, options: ParagraphOption
   const plainText = label && text.startsWith(label) ? text.slice(label.length).trimStart() : text;
   const lines = label
     ? wrapText(`${label} ${plainText}`, width, size)
-    : wrapText(text, width, size);
+    : wrapText(text, width, size, isBoldBase);
 
   ensureSpace(state, spacingBefore + lineHeight);
   state.cursorY -= spacingBefore;
@@ -214,13 +220,13 @@ function addParagraph(state: LayoutState, text: string, options: ParagraphOption
     const isLastLine = index === lines.length - 1;
     const indent = index === 0 ? firstLineIndent : options.hangingIndent ? options.hangingIndent : 0;
     const availableLineWidth = Math.max(0, width - indent);
-    const lineWidth = measureText(line, size);
+    const lineWidth = measureText(line, size, isBoldBase);
     let x = MARGIN_LEFT + leftIndent + indent;
     let wordSpacing: number | undefined;
 
     if (options.align === "center") {
       x = MARGIN_LEFT + leftIndent + Math.max(0, (width - lineWidth) / 2);
-    } else if (options.align === "justify" && !isLastLine && !label) {
+    } else if (options.align === "justify" && !isLastLine) {
       wordSpacing = justifyWordSpacing(line, lineWidth, availableLineWidth);
     }
 
@@ -337,55 +343,11 @@ function addReferences(state: LayoutState, references: string[]): void {
   }
 }
 
-function buildLayout(input: DocxGenerationInput): LayoutState {
-  const state = createLayoutState();
-  const blocks = parseEditorContent(input.editorText);
-  const references = [
-    ...splitParagraphs(input.fields.referencias),
-    ...blocks.filter((block) => block.type === "reference").map((block) => block.text),
-  ];
-
-  addTitleBlock(state, input);
-
-  if (input.fields.workType === "resumo_cpg") {
-    if (hasText(input.fields.abstractText)) {
-      addParagraph(state, `Abstract. ${input.fields.abstractText}`, {
-        boldLabel: "Abstract.",
-        leftIndent: ABSTRACT_INDENT,
-        rightIndent: ABSTRACT_INDENT,
-      });
-    }
-    if (hasText(input.fields.keywords)) {
-      addParagraph(state, `Keywords: ${input.fields.keywords}`, {
-        boldLabel: "Keywords:",
-        leftIndent: ABSTRACT_INDENT,
-        rightIndent: ABSTRACT_INDENT,
-      });
-    }
-    if (hasText(input.fields.resumo)) {
-      addParagraph(state, `Resumo. ${input.fields.resumo}`, {
-        boldLabel: "Resumo.",
-        leftIndent: ABSTRACT_INDENT,
-        rightIndent: ABSTRACT_INDENT,
-      });
-    }
-    if (hasText(input.fields.palavrasChave)) {
-      addParagraph(state, `Palavras-chave: ${input.fields.palavrasChave}`, {
-        boldLabel: "Palavras-chave:",
-        leftIndent: ABSTRACT_INDENT,
-        rightIndent: ABSTRACT_INDENT,
-      });
-    }
-    if (hasText(input.fields.agradecimentos)) {
-      addParagraph(state, "Agradecimentos", { font: "Times-Bold", size: 13, spacingBefore: 12 });
-      addParagraph(state, input.fields.agradecimentos, { align: "justify" });
-    }
-    return state;
-  }
-
+function addAbstractGroup(state: LayoutState, input: DocxGenerationInput): void {
   if (hasText(input.fields.abstractText)) {
     addParagraph(state, `Abstract. ${input.fields.abstractText}`, {
       boldLabel: "Abstract.",
+      align: "justify",
       leftIndent: ABSTRACT_INDENT,
       rightIndent: ABSTRACT_INDENT,
     });
@@ -400,6 +362,7 @@ function buildLayout(input: DocxGenerationInput): LayoutState {
   if (hasText(input.fields.resumo)) {
     addParagraph(state, `Resumo. ${input.fields.resumo}`, {
       boldLabel: "Resumo.",
+      align: "justify",
       leftIndent: ABSTRACT_INDENT,
       rightIndent: ABSTRACT_INDENT,
     });
@@ -411,6 +374,28 @@ function buildLayout(input: DocxGenerationInput): LayoutState {
       rightIndent: ABSTRACT_INDENT,
     });
   }
+}
+
+function buildLayout(input: DocxGenerationInput): LayoutState {
+  const state = createLayoutState();
+  const blocks = parseEditorContent(input.editorText);
+  const references = [
+    ...splitParagraphs(input.fields.referencias),
+    ...blocks.filter((block) => block.type === "reference").map((block) => block.text),
+  ];
+
+  addTitleBlock(state, input);
+
+  if (input.fields.workType === "resumo_cpg") {
+    addAbstractGroup(state, input);
+    if (hasText(input.fields.agradecimentos)) {
+      addParagraph(state, "Agradecimentos", { font: "Times-Bold", size: 13, spacingBefore: 12 });
+      addParagraph(state, input.fields.agradecimentos, { align: "justify" });
+    }
+    return state;
+  }
+
+  addAbstractGroup(state, input);
 
   // O template CPG separa a primeira página do corpo textual:
   // título, autores, afiliação, abstract, keywords, resumo e palavras-chave
