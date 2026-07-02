@@ -383,6 +383,11 @@ function buildLayout(input: DocxGenerationInput): LayoutState {
     });
   }
 
+  // O template CPG separa a primeira página do corpo textual:
+  // título, autores, afiliação, abstract, keywords, resumo e palavras-chave
+  // ficam na primeira página; a Introdução começa na página seguinte.
+  addPage(state);
+
   addEditorBlocks(state, blocks);
   addReferences(state, references);
   return state;

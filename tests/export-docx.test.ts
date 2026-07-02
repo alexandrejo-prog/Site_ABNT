@@ -347,7 +347,10 @@ describe("DOCX export", () => {
     const pdfText = decodedPdfText(Buffer.from(await blob.arrayBuffer()));
 
     expect(layout.pageCount).toBeGreaterThan(1);
-    expect(layout.pageCount).toBeLessThanOrEqual(6);
+    // O PDF CPG direto é experimental. A quebra antes da Introdução
+    // aproxima a estrutura do DOCX, mas pode aumentar a contagem
+    // do fixture sintético usado neste teste.
+    expect(layout.pageCount).toBeLessThanOrEqual(7);
     expect(layout.duplicateYPositions).toBeLessThan(8);
     expect(pdfText).toContain("Pós-Graduação");
     expect(pdfText).toContain("Educação");
