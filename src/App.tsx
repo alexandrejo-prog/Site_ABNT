@@ -428,16 +428,16 @@ export default function App() {
             <FileDown size={18} aria-hidden="true" />
             {isGenerating ? "Gerando..." : "Gerar DOCX"}
           </button>
-          {isCpgSelected && (
+           {isCpgSelected && (
             <button
               className="primary-action strong"
               type="button"
               onClick={handleGeneratePdf}
               disabled={isGenerating}
-              title="Formato final obrigatorio para submissao CPG/UFLA"
+              title="PDF direto experimental; para submissão final, exporte o DOCX pelo Word ou LibreOffice."
             >
               <FileText size={18} aria-hidden="true" />
-              {isGenerating ? "Gerando..." : "Gerar PDF"}
+              {isGenerating ? "Gerando..." : "Gerar PDF experimental"}
             </button>
           )}
         </div>
@@ -495,6 +495,9 @@ export default function App() {
               )}
               <p>
                 O campo Autor pode receber multiplos autores separados por virgula. Use Programa como endereco ou afiliacao institucional e Curso para e-mails ou informacoes adicionais nesta rodada.
+              </p>
+              <p>
+                <strong>Para submissão final em PDF:</strong> gere primeiro o DOCX e exporte/salve como PDF pelo Word ou LibreOffice. O PDF direto do navegador é experimental e pode apresentar diferenças de paginação e alinhamento.
               </p>
             </div>
           )}

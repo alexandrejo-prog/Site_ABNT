@@ -523,12 +523,36 @@ describe("DOCX export", () => {
     expect(pdfText).toContain('"');
   });
 
+  it("CPG first page does not bold affiliation and keeps title/author formatting", async () => {
+    const documentXml = await generatedCpgXml("# Introducao\nTexto comum.", {
+      ...fields,
+      workType: "resumo_expandido_cpg",
+      title: "Titulo Real do Trabalho",
+      author: "Ana, Bruno",
+      program: "Universidade Federal de Lavras\nPrograma de Pos-Graduacao",
+      course: "ana@ufla.br, bruno@ufla.br",
+    });
+
+    const title = paragraphXmlContaining(documentXml, "Titulo Real do Trabalho");
+    const authors = paragraphXmlContaining(documentXml, "Ana, Bruno");
+    const affiliation = paragraphXmlContaining(documentXml, "Universidade Federal de Lavras");
+
+    expect(title).toContain('w:sz w:val="32"');
+    expect(title).toMatch(/<w:b\s*\/?>|w:b w:val="1"/);
+    expect(authors).toContain('w:sz w:val="24"');
+    expect(authors).toMatch(/<w:b\s*\/?>|w:b w:val="1"/);
+    expect(affiliation).toContain('w:sz w:val="24"');
+    expect(affiliation).not.toMatch(/<w:b\s*\/?>|w:b w:val="1"/);
+  });
+
   it("App.tsx keeps CPG generation imports and PDF button hooks", () => {
     const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).toContain("generateCpgDocxBlob");
     expect(source).toContain("generateCpgPdfBlob");
     expect(source).toContain("handleGeneratePdf");
-    expect(source).toContain("Gerar PDF");
+    expect(source).toContain("Gerar PDF experimental");
     expect(source).toContain("isCpgSelected");
+    expect(source).toContain("PDF direto experimental; para submissão final, exporte o DOCX pelo Word ou LibreOffice.");
+    expect(source).toContain("Para submissão final em PDF");
   });
 });
