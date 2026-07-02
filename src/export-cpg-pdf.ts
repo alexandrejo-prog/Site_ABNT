@@ -167,6 +167,46 @@ function addTextLine(
   state.currentPage.yPositions.push(Number(y.toFixed(2)));
 }
 
+function addJustifiedLine(
+  state: LayoutState,
+  words: string[],
+  x: number,
+  y: number,
+  font: FontName,
+  size: number,
+  width: number,
+): void {
+  if (words.length === 0) return;
+
+  if (words.length === 1) {
+    addTextLine(state, words[0], x, y, font, size);
+    return;
+  }
+
+  const totalTextWidth = words.reduce((sum, word) => sum + measureText(word, size), 0);
+  const totalSpaces = words.length - 1;
+  const availableWidth = width - totalTextWidth;
+  const spaceWidth = availableWidth / totalSpaces;
+  const normalSpaceWidth = measureText(" ", size);
+  const adjustment = (spaceWidth - normalSpaceWidth) * 1000;
+
+  setFont(state.currentPage, font, size);
+  const tjArray: string[] = [];
+
+  words.forEach((word, index) => {
+    const escapedWord = escapePdfLiteral(normalizePdfText(word));
+    tjArray.push(`(${escapedWord})`);
+
+    if (index < words.length - 1) {
+      tjArray.push(`${adjustment.toFixed(0)}`);
+    }
+  });
+
+  state.currentPage.commands.push(`1 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)} Tm`);
+  state.currentPage.commands.push(`[${tjArray.join(" ")}] TJ`);
+  state.currentPage.yPositions.push(Number(y.toFixed(2)));
+}
+
 function addParagraph(state: LayoutState, text: string, options: ParagraphOptions = {}): void {
   const size = options.size ?? 12;
   const baseFont = options.font ?? "Times-Roman";
@@ -199,6 +239,9 @@ function addParagraph(state: LayoutState, text: string, options: ParagraphOption
       const labelWidth = measureText(label, size, true) + 6;
       addTextLine(state, label, x, state.cursorY, "Times-Bold", size);
       addTextLine(state, line.slice(label.length), x + labelWidth, state.cursorY, baseFont, size);
+    } else if (options.align === "justify") {
+      const words = line.split(/\s+/).filter(Boolean);
+      addJustifiedLine(state, words, x, state.cursorY, baseFont, size, width - leftIndent - rightIndent - indent);
     } else {
       addTextLine(state, line, x, state.cursorY, baseFont, size);
     }
