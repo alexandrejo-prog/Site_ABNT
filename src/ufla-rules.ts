@@ -1,5 +1,8 @@
 export const WORK_TYPES = [
   "artigo",
+  "resumo_cpg",
+  "resumo_expandido_cpg",
+  "artigo_completo_cpg",
   "monografia",
   "dissertacao",
   "tese",
@@ -10,7 +13,10 @@ export type WorkType = (typeof WORK_TYPES)[number];
 export type WorkTypeValue = WorkType | "";
 
 export const WORK_TYPE_LABELS: Record<WorkType, string> = {
-  artigo: "Artigo",
+  artigo: "Artigo acadêmico simples",
+  resumo_cpg: "Resumo CPG/UFLA (1 página)",
+  resumo_expandido_cpg: "Resumo expandido CPG/UFLA (4 a 6 páginas)",
+  artigo_completo_cpg: "Artigo completo CPG/UFLA (8 a 14 páginas)",
   monografia: "Monografia",
   dissertacao: "Dissertação",
   tese: "Tese",
@@ -91,6 +97,39 @@ export function cmToTwip(valueInCm: number): number {
   return Math.round(valueInCm * TWIPS_PER_CM);
 }
 
+export const CPG_RULES = {
+  source: "Templates do Congresso de Pós-Graduação da UFLA (CPG)",
+  margins: {
+    topCm: 3.5,
+    bottomCm: 2.5,
+    leftCm: 3,
+    rightCm: 3,
+    topTwip: cmToTwip(3.5),
+    bottomTwip: cmToTwip(2.5),
+    leftTwip: cmToTwip(3),
+    rightTwip: cmToTwip(3),
+  },
+  typography: {
+    fontFamily: "Times New Roman",
+    bodyFontSizePt: 12,
+    paragraphBeforePt: 6,
+    titleFontSizePt: 16,
+    sectionTitleFontSizePt: 13,
+    subsectionTitleFontSizePt: 12,
+    emailFontFamily: "Courier New",
+    emailFontSizePt: 10,
+    abstractSideIndentCm: 0.8,
+    paragraphFirstLineCm: 1.27,
+    referenceHangingCm: 0.5,
+  },
+  pageLimits: {
+    resumo_cpg: { min: 1, max: 1 },
+    resumo_expandido_cpg: { min: 4, max: 6 },
+    artigo_completo_cpg: { min: 8, max: 14 },
+  },
+  output: "PDF obrigatório para submissão no CPG.",
+} as const;
+
 // Regras extraídas do Manual de normalização da UFLA e mantidas aqui como
 // fonte única para evitar números mágicos no gerador DOCX e nos testes.
 export const UFLA_RULES = {
@@ -133,7 +172,6 @@ export const UFLA_RULES = {
     pageNumberFontSizePt: 11,
     lineSpacing: 1.5,
     simpleLineSpacing: 1,
-    // O template/Manual UFLA usa recuo de primeira linha de 1,25 cm no corpo textual.
     paragraphFirstLineCm: 1.25,
     paragraphFirstLineTwip: cmToTwip(1.25),
     paragraphFirstLineTemplateCm: 1.25,
@@ -226,6 +264,10 @@ export function isAdvisorRequired(workType: WorkTypeValue): boolean {
 
 export function requiresImpactIndicators(workType: WorkTypeValue): boolean {
   return workType === "dissertacao" || workType === "tese";
+}
+
+export function isCpgWork(workType: WorkTypeValue): boolean {
+  return workType === "resumo_cpg" || workType === "resumo_expandido_cpg" || workType === "artigo_completo_cpg";
 }
 
 export function emptyAcademicFields(): AcademicFields {
