@@ -80,6 +80,14 @@ function estimatePages(fields: AcademicFields, editorText: string): number {
   return Math.max(1, Math.ceil(text.length / 3200));
 }
 
+function estimateLineCount(value: string): number {
+  return value
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .reduce((total, line) => total + Math.max(1, Math.ceil(line.length / 95)), 0);
+}
+
 function addCpgWarnings(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
   if (!isCpgWork(fields.workType)) return;
 
@@ -116,6 +124,13 @@ function addCpgWarnings(fields: AcademicFields, editorText: string, issues: Vali
   }
 
   const pages = estimatePages(fields, editorText);
+  if (fields.workType === "resumo_cpg" && pages > 1) {
+    issues.push({
+      severity: "warning",
+      code: "cpg-resumo-estimated-pages",
+      message: `Estimativa atual: ${pages} pagina(s). Para resumo CPG, ajuste o conteudo para 1 pagina.`,
+    });
+  }
   if (fields.workType === "resumo_expandido_cpg" && (pages < 4 || pages > 6)) {
     issues.push({
       severity: "warning",
@@ -129,6 +144,30 @@ function addCpgWarnings(fields: AcademicFields, editorText: string, issues: Vali
       severity: "warning",
       code: "cpg-full-estimated-pages",
       message: `Estimativa atual: ${pages} página(s). Para artigo completo CPG, ajuste para 8 a 14 páginas.`,
+    });
+  }
+  if (fields.workType !== "resumo_cpg" && estimateLineCount(fields.abstractText) > 10) {
+    issues.push({
+      severity: "warning",
+      code: "cpg-abstract-too-long",
+      message: "Abstract CPG parece ultrapassar 10 linhas. Encurte ou revise a primeira pagina antes da submissao.",
+    });
+  }
+
+  if (fields.workType !== "resumo_cpg" && estimateLineCount(fields.resumo) > 10) {
+    issues.push({
+      severity: "warning",
+      code: "cpg-resumo-too-long",
+      message: "Resumo CPG parece ultrapassar 10 linhas. Encurte ou revise a primeira pagina antes da submissao.",
+    });
+  }
+
+  if (/<table\b|<\/table>|!\[[^\]]*\]\(|<img\b|\[Imagem detectada:/i.test(editorText)) {
+    issues.push({
+      severity: "warning",
+      code: "cpg-complex-media-warning",
+      message:
+        "Modelos CPG com imagens ou tabelas complexas precisam de conferencia visual: legendas, qualidade e espacamento podem exigir ajuste manual.",
     });
   }
 }

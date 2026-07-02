@@ -9,8 +9,7 @@ import {
 } from "docx";
 import type { IParagraphOptions } from "docx";
 import { parseEditorContent, type DocxGenerationInput, type EditorBlock } from "./export-docx";
-import { CPG_RULES, UFLA_RULES } from "./ufla-rules";
-import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
+import { CPG_RULES, UFLA_RULES, cmToTwip } from "./ufla-rules";
 
 const BLACK = "000000";
 const BODY_SIZE = CPG_RULES.typography.bodyFontSizePt * 2;
@@ -18,9 +17,13 @@ const TITLE_SIZE = CPG_RULES.typography.titleFontSizePt * 2;
 const SECTION_SIZE = CPG_RULES.typography.sectionTitleFontSizePt * 2;
 const SUBSECTION_SIZE = CPG_RULES.typography.subsectionTitleFontSizePt * 2;
 const EMAIL_SIZE = CPG_RULES.typography.emailFontSizePt * 2;
+const CAPTION_SIZE = 20;
 const SINGLE_LINE = 240;
 const SIX_PT = 120;
 const TWELVE_PT = 240;
+const ABSTRACT_INDENT = cmToTwip(CPG_RULES.typography.abstractSideIndentCm);
+const BODY_FIRST_LINE = cmToTwip(CPG_RULES.typography.paragraphFirstLineCm);
+const REFERENCE_HANGING = cmToTwip(CPG_RULES.typography.referenceHangingCm);
 
 interface RunOptions {
   bold?: boolean;
@@ -42,17 +45,22 @@ function splitParagraphs(value: string): string[] {
     .filter(Boolean);
 }
 
+function stripMarkup(value: string): string {
+  return value.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1");
+}
+
 function run(text: string, options: RunOptions = {}): TextRun {
   return new TextRun({
     text,
-    font: CPG_RULES.typography.fontFamily,
-    size: BODY_SIZE,
+    font: options.font ?? CPG_RULES.typography.fontFamily,
+    size: options.size ?? BODY_SIZE,
     color: BLACK,
-    ...options,
+    bold: options.bold,
+    italics: options.italics,
   });
 }
 
-function textRunsFromMarkup(text: string, size = BODY_SIZE, font: string = CPG_RULES.typography.fontFamily): TextRun[] {
+function textRunsFromMarkup(text: string, size = BODY_SIZE, font = CPG_RULES.typography.fontFamily): TextRun[] {
   const runs: TextRun[] = [];
   const tokenPattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
   let cursor = 0;
@@ -77,7 +85,7 @@ function paragraph(text: string, options: Partial<IParagraphOptions> = {}): Para
   return new Paragraph({
     alignment: AlignmentType.BOTH,
     spacing: { before: SIX_PT, after: 0, line: SINGLE_LINE },
-    indent: { firstLine: CPG_RULES.typography.paragraphFirstLineCm * 1440 / 2.54 },
+    indent: { firstLine: BODY_FIRST_LINE },
     children: textRunsFromMarkup(text || " "),
     ...options,
   });
@@ -91,28 +99,48 @@ function titleParagraph(text: string): Paragraph {
   });
 }
 
-function centered(text: string, bold = false, size = BODY_SIZE, font: string = CPG_RULES.typography.fontFamily): Paragraph {
+function centered(
+  text: string,
+  bold = false,
+  size = BODY_SIZE,
+  font: string = CPG_RULES.typography.fontFamily,
+  spacing: NonNullable<IParagraphOptions["spacing"]> = { after: TWELVE_PT, line: SINGLE_LINE },
+): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.CENTER,
-    spacing: { after: TWELVE_PT, line: SINGLE_LINE },
+    spacing,
     children: [run(text, { bold, size, font })],
   });
 }
 
-function abstractParagraph(label: string, value: string): Paragraph[] {
+function affiliationParagraphs(value: string): Paragraph[] {
+  return splitParagraphs(value).map((line) =>
+    centered(line, false, BODY_SIZE, CPG_RULES.typography.fontFamily, { after: 0, line: SINGLE_LINE }),
+  );
+}
+
+function emailParagraph(value: string): Paragraph[] {
   if (!hasText(value)) return [];
-  return splitParagraphs(value).map(
+  return [
+    centered(value, false, EMAIL_SIZE, CPG_RULES.typography.emailFontFamily, {
+      before: SIX_PT,
+      after: SIX_PT,
+      line: SINGLE_LINE,
+    }),
+  ];
+}
+
+function insetLabeledParagraph(label: string, text: string, separator: "." | ":" = "."): Paragraph[] {
+  if (!hasText(text)) return [];
+  return splitParagraphs(text).map(
     (line, index) =>
       new Paragraph({
         alignment: AlignmentType.BOTH,
         spacing: { before: SIX_PT, after: 0, line: SINGLE_LINE },
-        indent: {
-          left: CPG_RULES.typography.abstractSideIndentCm * 1440 / 2.54,
-          right: CPG_RULES.typography.abstractSideIndentCm * 1440 / 2.54,
-        },
+        indent: { left: ABSTRACT_INDENT, right: ABSTRACT_INDENT, firstLine: 0 },
         children:
           index === 0
-            ? [run(`${label}. `, { bold: true }), ...textRunsFromMarkup(line)]
+            ? [run(`${label}${separator} `, { bold: true }), ...textRunsFromMarkup(line)]
             : textRunsFromMarkup(line),
       }),
   );
@@ -132,50 +160,93 @@ function sectionTitle(text: string, level: DocxHeadingLevel = HeadingLevel.HEADI
   });
 }
 
-function blockToParagraph(block: EditorBlock, isFirstParagraphAfterTitle: boolean): Paragraph[] {
+function captionParagraph(text: string, tableCaption: boolean): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: SIX_PT, after: SIX_PT, line: SINGLE_LINE },
+    indent: { left: ABSTRACT_INDENT, right: ABSTRACT_INDENT },
+    children: [
+      run(text, {
+        bold: true,
+        size: CAPTION_SIZE,
+        font: "Helvetica",
+      }),
+    ],
+    ...(tableCaption ? {} : {}),
+  });
+}
+
+function isCaption(text: string): "figure" | "table" | null {
+  if (/^(figura|imagem)\s+\d+/i.test(text.trim())) return "figure";
+  if (/^(tabela|quadro)\s+\d+/i.test(text.trim())) return "table";
+  return null;
+}
+
+function blockToParagraph(block: EditorBlock, firstParagraphInSection: boolean): Paragraph[] {
   if (block.type === "heading1") return [sectionTitle(block.text, HeadingLevel.HEADING_1)];
   if (block.type === "heading2") return [sectionTitle(block.text, HeadingLevel.HEADING_2)];
   if (block.type === "heading3") return [sectionTitle(block.text, HeadingLevel.HEADING_3)];
   if (block.type === "longQuote") {
     return [
       paragraph(block.text, {
-        indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
+        indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip, firstLine: 0 },
       }),
     ];
   }
-  if (block.type === "scheduleTable") return splitParagraphs(block.text).map((line) => paragraph(line));
+  if (block.type === "scheduleTable") {
+    return splitParagraphs(block.text).map((line) => paragraph(line, { indent: { firstLine: 0 } }));
+  }
+
+  const caption = isCaption(block.text);
+  if (caption) return [captionParagraph(block.text, caption === "table")];
+
   return [
     paragraph(block.text, {
-      indent: { firstLine: isFirstParagraphAfterTitle ? 0 : CPG_RULES.typography.paragraphFirstLineCm * 1440 / 2.54 },
+      indent: { firstLine: firstParagraphInSection ? 0 : BODY_FIRST_LINE },
     }),
   ];
 }
 
-function referenceRunToTextRun(referenceRun: ReferenceRun): TextRun {
-  return run(referenceRun.text, {
-    bold: referenceRun.bold,
-    italics: referenceRun.italics,
-  });
+function isReferenceTitleNoise(text: string): boolean {
+  const normalized = text.trim().toUpperCase();
+  return /^(REFERENCIAS|REFERÊNCIAS|BIBLIOGRÁFICAS|BIBLIOGRAFICAS)$/.test(normalized);
+}
+
+function referenceTitleFor(references: string[]): string {
+  const upper = references.map((r) => r.trim().toUpperCase());
+  const hasRef = upper.some((r) => /^(REFERENCIAS|REFERÊNCIAS)$/.test(r));
+  const hasBiblio = upper.some((r) => /^(BIBLIOGRÁFICAS|BIBLIOGRAFICAS)$/.test(r));
+  if (hasRef && hasBiblio) return "REFERÊNCIAS BIBLIOGRÁFICAS";
+  if (hasBiblio) return "REFERÊNCIAS BIBLIOGRÁFICAS";
+  return "Referencias";
+}
+
+function filterReferenceNoise(reference: string): boolean {
+  return !isReferenceTitleNoise(reference);
 }
 
 function referenceParagraphs(references: string[]): Paragraph[] {
-  if (!references.length) return [];
+  const cleanReferences = references
+    .map((item) => stripMarkup(item).trim())
+    .filter(Boolean)
+    .filter(filterReferenceNoise);
+  if (!cleanReferences.length) return [];
+
+  const title = referenceTitleFor(references);
   return [
-    sectionTitle("Referencias"),
-    ...normalizeReferences(references)
-      .sort((a, b) => a.text.localeCompare(b.text, "pt-BR", { sensitivity: "base" }))
+    sectionTitle(title),
+    ...cleanReferences
+      .sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }))
       .map(
         (reference) =>
           new Paragraph({
             alignment: AlignmentType.LEFT,
             spacing: { before: SIX_PT, after: 0, line: SINGLE_LINE },
             indent: {
-              left: CPG_RULES.typography.referenceHangingCm * 1440 / 2.54,
-              hanging: CPG_RULES.typography.referenceHangingCm * 1440 / 2.54,
+              left: REFERENCE_HANGING,
+              hanging: REFERENCE_HANGING,
             },
-            children: reference.runs.length
-              ? reference.runs.map(referenceRunToTextRun)
-              : [run(reference.text || " ")],
+            children: textRunsFromMarkup(reference),
           }),
       ),
   ];
@@ -185,18 +256,27 @@ function cpgResumoChildren(input: DocxGenerationInput): Paragraph[] {
   return [
     titleParagraph(input.fields.title),
     centered(input.fields.author || "Autores", true),
-    ...(hasText(input.fields.program) ? [centered(input.fields.program)] : []),
-    ...(hasText(input.fields.course)
-      ? [centered(input.fields.course, false, EMAIL_SIZE, CPG_RULES.typography.emailFontFamily)]
+    ...affiliationParagraphs(input.fields.program),
+    ...emailParagraph(input.fields.course),
+    ...(hasText(input.fields.abstractText)
+      ? insetLabeledParagraph("Abstract", input.fields.abstractText, ".")
+      : []),
+    ...(hasText(input.fields.keywords)
+      ? insetLabeledParagraph("Keywords", input.fields.keywords, ":")
+      : []),
+    ...(hasText(input.fields.resumo)
+      ? insetLabeledParagraph("Resumo", input.fields.resumo, ".")
       : []),
     ...(hasText(input.fields.palavrasChave)
-      ? [paragraph(`Palavras-chave: ${input.fields.palavrasChave}`, { indent: { firstLine: 0 } })]
+      ? insetLabeledParagraph("Palavras-chave", input.fields.palavrasChave, ":")
       : []),
-    ...splitParagraphs(input.fields.resumo || input.editorText).map((line, index) =>
-      paragraph(line, { indent: { firstLine: index === 0 ? 0 : CPG_RULES.typography.paragraphFirstLineCm * 1440 / 2.54 } }),
-    ),
     ...(hasText(input.fields.agradecimentos)
-      ? [sectionTitle("Agradecimentos"), ...splitParagraphs(input.fields.agradecimentos).map((line) => paragraph(line))]
+      ? [
+          sectionTitle("Agradecimentos"),
+          ...splitParagraphs(input.fields.agradecimentos).map((line) =>
+            paragraph(line, { indent: { firstLine: 0 } }),
+          ),
+        ]
       : []),
   ];
 }
@@ -208,26 +288,25 @@ function cpgFullChildren(input: DocxGenerationInput): Paragraph[] {
     ...splitParagraphs(input.fields.referencias),
     ...blocks.filter((block) => block.type === "reference").map((block) => block.text),
   ];
-  let firstBodyParagraph = true;
+  let firstParagraphInSection = true;
 
   return [
     titleParagraph(input.fields.title),
     centered(input.fields.author || "Autores", true),
-    ...(hasText(input.fields.program) ? [centered(input.fields.program)] : []),
-    ...(hasText(input.fields.course)
-      ? [centered(input.fields.course, false, EMAIL_SIZE, CPG_RULES.typography.emailFontFamily)]
-      : []),
-    ...abstractParagraph("Abstract", input.fields.abstractText),
-    ...(hasText(input.fields.keywords)
-      ? [paragraph(`Keywords: ${input.fields.keywords}`, { indent: { firstLine: 0 } })]
-      : []),
-    ...abstractParagraph("Resumo", input.fields.resumo),
-    ...(hasText(input.fields.palavrasChave)
-      ? [paragraph(`Palavras-chave: ${input.fields.palavrasChave}`, { indent: { firstLine: 0 } })]
-      : []),
+    ...affiliationParagraphs(input.fields.program),
+    ...emailParagraph(input.fields.course),
+    ...insetLabeledParagraph("Abstract", input.fields.abstractText, "."),
+    ...insetLabeledParagraph("Keywords", input.fields.keywords, ":"),
+    ...insetLabeledParagraph("Resumo", input.fields.resumo, "."),
+    ...insetLabeledParagraph("Palavras-chave", input.fields.palavrasChave, ":"),
     ...bodyBlocks.flatMap((block) => {
-      const paragraphs = blockToParagraph(block, firstBodyParagraph);
-      if (block.type === "paragraph") firstBodyParagraph = false;
+      if (block.type === "heading1" || block.type === "heading2" || block.type === "heading3") {
+        firstParagraphInSection = true;
+        return blockToParagraph(block, true);
+      }
+
+      const paragraphs = blockToParagraph(block, firstParagraphInSection);
+      if (block.type === "paragraph") firstParagraphInSection = false;
       return paragraphs;
     }),
     ...referenceParagraphs(references),

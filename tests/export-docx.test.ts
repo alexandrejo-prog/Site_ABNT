@@ -3,6 +3,7 @@ import { inflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { generateArticleDocxBlob } from "../src/export-article-docx";
 import { generateCpgDocxBlob } from "../src/export-cpg-docx";
+import { generateCpgPdfBlob, inspectCpgPdfLayout } from "../src/export-cpg-pdf";
 import { calculateTextualStartPage, generateDocxBlob, parseEditorContent } from "../src/export-docx";
 import { CPG_RULES, UFLA_RULES, emptyAcademicFields, type AcademicFields } from "../src/ufla-rules";
 
@@ -102,6 +103,12 @@ function paragraphXmlContaining(documentXml: string, text: string): string {
   return paragraph ?? "";
 }
 
+function paragraphText(paragraphXml: string): string {
+  return [...paragraphXml.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)]
+    .map((match) => match[1])
+    .join("");
+}
+
 function paragraphXmlContainingStyle(documentXml: string, text: string, styleId: string): string {
   const paragraph = paragraphsIn(documentXml).find(
     (item) => item.includes(text) && item.includes(`w:val="${styleId}"`),
@@ -154,6 +161,26 @@ function expectCpgMargins(documentXml: string): void {
   expect(documentXml).toContain(`w:bottom="${CPG_RULES.margins.bottomTwip}"`);
   expect(documentXml).toContain(`w:left="${CPG_RULES.margins.leftTwip}"`);
   expect(documentXml).toContain(`w:right="${CPG_RULES.margins.rightTwip}"`);
+}
+
+function decodedPdfText(pdfBytes: Buffer): string {
+  const source = pdfBytes.toString("latin1");
+  const texts: string[] = [];
+  for (const match of source.matchAll(/\(([^()]*)\)\s*Tj/g)) {
+    texts.push(
+      match[1].replace(/\\([0-7]{3}|[\\()])/g, (_, escaped: string) => {
+        if (escaped.length === 3) return String.fromCharCode(parseInt(escaped, 8));
+        return escaped;
+      }),
+    );
+  }
+  return texts.join(" ");
+}
+
+function longCpgText(): string {
+  return Array.from({ length: 90 }, (_, index) =>
+    `# ${index + 1} Secao de teste\nEste paragrafo trata de Pos-Graduacao, Educacao, Ciencias, Docencia e Praxis com conteudo suficiente para validar quebra de pagina, margens e ausencia de sobreposicao no PDF CPG gerado.`,
+  ).join("\n");
 }
 
 describe("DOCX export", () => {
@@ -232,14 +259,42 @@ describe("DOCX export", () => {
     const documentXml = await generatedCpgXml("# Introducao\nTexto comum.", {
       ...fields,
       workType: "resumo_expandido_cpg",
+      author: "Maria Silva, Joao Souza",
+      program: "Universidade Federal de Lavras\nPrograma de Pos-Graduacao",
+      course: "maria@ufla.br, joao@ufla.br",
     });
 
+    expect(documentXml).toContain("Qualidade do cafe no sul de Minas");
+    expect(documentXml).toContain("Maria Silva, Joao Souza");
+    expect(documentXml).toContain("Universidade Federal de Lavras");
     expect(documentXml).toContain("Abstract");
     expect(documentXml).toContain("Keywords");
     expect(documentXml).toContain("Resumo");
     expect(documentXml).toContain("Palavras-chave");
+    expect(documentXml.indexOf("Abstract")).toBeLessThan(documentXml.indexOf("Resumo"));
     expectNoGraduateOnlyElements(documentXml);
     expectCpgMargins(documentXml);
+
+    const title = paragraphXmlContaining(documentXml, "Qualidade do cafe no sul de Minas");
+    const authors = paragraphXmlContaining(documentXml, "Maria Silva, Joao Souza");
+    const affiliation = paragraphXmlContaining(documentXml, "Universidade Federal de Lavras");
+    const abstract = paragraphXmlContaining(documentXml, "Abstract");
+    const section = paragraphXmlContainingStyle(documentXml, "Introducao", "Heading1");
+    const body = paragraphXmlContaining(documentXml, "Texto comum.");
+
+    expect(title).toContain('w:sz w:val="32"');
+    expect(authors).toContain("Maria Silva, Joao Souza");
+    expect(paragraphText(authors).split(",")).toHaveLength(2);
+    expect(affiliation).toContain('w:jc w:val="center"');
+    expect(abstract).toContain('w:left="454"');
+    expect(abstract).toContain('w:right="454"');
+    expect(section).toContain('w:sz w:val="26"');
+    expect(hasPositiveBold(section)).toBe(true);
+    expect(hasPositiveBold(body)).toBe(false);
+
+    expect(title).toBeTruthy();
+    expect(authors).toBeTruthy();
+    expect(affiliation).toBeTruthy();
   });
 
   it("generates complete CPG article without dissertation-only elements", async () => {
@@ -259,6 +314,10 @@ describe("DOCX export", () => {
       const documentXml = await generatedXml("# 1 Introducao\nTexto comum.", {
         ...fields,
         workType,
+        workNature:
+          workType === "tese"
+            ? "Dissertacao apresentada para obtencao do titulo de Mestre em Ciencias."
+            : "Tese apresentada para obtencao do titulo de Doutor em Ciencias.",
         indicadoresImpacto: "Impacto social informado.",
         impactIndicators: "Social impact text.",
       });
@@ -268,7 +327,36 @@ describe("DOCX export", () => {
       expect(documentXml).toContain("Aprovado em:");
       expect(documentXml).toContain("INDICADORES DE IMPACTO");
       expect(documentXml).toContain("IMPACT INDICATORS");
+      expect(documentXml).toContain(workType === "tese" ? "Doutor em Ciencias" : "Mestre em Ciencias");
     }
+  });
+
+  it("generates readable multi-page CPG PDF without graduate elements", async () => {
+    const pdfFields = {
+      ...fields,
+      workType: "artigo_completo_cpg" as const,
+      title: "Praxis na Pos-Graduacao",
+      author: "Maria Silva, Joao Souza",
+      program: "Programa de Pós-Graduação em Educação",
+      course: "maria@ufla.br",
+      resumo: "Educação, Ciências, Docência e Práxis orientam a pesquisa.",
+      abstractText: "Education, Science, Teaching and Praxis guide the research.",
+    };
+    const layout = inspectCpgPdfLayout({ fields: pdfFields, editorText: longCpgText() });
+    const blob = await generateCpgPdfBlob({ fields: pdfFields, editorText: longCpgText() });
+    const pdfText = decodedPdfText(Buffer.from(await blob.arrayBuffer()));
+
+    expect(layout.pageCount).toBeGreaterThan(1);
+    expect(layout.duplicateYPositions).toBeLessThan(8);
+    expect(pdfText).toContain("Pós-Graduação");
+    expect(pdfText).toContain("Educação");
+    expect(pdfText).toContain("Ciências");
+    expect(pdfText).toContain("Docência");
+    expect(pdfText).toContain("Práxis");
+    expect(pdfText).not.toContain("SUMÁRIO");
+    expect(pdfText).not.toContain("FICHA CATALOGRÁFICA");
+    expect(pdfText).not.toContain("FOLHA DE APROVAÇÃO");
+    expect(pdfText).not.toContain("PageNumber");
   });
 
   it("keeps summary and pre-textual titles out of Word heading levels", async () => {
@@ -352,5 +440,86 @@ describe("DOCX export", () => {
     for (const marker of markers) {
       expect(source).not.toContain(marker);
     }
+  });
+
+  it("CPG first page uses title before author and does not use advisor as title", async () => {
+    const documentXml = await generatedCpgXml("# Introducao\nTexto comum.", {
+      ...fields,
+      workType: "resumo_expandido_cpg",
+      title: "Titulo Real do Trabalho",
+      author: "Ana, Bruno",
+      program: "Programa de Pos-Graduacao",
+      course: "ana@ufla.br",
+      advisor: "Prof. Dr. Orientador",
+    });
+
+    const titlePos = documentXml.indexOf("Titulo Real do Trabalho");
+    const authorPos = documentXml.indexOf("Ana, Bruno");
+    const programPos = documentXml.indexOf("Programa de Pos-Graduacao");
+    const advisorPos = documentXml.indexOf("Prof. Dr. Orientador");
+
+    expect(titlePos).toBeGreaterThan(-1);
+    expect(authorPos).toBeGreaterThan(-1);
+    expect(titlePos).toBeLessThan(authorPos);
+    expect(programPos).toBeGreaterThan(authorPos);
+    expect(advisorPos).toBe(-1);
+  });
+
+  it("CPG resumo page places abstract and keywords before resumo", async () => {
+    const documentXml = await generatedCpgXml("", {
+      ...fields,
+      workType: "resumo_cpg",
+      abstractText: "Abstract text.",
+      keywords: "keyword1; keyword2",
+      resumo: "Resumo texto do resumo.",
+      palavrasChave: "palavra1; palavra2",
+    });
+
+    const abstractPos = documentXml.indexOf("Abstract");
+    const keywordsPos = documentXml.indexOf("Keywords");
+    const resumoPos = documentXml.indexOf("Resumo.");
+    const palavrasPos = documentXml.indexOf("Palavras-chave");
+
+    expect(abstractPos).toBeGreaterThan(-1);
+    expect(keywordsPos).toBeGreaterThan(-1);
+    expect(resumoPos).toBeGreaterThan(-1);
+    expect(palavrasPos).toBeGreaterThan(-1);
+    expect(abstractPos).toBeLessThan(resumoPos);
+    expect(keywordsPos).toBeLessThan(resumoPos);
+    expect(resumoPos).toBeLessThan(palavrasPos);
+  });
+
+  it("joins reference entries Referencias and BIBLIOGRAFICAS into a single title", async () => {
+    const documentXml = await generatedCpgXml("", {
+      ...fields,
+      workType: "resumo_expandido_cpg",
+      referencias: "Referencias\nBIBLIOGRÁFICAS\nSILVA, M. Livro. UFLA, 2024.",
+    });
+
+    const refTitle = paragraphXmlContaining(documentXml, "REFERÊNCIAS BIBLIOGRÁFICAS");
+    expect(refTitle).toBeTruthy();
+    expect(documentXml).toContain("SILVA, M. Livro");
+  });
+
+  it("generates readable multi-page CPG PDF with preserved accents and no question marks for quotes", async () => {
+    const pdfFields = {
+      ...fields,
+      workType: "resumo_expandido_cpg" as const,
+      title: "Título com Aspas “Curvas” e Acentos",
+      author: "Maria Silva",
+      program: "Programa de Pós-Graduação em Educação",
+      course: "maria@ufla.br",
+      resumo: "Resumo com aspas “não basta saber fazer” e acentos Pós-Graduação.",
+      abstractText: "Abstract with quotes and accents.",
+      keywords: "quotes; accents",
+      palavrasChave: "aspas; acentos",
+    };
+    const blob = await generateCpgPdfBlob({ fields: pdfFields, editorText: "# Introdução\nTexto com aspas “teste”." });
+    const pdfText = decodedPdfText(Buffer.from(await blob.arrayBuffer()));
+
+    expect(pdfText).toContain("Pós-Graduação");
+    expect(pdfText).toContain("Educação");
+    expect(pdfText).not.toContain("?");
+    expect(pdfText).toContain('"');
   });
 });
