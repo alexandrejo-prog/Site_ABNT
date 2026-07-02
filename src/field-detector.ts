@@ -7,6 +7,7 @@ import {
   WORK_TYPES,
   emptyAcademicFields,
   emptyConfidenceMap,
+  isCpgWork,
 } from "./ufla-rules";
 import {
   DocxStructure,
@@ -597,6 +598,14 @@ export function detectAcademicFieldsFromStructure(
     fields.workType = detectedWorkType;
   }
 
+  if (isCpgWork(fields.workType) || looksLikeCpgDocument(structure.blocks)) {
+    const cpgResult = detectCpgAcademicFieldsFromStructure(structure);
+    if (cpgResult.fields.title || cpgResult.fields.author || cpgResult.fields.abstractText) {
+      cpgResult.fields.workType = fields.workType || cpgResult.fields.workType;
+      return cpgResult;
+    }
+  }
+
   fields.author = findByLabel(text, [/^\s*(?:autor(?:a)?|discente|aluno(?:a)?)\s*[:\-]\s*(.+)$/im]);
   fields.title = findByLabel(text, [/^\s*t[íi]tulo\s*[:\-]\s*(.+)$/im]);
   fields.subtitle = findByLabel(text, [/^\s*subt[íi]tulo\s*[:\-]\s*(.+)$/im]);
@@ -684,6 +693,324 @@ export function detectAcademicFieldsFromStructure(
     editorText: blocksToEditorText(structure.blocks),
     messages,
   };
+}
+
+function looksLikeCpgDocument(blocks: ImportedBlock[]): boolean {
+  const normalized = blocks
+    .map((block) => normalizeForDetection(blockText(block)))
+    .filter(Boolean)
+    .join("\n");
+
+  const hasAbstractBeforeResumo = /ABSTRACT[^\n]*\n[^\n]*\n[^\n]*\n[^\n]*RESUMO/i.test(normalized);
+  const hasKeywordsBeforePalavras = /KEYWORDS[^\n]*\n[^\n]*\n[^\n]*PALAVRAS[- ]CHAVE/i.test(normalized);
+  const hasNumberedIntro = /^1\s+INTRODUCAO$/m.test(normalized);
+  const hasAuthorMarkers = /¹|²|³/.test(normalized);
+
+  return (hasAbstractBeforeResumo && hasKeywordsBeforePalavras) || (hasNumberedIntro && hasAuthorMarkers);
+}
+
+function findBlockIndex(blocks: ImportedBlock[], predicate: (block: ImportedBlock) => boolean): number {
+  return blocks.findIndex(predicate);
+}
+
+function blockTextTrimmed(block: ImportedBlock): string {
+  return blockText(block).trim();
+}
+
+function joinBlocks(blocks: ImportedBlock[], start: number, end?: number): string {
+  const slice = end !== undefined ? blocks.slice(start, end) : blocks.slice(start);
+  return slice
+    .map((block) => blockText(block).trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function isLikelyCpgAuthor(text: string): boolean {
+  const normalized = normalizeForDetection(text);
+  const upper = text.toUpperCase();
+  if (/¹|²|³/.test(text)) return true;
+  if (upper === text && text.length > 20) return false;
+  if (isGenericCoverLine(text)) return false;
+  if (isLocation(text) || isYear(text)) return false;
+  if (/[:;]|\d/.test(text)) return false;
+  if (
+    /\b(RESUMO|ABSTRACT|REFERENCIAS|INTRODUCAO|ANEXOS|APENDICES|SUMARIO|PALAVRAS[- ]CHAVE|KEYWORDS)\b/.test(
+      normalized,
+    )
+  ) {
+    return false;
+  }
+
+  const upperValue = text.toUpperCase();
+  for (const term of INSTITUTIONAL_TERMS) {
+    if (upperValue.includes(term)) {
+      return false;
+    }
+  }
+
+  const words = text.split(/\s+/).filter(Boolean);
+  return words.length >= 2 && words.length <= 8;
+}
+
+function isLikelyCpgAffiliation(text: string): boolean {
+  const normalized = normalizeForDetection(text);
+  const trimmed = text.trim();
+  if (/^[¹²³]$/.test(trimmed)) return true;
+  if (/UNIVERSIDADE FEDERAL DE LAVRAS|UFLA|PROGRAMA DE P[ÓO]S[- ]GRADUA[CÇ][AÃ]O/.test(normalized)) return true;
+  return false;
+}
+
+function isEmailLine(text: string): boolean {
+  return /^[^\s]+@[^\s]+$/.test(text.trim());
+}
+
+function cleanLabeledValue(text: string, label: string): string {
+  const normalized = normalizeForDetection(text);
+  const labelNormalized = normalizeForDetection(label);
+  if (normalized.startsWith(`${labelNormalized}:`) || normalized.startsWith(`${labelNormalized}.`)) {
+    return cleanValue(text.slice(text.indexOf(":") >= 0 ? text.indexOf(":") + 1 : text.indexOf(".") + 1));
+  }
+  return text;
+}
+
+function collectCpgSection(blocks: ImportedBlock[], startIndex: number, stopPattern: RegExp): string {
+  if (startIndex < 0) return "";
+  const collected: string[] = [];
+  for (let index = startIndex + 1; index < blocks.length; index += 1) {
+    const text = blockTextTrimmed(blocks[index]);
+    if (!text) continue;
+    if (stopPattern.test(text)) break;
+    collected.push(text);
+  }
+  return joinLines(collected);
+}
+
+function detectCpgAcademicFieldsFromStructure(structure: DocxStructure): FieldDetectionResult {
+  const blocks = structure.blocks.filter((block) => block.type !== "pageBreak");
+  if (!blocks.length) {
+    return {
+      fields: emptyAcademicFields(),
+      confidence: emptyConfidenceMap(),
+      editorText: "",
+      messages: [],
+    };
+  }
+
+  const fields = emptyAcademicFields();
+  const confidence = emptyConfidenceMap();
+  const messages: string[] = [];
+  const allTexts = blocks.map((block) => blockTextTrimmed(block)).filter(Boolean);
+
+  let cursor = 0;
+
+  const titleLines: string[] = [];
+  while (cursor < blocks.length) {
+    const text = blockTextTrimmed(blocks[cursor]);
+    if (!text || isLikelyCpgAuthor(text) || isLikelyCpgAffiliation(text) || isEmailLine(text)) break;
+    if (/^(RESUMO|ABSTRACT|KEYWORDS|PALAVRAS[- ]CHAVE|REFERÊNCIAS|REFERENCIAS|INTRODUÇÃO|INTRODUCAO)/i.test(text)) break;
+    titleLines.push(text);
+    cursor += 1;
+  }
+  const title = cleanValue(titleLines.join(" "));
+  if (title) {
+    fields.title = title;
+    confidence.title = "alta";
+  }
+
+  const authorLines: string[] = [];
+  while (cursor < blocks.length) {
+    const text = blockTextTrimmed(blocks[cursor]);
+    if (!text) { cursor += 1; continue; }
+    if (isLikelyCpgAffiliation(text) || isEmailLine(text)) break;
+    if (/^(RESUMO|ABSTRACT|KEYWORDS|PALAVRAS[- ]CHAVE|REFERÊNCIAS|REFERENCIAS|INTRODUÇÃO|INTRODUCAO)/i.test(text)) break;
+    if (isLikelyCpgAuthor(text)) {
+      authorLines.push(text);
+      cursor += 1;
+    } else if (authorLines.length && /¹|²|³/.test(text) && !isLikelyCpgAffiliation(text)) {
+      authorLines[authorLines.length - 1] += ` ${text}`.trim();
+      cursor += 1;
+    } else {
+      break;
+    }
+  }
+  if (authorLines.length) {
+    fields.author = cleanValue(authorLines.join(", "));
+    confidence.author = "alta";
+  }
+
+  const affiliationLines: string[] = [];
+  while (cursor < blocks.length) {
+    const text = blockTextTrimmed(blocks[cursor]);
+    if (!text) { cursor += 1; continue; }
+    if (isEmailLine(text)) break;
+    if (/^(RESUMO|ABSTRACT|KEYWORDS|PALAVRAS[- ]CHAVE|REFERÊNCIAS|REFERENCIAS|INTRODUÇÃO|INTRODUCAO)/i.test(text)) break;
+    if (isLikelyCpgAffiliation(text)) {
+      affiliationLines.push(text);
+      cursor += 1;
+    } else if (affiliationLines.length && /¹|²|³/.test(text)) {
+      affiliationLines[affiliationLines.length - 1] += ` ${text}`.trim();
+      cursor += 1;
+    } else {
+      break;
+    }
+  }
+  if (affiliationLines.length) {
+    fields.program = cleanValue(affiliationLines.join("\n"));
+    confidence.program = "alta";
+  }
+
+  const emailLines: string[] = [];
+  while (cursor < blocks.length) {
+    const text = blockTextTrimmed(blocks[cursor]);
+    if (!text) { cursor += 1; continue; }
+    if (!isEmailLine(text)) break;
+    emailLines.push(text);
+    cursor += 1;
+  }
+  if (emailLines.length) {
+    fields.course = cleanValue(emailLines.join(", "));
+    confidence.course = "alta";
+  }
+
+  const abstractTexts: string[] = [];
+  let abstractFound = false;
+  while (cursor < blocks.length) {
+    const text = blockTextTrimmed(blocks[cursor]);
+    if (!text) { cursor += 1; continue; }
+    const normalized = normalizeForDetection(text);
+    if (!abstractFound) {
+      if (/^ABSTRACT[.:\-]?\s*$/.test(normalized)) {
+        abstractFound = true;
+        cursor += 1;
+        continue;
+      }
+      if (/^(KEYWORDS|PALAVRAS[- ]CHAVE|RESUMO|REFERÊNCIAS|REFERENCIAS|INTRODUÇÃO|INTRODUCAO)/i.test(normalized)) break;
+    }
+    if (/^(KEYWORDS|PALAVRAS[- ]CHAVE|RESUMO|REFERÊNCIAS|REFERENCIAS|INTRODUÇÃO|INTRODUCAO)/i.test(normalized)) break;
+    if (abstractFound) abstractTexts.push(text);
+    cursor += 1;
+  }
+  fields.abstractText = joinLines(abstractTexts);
+  if (fields.abstractText) confidence.abstractText = "alta";
+
+  const keywordTexts: string[] = [];
+  while (cursor < blocks.length) {
+    const text = blockTextTrimmed(blocks[cursor]);
+    if (!text) { cursor += 1; continue; }
+    const normalized = normalizeForDetection(text);
+    const keywordMatch = text.match(/^KEYWORDS[.:\-]?\s*(.+)$/i);
+    if (keywordMatch?.[1]) {
+      fields.keywords = cleanValue(keywordMatch[1]);
+      confidence.keywords = "alta";
+      cursor += 1;
+      break;
+    }
+    if (/^(RESUMO|PALAVRAS[- ]CHAVE|REFERÊNCIAS|REFERENCIAS|INTRODUÇÃO|INTRODUCAO)/i.test(normalized)) break;
+    cursor += 1;
+  }
+
+  const resumoTexts: string[] = [];
+  let resumoFound = false;
+  while (cursor < blocks.length) {
+    const text = blockTextTrimmed(blocks[cursor]);
+    if (!text) { cursor += 1; continue; }
+    const normalized = normalizeForDetection(text);
+    if (!resumoFound) {
+      if (/^RESUMO[.:\-]?\s*$/.test(normalized)) {
+        resumoFound = true;
+        cursor += 1;
+        continue;
+      }
+      if (/^(PALAVRAS[- ]CHAVE|REFERÊNCIAS|REFERENCIAS|INTRODUÇÃO|INTRODUCAO)/i.test(normalized)) break;
+    }
+    if (/^(PALAVRAS[- ]CHAVE|REFERÊNCIAS|REFERENCIAS|INTRODUÇÃO|INTRODUCAO)/i.test(normalized)) break;
+    if (resumoFound) resumoTexts.push(text);
+    cursor += 1;
+  }
+  fields.resumo = joinLines(resumoTexts);
+  if (fields.resumo) confidence.resumo = "alta";
+
+  const palavrasTexts: string[] = [];
+  while (cursor < blocks.length) {
+    const text = blockTextTrimmed(blocks[cursor]);
+    if (!text) { cursor += 1; continue; }
+    const normalized = normalizeForDetection(text);
+    const palavrasMatch = text.match(/^PALAVRAS[- ]CHAVE[.:\-]?\s*(.+)$/i);
+    if (palavrasMatch?.[1]) {
+      fields.palavrasChave = cleanValue(palavrasMatch[1]);
+      confidence.palavrasChave = "alta";
+      cursor += 1;
+      break;
+    }
+    if (/^(REFERÊNCIAS|REFERENCIAS|INTRODUÇÃO|INTRODUCAO)/i.test(normalized)) break;
+    cursor += 1;
+  }
+
+  const introductionIndex = findBlockIndex(blocks, (block) => {
+    const normalized = normalizeForDetection(blockTextTrimmed(block));
+    return /^1\s+INTRODUCAO$/.test(normalized) || /^INTRODUCAO$/.test(normalized);
+  });
+  if (introductionIndex >= 0) {
+    const collected: string[] = [];
+    for (let index = introductionIndex; index < blocks.length; index += 1) {
+      const text = blockTextTrimmed(blocks[index]);
+      if (!text) continue;
+      const normalized = normalizeForDetection(text);
+      if (/^2\s+\S+/.test(normalized) || /^REFERENCIAS|^REFERÊNCIAS|^ANEXOS|^APENDICES/i.test(normalized)) break;
+      collected.push(text);
+    }
+    fields.introducao = joinLines(collected);
+    if (fields.introducao) confidence.introducao = "alta";
+  }
+
+  const referenceStart = findBlockIndex(blocks, (block) => {
+    const normalized = normalizeForDetection(blockTextTrimmed(block));
+    return /^REFERENCIAS/.test(normalized) || /^REFERÊNCIAS/.test(normalized);
+  });
+  if (referenceStart >= 0) {
+    const collected: string[] = [];
+    for (let index = referenceStart + 1; index < blocks.length; index += 1) {
+      const text = blockTextTrimmed(blocks[index]);
+      if (!text) continue;
+      collected.push(text);
+    }
+    fields.referencias = joinLines(collected);
+    if (fields.referencias) confidence.referencias = "alta";
+  }
+
+  return {
+    fields,
+    confidence,
+    editorText: blocksToEditorTextForCpg(blocks, referenceStart),
+    messages,
+  };
+}
+
+function blocksToEditorTextForCpg(blocks: ImportedBlock[], referenceStart: number): string {
+  const start = findBlockIndex(blocks, (block) => {
+    const normalized = normalizeForDetection(blockTextTrimmed(block));
+    return /^1\s+INTRODUCAO$/.test(normalized) || /^INTRODUCAO$/.test(normalized);
+  });
+  if (start < 0) return "";
+
+  const lines: string[] = [];
+  for (let index = start; index < blocks.length; index += 1) {
+    if (index === referenceStart) break;
+    const block = blocks[index];
+    if (block.type === "pageBreak") continue;
+    if (block.type === "heading") {
+      lines.push(`${block.level <= 1 ? "#" : "##"} ${block.text}`);
+      continue;
+    }
+    if (block.type === "longQuote") {
+      lines.push(`> ${block.text}`);
+      continue;
+    }
+    const text = blockTextTrimmed(block);
+    if (text) lines.push(text);
+  }
+  return lines.join("\n\n").trim();
 }
 
 export function detectAcademicFieldsFromText(text: string): FieldDetectionResult {

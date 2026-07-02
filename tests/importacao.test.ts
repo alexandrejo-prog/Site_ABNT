@@ -164,4 +164,61 @@ REFERÊNCIAS
     expect(result.fields.apendices).toContain("APÊNDICE A");
     expect(result.fields.apendices).toContain("[Imagem detectada:");
   });
+
+  it("detecta documento CPG com título, autores, afiliação, abstract, resumo e introdução", async () => {
+    const cpgBlocks = [
+      paragraph("PRÁXIS NO ESTÁGIO DE DOCÊNCIA"),
+      paragraph("Alexandre José de Oliveira¹"),
+      paragraph("Marina Battistetti Festozo²"),
+      paragraph("¹ Universidade Federal de Lavras (UFLA), Programa de Pós-Graduação em Educação Científica e Ambiental."),
+      paragraph("² Universidade Federal de Lavras (UFLA), Programa de Pós-Graduação em Educação Científica e Ambiental."),
+      paragraph("ABSTRACT"),
+      paragraph(
+        "This expanded abstract analyzes the teaching internship in the context of scientific and environmental education at UFLA.",
+      ),
+      paragraph("Keywords: Teaching Internship; Science Education; Environmental Education; Praxis."),
+      paragraph("RESUMO"),
+      paragraph(
+        "Este resumo expandido analisa o estágio de docência no contexto da educação científica e ambiental na UFLA.",
+      ),
+      paragraph("Palavras-chave: Estágio de Docência; Educação Científica; Educação Ambiental; Práxis."),
+      heading("1 INTRODUÇÃO"),
+      paragraph("O pensar sobre a docência como prática formativa"),
+      heading("2 MATERIAIS E MÉTODOS"),
+      paragraph("Metodologia do estudo."),
+      heading("3 RESULTADOS E DISCUSSÃO"),
+      paragraph("Resultados encontrados."),
+      heading("3.1 Formação", 2),
+      paragraph("Discussão da formação."),
+      heading("3.2 Observação", 2),
+      paragraph("Discussão da observação."),
+      heading("3.3 Planejamento", 2),
+      paragraph("Discussão do planejamento."),
+      heading("4 CONCLUSÃO"),
+      paragraph("Conclusão do trabalho."),
+      heading("AGRADECIMENTOS"),
+      paragraph("Agradecimentos."),
+      heading("REFERÊNCIAS BIBLIOGRÁFICAS"),
+      paragraph("CUNHA, M. Referência de exemplo. Lavras: UFLA, 2024."),
+    ];
+
+    const result = detectAcademicFieldsFromStructure(structureFromBlocks(cpgBlocks));
+
+    expect(result.fields.title).toContain("PRÁXIS NO ESTÁGIO DE DOCÊNCIA");
+    expect(result.fields.author).toContain("Alexandre José de Oliveira");
+    expect(result.fields.author).toContain("Marina Battistetti Festozo");
+    expect(result.fields.program).toContain("Universidade Federal de Lavras");
+    expect(result.fields.program).toContain("Programa de Pós-Graduação em Educação Científica e Ambiental");
+    expect(result.fields.abstractText).toContain("This expanded abstract analyzes");
+    expect(result.fields.keywords).toContain("Teaching Internship");
+    expect(result.fields.resumo).toContain("Este resumo expandido analisa");
+    expect(result.fields.palavrasChave).toContain("Estágio de Docência");
+    expect(result.fields.introducao).toContain("O pensar sobre a docência");
+    expect(result.fields.referencias).toContain("CUNHA");
+    expect(result.editorText).toContain("# 1 INTRODUÇÃO");
+    expect(result.editorText).toContain("# 2 MATERIAIS E MÉTODOS");
+    expect(result.editorText).toContain("# 3 RESULTADOS E DISCUSSÃO");
+    expect(result.editorText).toContain("## 3.1");
+    expect(result.editorText).toContain("# 4 CONCLUSÃO");
+  });
 });
