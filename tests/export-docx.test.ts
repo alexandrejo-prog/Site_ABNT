@@ -522,4 +522,13 @@ describe("DOCX export", () => {
     expect(pdfText).not.toContain("?");
     expect(pdfText).toContain('"');
   });
+
+  it("App.tsx keeps CPG generation imports and PDF button hooks", () => {
+    const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    expect(source).toContain("generateCpgDocxBlob");
+    expect(source).toContain("generateCpgPdfBlob");
+    expect(source).toContain("handleGeneratePdf");
+    expect(source).toContain("Gerar PDF");
+    expect(source).toContain("isCpgSelected");
+  });
 });
