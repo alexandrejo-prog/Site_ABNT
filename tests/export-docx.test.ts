@@ -3,7 +3,6 @@ import { inflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { generateArticleDocxBlob } from "../src/export-article-docx";
 import { generateCpgDocxBlob } from "../src/export-cpg-docx";
-import { generateCpgPdfBlob, inspectCpgPdfLayout } from "../src/export-cpg-pdf";
 import { calculateTextualStartPage, generateDocxBlob, parseEditorContent } from "../src/export-docx";
 import { CPG_RULES, UFLA_RULES, emptyAcademicFields, type AcademicFields } from "../src/ufla-rules";
 
@@ -138,7 +137,7 @@ function styleXmlById(stylesXml: string, styleId: string): string {
 }
 
 function hasPositiveBold(xml: string): boolean {
-  return /<w:b\s*\/>|<w:b\b(?=[^>]*w:val="(?:1|true|on)")/.test(xml);
+  return /<w:b\s*\/?>|<w:b\b(?=[^>]*w:val="(?:1|true|on)")/.test(xml);
 }
 
 function expectNoGraduateOnlyElements(documentXml: string): void {
@@ -161,26 +160,6 @@ function expectCpgMargins(documentXml: string): void {
   expect(documentXml).toContain(`w:bottom="${CPG_RULES.margins.bottomTwip}"`);
   expect(documentXml).toContain(`w:left="${CPG_RULES.margins.leftTwip}"`);
   expect(documentXml).toContain(`w:right="${CPG_RULES.margins.rightTwip}"`);
-}
-
-function decodedPdfText(pdfBytes: Buffer): string {
-  const source = pdfBytes.toString("latin1");
-  const texts: string[] = [];
-  for (const match of source.matchAll(/\(([^()]*)\)\s*Tj/g)) {
-    texts.push(
-      match[1].replace(/\\([0-7]{3}|[\\()])/g, (_, escaped: string) => {
-        if (escaped.length === 3) return String.fromCharCode(parseInt(escaped, 8));
-        return escaped;
-      }),
-    );
-  }
-  return texts.join(" ");
-}
-
-function longCpgText(): string {
-  return Array.from({ length: 45 }, (_, index) =>
-    `# ${index + 1} Secao de teste\nEste paragrafo trata de Pos-Graduacao, Educacao, Ciencias, Docencia e Praxis com conteudo suficiente para validar quebra de pagina, margens e ausencia de sobreposicao no PDF CPG gerado.`,
-  ).join("\n");
 }
 
 describe("DOCX export", () => {
@@ -291,10 +270,6 @@ describe("DOCX export", () => {
     expect(section).toContain('w:sz w:val="26"');
     expect(hasPositiveBold(section)).toBe(true);
     expect(hasPositiveBold(body)).toBe(false);
-
-    expect(title).toBeTruthy();
-    expect(authors).toBeTruthy();
-    expect(affiliation).toBeTruthy();
   });
 
   it("generates complete CPG article without dissertation-only elements", async () => {
@@ -329,38 +304,6 @@ describe("DOCX export", () => {
       expect(documentXml).toContain("IMPACT INDICATORS");
       expect(documentXml).toContain(workType === "tese" ? "Doutor em Ciencias" : "Mestre em Ciencias");
     }
-  });
-
-  it("generates readable multi-page CPG PDF without graduate elements", async () => {
-    const pdfFields = {
-      ...fields,
-      workType: "artigo_completo_cpg" as const,
-      title: "Praxis na Pos-Graduacao",
-      author: "Maria Silva, Joao Souza",
-      program: "Programa de Pós-Graduação em Educação",
-      course: "maria@ufla.br",
-      resumo: "Educação, Ciências, Docência e Práxis orientam a pesquisa.",
-      abstractText: "Education, Science, Teaching and Praxis guide the research.",
-    };
-    const layout = inspectCpgPdfLayout({ fields: pdfFields, editorText: longCpgText() });
-    const blob = await generateCpgPdfBlob({ fields: pdfFields, editorText: longCpgText() });
-    const pdfText = decodedPdfText(Buffer.from(await blob.arrayBuffer()));
-
-    expect(layout.pageCount).toBeGreaterThan(1);
-    // O PDF CPG direto é experimental. A quebra antes da Introdução
-    // aproxima a estrutura do DOCX, mas pode aumentar a contagem
-    // do fixture sintético usado neste teste.
-    expect(layout.pageCount).toBeLessThanOrEqual(7);
-    expect(layout.duplicateYPositions).toBeLessThan(8);
-    expect(pdfText).toContain("Pós-Graduação");
-    expect(pdfText).toContain("Educação");
-    expect(pdfText).toContain("Ciências");
-    expect(pdfText).toContain("Docência");
-    expect(pdfText).toContain("Práxis");
-    expect(pdfText).not.toContain("SUMÁRIO");
-    expect(pdfText).not.toContain("FICHA CATALOGRÁFICA");
-    expect(pdfText).not.toContain("FOLHA DE APROVAÇÃO");
-    expect(pdfText).not.toContain("PageNumber");
   });
 
   it("keeps summary and pre-textual titles out of Word heading levels", async () => {
@@ -505,28 +448,6 @@ describe("DOCX export", () => {
     expect(documentXml).toContain("SILVA, M. Livro");
   });
 
-  it("generates readable multi-page CPG PDF with preserved accents and no question marks for quotes", async () => {
-    const pdfFields = {
-      ...fields,
-      workType: "resumo_expandido_cpg" as const,
-      title: "Título com Aspas “Curvas” e Acentos",
-      author: "Maria Silva",
-      program: "Programa de Pós-Graduação em Educação",
-      course: "maria@ufla.br",
-      resumo: "Resumo com aspas “não basta saber fazer” e acentos Pós-Graduação.",
-      abstractText: "Abstract with quotes and accents.",
-      keywords: "quotes; accents",
-      palavrasChave: "aspas; acentos",
-    };
-    const blob = await generateCpgPdfBlob({ fields: pdfFields, editorText: "# Introdução\nTexto com aspas “teste”." });
-    const pdfText = decodedPdfText(Buffer.from(await blob.arrayBuffer()));
-
-    expect(pdfText).toContain("Pós-Graduação");
-    expect(pdfText).toContain("Educação");
-    expect(pdfText).not.toContain("?");
-    expect(pdfText).toContain('"');
-  });
-
   it("CPG first page does not bold affiliation and keeps title/author formatting", async () => {
     const documentXml = await generatedCpgXml("# Introducao\nTexto comum.", {
       ...fields,
@@ -549,14 +470,15 @@ describe("DOCX export", () => {
     expect(affiliation).not.toMatch(/<w:b\s*\/?>|w:b w:val="1"/);
   });
 
-  it("App.tsx keeps CPG generation imports and PDF button hooks", () => {
+  it("App.tsx keeps DOCX-only CPG generation and no PDF workflow", () => {
     const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).toContain("generateCpgDocxBlob");
-    expect(source).toContain("generateCpgPdfBlob");
-    expect(source).toContain("handleGeneratePdf");
-    expect(source).toContain("Gerar PDF experimental");
+    expect(source).toContain("Gerar DOCX");
     expect(source).toContain("isCpgSelected");
-    expect(source).toContain("PDF direto experimental; para submissão final, exporte o DOCX pelo Word ou LibreOffice.");
-    expect(source).toContain("Para submissão final em PDF");
+    expect(source).toContain("Saída do sistema");
+    expect(source).not.toContain("generateCpgPdfBlob");
+    expect(source).not.toContain("handleGeneratePdf");
+    expect(source).not.toContain("Gerar PDF experimental");
+    expect(source).not.toContain("PDF direto experimental");
   });
 });
