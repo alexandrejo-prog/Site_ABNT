@@ -7,8 +7,11 @@ type ScrollSnapshot = {
 let lastSnapshot: ScrollSnapshot | null = null;
 let formattingFromToolbar = false;
 
-function isEditorToolbarButton(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && Boolean(target.closest(".editor-toolbar-sticky button"));
+function isFormattingToolbarButton(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const button = target.closest(".editor-toolbar-sticky button");
+  if (!(button instanceof HTMLElement)) return false;
+  return !button.classList.contains("text-button");
 }
 
 function isRichEditor(element: unknown): element is HTMLElement {
@@ -84,7 +87,7 @@ if (typeof document !== "undefined") {
   document.addEventListener(
     "mousedown",
     (event) => {
-      if (!isEditorToolbarButton(event.target)) return;
+      if (!isFormattingToolbarButton(event.target)) return;
       lastSnapshot = captureScroll();
       formattingFromToolbar = true;
       event.preventDefault();
@@ -95,7 +98,7 @@ if (typeof document !== "undefined") {
   document.addEventListener(
     "click",
     (event) => {
-      if (!isEditorToolbarButton(event.target)) return;
+      if (!isFormattingToolbarButton(event.target)) return;
       restoreAfterFormatting();
       setTimeout(() => {
         formattingFromToolbar = false;
