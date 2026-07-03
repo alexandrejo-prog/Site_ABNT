@@ -1,7 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { describe, it } from "vitest";
 import { generateCpgDocxBlob } from "../src/export-cpg-docx";
-import { generateCpgPdfBlob } from "../src/export-cpg-pdf";
 import { emptyAcademicFields, type AcademicFields } from "../src/ufla-rules";
 
 function fields(workType: AcademicFields["workType"]): AcademicFields {
@@ -32,24 +31,16 @@ async function writeBlob(path: string, blob: Blob): Promise<void> {
 }
 
 describe("gera arquivos CPG para QA visual", () => {
-  it("escreve DOCX e PDF reais", async () => {
-    mkdirSync("tmp/pdfs", { recursive: true });
-    await writeBlob("tmp/pdfs/resumo-cpg.docx", await generateCpgDocxBlob({ fields: fields("resumo_cpg"), editorText: body(1) }));
+  it("escreve DOCX reais", async () => {
+    mkdirSync("tmp/docx", { recursive: true });
+    await writeBlob("tmp/docx/resumo-cpg.docx", await generateCpgDocxBlob({ fields: fields("resumo_cpg"), editorText: body(1) }));
     await writeBlob(
-      "tmp/pdfs/resumo-expandido-cpg.docx",
+      "tmp/docx/resumo-expandido-cpg.docx",
       await generateCpgDocxBlob({ fields: fields("resumo_expandido_cpg"), editorText: body(18) }),
     );
     await writeBlob(
-      "tmp/pdfs/artigo-completo-cpg.docx",
+      "tmp/docx/artigo-completo-cpg.docx",
       await generateCpgDocxBlob({ fields: fields("artigo_completo_cpg"), editorText: body(50) }),
-    );
-    await writeBlob(
-      "tmp/pdfs/resumo-expandido-cpg.pdf",
-      await generateCpgPdfBlob({ fields: fields("resumo_expandido_cpg"), editorText: body(18) }),
-    );
-    await writeBlob(
-      "tmp/pdfs/artigo-completo-cpg.pdf",
-      await generateCpgPdfBlob({ fields: fields("artigo_completo_cpg"), editorText: body(50) }),
     );
   });
 });
