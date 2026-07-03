@@ -718,12 +718,13 @@ export default function App() {
               className="adherence-header"
               onClick={() => setAdherenceExpanded((prev) => !prev)}
               aria-expanded={adherenceExpanded}
+              aria-controls="adherence-content"
             >
               <span>Painel de aderência normativa</span>
               <span className={`adherence-chevron ${adherenceExpanded ? "open" : ""}`}>▼</span>
             </button>
             {adherenceExpanded && (
-              <div className="adherence-body">
+              <div className="adherence-body" id="adherence-content">
                 <p className="adherence-disclaimer">
                   Este painel reflete o que o sistema implementa atualmente. A conformidade final depende de revisão manual no DOCX gerado.
                 </p>
