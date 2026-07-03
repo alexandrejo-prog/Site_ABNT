@@ -13,6 +13,7 @@ import {
   Pilcrow,
   Quote,
   Upload,
+  XCircle,
 } from "lucide-react";
 import { AI_PROVIDERS } from "./ai-assistant";
 import { generateArticleDocxBlob } from "./export-article-docx";
@@ -190,6 +191,7 @@ export default function App() {
   const [aiKey, setAiKey] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateAnyway, setGenerateAnyway] = useState(false);
+  const [importedFileName, setImportedFileName] = useState<string | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
 
   const errors = useMemo(
@@ -257,6 +259,7 @@ export default function App() {
       setStatus("Importando arquivo...");
       const result = await importDocumentFile(file);
       mergeImportedFields(result.fields, result.confidence);
+      setImportedFileName(file.name);
       setEditorText((current) =>
         current.trim() ? current : result.editorText || result.fields.introducao || result.text,
       );
@@ -270,6 +273,16 @@ export default function App() {
     } finally {
       event.target.value = "";
     }
+  }
+
+  function handleRemoveImport() {
+    setFields(emptyAcademicFields());
+    setConfidence(emptyConfidenceMap());
+    setEditorText("");
+    setIssues([]);
+    setGenerateAnyway(false);
+    setImportedFileName(null);
+    setStatus("Importação removida. Escolha outro arquivo ou preencha manualmente.");
   }
 
   function selectedLineRange(value: string, start: number, end: number) {
@@ -384,6 +397,17 @@ export default function App() {
               onChange={handleImport}
             />
           </label>
+          {importedFileName && (
+            <button
+              className="primary-action"
+              type="button"
+              onClick={handleRemoveImport}
+              title={`Remover importação: ${importedFileName}`}
+            >
+              <XCircle size={18} aria-hidden="true" />
+              Remover importação
+            </button>
+          )}
           <button className="primary-action" type="button" onClick={() => runValidation()}>
             <FileCheck2 size={18} aria-hidden="true" />
             Validar trabalho
