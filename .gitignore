@@ -22,4 +22,5 @@ tsconfig.tsbuildinfo
 
 testar-site.txt
 
-testar-site.txt
+# Pasta temporária para arquivos DOCX gerados durante testes/build
+tmp/

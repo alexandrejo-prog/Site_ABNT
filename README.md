@@ -1,6 +1,8 @@
 # UFLA DOCX Acadêmico
 
-Site estático de tela única para importar, revisar, validar e gerar arquivos DOCX de trabalhos acadêmicos conforme as regras centrais do Manual de normalização da UFLA.
+Ferramenta de apoio à normalização acadêmica UFLA/ABNT para gerar documentos `.docx` editáveis em trabalhos de graduação e pós-graduação.
+
+**Posicionamento:** este sistema não garante conformidade normativa automática e completa. Ele estrutura o documento conforme regras centrais do Manual de Normalização da UFLA, mas a revisão final pelo usuário é sempre necessária antes da submissão.
 
 ## Como rodar
 
@@ -28,7 +30,7 @@ npm run verify
 - Editor em tela única com marcadores para título, subtítulo, negrito, itálico, citação longa, referência e limpeza.
 - Validação normativa com erros bloqueantes e alertas não bloqueantes.
 - Geração de DOCX com A4, margens 3/3/2/2 cm, Times New Roman, corpo 12, citações longas 11, capa, folha de rosto, resumo, abstract, corpo e referências.
-- Área de IA opcional, desligada por padrão e sem chamada real de API nesta versão.
+- Fluxo recomendado: gerar DOCX, abrir no Word ou LibreOffice, atualizar sumário/campos quando necessário e exportar para PDF para submissão final.
 
 ## Observações
 

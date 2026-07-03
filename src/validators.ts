@@ -6,13 +6,97 @@ import {
 } from "./ufla-rules";
 import { validateReferencesText } from "./references-validator";
 
-export type ValidationSeverity = "error" | "warning";
+export type ValidationSeverity = "error" | "warning" | "info";
 
 export interface ValidationIssue {
   severity: ValidationSeverity;
   code: string;
   message: string;
+  what?: string;
+  why?: string;
+  action?: string;
 }
+
+export interface AdherenceCategory {
+  key: string;
+  label: string;
+  status: "implemented" | "partial" | "pending" | "manual";
+  statusLabel: string;
+  note?: string;
+}
+
+export const ADHERENCE_CATEGORIES: AdherenceCategory[] = [
+  {
+    key: "metadata",
+    label: "Metadados",
+    status: "implemented",
+    statusLabel: "Implementado",
+    note: "Tipo de trabalho, autor, título, orientador e campos básicos são editáveis.",
+  },
+  {
+    key: "pretextual",
+    label: "Elementos pré-textuais",
+    status: "partial",
+    statusLabel: "Parcial",
+    note: "Capa, folha de rosto, resumo e abstract são gerados. Ficha catalográfica e folha de aprovação dependem de preenchimento manual.",
+  },
+  {
+    key: "resumo",
+    label: "Resumo",
+    status: "partial",
+    statusLabel: "Parcial",
+    note: "Estrutura e campo são gerados. Validação de extensão (150-500 palavras) não é automática.",
+  },
+  {
+    key: "abstract",
+    label: "Abstract",
+    status: "partial",
+    statusLabel: "Parcial",
+    note: "Estrutura e campo são gerados. Validação de extensão não é automática.",
+  },
+  {
+    key: "keywords",
+    label: "Palavras-chave",
+    status: "implemented",
+    statusLabel: "Implementado",
+    note: "Campo editável com formatação ponto e vírgula.",
+  },
+  {
+    key: "body",
+    label: "Corpo do texto",
+    status: "implemented",
+    statusLabel: "Implementado",
+    note: "Editor com títulos, citações longas, negrito e itálico. Espaçamento 1,5 aplicado no DOCX.",
+  },
+  {
+    key: "illustrations",
+    label: "Ilustrações e tabelas",
+    status: "partial",
+    statusLabel: "Parcial",
+    note: "Imagens importadas são preservadas como marcadores. Legendas e fontes devem ser conferidas manualmente.",
+  },
+  {
+    key: "references",
+    label: "Referências",
+    status: "partial",
+    statusLabel: "Parcial",
+    note: "Normalização de destaque (negrito) implementada com detecção de tipo. Itens ambíguos exigem revisão manual.",
+  },
+  {
+    key: "posttextual",
+    label: "Elementos pós-textuais",
+    status: "partial",
+    statusLabel: "Parcial",
+    note: "Referências, apêndices e anexos são suportados. Glossário e índice não foram implementados.",
+  },
+  {
+    key: "export",
+    label: "Exportação DOCX",
+    status: "implemented",
+    statusLabel: "Implementado",
+    note: "Gera DOCX editável com margens, fonte, espaçamento e sumário atualizável. PDF deve ser gerado externamente.",
+  },
+];
 
 function hasValue(value: string | WorkTypeValue): boolean {
   return value.trim().length > 0;
@@ -183,6 +267,9 @@ export function validateWork(
       severity: "error",
       code: "work-type-required",
       message: "Selecione o tipo de trabalho.",
+      what: "O tipo de trabalho não foi informado.",
+      why: "O tipo define quais elementos pré-textuais e regras de formatação serão aplicados no DOCX.",
+      action: "Escolha artigo, monografia, dissertação, tese ou outro na lista suspensa.",
     });
   }
 
@@ -191,6 +278,9 @@ export function validateWork(
       severity: "error",
       code: "title-required",
       message: "Informe o título do trabalho.",
+      what: "O título do trabalho está vazio.",
+      why: "O título é obrigatório na capa, folha de rosto e cabeçalhos do documento.",
+      action: "Preencha o campo Título com a designação oficial do trabalho.",
     });
   }
 
@@ -199,6 +289,9 @@ export function validateWork(
       severity: "error",
       code: "author-required",
       message: "Informe o autor do trabalho.",
+      what: "O autor do trabalho não foi informado.",
+      why: "O nome do autor aparece na capa, folha de rosto e elementos pré-textuais.",
+      action: "Preencha o campo Autor com o nome completo do autor ou autores separados por vírgula.",
     });
   } else if (looksInstitutionalAuthor(fields.author)) {
     issues.push({
@@ -206,6 +299,9 @@ export function validateWork(
       code: "author-institutional",
       message:
         "O campo autor parece conter uma instituição, programa, unidade ou localidade, não um nome de pessoa. Revise a identificação automática.",
+      what: "O campo Autor contém texto que parece institucional.",
+      why: "A capa e a folha de rosto esperam o nome de pessoa física, não o nome da instituição.",
+      action: "Substitua por nome(s) de pessoa(s). Se houver múltiplos autores, separe por vírgula.",
     });
   }
 
@@ -214,6 +310,9 @@ export function validateWork(
       severity: "warning",
       code: "advisor-required",
       message: "Informe o orientador para monografia, dissertação ou tese.",
+      what: "O orientador não foi informado.",
+      why: "Monografias, dissertações e teses exigem nome do orientador na folha de rosto.",
+      action: "Preencha o campo Orientador antes de gerar o DOCX.",
     });
   }
 
@@ -222,6 +321,9 @@ export function validateWork(
       severity: "warning",
       code: "resumo-required",
       message: "Inclua o resumo antes da versão final.",
+      what: "O resumo está vazio.",
+      why: "O resumo é elemento pré-textual obrigatório na maioria dos tipos de trabalho.",
+      action: "Escreva o resumo no campo correspondente. Verifique extensão e palavras-chave.",
     });
   }
 
@@ -230,6 +332,9 @@ export function validateWork(
       severity: "warning",
       code: "references-required",
       message: "Inclua as referências do trabalho.",
+      what: "O bloco de referências está vazio.",
+      why: "Referências são obrigatórias para a seção pós-textual.",
+      action: "Adicione as referências no campo Referências, uma por linha.",
     });
   } else if (hasValue(fields.referencias)) {
     for (const referenceIssue of validateReferencesText(fields.referencias)) {
@@ -237,6 +342,19 @@ export function validateWork(
         severity: "warning",
         code: referenceIssue.code,
         message: referenceIssueMessage(referenceIssue.code, referenceIssue.message),
+        what: referenceIssue.code.includes("year-missing")
+          ? "Há referência sem ano detectável."
+          : referenceIssue.code.includes("access-missing")
+            ? "Há referência online sem informação de acesso."
+            : referenceIssue.code.includes("highlight-missing")
+              ? "Há referência sem destaque de título detectado."
+              : referenceIssue.code.includes("too-short")
+                ? "Há referência muito curta para validação segura."
+                : referenceIssue.code.includes("normative-preserved")
+                  ? "Há referência normativa preservada sem destaque automático."
+                  : "Referência precisa de revisão.",
+        why: "A conformidade ABNT/UFLA depende de autor, ano, acesso e destaque corretos.",
+        action: "Revise o item no campo Referências e use Negrito/Itálico para ajustar o destaque.",
       });
     }
   }
@@ -246,6 +364,9 @@ export function validateWork(
       severity: "warning",
       code: "intro-required",
       message: "A introdução não foi detectada ou está vazia.",
+      what: "A seção de introdução não foi identificada.",
+      why: "A introdução é a primeira seção textual obrigatória na estrutura UFLA.",
+      action: "Insira a introdução no editor ou no campo Introdução.",
     });
   }
 
@@ -254,6 +375,9 @@ export function validateWork(
       severity: "warning",
       code: "abstract-recommended",
       message: "Inclua o abstract quando exigido pelo trabalho.",
+      what: "O abstract está vazio.",
+      why: "O abstract é obrigatório para a maioria dos trabalhos acadêmicos da UFLA.",
+      action: "Preencha o campo Abstract com a versão do resumo em inglês ou idioma estrangeiro.",
     });
   }
 
@@ -264,6 +388,9 @@ export function validateWork(
       severity: "warning",
       code: "image-caption-warning",
       message: "Imagem detectada sem legenda provável. Confira posição, qualidade e legenda antes da versão final.",
+      what: "Há possível imagem sem legenda no texto.",
+      why: "Ilustrações precisam de legenda e fonte conforme ABNT/UFLA.",
+      action: "Adicione legenda no formato 'Figura X - Título' e verifique a fonte da imagem.",
     });
   }
 
@@ -272,6 +399,9 @@ export function validateWork(
       severity: "warning",
       code: "long-quote-warning",
       message: "Há possível citação longa não marcada como citação longa. Revise antes da versão final.",
+      what: "Há parágrafo longo com data que pode ser citação direta.",
+      why: "Citações longas exigem recuo de 4 cm, fonte 11 e espaço simples.",
+      action: "Selecione o trecho e clique em Citação longa na barra de ferramentas.",
     });
   }
 
@@ -280,6 +410,9 @@ export function validateWork(
       severity: "warning",
       code: "imported-image-warning",
       message: `${fields.imageWarnings} Confira posição, qualidade e legenda antes da versão final.`,
+      what: "Imagens foram importadas do arquivo original.",
+      why: "Imagens importadas podem perder qualidade ou legenda na conversão.",
+      action: "Verifique cada imagem no DOCX gerado e ajuste legendas se necessário.",
     });
   }
 
@@ -288,6 +421,9 @@ export function validateWork(
       severity: "warning",
       code: "annex-image-partial",
       message: "Há imagem detectada em anexos; confira posição, qualidade e legenda antes da versão final.",
+      what: "Imagens foram detectadas na seção de anexos.",
+      why: "Anexos com imagens exigem verificação de legenda, fonte e qualidade.",
+      action: "Abra o DOCX e confira cada imagem nos anexos.",
     });
   }
 
@@ -296,6 +432,9 @@ export function validateWork(
       severity: "warning",
       code: "appendix-image-partial",
       message: "Há imagem detectada em apêndices; confira posição, qualidade e legenda antes da versão final.",
+      what: "Imagens foram detectadas na seção de apêndices.",
+      why: "Apêndices com imagens exigem verificação de legenda, fonte e qualidade.",
+      action: "Abra o DOCX e confira cada imagem nos apêndices.",
     });
   }
 

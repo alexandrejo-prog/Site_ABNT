@@ -297,6 +297,11 @@ button:focus-visible,
   border-color: #1f7b69;
 }
 
+.toolbar-text {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
 .icon-button:hover,
 .text-button:hover {
   border-color: #1f7b69;
@@ -360,33 +365,118 @@ button:focus-visible,
   margin: 0;
 }
 
-.ai-panel {
-  display: grid;
-  grid-template-columns: max-content minmax(190px, 260px) minmax(180px, 1fr) max-content;
-  align-items: center;
-  gap: 10px;
-  padding: 12px;
+.adherence-panel {
   background: #ffffff;
   border: 1px solid #d7dfd8;
   border-radius: 8px;
+  margin-bottom: 12px;
+  overflow: hidden;
 }
 
-.ai-title,
-.key-field {
-  display: inline-flex;
+.adherence-header {
+  width: 100%;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border: none;
+  background: transparent;
+  color: #1f2933;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.adherence-header:hover {
+  color: #105a4b;
+}
+
+.adherence-chevron {
+  font-size: 0.75rem;
+  transition: transform 0.2s ease;
+}
+
+.adherence-chevron.open {
+  transform: rotate(180deg);
+}
+
+.adherence-body {
+  padding: 0 12px 12px;
+}
+
+.adherence-disclaimer {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  color: #52616c;
+}
+
+.adherence-grid {
+  display: grid;
   gap: 8px;
 }
 
-.key-field input {
-  min-width: 0;
+.adherence-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  background: #f5f7f4;
+  border-radius: 6px;
 }
 
-.ai-state {
-  justify-self: end;
-  color: #52616c;
-  font-size: 0.84rem;
+.adherence-label {
+  font-size: 0.85rem;
+  font-weight: 750;
+  color: #1f2933;
+}
+
+.adherence-status {
+  font-size: 0.75rem;
   font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 999px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.adherence-implemented {
+  background: #cfe8d7;
+  color: #17462b;
+}
+
+.adherence-partial {
+  background: #f7e3a7;
+  color: #5d4300;
+}
+
+.adherence-pending {
+  background: #f8d1bc;
+  color: #703318;
+}
+
+.adherence-manual {
+  background: #e7ece9;
+  color: #52616c;
+}
+
+.adherence-note {
+  grid-column: 1 / -1;
+  font-size: 0.78rem;
+  color: #52616c;
+  line-height: 1.35;
+}
+
+.post-generation-note {
+  margin-bottom: 12px;
+  padding: 10px;
+  background: #e7f2ee;
+  border-left: 4px solid #1f7b69;
+  border-radius: 6px;
+  font-size: 0.84rem;
+  color: #1e3932;
+  line-height: 1.4;
 }
 
 .status-line {
@@ -429,6 +519,20 @@ button:focus-visible,
 .issue {
   padding: 10px;
   border-radius: 6px;
+}
+
+.issue-message {
+  margin: 0 0 6px;
+  font-weight: 750;
+}
+
+.issue-detail {
+  margin: 0 0 4px;
+  font-size: 0.82rem;
+}
+
+.issue-detail:last-child {
+  margin-bottom: 0;
 }
 
 .issue.error {
@@ -495,13 +599,5 @@ button:focus-visible,
 
   .editor {
     min-height: 420px;
-  }
-
-  .ai-panel {
-    grid-template-columns: 1fr;
-  }
-
-  .ai-state {
-    justify-self: start;
   }
 }

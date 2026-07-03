@@ -2,20 +2,17 @@ import { ChangeEvent, ReactNode, useEffect, useMemo, useRef, useState } from "re
 import { saveAs } from "file-saver";
 import {
   Bold,
-  BrainCircuit,
   Eraser,
   FileCheck2,
   FileDown,
   Heading1,
   Heading2,
   Italic,
-  KeyRound,
   Pilcrow,
   Quote,
   Upload,
   XCircle,
 } from "lucide-react";
-import { AI_PROVIDERS } from "./ai-assistant";
 import { generateArticleDocxBlob } from "./export-article-docx";
 import { generateCpgDocxBlob } from "./export-cpg-docx";
 import { generateDocxBlob } from "./export-docx";
@@ -36,6 +33,8 @@ import {
   ValidationIssue,
   hasBlockingErrors,
   validateWork,
+  ADHERENCE_CATEGORIES,
+  type AdherenceCategory,
 } from "./validators";
 
 const FIELD_LABELS: Record<AcademicFieldKey, string> = {
@@ -283,13 +282,14 @@ export default function App() {
   const [editorText, setEditorText] = useState("");
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
   const [status, setStatus] = useState("Pronto para editar.");
-  const [aiProvider, setAiProvider] = useState("none");
-  const [aiKey, setAiKey] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateAnyway, setGenerateAnyway] = useState(false);
   const [importedFileName, setImportedFileName] = useState<string | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>("body");
+  const [adherenceExpanded, setAdherenceExpanded] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
+  const editorContentVersionRef = useRef(0);
+  const lastAppliedEditorTextRef = useRef("");
 
   const errors = useMemo(
     () => issues.filter((issue) => issue.severity === "error"),
@@ -304,8 +304,18 @@ export default function App() {
 
   useEffect(() => {
     if (!editorRef.current) return;
-    if (document.activeElement === editorRef.current) return;
-    editorRef.current.innerHTML = editorMarkupToHtml(activeEditorText);
+    const newContent = editorMarkupToHtml(activeEditorText);
+    const currentVersion = editorContentVersionRef.current;
+    
+    // Atualiza o innerHTML se o conteúdo mudou e não estamos editando ativamente
+    const isEditing = document.activeElement === editorRef.current;
+    const contentChanged = lastAppliedEditorTextRef.current !== activeEditorText;
+    
+    if (contentChanged && (!isEditing || editorMode !== "body")) {
+      editorRef.current.innerHTML = newContent;
+      lastAppliedEditorTextRef.current = activeEditorText;
+      editorContentVersionRef.current += 1;
+    }
   }, [activeEditorText, editorMode]);
 
   function updateField(key: AcademicFieldKey, value: string) {
@@ -322,11 +332,14 @@ export default function App() {
       return;
     }
     setEditorText(value);
+    lastAppliedEditorTextRef.current = value;
   }
 
   function handleRichEditorInput() {
     if (!editorRef.current) return;
-    updateActiveEditorText(editorHtmlToMarkup(editorRef.current));
+    const markup = editorHtmlToMarkup(editorRef.current);
+    updateActiveEditorText(markup);
+    lastAppliedEditorTextRef.current = markup;
   }
 
   function updateWorkType(workType: AcademicFields["workType"]) {
@@ -378,9 +391,11 @@ export default function App() {
       mergeImportedFields(result.fields, result.confidence);
       setImportedFileName(file.name);
       setEditorMode("body");
-      setEditorText((current) =>
-        current.trim() ? current : result.editorText || result.fields.introducao || result.text,
-      );
+      const newEditorText = result.editorText || result.fields.introducao || result.text;
+      setEditorText(newEditorText);
+      lastAppliedEditorTextRef.current = newEditorText;
+      editorContentVersionRef.current += 1;
+      
       setStatus(
         result.messages.length
           ? `Arquivo importado com ${result.messages.length} aviso(s).`
@@ -401,6 +416,8 @@ export default function App() {
     setGenerateAnyway(false);
     setImportedFileName(null);
     setEditorMode("body");
+    lastAppliedEditorTextRef.current = "";
+    editorContentVersionRef.current += 1;
     setStatus("Importação removida. Escolha outro arquivo ou preencha manualmente.");
   }
 
@@ -411,31 +428,32 @@ export default function App() {
     if (prefix === "[REF] ") {
       document.execCommand("insertText", false, "[REF] ");
     }
-    requestAnimationFrame(handleRichEditorInput);
+    setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0);
   }
 
   function wrapSelection(command: "bold" | "italic") {
     editorRef.current?.focus();
     document.execCommand(command, false);
-    requestAnimationFrame(handleRichEditorInput);
+    setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0);
   }
 
   function clearFormatting() {
     editorRef.current?.focus();
     document.execCommand("removeFormat", false);
     document.execCommand("formatBlock", false, "p");
-    requestAnimationFrame(handleRichEditorInput);
+    setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0);
   }
 
   function handleEditorPaste(event: React.ClipboardEvent<HTMLDivElement>) {
     event.preventDefault();
     document.execCommand("insertText", false, event.clipboardData.getData("text/plain"));
-    requestAnimationFrame(handleRichEditorInput);
+    setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0);
   }
 
   function runValidation(candidateFields = fields) {
     const normalizedFields = ensureGraduateCompleteStructure(candidateFields);
-    const nextIssues = validateWork(normalizedFields, editorText);
+    const textToValidate = editorMode === "references" ? fields.referencias : editorText;
+    const nextIssues = validateWork(normalizedFields, textToValidate);
     setFields(normalizedFields);
     setIssues(nextIssues);
     setStatus(
@@ -474,8 +492,8 @@ export default function App() {
     <div className="app-shell">
       <header className="app-header">
         <div>
-          <p className="eyebrow">Normalização UFLA</p>
-          <h1>UFLA DOCX Acadêmico</h1>
+          <p className="eyebrow">Ferramenta de apoio UFLA/ABNT</p>
+          <h1>Normalização Acadêmica UFLA — DOCX editável</h1>
         </div>
         <div className="header-actions">
           <label className="upload-button">
@@ -568,7 +586,7 @@ export default function App() {
                 O campo Autor pode receber multiplos autores separados por virgula. Use Programa como endereco ou afiliacao institucional e Curso para e-mails ou informacoes adicionais nesta rodada.
               </p>
               <p>
-                <strong>Saída do sistema:</strong> gere o DOCX e, se precisar de PDF, exporte pelo Word ou LibreOffice fora do sistema.
+                <strong>Saída do sistema:</strong> gere o DOCX e, se precisar de PDF, exporte por um editor de texto externo.
               </p>
             </div>
           )}
@@ -631,6 +649,18 @@ export default function App() {
             </div>
 
             <div className="toolbar" aria-label="Ferramentas do editor">
+              <ToolButton title="Desfazer (Ctrl+Z)" onClick={() => {
+                editorRef.current?.focus();
+                document.execCommand("undo", false);
+              }}>
+                <span className="toolbar-text">Desfazer</span>
+              </ToolButton>
+              <ToolButton title="Refazer (Ctrl+Y)" onClick={() => {
+                editorRef.current?.focus();
+                document.execCommand("redo", false);
+              }}>
+                <span className="toolbar-text">Refazer</span>
+              </ToolButton>
               <ToolButton title="Parágrafo normal" onClick={() => applyBlockStyle("")}>
                 <Pilcrow size={18} aria-hidden="true" />
               </ToolButton>
@@ -672,50 +702,51 @@ export default function App() {
             role="textbox"
             aria-multiline="true"
             aria-label={editorMode === "references" ? "Editor de referências" : "Editor do texto principal"}
-            dangerouslySetInnerHTML={{ __html: editorMarkupToHtml(activeEditorText) }}
             onInput={handleRichEditorInput}
             onPaste={handleEditorPaste}
             spellCheck
           />
 
-          <div className="ai-panel">
-            <div className="ai-title">
-              <BrainCircuit size={18} aria-hidden="true" />
-              <span>Assistência de IA</span>
-            </div>
-            <select
-              value={aiProvider}
-              onChange={(event) => setAiProvider(event.target.value)}
+          <div className="adherence-panel">
+            <button
+              type="button"
+              className="adherence-header"
+              onClick={() => setAdherenceExpanded((prev) => !prev)}
+              aria-expanded={adherenceExpanded}
             >
-              {AI_PROVIDERS.map((provider) => (
-                <option key={provider.value} value={provider.value}>
-                  {provider.label}
-                </option>
-              ))}
-            </select>
-            <label className="key-field">
-              <KeyRound size={16} aria-hidden="true" />
-              <input
-                type="password"
-                value={aiKey}
-                onChange={(event) => setAiKey(event.target.value)}
-                placeholder="Chave própria"
-                disabled={aiProvider === "none"}
-              />
-            </label>
-            <span className="ai-state">
-              {aiProvider === "none"
-                ? "desligada"
-                : aiKey
-                  ? "estrutura pronta"
-                  : "aguardando chave"}
-            </span>
+              <span>Painel de aderência normativa</span>
+              <span className={`adherence-chevron ${adherenceExpanded ? "open" : ""}`}>▼</span>
+            </button>
+            {adherenceExpanded && (
+              <div className="adherence-body">
+                <p className="adherence-disclaimer">
+                  Este painel reflete o que o sistema implementa atualmente. A conformidade final depende de revisão manual no DOCX gerado.
+                </p>
+                <div className="adherence-grid">
+                  {ADHERENCE_CATEGORIES.map((category) => (
+                    <div className="adherence-item" key={category.key}>
+                      <span className="adherence-label">{category.label}</span>
+                      <span className={`adherence-status adherence-${category.status}`}>
+                        {category.statusLabel}
+                      </span>
+                      {category.note && (
+                        <span className="adherence-note">{category.note}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
         <aside className="validation-pane" aria-label="Validação">
           <div className="status-line" aria-live="polite">
             {status}
+          </div>
+
+          <div className="post-generation-note">
+            <strong>Após gerar o DOCX:</strong> abra no Word ou em outro editor de texto, atualize o sumário (F9) e campos quando necessário, confira paginação e exporte para PDF para submissão final.
           </div>
 
           <label className="force-generate">
@@ -731,9 +762,12 @@ export default function App() {
             <h2>Erros</h2>
             {errors.length ? (
               errors.map((issue) => (
-                <p className="issue error" key={issue.code}>
-                  {issue.message}
-                </p>
+                <div className={`issue error`} key={issue.code}>
+                  <p className="issue-message">{issue.message}</p>
+                  {issue.what && <p className="issue-detail"><strong>O que é:</strong> {issue.what}</p>}
+                  {issue.why && <p className="issue-detail"><strong>Por que importa:</strong> {issue.why}</p>}
+                  {issue.action && <p className="issue-detail"><strong>Ação:</strong> {issue.action}</p>}
+                </div>
               ))
             ) : (
               <p className="empty-state">Nenhum erro essencial.</p>
@@ -744,9 +778,12 @@ export default function App() {
             <h2>Alertas</h2>
             {warnings.length ? (
               warnings.map((issue) => (
-                <p className="issue warning" key={issue.code}>
-                  {issue.message}
-                </p>
+                <div className={`issue warning`} key={issue.code}>
+                  <p className="issue-message">{issue.message}</p>
+                  {issue.what && <p className="issue-detail"><strong>O que é:</strong> {issue.what}</p>}
+                  {issue.why && <p className="issue-detail"><strong>Por que importa:</strong> {issue.why}</p>}
+                  {issue.action && <p className="issue-detail"><strong>Ação:</strong> {issue.action}</p>}
+                </div>
               ))
             ) : (
               <p className="empty-state">Nenhum alerta registrado.</p>
