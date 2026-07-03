@@ -48,6 +48,27 @@ describe("Acessibilidade básica da interface", () => {
     expect(stylesSource).toContain("outline");
   });
 
+  it("erros bloqueantes possuem role=\"alert\"", () => {
+    const count = (appSource.match(/role="alert"/g) || []).length;
+    expect(count).toBeGreaterThanOrEqual(1);
+  });
+
+  it("alertas não bloqueantes possuem role=\"status\"", () => {
+    const count = (appSource.match(/role="status"/g) || []).length;
+    expect(count).toBeGreaterThanOrEqual(3);
+  });
+
+  it("estados vazios de validação possuem role=\"status\"", () => {
+    const emptyStatus = appSource.match(/className="empty-state"[^>]*role="status"/g);
+    expect(emptyStatus).not.toBeNull();
+    expect(emptyStatus!.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("listas de validação possuem aria-label", () => {
+    expect(appSource).toContain('aria-label="Erros de validação"');
+    expect(appSource).toContain('aria-label="Alertas de validação"');
+  });
+
   it("não há referências funcionais a IA ou APIs externas", () => {
     const aiPatterns = [
       /\bAI\b/i,

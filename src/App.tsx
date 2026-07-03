@@ -764,11 +764,11 @@ export default function App() {
             <span>Gerar mesmo assim</span>
           </label>
 
-          <div className="issue-list">
+          <div className="issue-list" aria-label="Erros de validação">
             <h2>Erros</h2>
             {errors.length ? (
               errors.map((issue) => (
-                <div className={`issue error`} key={issue.code}>
+                <div className={`issue error`} key={issue.code} role="alert">
                   <p className="issue-message">{issue.message}</p>
                   {issue.what && <p className="issue-detail"><strong>O que é:</strong> {issue.what}</p>}
                   {issue.why && <p className="issue-detail"><strong>Por que importa:</strong> {issue.why}</p>}
@@ -776,15 +776,15 @@ export default function App() {
                 </div>
               ))
             ) : (
-              <p className="empty-state">Nenhum erro essencial.</p>
+              <p className="empty-state" role="status">Nenhum erro essencial.</p>
             )}
           </div>
 
-          <div className="issue-list">
+          <div className="issue-list" aria-label="Alertas de validação">
             <h2>Alertas</h2>
             {warnings.length ? (
               warnings.map((issue) => (
-                <div className={`issue warning`} key={issue.code}>
+                <div className={`issue warning`} key={issue.code} role="status">
                   <p className="issue-message">{issue.message}</p>
                   {issue.what && <p className="issue-detail"><strong>O que é:</strong> {issue.what}</p>}
                   {issue.why && <p className="issue-detail"><strong>Por que importa:</strong> {issue.why}</p>}
@@ -792,7 +792,7 @@ export default function App() {
                 </div>
               ))
             ) : (
-              <p className="empty-state">Nenhum alerta registrado.</p>
+              <p className="empty-state" role="status">Nenhum alerta registrado.</p>
             )}
           </div>
         </aside>
