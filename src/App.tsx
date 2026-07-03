@@ -61,6 +61,18 @@ const FIELD_LABELS: Record<AcademicFieldKey, string> = {
   indicadoresImpacto: "Indicadores de impacto",
   impactIndicators: "Impact indicators",
   imageWarnings: "Avisos de imagens",
+  tema: "Tema",
+  delimitacaoTema: "Delimitação do Tema",
+  problemaPesquisa: "Problema de Pesquisa",
+  hipotese: "Hipótese",
+  objetivoGeral: "Objetivo Geral",
+  objetivosEspecificos: "Objetivos Específicos",
+  justificativa: "Justificativa",
+  referencialTeorico: "Referencial Teórico",
+  metodologia: "Metodologia",
+  cronograma: "Cronograma",
+  recursosOrcamento: "Recursos/Orçamento",
+  resultadosEsperados: "Resultados Esperados",
 };
 
 const LONG_FIELDS = new Set<AcademicFieldKey>([
@@ -78,6 +90,18 @@ const LONG_FIELDS = new Set<AcademicFieldKey>([
   "indicadoresImpacto",
   "impactIndicators",
   "imageWarnings",
+  "tema",
+  "delimitacaoTema",
+  "problemaPesquisa",
+  "hipotese",
+  "objetivoGeral",
+  "objetivosEspecificos",
+  "justificativa",
+  "referencialTeorico",
+  "metodologia",
+  "cronograma",
+  "recursosOrcamento",
+  "resultadosEsperados",
 ]);
 
 type EditorMode = "body" | "references";

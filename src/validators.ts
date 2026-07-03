@@ -276,12 +276,12 @@ function addResearchProjectIssues(fields: AcademicFields, editorText: string, is
     action: "Revise todos os campos e o DOCX gerado antes da versão final.",
   });
 
-  const hasProblemStatement = /#+\s*PROBLEMA\s+DE\s+PESQUISA/i.test(editorText) || /#+\s*PROBLEMA/i.test(editorText);
-  const hasObjective = /#+\s*OBJETIVO\s+GERAL/i.test(editorText);
-  const hasJustification = /#+\s*JUSTIFICATIVA/i.test(editorText);
-  const hasMethodology = /#+\s*METODOLOGIA/i.test(editorText) || /#+\s*PROCEDIMENTOS/i.test(editorText);
-  const hasSchedule = /#+\s*CRONOGRAMA/i.test(editorText);
-  const hasReferences = /#+\s*(REFERÊNCIAS|REFERENCIAS|REFERÊNCIAS)/i.test(editorText) || /#+\s*BIBLIOGRÁFICAS/i.test(editorText);
+  const hasProblemStatement = hasValue(fields.problemaPesquisa) || /#+\s*PROBLEMA\s+DE\s+PESQUISA/i.test(editorText) || /#+\s*PROBLEMA/i.test(editorText);
+  const hasObjective = hasValue(fields.objetivoGeral) || /#+\s*OBJETIVO\s+GERAL/i.test(editorText);
+  const hasJustification = hasValue(fields.justificativa) || /#+\s*JUSTIFICATIVA/i.test(editorText);
+  const hasMethodology = hasValue(fields.metodologia) || /#+\s*METODOLOGIA/i.test(editorText) || /#+\s*PROCEDIMENTOS/i.test(editorText);
+  const hasSchedule = hasValue(fields.cronograma) || /#+\s*CRONOGRAMA/i.test(editorText);
+  const hasReferences = hasValue(fields.referencias) || /#+\s*(REFERÊNCIAS|REFERENCIAS|REFERÊNCIAS)/i.test(editorText) || /#+\s*BIBLIOGRÁFICAS/i.test(editorText);
 
   if (!hasProblemStatement) {
     issues.push({
@@ -290,7 +290,7 @@ function addResearchProjectIssues(fields: AcademicFields, editorText: string, is
       message: "Informe o problema de pesquisa.",
       what: "O projeto de pesquisa não apresenta o problema a ser investigado.",
       why: "O problema delimita a investigação e orienta objetivos, metodologia e justificativa.",
-      action: "Adicione uma seção chamada 'Problema de pesquisa' no editor.",
+      action: "Adicione conteúdo no campo 'Problema de pesquisa' ou uma seção chamada 'Problema de pesquisa' no editor.",
     });
   }
 
@@ -301,7 +301,7 @@ function addResearchProjectIssues(fields: AcademicFields, editorText: string, is
       message: "Informe o objetivo geral.",
       what: "O projeto de pesquisa não apresenta o objetivo geral.",
       why: "O objetivo geral direciona a pesquisa e fundamenta a metodologia.",
-      action: "Adicione uma seção chamada 'Objetivo geral' no editor.",
+      action: "Adicione conteúdo no campo 'Objetivo geral' ou uma seção chamada 'Objetivo geral' no editor.",
     });
   }
 
@@ -312,7 +312,7 @@ function addResearchProjectIssues(fields: AcademicFields, editorText: string, is
       message: "Informe a justificativa.",
       what: "O projeto de pesquisa não apresenta a justificativa.",
       why: "A justificativa fundamenta a relevância e pertinência da pesquisa.",
-      action: "Adicione uma seção chamada 'Justificativa' no editor.",
+      action: "Adicione conteúdo no campo 'Justificativa' ou uma seção chamada 'Justificativa' no editor.",
     });
   }
 
@@ -323,7 +323,7 @@ function addResearchProjectIssues(fields: AcademicFields, editorText: string, is
       message: "Informe a metodologia.",
       what: "O projeto de pesquisa não apresenta a metodologia.",
       why: "A metodologia descreve como a pesquisa será conduzida.",
-      action: "Adicione uma seção chamada 'Metodologia' no editor.",
+      action: "Adicione conteúdo no campo 'Metodologia' ou uma seção chamada 'Metodologia' no editor.",
     });
   }
 
@@ -334,7 +334,7 @@ function addResearchProjectIssues(fields: AcademicFields, editorText: string, is
       message: "Informe o cronograma.",
       what: "O projeto de pesquisa não apresenta o cronograma.",
       why: "O cronograma orienta a execução e marcos do projeto.",
-      action: "Adicione uma seção chamada 'Cronograma' no editor.",
+      action: "Adicione conteúdo no campo 'Cronograma' ou uma seção chamada 'Cronograma' no editor.",
     });
   }
 

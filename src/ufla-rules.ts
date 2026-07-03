@@ -60,6 +60,18 @@ export const ACADEMIC_FIELD_KEYS = [
   "indicadoresImpacto",
   "impactIndicators",
   "imageWarnings",
+  "tema",
+  "delimitacaoTema",
+  "problemaPesquisa",
+  "hipotese",
+  "objetivoGeral",
+  "objetivosEspecificos",
+  "justificativa",
+  "referencialTeorico",
+  "metodologia",
+  "cronograma",
+  "recursosOrcamento",
+  "resultadosEsperados",
 ] as const;
 
 export type AcademicFieldKey = (typeof ACADEMIC_FIELD_KEYS)[number];
@@ -91,6 +103,18 @@ export interface AcademicFields {
   indicadoresImpacto: string;
   impactIndicators: string;
   imageWarnings: string;
+  tema: string;
+  delimitacaoTema: string;
+  problemaPesquisa: string;
+  hipotese: string;
+  objetivoGeral: string;
+  objetivosEspecificos: string;
+  justificativa: string;
+  referencialTeorico: string;
+  metodologia: string;
+  cronograma: string;
+  recursosOrcamento: string;
+  resultadosEsperados: string;
 }
 
 const TWIPS_PER_CM = 1440 / 2.54;
@@ -304,6 +328,18 @@ export function emptyAcademicFields(): AcademicFields {
     indicadoresImpacto: "",
     impactIndicators: "",
     imageWarnings: "",
+    tema: "",
+    delimitacaoTema: "",
+    problemaPesquisa: "",
+    hipotese: "",
+    objetivoGeral: "",
+    objetivosEspecificos: "",
+    justificativa: "",
+    referencialTeorico: "",
+    metodologia: "",
+    cronograma: "",
+    recursosOrcamento: "",
+    resultadosEsperados: "",
   };
 }
 

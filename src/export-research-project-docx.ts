@@ -93,12 +93,69 @@ function splitParagraphs(value: string): string[] {
     .filter(Boolean);
 }
 
+function hasValue(value: string): boolean {
+  return value.trim().length > 0;
+}
+
 function buildDocument(input: DocxGenerationInput): Document {
   const blocks = parseEditorContent(input.editorText);
   const references = [
     ...splitParagraphs(input.fields.referencias),
     ...blocks.filter((b) => b.type === "reference").map((b) => b.text),
   ];
+
+  const specificSections: EditorBlock[] = [];
+
+  if (hasValue(input.fields.tema)) {
+    specificSections.push({ type: "heading1", text: "Tema" });
+    specificSections.push({ type: "paragraph", text: input.fields.tema });
+  }
+  if (hasValue(input.fields.delimitacaoTema)) {
+    specificSections.push({ type: "heading1", text: "Delimitação do Tema" });
+    specificSections.push({ type: "paragraph", text: input.fields.delimitacaoTema });
+  }
+  if (hasValue(input.fields.problemaPesquisa)) {
+    specificSections.push({ type: "heading1", text: "Problema de Pesquisa" });
+    specificSections.push({ type: "paragraph", text: input.fields.problemaPesquisa });
+  }
+  if (hasValue(input.fields.hipotese)) {
+    specificSections.push({ type: "heading1", text: "Hipótese" });
+    specificSections.push({ type: "paragraph", text: input.fields.hipotese });
+  }
+  if (hasValue(input.fields.objetivoGeral)) {
+    specificSections.push({ type: "heading1", text: "Objetivo Geral" });
+    specificSections.push({ type: "paragraph", text: input.fields.objetivoGeral });
+  }
+  if (hasValue(input.fields.objetivosEspecificos)) {
+    specificSections.push({ type: "heading1", text: "Objetivos Específicos" });
+    specificSections.push({ type: "paragraph", text: input.fields.objetivosEspecificos });
+  }
+  if (hasValue(input.fields.justificativa)) {
+    specificSections.push({ type: "heading1", text: "Justificativa" });
+    specificSections.push({ type: "paragraph", text: input.fields.justificativa });
+  }
+  if (hasValue(input.fields.referencialTeorico)) {
+    specificSections.push({ type: "heading1", text: "Referencial Teórico" });
+    specificSections.push({ type: "paragraph", text: input.fields.referencialTeorico });
+  }
+  if (hasValue(input.fields.metodologia)) {
+    specificSections.push({ type: "heading1", text: "Metodologia" });
+    specificSections.push({ type: "paragraph", text: input.fields.metodologia });
+  }
+  if (hasValue(input.fields.cronograma)) {
+    specificSections.push({ type: "heading1", text: "Cronograma" });
+    specificSections.push({ type: "paragraph", text: input.fields.cronograma });
+  }
+  if (hasValue(input.fields.recursosOrcamento)) {
+    specificSections.push({ type: "heading1", text: "Recursos/Orçamento" });
+    specificSections.push({ type: "paragraph", text: input.fields.recursosOrcamento });
+  }
+  if (hasValue(input.fields.resultadosEsperados)) {
+    specificSections.push({ type: "heading1", text: "Resultados Esperados" });
+    specificSections.push({ type: "paragraph", text: input.fields.resultadosEsperados });
+  }
+
+  const bodyBlocks = specificSections.length > 0 ? specificSections : blocks;
 
   return new Document({
     creator: "UFLA DOCX Academico",
@@ -135,7 +192,7 @@ function buildDocument(input: DocxGenerationInput): Document {
           centeredParagraph(input.fields.year || new Date().getFullYear().toString(), false, BODY_SIZE - 4),
           // Corpo do texto
           new Paragraph({ spacing: { before: 720 } }),
-          ...blocks.flatMap((block) => blockToParagraph(block)),
+          ...bodyBlocks.flatMap((block) => blockToParagraph(block)),
           // Referências
           ...(references.length > 0
             ? [
