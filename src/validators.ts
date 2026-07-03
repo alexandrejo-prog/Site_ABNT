@@ -264,7 +264,7 @@ function addCpgWarnings(fields: AcademicFields, editorText: string, issues: Vali
   }
 }
 
-function addResearchProjectWarnings(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
+function addResearchProjectIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
   if (!isResearchProject(fields.workType)) return;
 
   issues.push({
@@ -277,7 +277,7 @@ function addResearchProjectWarnings(fields: AcademicFields, editorText: string, 
   });
 
   const hasProblemStatement = /#+\s*PROBLEMA\s+DE\s+PESQUISA/i.test(editorText) || /#+\s*PROBLEMA/i.test(editorText);
-  const hasObjective = /#+\s*OBJETIVO\s+GERAL/i.test(editorText) || /#+\s*OBJETIVOS/i.test(editorText);
+  const hasObjective = /#+\s*OBJETIVO\s+GERAL/i.test(editorText);
   const hasJustification = /#+\s*JUSTIFICATIVA/i.test(editorText);
   const hasMethodology = /#+\s*METODOLOGIA/i.test(editorText) || /#+\s*PROCEDIMENTOS/i.test(editorText);
   const hasSchedule = /#+\s*CRONOGRAMA/i.test(editorText);
@@ -476,7 +476,7 @@ export function validateWork(
 }
 
 addCpgWarnings(fields, editorText, issues);
-  addResearchProjectWarnings(fields, editorText, issues);
+  addResearchProjectIssues(fields, editorText, issues);
 
   if (hasLikelyImageWithoutCaption(editorText)) {
     issues.push({
