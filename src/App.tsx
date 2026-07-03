@@ -83,6 +83,8 @@ const LONG_FIELDS = new Set<AcademicFieldKey>([
   "imageWarnings",
 ]);
 
+type EditorMode = "body" | "references";
+
 function safeFileName(title: string): string {
   const normalized = title
     .normalize("NFD")
@@ -192,6 +194,7 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateAnyway, setGenerateAnyway] = useState(false);
   const [importedFileName, setImportedFileName] = useState<string | null>(null);
+  const [editorMode, setEditorMode] = useState<EditorMode>("body");
   const editorRef = useRef<HTMLTextAreaElement>(null);
 
   const errors = useMemo(
@@ -203,6 +206,7 @@ export default function App() {
     [issues],
   );
   const isCpgSelected = isCpgWork(fields.workType);
+  const activeEditorText = editorMode === "references" ? fields.referencias : editorText;
 
   function updateField(key: AcademicFieldKey, value: string) {
     setFields((current) => ({ ...current, [key]: value }));
@@ -210,6 +214,14 @@ export default function App() {
       ...current,
       [key]: current[key] === "nao-identificado" ? "baixa" : current[key],
     }));
+  }
+
+  function updateActiveEditorText(value: string) {
+    if (editorMode === "references") {
+      updateField("referencias", value);
+      return;
+    }
+    setEditorText(value);
   }
 
   function updateWorkType(workType: AcademicFields["workType"]) {
@@ -260,6 +272,7 @@ export default function App() {
       const result = await importDocumentFile(file);
       mergeImportedFields(result.fields, result.confidence);
       setImportedFileName(file.name);
+      setEditorMode("body");
       setEditorText((current) =>
         current.trim() ? current : result.editorText || result.fields.introducao || result.text,
       );
@@ -282,6 +295,7 @@ export default function App() {
     setIssues([]);
     setGenerateAnyway(false);
     setImportedFileName(null);
+    setEditorMode("body");
     setStatus("Importação removida. Escolha outro arquivo ou preencha manualmente.");
   }
 
@@ -296,7 +310,8 @@ export default function App() {
     const textarea = editorRef.current;
     if (!textarea) return;
 
-    const { value, selectionStart, selectionEnd } = textarea;
+    const value = activeEditorText;
+    const { selectionStart, selectionEnd } = textarea;
     const { lineStart, lineEnd } = selectedLineRange(value, selectionStart, selectionEnd);
     const before = value.slice(0, lineStart);
     const selected = value.slice(lineStart, lineEnd);
@@ -309,7 +324,7 @@ export default function App() {
       })
       .join("\n");
 
-    setEditorText(`${before}${updated}${after}`);
+    updateActiveEditorText(`${before}${updated}${after}`);
     requestAnimationFrame(() => textarea.focus());
   }
 
@@ -317,10 +332,11 @@ export default function App() {
     const textarea = editorRef.current;
     if (!textarea) return;
 
-    const { value, selectionStart, selectionEnd } = textarea;
+    const value = activeEditorText;
+    const { selectionStart, selectionEnd } = textarea;
     const selected = value.slice(selectionStart, selectionEnd);
     const replacement = selected ? `${marker}${selected}${marker}` : marker.repeat(2);
-    setEditorText(
+    updateActiveEditorText(
       `${value.slice(0, selectionStart)}${replacement}${value.slice(selectionEnd)}`,
     );
     requestAnimationFrame(() => textarea.focus());
@@ -330,7 +346,8 @@ export default function App() {
     const textarea = editorRef.current;
     if (!textarea) return;
 
-    const { value, selectionStart, selectionEnd } = textarea;
+    const value = activeEditorText;
+    const { selectionStart, selectionEnd } = textarea;
     const { lineStart, lineEnd } = selectedLineRange(value, selectionStart, selectionEnd);
     const before = value.slice(0, lineStart);
     const selected = value.slice(lineStart, lineEnd);
@@ -339,7 +356,7 @@ export default function App() {
       .split(/\n/)
       .map((line) => stripInlineMarkup(stripBlockMarker(line)))
       .join("\n");
-    setEditorText(`${before}${cleaned}${after}`);
+    updateActiveEditorText(`${before}${cleaned}${after}`);
     requestAnimationFrame(() => textarea.focus());
   }
 
@@ -508,10 +525,10 @@ export default function App() {
               {key === "referencias" && (
                 <div className="field-note">
                   <p>
-                    Revise as referências antes de gerar a versão final. O sistema aplica destaques automaticamente apenas quando há segurança. Use **negrito** e *itálico* para marcação manual.
+                    Para editar com mais espaço, use o botão <strong>Referências</strong> no painel central.
                   </p>
                   <p>
-                    Para editar: altere o texto acima. Para marcar manualmente: use **título em negrito** e *periódico em itálico*. Se houver [REF] no editor textual, elas são incorporadas automaticamente.
+                    Use uma referência por linha. Para destacar manualmente: **título em negrito** e *periódico em itálico*.
                   </p>
                 </div>
               )}
@@ -520,6 +537,25 @@ export default function App() {
         </section>
 
         <section className="editor-pane" aria-label="Editor do texto">
+          <div className="toolbar" aria-label="Modo de edição">
+            <button
+              className="icon-button"
+              type="button"
+              title="Editar texto principal"
+              onClick={() => setEditorMode("body")}
+            >
+              Texto
+            </button>
+            <button
+              className="icon-button"
+              type="button"
+              title="Editar referências no painel central"
+              onClick={() => setEditorMode("references")}
+            >
+              Referências
+            </button>
+          </div>
+
           <div className="toolbar" aria-label="Ferramentas do editor">
             <ToolButton title="Parágrafo normal" onClick={() => applyBlockStyle("")}>
               <Pilcrow size={18} aria-hidden="true" />
@@ -547,11 +583,17 @@ export default function App() {
             </ToolButton>
           </div>
 
+          <p className="field-note">
+            {editorMode === "references"
+              ? "Editando referências no painel central. Uma referência por linha."
+              : "Editando texto principal do trabalho."}
+          </p>
+
           <textarea
             ref={editorRef}
             className="editor"
-            value={editorText}
-            onChange={(event) => setEditorText(event.target.value)}
+            value={activeEditorText}
+            onChange={(event) => updateActiveEditorText(event.target.value)}
             spellCheck
           />
 
