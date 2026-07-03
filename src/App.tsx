@@ -1,4 +1,4 @@
-import { ChangeEvent, ReactNode, useMemo, useRef, useState } from "react";
+import { ChangeEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { saveAs } from "file-saver";
 import {
   Bold,
@@ -97,13 +97,107 @@ function safeFileName(title: string): string {
 
 function stripBlockMarker(line: string): string {
   return line
-    .replace(/^#{1,2}\s+/, "")
+    .replace(/^#{1,3}\s+/, "")
     .replace(/^>\s+/, "")
     .replace(/^\[REF\]\s+/i, "");
 }
 
 function stripInlineMarkup(value: string): string {
   return value.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1");
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function inlineMarkupToHtml(value: string): string {
+  const parts: string[] = [];
+  const tokenPattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = tokenPattern.exec(value)) !== null) {
+    if (match.index > cursor) {
+      parts.push(escapeHtml(value.slice(cursor, match.index)));
+    }
+
+    const token = match[0];
+    if (token.startsWith("**")) {
+      parts.push(`<strong>${escapeHtml(token.slice(2, -2))}</strong>`);
+    } else {
+      parts.push(`<em>${escapeHtml(token.slice(1, -1))}</em>`);
+    }
+    cursor = match.index + token.length;
+  }
+
+  if (cursor < value.length) {
+    parts.push(escapeHtml(value.slice(cursor)));
+  }
+
+  return parts.join("") || "<br />";
+}
+
+function editorMarkupToHtml(value: string): string {
+  const lines = value.split(/\n/);
+  if (!value.trim()) return "<p><br /></p>";
+
+  return lines
+    .map((rawLine) => {
+      const line = rawLine.trimEnd();
+      if (!line.trim()) return "<p><br /></p>";
+      if (/^###\s+/.test(line)) return `<h3>${inlineMarkupToHtml(line.replace(/^###\s+/, ""))}</h3>`;
+      if (/^##\s+/.test(line)) return `<h2>${inlineMarkupToHtml(line.replace(/^##\s+/, ""))}</h2>`;
+      if (/^#\s+/.test(line)) return `<h1>${inlineMarkupToHtml(line.replace(/^#\s+/, ""))}</h1>`;
+      if (/^>\s+/.test(line)) return `<blockquote>${inlineMarkupToHtml(line.replace(/^>\s+/, ""))}</blockquote>`;
+      if (/^\[REF\]\s+/i.test(line)) return `<p data-reference="true">${inlineMarkupToHtml(line.replace(/^\[REF\]\s+/i, ""))}</p>`;
+      return `<p>${inlineMarkupToHtml(line)}</p>`;
+    })
+    .join("");
+}
+
+function inlineNodeToMarkup(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+  if (node.nodeType !== Node.ELEMENT_NODE) return "";
+
+  const element = node as HTMLElement;
+  if (element.tagName === "BR") return "\n";
+
+  const text = Array.from(element.childNodes).map(inlineNodeToMarkup).join("");
+  if (!text) return "";
+  if (element.tagName === "STRONG" || element.tagName === "B") return `**${text}**`;
+  if (element.tagName === "EM" || element.tagName === "I") return `*${text}*`;
+  return text;
+}
+
+function blockNodeToMarkup(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? "").trim();
+  if (node.nodeType !== Node.ELEMENT_NODE) return "";
+
+  const element = node as HTMLElement;
+  const text = Array.from(element.childNodes)
+    .map(inlineNodeToMarkup)
+    .join("")
+    .replace(/\n+$/g, "")
+    .trimEnd();
+
+  if (!text.trim()) return "";
+  if (element.tagName === "H1") return `# ${text}`;
+  if (element.tagName === "H2") return `## ${text}`;
+  if (element.tagName === "H3") return `### ${text}`;
+  if (element.tagName === "BLOCKQUOTE") return `> ${text}`;
+  if (element.dataset.reference === "true") return `[REF] ${text}`;
+  return text;
+}
+
+function editorHtmlToMarkup(element: HTMLElement): string {
+  const blocks = Array.from(element.childNodes)
+    .map(blockNodeToMarkup)
+    .filter((line) => line.trim().length > 0);
+  return blocks.join("\n");
 }
 
 function rowsForField(key: AcademicFieldKey): number {
@@ -195,7 +289,7 @@ export default function App() {
   const [generateAnyway, setGenerateAnyway] = useState(false);
   const [importedFileName, setImportedFileName] = useState<string | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>("body");
-  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
 
   const errors = useMemo(
     () => issues.filter((issue) => issue.severity === "error"),
@@ -207,6 +301,12 @@ export default function App() {
   );
   const isCpgSelected = isCpgWork(fields.workType);
   const activeEditorText = editorMode === "references" ? fields.referencias : editorText;
+
+  useEffect(() => {
+    if (!editorRef.current) return;
+    if (document.activeElement === editorRef.current) return;
+    editorRef.current.innerHTML = editorMarkupToHtml(activeEditorText);
+  }, [activeEditorText, editorMode]);
 
   function updateField(key: AcademicFieldKey, value: string) {
     setFields((current) => ({ ...current, [key]: value }));
@@ -222,6 +322,11 @@ export default function App() {
       return;
     }
     setEditorText(value);
+  }
+
+  function handleRichEditorInput() {
+    if (!editorRef.current) return;
+    updateActiveEditorText(editorHtmlToMarkup(editorRef.current));
   }
 
   function updateWorkType(workType: AcademicFields["workType"]) {
@@ -299,65 +404,33 @@ export default function App() {
     setStatus("Importação removida. Escolha outro arquivo ou preencha manualmente.");
   }
 
-  function selectedLineRange(value: string, start: number, end: number) {
-    const lineStart = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
-    const nextBreak = value.indexOf("\n", end);
-    const lineEnd = nextBreak === -1 ? value.length : nextBreak;
-    return { lineStart, lineEnd };
-  }
-
   function applyBlockStyle(prefix: string) {
-    const textarea = editorRef.current;
-    if (!textarea) return;
-
-    const value = activeEditorText;
-    const { selectionStart, selectionEnd } = textarea;
-    const { lineStart, lineEnd } = selectedLineRange(value, selectionStart, selectionEnd);
-    const before = value.slice(0, lineStart);
-    const selected = value.slice(lineStart, lineEnd);
-    const after = value.slice(lineEnd);
-    const updated = selected
-      .split(/\n/)
-      .map((line) => {
-        const cleanLine = stripBlockMarker(line);
-        return cleanLine.trim() ? `${prefix}${cleanLine}` : cleanLine;
-      })
-      .join("\n");
-
-    updateActiveEditorText(`${before}${updated}${after}`);
-    requestAnimationFrame(() => textarea.focus());
+    editorRef.current?.focus();
+    const block = prefix === "# " ? "h1" : prefix === "## " ? "h2" : prefix === "> " ? "blockquote" : "p";
+    document.execCommand("formatBlock", false, block);
+    if (prefix === "[REF] ") {
+      document.execCommand("insertText", false, "[REF] ");
+    }
+    requestAnimationFrame(handleRichEditorInput);
   }
 
-  function wrapSelection(marker: "*" | "**") {
-    const textarea = editorRef.current;
-    if (!textarea) return;
-
-    const value = activeEditorText;
-    const { selectionStart, selectionEnd } = textarea;
-    const selected = value.slice(selectionStart, selectionEnd);
-    const replacement = selected ? `${marker}${selected}${marker}` : marker.repeat(2);
-    updateActiveEditorText(
-      `${value.slice(0, selectionStart)}${replacement}${value.slice(selectionEnd)}`,
-    );
-    requestAnimationFrame(() => textarea.focus());
+  function wrapSelection(command: "bold" | "italic") {
+    editorRef.current?.focus();
+    document.execCommand(command, false);
+    requestAnimationFrame(handleRichEditorInput);
   }
 
   function clearFormatting() {
-    const textarea = editorRef.current;
-    if (!textarea) return;
+    editorRef.current?.focus();
+    document.execCommand("removeFormat", false);
+    document.execCommand("formatBlock", false, "p");
+    requestAnimationFrame(handleRichEditorInput);
+  }
 
-    const value = activeEditorText;
-    const { selectionStart, selectionEnd } = textarea;
-    const { lineStart, lineEnd } = selectedLineRange(value, selectionStart, selectionEnd);
-    const before = value.slice(0, lineStart);
-    const selected = value.slice(lineStart, lineEnd);
-    const after = value.slice(lineEnd);
-    const cleaned = selected
-      .split(/\n/)
-      .map((line) => stripInlineMarkup(stripBlockMarker(line)))
-      .join("\n");
-    updateActiveEditorText(`${before}${cleaned}${after}`);
-    requestAnimationFrame(() => textarea.focus());
+  function handleEditorPaste(event: React.ClipboardEvent<HTMLDivElement>) {
+    event.preventDefault();
+    document.execCommand("insertText", false, event.clipboardData.getData("text/plain"));
+    requestAnimationFrame(handleRichEditorInput);
   }
 
   function runValidation(candidateFields = fields) {
@@ -528,7 +601,7 @@ export default function App() {
                     Para editar com mais espaço, use o botão <strong>Referências</strong> no painel central.
                   </p>
                   <p>
-                    Use uma referência por linha. Para destacar manualmente: **título em negrito** e *periódico em itálico*.
+                    Use uma referência por linha. Para destacar manualmente, selecione o trecho e clique em Negrito ou Itálico.
                   </p>
                 </div>
               )}
@@ -537,63 +610,71 @@ export default function App() {
         </section>
 
         <section className="editor-pane" aria-label="Editor do texto">
-          <div className="toolbar" aria-label="Modo de edição">
-            <button
-              className="icon-button"
-              type="button"
-              title="Editar texto principal"
-              onClick={() => setEditorMode("body")}
-            >
-              Texto
-            </button>
-            <button
-              className="icon-button"
-              type="button"
-              title="Editar referências no painel central"
-              onClick={() => setEditorMode("references")}
-            >
-              Referências
-            </button>
+          <div className="editor-toolbar-sticky">
+            <div className="toolbar" aria-label="Modo de edição">
+              <button
+                className={`text-button ${editorMode === "body" ? "active" : ""}`}
+                type="button"
+                title="Editar texto principal"
+                onClick={() => setEditorMode("body")}
+              >
+                Texto
+              </button>
+              <button
+                className={`text-button ${editorMode === "references" ? "active" : ""}`}
+                type="button"
+                title="Editar referências no painel central"
+                onClick={() => setEditorMode("references")}
+              >
+                Referências
+              </button>
+            </div>
+
+            <div className="toolbar" aria-label="Ferramentas do editor">
+              <ToolButton title="Parágrafo normal" onClick={() => applyBlockStyle("")}>
+                <Pilcrow size={18} aria-hidden="true" />
+              </ToolButton>
+              <ToolButton title="Título primário" onClick={() => applyBlockStyle("# ")}>
+                <Heading1 size={18} aria-hidden="true" />
+              </ToolButton>
+              <ToolButton title="Título secundário" onClick={() => applyBlockStyle("## ")}>
+                <Heading2 size={18} aria-hidden="true" />
+              </ToolButton>
+              <ToolButton title="Negrito" onClick={() => wrapSelection("bold")}>
+                <Bold size={18} aria-hidden="true" />
+              </ToolButton>
+              <ToolButton title="Itálico" onClick={() => wrapSelection("italic")}>
+                <Italic size={18} aria-hidden="true" />
+              </ToolButton>
+              <ToolButton title="Citação longa" onClick={() => applyBlockStyle("> ")}>
+                <Quote size={18} aria-hidden="true" />
+              </ToolButton>
+              <ToolButton title="Referência" onClick={() => applyBlockStyle("[REF] ")}>
+                <FileCheck2 size={18} aria-hidden="true" />
+              </ToolButton>
+              <ToolButton title="Limpar formatação" onClick={clearFormatting}>
+                <Eraser size={18} aria-hidden="true" />
+              </ToolButton>
+            </div>
+
+            <p className="field-note editor-mode-note">
+              {editorMode === "references"
+                ? "Editando referências no painel central. Selecione palavras e use Negrito/Itálico como no Word."
+                : "Editando texto principal. Selecione palavras e use Negrito/Itálico como no Word."}
+            </p>
           </div>
 
-          <div className="toolbar" aria-label="Ferramentas do editor">
-            <ToolButton title="Parágrafo normal" onClick={() => applyBlockStyle("")}>
-              <Pilcrow size={18} aria-hidden="true" />
-            </ToolButton>
-            <ToolButton title="Título primário" onClick={() => applyBlockStyle("# ")}>
-              <Heading1 size={18} aria-hidden="true" />
-            </ToolButton>
-            <ToolButton title="Título secundário" onClick={() => applyBlockStyle("## ")}>
-              <Heading2 size={18} aria-hidden="true" />
-            </ToolButton>
-            <ToolButton title="Negrito" onClick={() => wrapSelection("**")}>
-              <Bold size={18} aria-hidden="true" />
-            </ToolButton>
-            <ToolButton title="Itálico" onClick={() => wrapSelection("*")}>
-              <Italic size={18} aria-hidden="true" />
-            </ToolButton>
-            <ToolButton title="Citação longa" onClick={() => applyBlockStyle("> ")}>
-              <Quote size={18} aria-hidden="true" />
-            </ToolButton>
-            <ToolButton title="Referência" onClick={() => applyBlockStyle("[REF] ")}>
-              <FileCheck2 size={18} aria-hidden="true" />
-            </ToolButton>
-            <ToolButton title="Limpar formatação" onClick={clearFormatting}>
-              <Eraser size={18} aria-hidden="true" />
-            </ToolButton>
-          </div>
-
-          <p className="field-note">
-            {editorMode === "references"
-              ? "Editando referências no painel central. Uma referência por linha."
-              : "Editando texto principal do trabalho."}
-          </p>
-
-          <textarea
+          <div
             ref={editorRef}
-            className="editor"
-            value={activeEditorText}
-            onChange={(event) => updateActiveEditorText(event.target.value)}
+            className="editor rich-editor"
+            contentEditable
+            suppressContentEditableWarning
+            role="textbox"
+            aria-multiline="true"
+            aria-label={editorMode === "references" ? "Editor de referências" : "Editor do texto principal"}
+            dangerouslySetInnerHTML={{ __html: editorMarkupToHtml(activeEditorText) }}
+            onInput={handleRichEditorInput}
+            onPaste={handleEditorPaste}
             spellCheck
           />
 
