@@ -25,6 +25,7 @@ import {
   emptyAcademicFields,
   emptyConfidenceMap,
   isCpgWork,
+  isResearchProject,
 } from "./ufla-rules";
 import {
   ValidationIssue,
@@ -473,17 +474,23 @@ export default function App() {
       setStatus("Gerando DOCX...");
       
       // Carrega exportadores sob demanda para reduzir bundle inicial
-      const [{ generateDocxBlob }, { generateArticleDocxBlob }, { generateCpgDocxBlob }] = await Promise.all([
+      const [{ generateDocxBlob }, { generateArticleDocxBlob }, { generateCpgDocxBlob }, { generateResearchProjectDocxBlob }] = await Promise.all([
         import("./export-docx"),
         import("./export-article-docx"),
         import("./export-cpg-docx"),
+        import("./export-research-project-docx"),
       ]);
       
-      const blob = isCpgWork(generationFields.workType)
-        ? await generateCpgDocxBlob({ fields: generationFields, editorText })
-        : generationFields.workType === "artigo"
-          ? await generateArticleDocxBlob({ fields: generationFields, editorText })
-          : await generateDocxBlob({ fields: generationFields, editorText });
+      let blob: Blob;
+      if (isCpgWork(generationFields.workType)) {
+        blob = await generateCpgDocxBlob({ fields: generationFields, editorText });
+      } else if (generationFields.workType === "artigo") {
+        blob = await generateArticleDocxBlob({ fields: generationFields, editorText });
+      } else if (isResearchProject(generationFields.workType)) {
+        blob = await generateResearchProjectDocxBlob({ fields: generationFields, editorText });
+      } else {
+        blob = await generateDocxBlob({ fields: generationFields, editorText });
+      }
       saveAs(blob, safeFileName(generationFields.title));
       setStatus("DOCX gerado. Confira o arquivo baixado.");
     } catch (error) {

@@ -6,6 +6,7 @@ export const WORK_TYPES = [
   "monografia",
   "dissertacao",
   "tese",
+  "projeto_pesquisa",
   "outro",
 ] as const;
 
@@ -20,6 +21,7 @@ export const WORK_TYPE_LABELS: Record<WorkType, string> = {
   monografia: "Monografia",
   dissertacao: "Dissertação",
   tese: "Tese",
+  projeto_pesquisa: "Projeto de pesquisa (NBR 15287:2025)",
   outro: "Outro",
 };
 
@@ -268,6 +270,10 @@ export function requiresImpactIndicators(workType: WorkTypeValue): boolean {
 
 export function isCpgWork(workType: WorkTypeValue): boolean {
   return workType === "resumo_cpg" || workType === "resumo_expandido_cpg" || workType === "artigo_completo_cpg";
+}
+
+export function isResearchProject(workType: WorkTypeValue): boolean {
+  return workType === "projeto_pesquisa";
 }
 
 export function emptyAcademicFields(): AcademicFields {

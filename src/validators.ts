@@ -3,6 +3,7 @@ import {
   WorkTypeValue,
   isAdvisorRequired,
   isCpgWork,
+  isResearchProject,
 } from "./ufla-rules";
 import { validateReferencesText } from "./references-validator";
 
@@ -95,6 +96,13 @@ export const ADHERENCE_CATEGORIES: AdherenceCategory[] = [
     status: "implemented",
     statusLabel: "Implementado",
     note: "Gera DOCX editável com margens, fonte, espaçamento e sumário atualizável. PDF deve ser gerado externamente.",
+  },
+  {
+    key: "research-project",
+    label: "Projeto de pesquisa / NBR 15287",
+    status: "partial",
+    statusLabel: "Parcial",
+    note: "Suporte inicial para projeto de pesquisa com estrutura básica e validações parciais. A revisão final pelo usuário é obrigatória.",
   },
 ];
 
@@ -256,6 +264,92 @@ function addCpgWarnings(fields: AcademicFields, editorText: string, issues: Vali
   }
 }
 
+function addResearchProjectWarnings(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
+  if (!isResearchProject(fields.workType)) return;
+
+  issues.push({
+    severity: "warning",
+    code: "research-project-partial",
+    message: "Suporte inicial para Projeto de pesquisa (NBR 15287:2025). A revisão final pelo usuário é obrigatória.",
+    what: "O sistema possui suporte inicial para projeto de pesquisa.",
+    why: "A validação NBR 15287 é parcial e o sistema não substitui a norma oficial.",
+    action: "Revise todos os campos e o DOCX gerado antes da versão final.",
+  });
+
+  const hasProblemStatement = /#+\s*PROBLEMA\s+DE\s+PESQUISA/i.test(editorText) || /#+\s*PROBLEMA/i.test(editorText);
+  const hasObjective = /#+\s*OBJETIVO\s+GERAL/i.test(editorText) || /#+\s*OBJETIVOS/i.test(editorText);
+  const hasJustification = /#+\s*JUSTIFICATIVA/i.test(editorText);
+  const hasMethodology = /#+\s*METODOLOGIA/i.test(editorText) || /#+\s*PROCEDIMENTOS/i.test(editorText);
+  const hasSchedule = /#+\s*CRONOGRAMA/i.test(editorText);
+  const hasReferences = /#+\s*(REFERÊNCIAS|REFERENCIAS|REFERÊNCIAS)/i.test(editorText) || /#+\s*BIBLIOGRÁFICAS/i.test(editorText);
+
+  if (!hasProblemStatement) {
+    issues.push({
+      severity: "error",
+      code: "research-problem-required",
+      message: "Informe o problema de pesquisa.",
+      what: "O projeto de pesquisa não apresenta o problema a ser investigado.",
+      why: "O problema delimita a investigação e orienta objetivos, metodologia e justificativa.",
+      action: "Adicione uma seção chamada 'Problema de pesquisa' no editor.",
+    });
+  }
+
+  if (!hasObjective) {
+    issues.push({
+      severity: "error",
+      code: "research-goal-required",
+      message: "Informe o objetivo geral.",
+      what: "O projeto de pesquisa não apresenta o objetivo geral.",
+      why: "O objetivo geral direciona a pesquisa e fundamenta a metodologia.",
+      action: "Adicione uma seção chamada 'Objetivo geral' no editor.",
+    });
+  }
+
+  if (!hasJustification) {
+    issues.push({
+      severity: "error",
+      code: "research-justification-required",
+      message: "Informe a justificativa.",
+      what: "O projeto de pesquisa não apresenta a justificativa.",
+      why: "A justificativa fundamenta a relevância e pertinência da pesquisa.",
+      action: "Adicione uma seção chamada 'Justificativa' no editor.",
+    });
+  }
+
+  if (!hasMethodology) {
+    issues.push({
+      severity: "error",
+      code: "research-methodology-required",
+      message: "Informe a metodologia.",
+      what: "O projeto de pesquisa não apresenta a metodologia.",
+      why: "A metodologia descreve como a pesquisa será conduzida.",
+      action: "Adicione uma seção chamada 'Metodologia' no editor.",
+    });
+  }
+
+  if (!hasSchedule) {
+    issues.push({
+      severity: "error",
+      code: "research-schedule-required",
+      message: "Informe o cronograma.",
+      what: "O projeto de pesquisa não apresenta o cronograma.",
+      why: "O cronograma orienta a execução e marcos do projeto.",
+      action: "Adicione uma seção chamada 'Cronograma' no editor.",
+    });
+  }
+
+  if (!hasReferences) {
+    issues.push({
+      severity: "error",
+      code: "research-references-required",
+      message: "Informe as referências.",
+      what: "O projeto de pesquisa não apresenta referências.",
+      why: "Referências são necessárias para base teórica e aportes bibliográficos.",
+      action: "Adicione referências no editor ou no campo Referências.",
+    });
+  }
+}
+
 export function validateWork(
   fields: AcademicFields,
   editorText = "",
@@ -379,9 +473,10 @@ export function validateWork(
       why: "O abstract é obrigatório para a maioria dos trabalhos acadêmicos da UFLA.",
       action: "Preencha o campo Abstract com a versão do resumo em inglês ou idioma estrangeiro.",
     });
-  }
+}
 
-  addCpgWarnings(fields, editorText, issues);
+addCpgWarnings(fields, editorText, issues);
+  addResearchProjectWarnings(fields, editorText, issues);
 
   if (hasLikelyImageWithoutCaption(editorText)) {
     issues.push({
