@@ -13,9 +13,6 @@ import {
   Upload,
   XCircle,
 } from "lucide-react";
-import { generateArticleDocxBlob } from "./export-article-docx";
-import { generateCpgDocxBlob } from "./export-cpg-docx";
-import { generateDocxBlob } from "./export-docx";
 import { importDocumentFile } from "./import-docx";
 import {
   ACADEMIC_FIELD_KEYS,
@@ -474,6 +471,14 @@ export default function App() {
     try {
       setIsGenerating(true);
       setStatus("Gerando DOCX...");
+      
+      // Carrega exportadores sob demanda para reduzir bundle inicial
+      const [{ generateDocxBlob }, { generateArticleDocxBlob }, { generateCpgDocxBlob }] = await Promise.all([
+        import("./export-docx"),
+        import("./export-article-docx"),
+        import("./export-cpg-docx"),
+      ]);
+      
       const blob = isCpgWork(generationFields.workType)
         ? await generateCpgDocxBlob({ fields: generationFields, editorText })
         : generationFields.workType === "artigo"
