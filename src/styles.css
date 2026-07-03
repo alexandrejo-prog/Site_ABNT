@@ -179,6 +179,7 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus,
+.rich-editor:focus,
 button:focus-visible,
 .upload-button:focus-within {
   outline: 3px solid rgba(31, 123, 105, 0.25);
@@ -251,6 +252,16 @@ button:focus-visible,
   margin-bottom: 0;
 }
 
+.editor-toolbar-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: grid;
+  gap: 8px;
+  padding-bottom: 8px;
+  background: #f5f7f4;
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -262,8 +273,9 @@ button:focus-visible,
   border-radius: 8px;
 }
 
-.icon-button {
-  width: 38px;
+.icon-button,
+.text-button {
+  min-width: 38px;
   height: 38px;
   display: inline-grid;
   place-items: center;
@@ -271,21 +283,81 @@ button:focus-visible,
   border-radius: 6px;
   color: #24343c;
   background: #ffffff;
+  font-weight: 700;
 }
 
-.icon-button:hover {
+.text-button {
+  width: auto;
+  padding: 0 12px;
+}
+
+.text-button.active {
+  color: #ffffff;
+  background: #1f7b69;
+  border-color: #1f7b69;
+}
+
+.icon-button:hover,
+.text-button:hover {
   border-color: #1f7b69;
   color: #105a4b;
+}
+
+.text-button.active:hover {
+  color: #ffffff;
 }
 
 .editor {
   flex: 1;
   min-height: 520px;
-  resize: none;
   border-color: #b8c7be;
   font-family: "Times New Roman", Times, serif;
   font-size: 1rem;
   line-height: 1.55;
+}
+
+.rich-editor {
+  width: 100%;
+  overflow: auto;
+  border: 1px solid #b8c7be;
+  border-radius: 6px;
+  padding: 16px 18px;
+  color: #111827;
+  background: #ffffff;
+}
+
+.rich-editor p,
+.rich-editor blockquote,
+.rich-editor h1,
+.rich-editor h2,
+.rich-editor h3 {
+  margin: 0 0 12px;
+}
+
+.rich-editor h1 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.rich-editor h2 {
+  font-size: 1.08rem;
+  font-weight: 700;
+}
+
+.rich-editor h3 {
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.rich-editor blockquote {
+  margin-left: 3.5rem;
+  padding-left: 0.8rem;
+  border-left: 3px solid #c9d3cd;
+}
+
+.editor-mode-note {
+  margin: 0;
 }
 
 .ai-panel {
