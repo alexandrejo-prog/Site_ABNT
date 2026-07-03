@@ -348,6 +348,17 @@ function addResearchProjectIssues(fields: AcademicFields, editorText: string, is
       action: "Adicione referências no editor ou no campo Referências.",
     });
   }
+
+  if (hasValue(fields.objetivosEspecificos) && !hasValue(fields.objetivoGeral)) {
+    issues.push({
+      severity: "error",
+      code: "research-objective-mandatory",
+      message: "Objetivo geral é obrigatório quando há objetivos específicos.",
+      what: "Objetivos específicos foram informados, mas o objetivo geral está ausente.",
+      why: "O objetivo geral é o alvo principal da pesquisa e deve estar presente antes dos objetivos específicos.",
+      action: "Preencha o campo 'Objetivo Geral' antes da geração.",
+    });
+  }
 }
 
 export function validateWork(
@@ -473,9 +484,9 @@ export function validateWork(
       why: "O abstract é obrigatório para a maioria dos trabalhos acadêmicos da UFLA.",
       action: "Preencha o campo Abstract com a versão do resumo em inglês ou idioma estrangeiro.",
     });
-}
+  }
 
-addCpgWarnings(fields, editorText, issues);
+  addCpgWarnings(fields, editorText, issues);
   addResearchProjectIssues(fields, editorText, issues);
 
   if (hasLikelyImageWithoutCaption(editorText)) {

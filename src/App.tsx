@@ -75,6 +75,21 @@ const FIELD_LABELS: Record<AcademicFieldKey, string> = {
   resultadosEsperados: "Resultados Esperados",
 };
 
+const RESEARCH_PROJECT_FIELD_KEYS: AcademicFieldKey[] = [
+  "tema",
+  "delimitacaoTema",
+  "problemaPesquisa",
+  "hipotese",
+  "objetivoGeral",
+  "objetivosEspecificos",
+  "justificativa",
+  "referencialTeorico",
+  "metodologia",
+  "cronograma",
+  "recursosOrcamento",
+  "resultadosEsperados",
+];
+
 const LONG_FIELDS = new Set<AcademicFieldKey>([
   "workNature",
   "resumo",
@@ -253,7 +268,7 @@ function defaultWorkNature(fields: AcademicFields): string {
   const program =
     fields.program || "Programa de Pós-Graduação em Educação Científica e Ambiental";
 
-  return `${kind} apresentada à Universidade Federal de Lavras, como parte das exigências do ${program}, para obtenção do título de ${degree}.`;
+  return `${kind} apresentada à Universidade Federal de Lavfas, como parte das exigências do ${program}, para obtenção do título de ${degree}.`;
 }
 
 function ensureGraduateCompleteStructure(fields: AcademicFields): AcademicFields {
@@ -627,40 +642,53 @@ export default function App() {
             </div>
           )}
 
-          {ACADEMIC_FIELD_KEYS.map((key) => (
-            <div className="field-group" key={key}>
-              <div className="label-row">
-                <label htmlFor={key}>{FIELD_LABELS[key]}</label>
-                <span className={`confidence confidence-${confidence[key]}`}>
-                  {CONFIDENCE_LABELS[confidence[key]]}
-                </span>
-              </div>
-              {LONG_FIELDS.has(key) ? (
-                <textarea
-                  id={key}
-                  value={fields[key]}
-                  onChange={(event) => updateField(key, event.target.value)}
-                  rows={rowsForField(key)}
-                />
-              ) : (
-                <input
-                  id={key}
-                  value={fields[key]}
-                  onChange={(event) => updateField(key, event.target.value)}
-                />
-              )}
-              {key === "referencias" && (
-                <div className="field-note">
-                  <p>
-                    Para editar com mais espaço, use o botão <strong>Referências</strong> no painel central.
-                  </p>
-                  <p>
-                    Use uma referência por linha. Para destacar manualmente, selecione o trecho e clique em Negrito ou Itálico.
-                  </p>
-                </div>
-              )}
+          {isResearchProject(fields.workType) && (
+            <div className="mode-panel">
+              <h2>Estrutura do Projeto de Pesquisa</h2>
+              <p>
+                Campos específicos para estrutura de projeto de pesquisa conforme ABNT NBR 15287:2025.
+              </p>
             </div>
-          ))}
+          )}
+
+          {ACADEMIC_FIELD_KEYS.map((key) => {
+            const isResearchField = RESEARCH_PROJECT_FIELD_KEYS.includes(key);
+            if (isResearchField && !isResearchProject(fields.workType)) return null;
+            return (
+              <div className="field-group" key={key}>
+                <div className="label-row">
+                  <label htmlFor={key}>{FIELD_LABELS[key]}</label>
+                  <span className={`confidence confidence-${confidence[key]}`}>
+                    {CONFIDENCE_LABELS[confidence[key]]}
+                  </span>
+                </div>
+                {LONG_FIELDS.has(key) ? (
+                  <textarea
+                    id={key}
+                    value={fields[key]}
+                    onChange={(event) => updateField(key, event.target.value)}
+                    rows={rowsForField(key)}
+                  />
+                ) : (
+                  <input
+                    id={key}
+                    value={fields[key]}
+                    onChange={(event) => updateField(key, event.target.value)}
+                  />
+                )}
+                {key === "referencias" && (
+                  <div className="field-note">
+                    <p>
+                      Para editar com mais espaço, use o botão <strong>Referências</strong> no painel central.
+                    </p>
+                    <p>
+                      Use uma referência por linha. Para destacar manualmente, selecione o trecho e clique em Negrito ou Itálico.
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </section>
 
         <section className="editor-pane" aria-label="Editor do texto">

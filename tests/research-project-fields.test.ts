@@ -64,7 +64,7 @@ describe("Campos específicos de Projeto de pesquisa", () => {
       expect(hasBlockingErrors(issues)).toBe(false);
     });
 
-    it("projeto com objetivosEspecificos preenchido, mas objetivoGeral vazio, gera erro", () => {
+    it("projeto com objetivosEspecificos preenchido, mas objetivoGeral vazio, gera erro de objetivo obrigatório", () => {
       const fields = {
         ...emptyAcademicFields(),
         workType: "projeto_pesquisa" as const,
@@ -74,7 +74,7 @@ describe("Campos específicos de Projeto de pesquisa", () => {
       };
 
       const issues = validateWork(fields, "");
-      expect(issues.some((i) => i.code === "research-goal-required")).toBe(true);
+      expect(issues.some((i) => i.code === "research-objective-mandatory")).toBe(true);
     });
 
     it("projeto com problemaPesquisa preenchido não gera erro de problema", () => {
