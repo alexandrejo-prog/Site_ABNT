@@ -46,21 +46,21 @@ export const ADHERENCE_CATEGORIES: AdherenceCategory[] = [
     label: "Resumo",
     status: "partial",
     statusLabel: "Parcial",
-    note: "Estrutura e campo são gerados. Validação de extensão (150-500 palavras) não é automática.",
+    note: "Estrutura e campo são gerados. Validação de extensão, parágrafo único e palavras-chave está implementada como alerta.",
   },
   {
     key: "abstract",
     label: "Abstract",
     status: "partial",
     statusLabel: "Parcial",
-    note: "Estrutura e campo são gerados. Validação de extensão não é automática.",
+    note: "Estrutura e campo são gerados. Validação de extensão, parágrafo único e keywords está implementada como alerta.",
   },
   {
     key: "keywords",
     label: "Palavras-chave",
     status: "implemented",
     statusLabel: "Implementado",
-    note: "Campo editável com formatação ponto e vírgula.",
+    note: "Campo editável com validação de quantidade e separação por ponto e vírgula.",
   },
   {
     key: "body",
@@ -133,6 +133,157 @@ function hasSectionHeading(editorText: string, labels: string[]): boolean {
     .split(/\n+/)
     .map(stripHeadingSyntax)
     .some((line) => normalizedLabels.includes(line));
+}
+
+function wordCount(value: string): number {
+  return value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+function paragraphCount(value: string): number {
+  return value
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean).length;
+}
+
+function keywordItems(value: string): string[] {
+  return value
+    .split(/[;\.]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function addResumoAbstractIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
+  if (isCpgWork(fields.workType)) return;
+
+  if (hasValue(fields.resumo)) {
+    const count = wordCount(fields.resumo);
+    if (count < 150 || count > 500) {
+      issues.push({
+        severity: "warning",
+        code: "resumo-word-count",
+        message: `Resumo com ${count} palavra(s). Confira se está entre 150 e 500 palavras antes da versão final.`,
+        what: "O resumo parece estar fora da faixa usual de extensão.",
+        why: "Resumos acadêmicos normalmente exigem controle de extensão e síntese adequada.",
+        action: "Revise o campo Resumo e ajuste a extensão, mantendo objetivo, método, resultados e conclusão quando aplicável.",
+      });
+    }
+
+    if (paragraphCount(fields.resumo) > 1) {
+      issues.push({
+        severity: "warning",
+        code: "resumo-single-paragraph",
+        message: "Resumo parece ter mais de um parágrafo. Revise antes da versão final.",
+        what: "O campo Resumo contém quebras de parágrafo internas.",
+        why: "O resumo costuma ser apresentado em parágrafo único nos modelos acadêmicos.",
+        action: "Una o texto do resumo em um único parágrafo, se o manual/template aplicável exigir.",
+      });
+    }
+  }
+
+  if (hasValue(fields.palavrasChave)) {
+    const items = keywordItems(fields.palavrasChave);
+    if (items.length < 3 || items.length > 5) {
+      issues.push({
+        severity: "warning",
+        code: "palavras-chave-count",
+        message: `Palavras-chave com ${items.length} item(ns). Confira se há de 3 a 5 termos.`,
+        what: "A quantidade de palavras-chave parece fora da faixa usual.",
+        why: "Palavras-chave orientam indexação e recuperação do trabalho.",
+        action: "Informe de 3 a 5 palavras-chave, preferencialmente separadas por ponto e vírgula.",
+      });
+    }
+
+    if (items.length > 1 && !fields.palavrasChave.includes(";")) {
+      issues.push({
+        severity: "warning",
+        code: "palavras-chave-separator",
+        message: "Palavras-chave parecem não estar separadas por ponto e vírgula.",
+        what: "O separador entre os termos pode estar inconsistente.",
+        why: "A separação padronizada facilita a normalização e a leitura do DOCX.",
+        action: "Use ponto e vírgula entre as palavras-chave.",
+      });
+    }
+  }
+
+  if (hasValue(fields.abstractText)) {
+    const count = wordCount(fields.abstractText);
+    if (count < 150 || count > 500) {
+      issues.push({
+        severity: "warning",
+        code: "abstract-word-count",
+        message: `Abstract com ${count} palavra(s). Confira se está entre 150 e 500 palavras antes da versão final.`,
+        what: "O abstract parece estar fora da faixa usual de extensão.",
+        why: "O abstract deve corresponder ao resumo e manter extensão controlada.",
+        action: "Revise o campo Abstract e ajuste a extensão conforme o template aplicável.",
+      });
+    }
+
+    if (paragraphCount(fields.abstractText) > 1) {
+      issues.push({
+        severity: "warning",
+        code: "abstract-single-paragraph",
+        message: "Abstract parece ter mais de um parágrafo. Revise antes da versão final.",
+        what: "O campo Abstract contém quebras de parágrafo internas.",
+        why: "O abstract costuma acompanhar o formato sintético do resumo.",
+        action: "Una o abstract em um único parágrafo, se o manual/template aplicável exigir.",
+      });
+    }
+  }
+
+  if (hasValue(fields.keywords)) {
+    const items = keywordItems(fields.keywords);
+    if (items.length < 3 || items.length > 5) {
+      issues.push({
+        severity: "warning",
+        code: "keywords-count",
+        message: `Keywords com ${items.length} item(ns). Confira se há de 3 a 5 termos.`,
+        what: "A quantidade de keywords parece fora da faixa usual.",
+        why: "Keywords orientam indexação e recuperação internacional do trabalho.",
+        action: "Informe de 3 a 5 keywords, preferencialmente separadas por ponto e vírgula.",
+      });
+    }
+
+    if (items.length > 1 && !fields.keywords.includes(";")) {
+      issues.push({
+        severity: "warning",
+        code: "keywords-separator",
+        message: "Keywords parecem não estar separadas por ponto e vírgula.",
+        what: "O separador entre os termos pode estar inconsistente.",
+        why: "A separação padronizada facilita a normalização e a leitura do DOCX.",
+        action: "Use ponto e vírgula entre as keywords.",
+      });
+    }
+  }
+}
+
+function addImpactIndicatorIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
+  if (fields.workType !== "dissertacao" && fields.workType !== "tese") return;
+
+  if (!hasValue(fields.indicadoresImpacto)) {
+    issues.push({
+      severity: "warning",
+      code: "impact-indicators-required",
+      message: "Inclua os indicadores de impacto quando exigidos para dissertação ou tese.",
+      what: "O campo Indicadores de impacto está vazio.",
+      why: "Dissertações e teses podem exigir descrição de impacto social, científico, econômico, cultural ou ambiental.",
+      action: "Preencha o campo Indicadores de impacto ou confirme se o modelo aplicado dispensa esse elemento.",
+    });
+  }
+
+  if (hasValue(fields.indicadoresImpacto) && !hasValue(fields.impactIndicators)) {
+    issues.push({
+      severity: "warning",
+      code: "impact-indicators-english-recommended",
+      message: "Inclua a versão em inglês dos indicadores de impacto quando exigida.",
+      what: "Há indicadores de impacto em português, mas o campo Impact indicators está vazio.",
+      why: "Alguns fluxos de pós-graduação exigem versão em português e inglês.",
+      action: "Preencha o campo Impact indicators ou confirme se o template aplicado não exige versão em inglês.",
+    });
+  }
 }
 
 function looksInstitutionalAuthor(value: string): boolean {
@@ -502,6 +653,8 @@ export function validateWork(
     });
   }
 
+  addResumoAbstractIssues(fields, issues);
+  addImpactIndicatorIssues(fields, issues);
   addCpgWarnings(fields, editorText, issues);
   addResearchProjectIssues(fields, editorText, issues);
 
