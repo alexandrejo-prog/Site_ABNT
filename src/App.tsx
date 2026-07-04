@@ -430,6 +430,11 @@ export default function App() {
       setEditorMode("body");
       const newEditorText = result.editorText || result.fields.introducao || result.text;
       setEditorText(newEditorText);
+
+      if (editorRef.current) {
+        editorRef.current.innerHTML = editorMarkupToHtml(newEditorText);
+      }
+
       lastAppliedEditorTextRef.current = newEditorText;
       editorContentVersionRef.current += 1;
       
