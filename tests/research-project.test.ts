@@ -75,10 +75,50 @@ SILVA, M. Projeto de pesquisa. Lavras: UFLA, 2024.
       };
 
       const issues = validateWork(fields, editorContent);
-      const blockingErrors = issues.filter((i) => i.severity === "error");
 
-      // Should have warning but no blocking error for sections
       expect(issues.some((i) => i.code === "research-project-partial")).toBe(true);
+      expect(hasBlockingErrors(issues)).toBe(false);
+    });
+
+    it("projeto com seções numeradas no editor não gera erro bloqueante para conteúdo", () => {
+      const editorContent = `# 1 INTRODUÇÃO
+Texto da introdução.
+
+# 1.2 Problema de pesquisa
+Descrição do problema.
+
+# 1.3.1 Objetivo geral
+Objetivo principal.
+
+# 1.4 Justificativa
+Justificativa da pesquisa.
+
+# 3 METODOLOGIA
+Metodologia a ser usada.
+
+# 5 CRONOGRAMA
+Planejamento das atividades.
+
+# REFERÊNCIAS
+SILVA, M. Projeto de pesquisa. Lavras: UFLA, 2024.
+`;
+
+      const fields = {
+        ...emptyAcademicFields(),
+        workType: "projeto_pesquisa" as const,
+        title: "Título do Projeto",
+        author: "Maria Silva",
+        location: "Lavras - MG",
+        year: "2026",
+      };
+
+      const issues = validateWork(fields, editorContent);
+
+      expect(issues.map((issue) => issue.code)).not.toContain("research-problem-required");
+      expect(issues.map((issue) => issue.code)).not.toContain("research-goal-required");
+      expect(issues.map((issue) => issue.code)).not.toContain("research-justification-required");
+      expect(issues.map((issue) => issue.code)).not.toContain("research-methodology-required");
+      expect(issues.map((issue) => issue.code)).not.toContain("research-schedule-required");
       expect(hasBlockingErrors(issues)).toBe(false);
     });
 
@@ -159,7 +199,6 @@ Referências bibliográficas.
 
       const result = normalizePlainAcademicText(text);
 
-      // Should have blocks without throwing
       expect(result.structure.blocks.length).toBeGreaterThan(0);
       expect(result.text).toContain("PROBLEMA DE PESQUISA");
     });
