@@ -26,8 +26,8 @@ export const NORMATIVE_COVERAGE_MATRIX: NormativeCoverageItem[] = [
     problem: "Evitar mensagem ambígua sobre IA, serviço externo ou conformidade automática.",
     currentStatus: "implemented",
     priority: "alta",
-    evidence: ["README posiciona a ferramenta como apoio", "Sem backend, API key ou provedor de IA no fluxo principal"],
-    nextStep: "Manter interface e documentação sem promessa de conformidade total ou IA opcional.",
+    evidence: ["README posiciona a ferramenta como apoio", "Teste de fluxo sem provedores externos no código principal"],
+    nextStep: "Manter interface e documentação sem promessa de conformidade total.",
     estimatedEffort: "0,5 dia",
   },
   {
@@ -96,8 +96,8 @@ export const NORMATIVE_COVERAGE_MATRIX: NormativeCoverageItem[] = [
     problem: "Sumário, paginação e campos dependem de atualização em editor externo.",
     currentStatus: "partial",
     priority: "media",
-    evidence: ["DOCX editável", "Instrução pós-geração para Word/LibreOffice"],
-    nextStep: "Validar presença dos campos de sumário e reforçar instruções no fluxo final.",
+    evidence: ["DOCX editável", "Sumário atualizável", "Instrução pós-geração para Word/LibreOffice"],
+    nextStep: "Validar presença dos campos de sumário em mais tipos de trabalho e reforçar instruções no fluxo final.",
     estimatedEffort: "1 dia",
   },
   {
@@ -116,8 +116,8 @@ export const NORMATIVE_COVERAGE_MATRIX: NormativeCoverageItem[] = [
     problem: "Usuário pode interpretar alertas como conformidade total.",
     currentStatus: "partial",
     priority: "alta",
-    evidence: ["Erros bloqueantes", "Alertas não bloqueantes", "Painel de aderência"],
-    nextStep: "Criar nível de aderência por documento com score e pendências bloqueantes.",
+    evidence: ["Erros bloqueantes", "Alertas não bloqueantes", "Cálculo técnico de score", "Painel de aderência"],
+    nextStep: "Exibir o nível de aderência por documento na interface.",
     estimatedEffort: "1 a 2 dias",
   },
   {
@@ -126,8 +126,8 @@ export const NORMATIVE_COVERAGE_MATRIX: NormativeCoverageItem[] = [
     problem: "Faltam e2e, Lighthouse e axe no pipeline contínuo.",
     currentStatus: "partial",
     priority: "alta",
-    evidence: ["Vitest unitário", "Build TypeScript", "Workflow de verify"],
-    nextStep: "Adicionar Playwright, Lighthouse CI e axe com orçamento de acessibilidade/performance.",
+    evidence: ["Vitest unitário", "Build TypeScript", "Script npm run verify"],
+    nextStep: "Adicionar workflow de CI, Playwright, Lighthouse CI e axe com orçamento de acessibilidade/performance.",
     estimatedEffort: "2 a 4 dias",
   },
   {
