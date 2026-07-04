@@ -29,8 +29,15 @@ npm run verify
 - Formulário editável para revisão manual.
 - Editor em tela única com marcadores para título, subtítulo, negrito, itálico, citação longa, referência e limpeza.
 - Validação normativa com erros bloqueantes e alertas não bloqueantes.
-- Geração de DOCX com A4, margens 3/3/2/2 cm, Times New Roman, corpo 12, citações longas 11, capa, folha de rosto, resumo, abstract, corpo e referências.
+- Validação parcial de resumo, abstract, palavras-chave e indicadores de impacto.
+- Geração de DOCX com A4, margens 3/3/2/2 cm, Times New Roman, corpo 12, citações longas 11, capa, folha de rosto, resumo, abstract, corpo, referências e sumário atualizável.
 - Fluxo recomendado: gerar DOCX, abrir no Word ou LibreOffice, atualizar sumário/campos quando necessário e exportar para PDF para submissão final.
+
+## Limites conhecidos
+
+- Ficha catalográfica, folha de aprovação, listas de ilustrações, listas de tabelas, listas de siglas e conferência visual de imagens ainda exigem revisão manual.
+- O sumário do DOCX deve ser atualizado no Word ou LibreOffice.
+- O suporte a projeto de pesquisa é parcial e precisa de revisão final pelo usuário.
 
 ## Observações
 
