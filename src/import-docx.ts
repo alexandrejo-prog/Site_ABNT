@@ -1,8 +1,5 @@
 import * as mammoth from "mammoth/mammoth.browser";
-import {
-  detectAcademicFieldsFromStructure,
-  detectAcademicFieldsFromText,
-} from "./field-detector";
+import { detectAcademicFieldsFromStructure } from "./field-detector";
 import {
   AcademicFieldKey,
   AcademicFields,
@@ -11,6 +8,7 @@ import {
 import {
   ImportedBlock,
   extractDocxStructure,
+  normalizeForDetection,
 } from "./word-structure-extractor";
 import {
   normalizeImportedStructure,
@@ -37,13 +35,45 @@ function docxOpenError(fileName: string): Error {
   );
 }
 
+function looksLikeResearchProject(text: string, fields: AcademicFields): boolean {
+  const normalized = normalizeForDetection(
+    [text, fields.title, fields.subtitle, fields.workNature, fields.resumo, fields.introducao].join("\n"),
+  );
+
+  return (
+    /\bPROJETO DE PESQUISA\b/.test(normalized) ||
+    /\bPROJETO DE PESQUISA APRESENTADO\b/.test(normalized) ||
+    /\bRESEARCH PROJECT\b/.test(normalized)
+  );
+}
+
+function withInferredWorkType(fields: AcademicFields, text: string): AcademicFields {
+  if (!looksLikeResearchProject(text, fields)) return fields;
+  return { ...fields, workType: "projeto_pesquisa" };
+}
+
+function buildImportResult(
+  normalized: ReturnType<typeof normalizePlainAcademicText>,
+  detected: ReturnType<typeof detectAcademicFieldsFromStructure>,
+  messages: string[],
+): ImportResult {
+  return {
+    text: normalized.text,
+    editorText: detected.editorText || normalized.text,
+    fields: withInferredWorkType(detected.fields, normalized.text),
+    confidence: detected.confidence,
+    messages,
+    blocks: normalized.structure.blocks,
+  };
+}
+
 export function identifyAcademicFields(
   text: string,
 ): Omit<ImportResult, "text" | "editorText" | "messages" | "blocks"> {
   const normalized = normalizePlainAcademicText(text);
   const identified = detectAcademicFieldsFromStructure(normalized.structure);
   return {
-    fields: identified.fields,
+    fields: withInferredWorkType(identified.fields, normalized.text),
     confidence: identified.confidence,
   };
 }
@@ -80,31 +110,21 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
       });
       const detected = detectAcademicFieldsFromStructure(normalized.structure);
 
-      return {
-        text: normalized.text,
-        editorText: detected.editorText || normalized.text,
-        fields: detected.fields,
-        confidence: detected.confidence,
-        messages: [...messages, ...normalized.messages, ...detected.messages],
-        blocks: normalized.structure.blocks,
-      };
+      return buildImportResult(normalized, detected, [
+        ...messages,
+        ...normalized.messages,
+        ...detected.messages,
+      ]);
     } catch {
       if (mammothText.trim()) {
         const normalized = normalizePlainAcademicText(mammothText);
         const detected = detectAcademicFieldsFromStructure(normalized.structure);
-        return {
-          text: normalized.text,
-          editorText: detected.editorText || normalized.text,
-          fields: detected.fields,
-          confidence: detected.confidence,
-          messages: [
-            ...messages,
-            "Não foi possível ler a estrutura OOXML; o arquivo foi importado apenas como texto bruto.",
-            ...normalized.messages,
-            ...detected.messages,
-          ],
-          blocks: normalized.structure.blocks,
-        };
+        return buildImportResult(normalized, detected, [
+          ...messages,
+          "Não foi possível ler a estrutura OOXML; o arquivo foi importado apenas como texto bruto.",
+          ...normalized.messages,
+          ...detected.messages,
+        ]);
       }
 
       throw docxOpenError(file.name);
@@ -115,14 +135,10 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
     const text = await file.text();
     const normalized = normalizePlainAcademicText(text);
     const detected = detectAcademicFieldsFromStructure(normalized.structure);
-    return {
-      text: normalized.text,
-      editorText: detected.editorText || normalized.text,
-      fields: detected.fields,
-      confidence: detected.confidence,
-      messages: [...normalized.messages, ...detected.messages],
-      blocks: normalized.structure.blocks,
-    };
+    return buildImportResult(normalized, detected, [
+      ...normalized.messages,
+      ...detected.messages,
+    ]);
   }
 
   throw new Error("Formato não suportado. Use .docx, .txt ou .md.");
