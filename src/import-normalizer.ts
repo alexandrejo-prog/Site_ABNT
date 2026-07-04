@@ -267,11 +267,15 @@ function normalizeBlock(block: ImportedBlock): ImportedBlock[] {
 function textFromBlock(block: ImportedBlock): string[] {
   if (block.type === "pageBreak" || block.type === "image") return [];
   if (block.type === "table") return block.rows.map((row) => row.join("\t"));
+  if (block.type === "heading") return [`${block.level <= 1 ? "#" : "##"} ${block.text}`];
   return [block.text];
 }
 
 function blockText(block: ImportedBlock): string {
-  return textFromBlock(block).join("\n").trim();
+  if (block.type === "pageBreak") return "";
+  if (block.type === "image") return "";
+  if (block.type === "table") return block.rows.map((row) => row.join("\t")).join("\n");
+  return block.text.trim();
 }
 
 function isTocHeading(block: ImportedBlock): boolean {
