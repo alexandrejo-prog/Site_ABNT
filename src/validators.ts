@@ -119,6 +119,22 @@ function normalizeForValidation(value: string): string {
     .trim();
 }
 
+function stripHeadingSyntax(value: string): string {
+  return normalizeForValidation(value)
+    .replace(/^#+\s*/, "")
+    .replace(/^\d+(?:\.\d+)*\s+/, "")
+    .replace(/[:.\-–—]+$/, "")
+    .trim();
+}
+
+function hasSectionHeading(editorText: string, labels: string[]): boolean {
+  const normalizedLabels = labels.map(normalizeForValidation);
+  return editorText
+    .split(/\n+/)
+    .map(stripHeadingSyntax)
+    .some((line) => normalizedLabels.includes(line));
+}
+
 function looksInstitutionalAuthor(value: string): boolean {
   const normalized = normalizeForValidation(value);
   return /\b(UNIVERSIDADE|UFLA|INSTITUTO|PROGRAMA|POS-GRADUACAO|CURSO|DEPARTAMENTO|FACULDADE|ESCOLA|LAVRAS|MINAS GERAIS|MG)\b/.test(
@@ -276,12 +292,12 @@ function addResearchProjectIssues(fields: AcademicFields, editorText: string, is
     action: "Revise todos os campos e o DOCX gerado antes da versão final.",
   });
 
-  const hasProblemStatement = hasValue(fields.problemaPesquisa) || /#+\s*PROBLEMA\s+DE\s+PESQUISA/i.test(editorText) || /#+\s*PROBLEMA/i.test(editorText);
-  const hasObjective = hasValue(fields.objetivoGeral) || /#+\s*OBJETIVO\s+GERAL/i.test(editorText);
-  const hasJustification = hasValue(fields.justificativa) || /#+\s*JUSTIFICATIVA/i.test(editorText);
-  const hasMethodology = hasValue(fields.metodologia) || /#+\s*METODOLOGIA/i.test(editorText) || /#+\s*PROCEDIMENTOS/i.test(editorText);
-  const hasSchedule = hasValue(fields.cronograma) || /#+\s*CRONOGRAMA/i.test(editorText);
-  const hasReferences = hasValue(fields.referencias) || /#+\s*(REFERÊNCIAS|REFERENCIAS|REFERÊNCIAS)/i.test(editorText) || /#+\s*BIBLIOGRÁFICAS/i.test(editorText);
+  const hasProblemStatement = hasValue(fields.problemaPesquisa) || hasSectionHeading(editorText, ["PROBLEMA DE PESQUISA", "PROBLEMA"]);
+  const hasObjective = hasValue(fields.objetivoGeral) || hasSectionHeading(editorText, ["OBJETIVO GERAL"]);
+  const hasJustification = hasValue(fields.justificativa) || hasSectionHeading(editorText, ["JUSTIFICATIVA"]);
+  const hasMethodology = hasValue(fields.metodologia) || hasSectionHeading(editorText, ["METODOLOGIA", "PROCEDIMENTOS METODOLÓGICOS", "PROCEDIMENTOS METODOLOGICOS"]);
+  const hasSchedule = hasValue(fields.cronograma) || hasSectionHeading(editorText, ["CRONOGRAMA"]);
+  const hasReferences = hasValue(fields.referencias) || hasSectionHeading(editorText, ["REFERÊNCIAS", "REFERENCIAS", "BIBLIOGRÁFICAS", "BIBLIOGRAFICAS"]);
 
   if (!hasProblemStatement) {
     issues.push({
@@ -349,7 +365,7 @@ function addResearchProjectIssues(fields: AcademicFields, editorText: string, is
     });
   }
 
-  if (hasValue(fields.objetivosEspecificos) && !hasValue(fields.objetivoGeral)) {
+  if (hasValue(fields.objetivosEspecificos) && !hasValue(fields.objetivoGeral) && !hasObjective) {
     issues.push({
       severity: "error",
       code: "research-objective-mandatory",
