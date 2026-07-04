@@ -1,6 +1,7 @@
 import {
   DocxStructure,
   ImportedBlock,
+  normalizeForDetection,
 } from "./word-structure-extractor";
 
 export interface ImportNormalizationResult {
@@ -56,9 +57,30 @@ const SECTION_LABELS = [
   "Para a Função Social da UFLA",
 ];
 
+const UNNUMBERED_RESEARCH_HEADINGS: Array<{
+  labels: string[];
+  heading: string;
+  kind: InlineMarker["kind"];
+  insertPageBreakBefore?: boolean;
+}> = [
+  { labels: ["TEMA"], heading: "TEMA", kind: "textual" },
+  { labels: ["DELIMITAÇÃO DO TEMA", "DELIMITACAO DO TEMA"], heading: "DELIMITAÇÃO DO TEMA", kind: "textual" },
+  { labels: ["PROBLEMA DE PESQUISA", "PROBLEMA"], heading: "PROBLEMA DE PESQUISA", kind: "textual" },
+  { labels: ["HIPÓTESE", "HIPOTESE", "HIPÓTESES", "HIPOTESES"], heading: "HIPÓTESE", kind: "textual" },
+  { labels: ["OBJETIVO GERAL"], heading: "OBJETIVO GERAL", kind: "textual" },
+  { labels: ["OBJETIVOS ESPECÍFICOS", "OBJETIVOS ESPECIFICOS"], heading: "OBJETIVOS ESPECÍFICOS", kind: "textual" },
+  { labels: ["JUSTIFICATIVA"], heading: "JUSTIFICATIVA", kind: "textual" },
+  { labels: ["REFERENCIAL TEÓRICO", "REFERENCIAL TEORICO", "FUNDAMENTAÇÃO TEÓRICA", "FUNDAMENTACAO TEORICA"], heading: "REFERENCIAL TEÓRICO", kind: "textual" },
+  { labels: ["METODOLOGIA", "PROCEDIMENTOS METODOLÓGICOS", "PROCEDIMENTOS METODOLOGICOS"], heading: "METODOLOGIA", kind: "textual" },
+  { labels: ["CRONOGRAMA"], heading: "CRONOGRAMA", kind: "textual" },
+  { labels: ["RECURSOS", "ORÇAMENTO", "ORCAMENTO"], heading: "RECURSOS/ORÇAMENTO", kind: "textual" },
+  { labels: ["RESULTADOS ESPERADOS"], heading: "RESULTADOS ESPERADOS", kind: "textual" },
+  { labels: ["REFERÊNCIAS", "REFERENCIAS"], heading: "REFERÊNCIAS", kind: "post-textual", insertPageBreakBefore: true },
+];
+
 const SECTION_LABEL_PATTERN = SECTION_LABELS.map(escapeRegExp).join("|");
 const NUMBERED_HEADING_PATTERN = new RegExp(
-  `(^|\\s)(\\d+(?:\\.\\d+)*)(?:\\.)?\\s+(${SECTION_LABEL_PATTERN})(?=\\s|$|[:.])`,
+  `(^|\\s)(?:#{1,6}\\s*)?(\\d+(?:\\.\\d+)*)(?:\\.)?\\s+(${SECTION_LABEL_PATTERN})(?=\\s|$|[:.])`,
   "i",
 );
 
@@ -104,10 +126,33 @@ function normalizeNumberedHeading(number: string, label: string): { heading: str
   };
 }
 
+function wholeLineHeadingMarker(text: string): InlineMarker | undefined {
+  const withoutMarker = cleanText(text.replace(/^#{1,6}\s*/, "").replace(/[:.\-–—]+$/, ""));
+  if (!withoutMarker) return undefined;
+  const normalized = normalizeForDetection(withoutMarker);
+
+  for (const candidate of UNNUMBERED_RESEARCH_HEADINGS) {
+    if (candidate.labels.some((label) => normalizeForDetection(label) === normalized)) {
+      return {
+        index: 0,
+        length: text.length,
+        heading: candidate.heading,
+        level: 1,
+        kind: candidate.kind,
+        insertPageBreakBefore: candidate.insertPageBreakBefore,
+      };
+    }
+  }
+
+  return undefined;
+}
+
 function findNextMarker(text: string): InlineMarker | undefined {
   const candidates: InlineMarker[] = [];
+  const wholeLine = wholeLineHeadingMarker(text);
+  if (wholeLine) candidates.push(wholeLine);
 
-  const resumo = text.match(/(?:^|\s)(?:RESUMO|Resumo)\b\s*[:.\-]?\s*/);
+  const resumo = text.match(/(?:^|\s)(?:#{1,6}\s*)?(?:RESUMO|Resumo)\b\s*[:.\-]?\s*/);
   if (resumo?.index !== undefined) {
     candidates.push({
       index: resumo.index,
@@ -119,7 +164,7 @@ function findNextMarker(text: string): InlineMarker | undefined {
     });
   }
 
-  const abstract = text.match(/(?:^|\s)(?:ABSTRACT|Abstract)\b\s*[:.\-]?\s*/);
+  const abstract = text.match(/(?:^|\s)(?:#{1,6}\s*)?(?:ABSTRACT|Abstract)\b\s*[:.\-]?\s*/);
   if (abstract?.index !== undefined) {
     candidates.push({
       index: abstract.index,
@@ -131,7 +176,7 @@ function findNextMarker(text: string): InlineMarker | undefined {
     });
   }
 
-  const referencias = text.match(/(?:^|\s)(?:REFERÊNCIAS|REFERENCIAS|Referências)\b\s*[:.\-]?\s*/);
+  const referencias = text.match(/(?:^|\s)(?:#{1,6}\s*)?(?:REFERÊNCIAS|REFERENCIAS|Referências)\b\s*[:.\-]?\s*/);
   if (referencias?.index !== undefined) {
     candidates.push({
       index: referencias.index,
@@ -225,6 +270,90 @@ function textFromBlock(block: ImportedBlock): string[] {
   return [block.text];
 }
 
+function blockText(block: ImportedBlock): string {
+  return textFromBlock(block).join("\n").trim();
+}
+
+function isTocHeading(block: ImportedBlock): boolean {
+  return normalizeForDetection(blockText(block)) === "SUMARIO";
+}
+
+function isStandalonePageNumber(text: string): boolean {
+  return /^\d{1,4}$/.test(cleanText(text));
+}
+
+function isTocEntry(text: string): boolean {
+  const cleaned = cleanText(text);
+  const normalized = normalizeForDetection(cleaned);
+  if (!normalized) return false;
+  if (isStandalonePageNumber(cleaned)) return true;
+  if (/^[\-–—]\s*\d{1,4}$/.test(cleaned)) return true;
+  if (/^\d+(?:\.\d+)*\s*$/.test(normalized)) return true;
+  if (/^\d+(?:\.\d+)*\s+.+\s+\d{1,4}$/.test(normalized)) return true;
+  if (/^(REFERENCIAS|APENDICE|APENDICES|ANEXO|ANEXOS|CONCLUSAO|CONSIDERACOES FINAIS)\b.*\s+\d{1,4}$/.test(normalized)) return true;
+  if (/^\d+(?:\.\d+)*\s+(INTRODUCAO|REFERENCIAL TEORICO|METODOLOGIA|CRONOGRAMA|RESULTADOS ESPERADOS|CONSIDERACOES FINAIS)\b/.test(normalized)) return true;
+  if (/^\d+(?:\.\d+)*\s+[A-Z0-9]/.test(normalized) && normalized.length < 120) return true;
+  return false;
+}
+
+function looksLikeRealBodyStart(blocks: ImportedBlock[], index: number): boolean {
+  const current = normalizeForDetection(blockText(blocks[index]));
+  const isIntro = current === "1 INTRODUCAO" || current === "INTRODUCAO";
+  if (!isIntro) return false;
+
+  for (let cursor = index + 1; cursor < Math.min(blocks.length, index + 6); cursor += 1) {
+    const candidate = blocks[cursor];
+    if (candidate.type === "pageBreak") continue;
+    const text = blockText(candidate);
+    if (!text || isStandalonePageNumber(text) || isTocEntry(text)) continue;
+    const normalized = normalizeForDetection(text);
+    if (!/^\d+(?:\.\d+)*\s+/.test(normalized) && text.length > 60) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function stripTableOfContents(blocks: ImportedBlock[]): ImportedBlock[] {
+  const output: ImportedBlock[] = [];
+  let insideToc = false;
+
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index];
+    const text = blockText(block);
+
+    if (!insideToc && isTocHeading(block)) {
+      insideToc = true;
+      continue;
+    }
+
+    if (insideToc) {
+      if (looksLikeRealBodyStart(blocks, index)) {
+        insideToc = false;
+        output.push(block);
+        continue;
+      }
+
+      if (block.type === "pageBreak" || !text || isTocEntry(text) || block.type === "heading") {
+        continue;
+      }
+
+      if (text.length < 120) {
+        continue;
+      }
+
+      insideToc = false;
+      output.push(block);
+      continue;
+    }
+
+    output.push(block);
+  }
+
+  return output;
+}
+
 function shouldForcePageBreakBefore(block: ImportedBlock): boolean {
   if (block.type !== "heading") return false;
   return /^(RESUMO|ABSTRACT|REFERÊNCIAS|REFERENCIAS)$/i.test(block.text) || /^1\s+Introdu/i.test(block.text);
@@ -232,9 +361,10 @@ function shouldForcePageBreakBefore(block: ImportedBlock): boolean {
 
 function normalizeBlocks(blocks: ImportedBlock[]): ImportedBlock[] {
   const split = blocks.flatMap(normalizeBlock);
+  const withoutToc = stripTableOfContents(split);
   const normalized: ImportedBlock[] = [];
 
-  for (const block of split) {
+  for (const block of withoutToc) {
     if (shouldForcePageBreakBefore(block) && !shouldSuppressPageBreak(normalized)) {
       normalized.push(pageBreakBlock());
     }
@@ -275,7 +405,7 @@ export function normalizePlainAcademicText(text: string): ImportNormalizationRes
     },
     messages: hasStructuralChange(blocks, normalizedBlocks)
       ? [
-          "Documento mal segmentado: título, resumo e seções foram separados automaticamente para revisão.",
+          "Documento mal segmentado: título, resumo, sumário e seções foram separados automaticamente para revisão.",
         ]
       : [],
   };
@@ -294,7 +424,7 @@ export function normalizeImportedStructure(structure: DocxStructure): ImportNorm
     },
     messages: hasStructuralChange(structure.blocks, normalizedBlocks)
       ? [
-          "Documento mal segmentado: título, resumo e seções foram separados automaticamente para revisão.",
+          "Documento mal segmentado: título, resumo, sumário e seções foram separados automaticamente para revisão.",
         ]
       : [],
   };
