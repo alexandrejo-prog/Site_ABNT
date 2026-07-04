@@ -35,7 +35,7 @@ describe("editor e fluxo de importação", () => {
   it("App.tsx não usa dangerouslySetInnerHTML no editor", () => {
     const editorMatches = appSource.match(/<div[^>]*ref={editorRef}[^>]*>/g);
     expect(editorMatches).toBeTruthy();
-    
+
     const editorDiv = editorMatches![0];
     expect(editorDiv).not.toContain("dangerouslySetInnerHTML");
   });
@@ -50,6 +50,7 @@ describe("editor e fluxo de importação", () => {
   it("App.tsx atualiza editor após importação", () => {
     expect(appSource).toContain("editorContentVersionRef.current += 1");
     expect(appSource).toContain("lastAppliedEditorTextRef.current = newEditorText");
+    expect(appSource).toContain("editorRef.current.innerHTML = editorMarkupToHtml(newEditorText)");
   });
 
   it("App.tsx preserva conteúdo ao alternar modos", () => {
