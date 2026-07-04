@@ -1,9 +1,17 @@
+import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { WORK_TYPES, WORK_TYPE_LABELS, isResearchProject, emptyAcademicFields } from "../src/ufla-rules";
 import { validateWork, hasBlockingErrors } from "../src/validators";
 import { generateResearchProjectDocxBlob } from "../src/export-research-project-docx";
 import { ADHERENCE_CATEGORIES } from "../src/validators";
 import { normalizePlainAcademicText } from "../src/import-normalizer";
+
+async function getDocumentXml(blob: Blob): Promise<string> {
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  const documentXml = zip.file("word/document.xml");
+  expect(documentXml).toBeTruthy();
+  return documentXml!.async("text");
+}
 
 describe("Projeto de pesquisa (NBR 15287:2025)", () => {
   describe("A. Tipo de trabalho", () => {
@@ -163,6 +171,48 @@ Objetivo principal da pesquisa.
       expect(blob).toBeInstanceOf(Blob);
       expect(blob.size).toBeGreaterThan(0);
       expect(blob.type).toMatch(/^application\/(vnd\.openxmlformats-officedocument\.wordprocessingml\.document|octet-stream)/);
+    });
+
+    it("inclui sumário visível com entradas do projeto", async () => {
+      const fields = {
+        ...emptyAcademicFields(),
+        workType: "projeto_pesquisa" as const,
+        title: "Título do Projeto de Pesquisa",
+        author: "Maria Silva",
+        location: "Lavras - MG",
+        year: "2026",
+        referencias: "SILVA, M. Projeto de pesquisa. Lavras: UFLA, 2024.",
+      };
+
+      const editorText = `# 1 INTRODUÇÃO
+Texto da introdução do projeto.
+
+## 1.1 Contextualização e delimitação do tema
+Texto da contextualização.
+
+## 1.2 Problema de pesquisa
+Descrição do problema investigado.
+
+### 1.3.1 Objetivo geral
+Objetivo principal da pesquisa.
+
+# 3 METODOLOGIA
+Texto da metodologia.
+
+# 5 CRONOGRAMA
+Texto do cronograma.
+`;
+
+      const xml = await getDocumentXml(await generateResearchProjectDocxBlob({ fields, editorText }));
+
+      expect(xml).toContain("SUMÁRIO");
+      expect(xml).toContain("1 INTRODUÇÃO");
+      expect(xml).toContain("1.1 Contextualização e delimitação do tema");
+      expect(xml).toContain("1.2 Problema de pesquisa");
+      expect(xml).toContain("1.3.1 Objetivo geral");
+      expect(xml).toContain("3 METODOLOGIA");
+      expect(xml).toContain("5 CRONOGRAMA");
+      expect(xml).toContain("REFERÊNCIAS");
     });
   });
 
