@@ -3,6 +3,7 @@ import {
   Document,
   HeadingLevel,
   Packer,
+  PageBreak,
   PageOrientation,
   Paragraph,
   TextRun,
@@ -17,6 +18,8 @@ const ONE_AND_HALF_LINE = UFLA_RULES.spacing.bodyLineTwip;
 const SINGLE_LINE = UFLA_RULES.spacing.singleLineTwip;
 const TWELVE_PT = 240;
 const SIX_PT = 120;
+
+type SummaryEntry = Pick<EditorBlock, "type" | "text">;
 
 function run(text: string, options: { bold?: boolean; size?: number } = {}): TextRun {
   return new TextRun({
@@ -53,6 +56,59 @@ function centeredParagraph(text: string, bold = false, size = BODY_SIZE): Paragr
   });
 }
 
+function pageBreak(): Paragraph {
+  return new Paragraph({ children: [new PageBreak()] });
+}
+
+function summaryTitle(): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: TWELVE_PT, after: TWELVE_PT, line: ONE_AND_HALF_LINE },
+    children: [run("SUMÁRIO", { bold: true })],
+  });
+}
+
+function summaryEntryParagraph(entry: SummaryEntry): Paragraph {
+  const left = entry.type === "heading3" ? cmToTwip(1) : entry.type === "heading2" ? cmToTwip(0.5) : 0;
+
+  return new Paragraph({
+    alignment: AlignmentType.LEFT,
+    spacing: { before: 0, after: 0, line: SINGLE_LINE },
+    indent: { left },
+    children: [run(entry.text, { bold: entry.type === "heading1" })],
+  });
+}
+
+function summaryEntries(bodyBlocks: EditorBlock[], references: string[], input: DocxGenerationInput): SummaryEntry[] {
+  const entries: SummaryEntry[] = bodyBlocks
+    .filter((block) => block.type === "heading1" || block.type === "heading2" || block.type === "heading3")
+    .map((block) => ({ type: block.type, text: block.text }));
+
+  if (references.length > 0) entries.push({ type: "heading1", text: "REFERÊNCIAS" });
+  if (input.fields.apendices) entries.push({ type: "heading1", text: "APÊNDICES" });
+  if (input.fields.anexos) entries.push({ type: "heading1", text: "ANEXOS" });
+
+  return entries;
+}
+
+function buildSummary(bodyBlocks: EditorBlock[], references: string[], input: DocxGenerationInput): Paragraph[] {
+  const entries = summaryEntries(bodyBlocks, references, input);
+  if (!entries.length) return [];
+
+  return [
+    pageBreak(),
+    summaryTitle(),
+    ...entries.map((entry) => summaryEntryParagraph(entry)),
+    new Paragraph({ spacing: { before: 240 } }),
+    paragraph(
+      "Após abrir o DOCX no Word ou LibreOffice, atualize o sumário para conferir a paginação final.",
+      false,
+      { line: SINGLE_LINE },
+    ),
+    pageBreak(),
+  ];
+}
+
 function blockToParagraph(block: EditorBlock): Paragraph[] {
   if (block.type === "heading1") {
     return [sectionTitle(block.text)];
@@ -69,9 +125,7 @@ function blockToParagraph(block: EditorBlock): Paragraph[] {
   }
 
   if (block.type === "longQuote") {
-    return [
-      paragraph(block.text, false, { line: SINGLE_LINE }),
-    ];
+    return [paragraph(block.text, false, { line: SINGLE_LINE })];
   }
 
   return [paragraph(block.text)];
@@ -190,6 +244,8 @@ function buildDocument(input: DocxGenerationInput): Document {
           centeredParagraph(input.fields.location || "Lavras - MG", false, BODY_SIZE - 4),
           new Paragraph({ spacing: { before: 480 } }),
           centeredParagraph(input.fields.year || new Date().getFullYear().toString(), false, BODY_SIZE - 4),
+          // Sumário estático de segurança para projeto de pesquisa
+          ...buildSummary(bodyBlocks, references, input),
           // Corpo do texto
           new Paragraph({ spacing: { before: 720 } }),
           ...bodyBlocks.flatMap((block) => blockToParagraph(block)),
@@ -203,10 +259,18 @@ function buildDocument(input: DocxGenerationInput): Document {
             : []),
           // Apêndices/Anexos se houver
           ...(input.fields.apendices
-            ? [new Paragraph({ spacing: { before: 480 } }), sectionTitle("Apêndices"), ...splitParagraphs(input.fields.apendices).map((line) => paragraph(line))]
+            ? [
+                new Paragraph({ spacing: { before: 480 } }),
+                sectionTitle("Apêndices"),
+                ...splitParagraphs(input.fields.apendices).map((line) => paragraph(line)),
+              ]
             : []),
           ...(input.fields.anexos
-            ? [new Paragraph({ spacing: { before: 480 } }), sectionTitle("Anexos"), ...splitParagraphs(input.fields.anexos).map((line) => paragraph(line))]
+            ? [
+                new Paragraph({ spacing: { before: 480 } }),
+                sectionTitle("Anexos"),
+                ...splitParagraphs(input.fields.anexos).map((line) => paragraph(line)),
+              ]
             : []),
         ],
       },
