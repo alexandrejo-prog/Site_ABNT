@@ -26,17 +26,26 @@ function isKnownHeadingFragment(currentLine: string, nextLine: string): boolean 
   );
 }
 
+function nextNonEmptyLineIndex(lines: string[], startIndex: number): number | undefined {
+  for (let index = startIndex; index < lines.length; index += 1) {
+    if (lines[index].trim()) return index;
+  }
+
+  return undefined;
+}
+
 export function repairHeadingFragments(text: string): string {
   const lines = text.split(/\r?\n/);
   const repaired: string[] = [];
 
   for (let index = 0; index < lines.length; index += 1) {
     const current = lines[index];
-    const next = lines[index + 1];
+    const nextIndex = nextNonEmptyLineIndex(lines, index + 1);
+    const next = nextIndex === undefined ? undefined : lines[nextIndex];
 
-    if (next !== undefined && isKnownHeadingFragment(current.trim(), next.trim())) {
+    if (current.trim() && next !== undefined && isKnownHeadingFragment(current.trim(), next.trim())) {
       repaired.push(`${current.trim()} ${next.trim()}`);
-      index += 1;
+      index = nextIndex;
       continue;
     }
 
