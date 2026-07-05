@@ -257,7 +257,8 @@ function isGenericWorkNature(value: string): boolean {
     !value.trim() ||
     normalized.includes("requisito academico") ||
     normalized.includes("dados revisados pelo usuario") ||
-    normalized.includes("trabalho apresentado a universidade federal de lavras como requisito")
+    normalized.includes("trabalho apresentado a universidade federal de lavras como requisito") ||
+    normalized.includes("projeto de pesquisa apresentado a universidade federal de lavras")
   );
 }
 
@@ -268,7 +269,7 @@ function defaultWorkNature(fields: AcademicFields): string {
   const program =
     fields.program || "Programa de Pós-Graduação em Educação Científica e Ambiental";
 
-  return `${kind} apresentada à Universidade Federal de Lavfas, como parte das exigências do ${program}, para obtenção do título de ${degree}.`;
+  return `${kind} apresentada à Universidade Federal de Lavras, como parte das exigências do ${program}, para obtenção do título de ${degree}.`;
 }
 
 function ensureGraduateCompleteStructure(fields: AcademicFields): AcademicFields {
@@ -607,15 +608,12 @@ export default function App() {
               ))}
             </select>
           </div>
-
-          {fields.workType === "artigo" && (
-            <div className="mode-panel">
-              <h2>Artigo academico simples</h2>
-              <p>
-                Artigo simples nao usa capa, folha de rosto, ficha catalografica, folha de aprovacao, indicadores de impacto nem sumario.
-              </p>
-            </div>
-          )}
+          <div className="mode-panel">
+            <h2>{fields.workType ? WORK_TYPE_LABELS[fields.workType] : "Fluxo UFLA/ABNT"}</h2>
+            <p>
+              Gere um DOCX editável. Depois abra no Word ou LibreOffice, atualize o sumário e exporte para PDF.
+            </p>
+          </div>
 
           {isCpgSelected && (
             <div className="mode-panel">
@@ -642,7 +640,7 @@ export default function App() {
                 O campo Autor pode receber multiplos autores separados por virgula. Use Programa como endereco ou afiliacao institucional e Curso para e-mails ou informacoes adicionais nesta rodada.
               </p>
               <p>
-                <strong>Saída do sistema:</strong> gere o DOCX e, se precisar de PDF, exporte por um editor de texto externo.
+                <strong>SaÃda do sistema:</strong> gere o DOCX e, se precisar de PDF, exporte por um editor de texto externo.
               </p>
             </div>
           )}
@@ -651,7 +649,7 @@ export default function App() {
             <div className="mode-panel">
               <h2>Estrutura do Projeto de Pesquisa</h2>
               <p>
-                Campos específicos para estrutura de projeto de pesquisa conforme ABNT NBR 15287:2025.
+                Campos especÃficos para estrutura de projeto de pesquisa conforme ABNT NBR 15287:2025.
               </p>
             </div>
           )}
@@ -667,200 +665,4 @@ export default function App() {
                     {CONFIDENCE_LABELS[confidence[key]]}
                   </span>
                 </div>
-                {LONG_FIELDS.has(key) ? (
-                  <textarea
-                    id={key}
-                    value={fields[key]}
-                    onChange={(event) => updateField(key, event.target.value)}
-                    rows={rowsForField(key)}
-                  />
-                ) : (
-                  <input
-                    id={key}
-                    value={fields[key]}
-                    onChange={(event) => updateField(key, event.target.value)}
-                  />
-                )}
-                {key === "referencias" && (
-                  <div className="field-note">
-                    <p>
-                      Para editar com mais espaço, use o botão <strong>Referências</strong> no painel central.
-                    </p>
-                    <p>
-                      Use uma referência por linha. Para destacar manualmente, selecione o trecho e clique em Negrito ou Itálico.
-                    </p>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </section>
-
-        <section className="editor-pane" aria-label="Editor do texto">
-          <div className="editor-toolbar-sticky">
-            <div className="toolbar" aria-label="Modo de edição">
-              <button
-                className={`text-button ${editorMode === "body" ? "active" : ""}`}
-                type="button"
-                title="Editar texto principal"
-                onClick={() => setEditorMode("body")}
-              >
-                Texto
-              </button>
-              <button
-                className={`text-button ${editorMode === "references" ? "active" : ""}`}
-                type="button"
-                title="Editar referências no painel central"
-                onClick={() => setEditorMode("references")}
-              >
-                Referências
-              </button>
-            </div>
-
-            <div className="toolbar" aria-label="Ferramentas do editor">
-              <ToolButton title="Desfazer (Ctrl+Z)" onClick={() => {
-                editorRef.current?.focus();
-                document.execCommand("undo", false);
-              }}>
-                <span className="toolbar-text">Desfazer</span>
-              </ToolButton>
-              <ToolButton title="Refazer (Ctrl+Y)" onClick={() => {
-                editorRef.current?.focus();
-                document.execCommand("redo", false);
-              }}>
-                <span className="toolbar-text">Refazer</span>
-              </ToolButton>
-              <ToolButton title="Parágrafo normal" onClick={() => applyBlockStyle("")}>
-                <Pilcrow size={18} aria-hidden="true" />
-              </ToolButton>
-              <ToolButton title="Título primário" onClick={() => applyBlockStyle("# ")}>
-                <Heading1 size={18} aria-hidden="true" />
-              </ToolButton>
-              <ToolButton title="Título secundário" onClick={() => applyBlockStyle("## ")}>
-                <Heading2 size={18} aria-hidden="true" />
-              </ToolButton>
-              <ToolButton title="Negrito" onClick={() => wrapSelection("bold")}>
-                <Bold size={18} aria-hidden="true" />
-              </ToolButton>
-              <ToolButton title="Itálico" onClick={() => wrapSelection("italic")}>
-                <Italic size={18} aria-hidden="true" />
-              </ToolButton>
-              <ToolButton title="Citação longa" onClick={() => applyBlockStyle("> ")}>
-                <Quote size={18} aria-hidden="true" />
-              </ToolButton>
-              <ToolButton title="Referência" onClick={() => applyBlockStyle("[REF] ")}>
-                <FileCheck2 size={18} aria-hidden="true" />
-              </ToolButton>
-              <ToolButton title="Limpar formatação" onClick={clearFormatting}>
-                <Eraser size={18} aria-hidden="true" />
-              </ToolButton>
-            </div>
-
-            <p className="field-note editor-mode-note">
-              {editorMode === "references"
-                ? "Editando referências no painel central. Selecione palavras e use Negrito/Itálico como no Word."
-                : "Editando texto principal. Selecione palavras e use Negrito/Itálico como no Word."}
-            </p>
-          </div>
-
-          <div
-            ref={editorRef}
-            className="editor rich-editor"
-            contentEditable
-            suppressContentEditableWarning
-            role="textbox"
-            aria-multiline="true"
-            aria-label={editorMode === "references" ? "Editor de referências" : "Editor do texto principal"}
-            onInput={handleRichEditorInput}
-            onPaste={handleEditorPaste}
-            spellCheck
-          />
-
-          <div className="adherence-panel">
-            <button
-              type="button"
-              className="adherence-header"
-              onClick={() => setAdherenceExpanded((prev) => !prev)}
-              aria-expanded={adherenceExpanded}
-              aria-controls="adherence-content"
-            >
-              <span>Painel de aderência normativa</span>
-              <span className={`adherence-chevron ${adherenceExpanded ? "open" : ""}`}>▼</span>
-            </button>
-            {adherenceExpanded && (
-              <div className="adherence-body" id="adherence-content">
-                <p className="adherence-disclaimer">
-                  Este painel reflete o que o sistema implementa atualmente. A conformidade final depende de revisão manual no DOCX gerado.
-                </p>
-                <div className="adherence-grid">
-                  {ADHERENCE_CATEGORIES.map((category) => (
-                    <div className="adherence-item" key={category.key}>
-                      <span className="adherence-label">{category.label}</span>
-                      <span className={`adherence-status adherence-${category.status}`}>
-                        {category.statusLabel}
-                      </span>
-                      {category.note && (
-                        <span className="adherence-note">{category.note}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <aside className="validation-pane" aria-label="Validação">
-          <div className="status-line" aria-live="polite">
-            {status}
-          </div>
-
-          <div className="post-generation-note">
-            <strong>Após gerar o DOCX:</strong> abra no Word ou em outro editor de texto, atualize o sumário (F9) e campos quando necessário, confira paginação e exporte para PDF para submissão final.
-          </div>
-
-          <label className="force-generate">
-            <input
-              type="checkbox"
-              checked={generateAnyway}
-              onChange={(event) => setGenerateAnyway(event.target.checked)}
-            />
-            <span>Gerar mesmo assim</span>
-          </label>
-
-          <div className="issue-list" aria-label="Erros de validação">
-            <h2>Erros</h2>
-            {errors.length ? (
-              errors.map((issue) => (
-                <div className={`issue error`} key={issue.code} role="alert">
-                  <p className="issue-message">{issue.message}</p>
-                  {issue.what && <p className="issue-detail"><strong>O que é:</strong> {issue.what}</p>}
-                  {issue.why && <p className="issue-detail"><strong>Por que importa:</strong> {issue.why}</p>}
-                  {issue.action && <p className="issue-detail"><strong>Ação:</strong> {issue.action}</p>}
-                </div>
-              ))
-            ) : (
-              <p className="empty-state" role="status">Nenhum erro essencial.</p>
-            )}
-          </div>
-
-          <div className="issue-list" aria-label="Alertas de validação">
-            <h2>Alertas</h2>
-            {warnings.length ? (
-              warnings.map((issue) => (
-                <div className={`issue warning`} key={issue.code} role="status">
-                  <p className="issue-message">{issue.message}</p>
-                  {issue.what && <p className="issue-detail"><strong>O que é:</strong> {issue.what}</p>}
-                  {issue.why && <p className="issue-detail"><strong>Por que importa:</strong> {issue.why}</p>}
-                  {issue.action && <p className="issue-detail"><strong>Ação:</strong> {issue.action}</p>}
-                </div>
-              ))
-            ) : (
-              <p className="empty-state" role="status">Nenhum alerta registrado.</p>
-            )}
-          </div>
-        </aside>
-      </main>
-    </div>
-  );
-}
+                {LONG_FIELDS.has(key) ?
