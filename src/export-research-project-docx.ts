@@ -1,10 +1,12 @@
 import {
   AlignmentType,
   Document,
+  Header,
   HeadingLevel,
   ImageRun,
   Packer,
   PageBreak,
+  PageNumber,
   PageOrientation,
   Paragraph,
   TableOfContents,
@@ -76,6 +78,17 @@ function logoParagraph(logo?: DocxLogoAsset): Paragraph[] {
       ],
     }),
   ];
+}
+
+function pageMargins() {
+  return {
+    top: UFLA_RULES.margins.topTwip,
+    left: UFLA_RULES.margins.leftTwip,
+    bottom: UFLA_RULES.margins.bottomTwip,
+    right: UFLA_RULES.margins.rightTwip,
+    header: UFLA_RULES.header.distanceFromTopTwip,
+    footer: UFLA_RULES.footer.distanceFromBottomTwip,
+  };
 }
 
 function coverChildren(input: DocxGenerationInput): Paragraph[] {
@@ -195,12 +208,27 @@ function referenceParagraphs(references: string[]): Paragraph[] {
   ];
 }
 
+function pageNumberHeader(): Header {
+  return new Header({
+    children: [
+      new Paragraph({
+        alignment: AlignmentType.RIGHT,
+        children: [new TextRun({ children: [PageNumber.CURRENT], font: UFLA_RULES.typography.fontFamily, size: UFLA_RULES.typography.pageNumberFontSizePt * 2, color: BLACK })],
+      }),
+    ],
+  });
+}
+
 function createProjectDocument(input: DocxGenerationInput): Document {
   const blocks = parseEditorContent(projectEditorText(input));
   const bodyBlocks = blocks.filter((block) => block.type !== "reference");
   const references = [
     ...splitParagraphs(input.fields.referencias),
     ...blocks.filter((block) => block.type === "reference").map((block) => block.text),
+  ];
+  const textualChildren = [
+    ...bodyBlocks.flatMap((block, index) => blockToParagraph(block, index === 0)),
+    ...referenceParagraphs(references),
   ];
 
   return new Document({
@@ -210,8 +238,13 @@ function createProjectDocument(input: DocxGenerationInput): Document {
     features: { updateFields: true },
     sections: [
       {
-        properties: { page: { size: { orientation: PageOrientation.PORTRAIT, width: UFLA_RULES.page.widthTwip, height: UFLA_RULES.page.heightTwip }, margin: { top: UFLA_RULES.margins.topTwip, left: UFLA_RULES.margins.leftTwip, bottom: UFLA_RULES.margins.bottomTwip, right: UFLA_RULES.margins.rightTwip } } },
-        children: [...coverChildren(input), ...titlePageChildren(input.fields), ...preTextualChildren(input.fields), pageBreak(), ...bodyBlocks.flatMap((block, index) => blockToParagraph(block, index === 0)), ...referenceParagraphs(references)],
+        properties: { page: { size: { orientation: PageOrientation.PORTRAIT, width: UFLA_RULES.page.widthTwip, height: UFLA_RULES.page.heightTwip }, margin: pageMargins() } },
+        children: [...coverChildren(input), ...titlePageChildren(input.fields), ...preTextualChildren(input.fields)],
+      },
+      {
+        properties: { page: { size: { orientation: PageOrientation.PORTRAIT, width: UFLA_RULES.page.widthTwip, height: UFLA_RULES.page.heightTwip }, margin: pageMargins(), pageNumbers: { start: 5 } } },
+        headers: { default: pageNumberHeader() },
+        children: textualChildren,
       },
     ],
   });
