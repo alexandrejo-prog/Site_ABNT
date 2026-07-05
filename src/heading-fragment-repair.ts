@@ -41,12 +41,15 @@ export function repairHeadingFragments(text: string): string {
   for (let index = 0; index < lines.length; index += 1) {
     const current = lines[index];
     const nextIndex = nextNonEmptyLineIndex(lines, index + 1);
-    const next = nextIndex === undefined ? undefined : lines[nextIndex];
 
-    if (current.trim() && next !== undefined && isKnownHeadingFragment(current.trim(), next.trim())) {
-      repaired.push(`${current.trim()} ${next.trim()}`);
-      index = nextIndex;
-      continue;
+    if (current.trim() && nextIndex !== undefined) {
+      const next = lines[nextIndex];
+
+      if (isKnownHeadingFragment(current.trim(), next.trim())) {
+        repaired.push(`${current.trim()} ${next.trim()}`);
+        index = nextIndex;
+        continue;
+      }
     }
 
     repaired.push(current);
