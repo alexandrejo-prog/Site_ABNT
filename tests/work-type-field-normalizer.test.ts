@@ -12,7 +12,31 @@ describe("normalizacao de campos por modelo selecionado", () => {
     });
 
     expect(fields.workNature).toContain("Monografia apresentada à Universidade Federal de Lavras");
+    expect(fields.workNature).toContain("Licenciado em Física");
     expect(fields.workNature).not.toContain("Projeto de pesquisa apresentado");
+  });
+
+  it("evita titulo duplicado quando monografia nao tem curso informado", () => {
+    const fields = normalizeFieldsForSelectedModel({
+      ...emptyAcademicFields(),
+      workType: "monografia",
+      workNature: "Projeto de pesquisa apresentado à Universidade Federal de Lavras.",
+    });
+
+    expect(fields.workNature).toContain("curso de graduação informado pelo usuário");
+    expect(fields.workNature).toContain("grau acadêmico correspondente");
+    expect(fields.workNature).not.toContain("título de título correspondente");
+  });
+
+  it("remove orientador quando importacao confunde local com nome", () => {
+    const fields = normalizeFieldsForSelectedModel({
+      ...emptyAcademicFields(),
+      workType: "monografia",
+      location: "LAVRAS - MG",
+      advisor: "LAVRAS - MG",
+    });
+
+    expect(fields.advisor).toBe("");
   });
 
   it("remove natureza e pre-textuais indevidos de artigo simples", () => {
