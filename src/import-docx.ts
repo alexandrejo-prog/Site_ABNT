@@ -14,6 +14,7 @@ import {
   normalizeImportedStructure,
   normalizePlainAcademicText,
 } from "./import-normalizer";
+import { repairHeadingFragments, repairRecordHeadingFragments } from "./heading-fragment-repair";
 
 export interface ImportResult {
   text: string;
@@ -57,10 +58,14 @@ function buildImportResult(
   detected: ReturnType<typeof detectAcademicFieldsFromStructure>,
   messages: string[],
 ): ImportResult {
+  const text = repairHeadingFragments(normalized.text);
+  const editorText = repairHeadingFragments(detected.editorText || text);
+  const fields = repairRecordHeadingFragments(withInferredWorkType(detected.fields, text));
+
   return {
-    text: normalized.text,
-    editorText: detected.editorText || normalized.text,
-    fields: withInferredWorkType(detected.fields, normalized.text),
+    text,
+    editorText,
+    fields,
     confidence: detected.confidence,
     messages,
     blocks: normalized.structure.blocks,
@@ -72,8 +77,9 @@ export function identifyAcademicFields(
 ): Omit<ImportResult, "text" | "editorText" | "messages" | "blocks"> {
   const normalized = normalizePlainAcademicText(text);
   const identified = detectAcademicFieldsFromStructure(normalized.structure);
+  const repairedText = repairHeadingFragments(normalized.text);
   return {
-    fields: withInferredWorkType(identified.fields, normalized.text),
+    fields: repairRecordHeadingFragments(withInferredWorkType(identified.fields, repairedText)),
     confidence: identified.confidence,
   };
 }
