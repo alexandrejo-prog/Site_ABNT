@@ -36,6 +36,32 @@ function splitParagraphs(value: string): string[] {
     .filter(Boolean);
 }
 
+function normalizeComparable(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function stripLeadingArticleMetadataBlocks(blocks: EditorBlock[], input: DocxGenerationInput): EditorBlock[] {
+  const metadata = new Set(
+    [input.fields.title, input.fields.subtitle, input.fields.author]
+      .map(normalizeComparable)
+      .filter(Boolean),
+  );
+
+  if (!metadata.size) return blocks;
+
+  let firstBodyIndex = 0;
+  while (firstBodyIndex < blocks.length && metadata.has(normalizeComparable(blocks[firstBodyIndex].text))) {
+    firstBodyIndex += 1;
+  }
+
+  return blocks.slice(firstBodyIndex);
+}
+
 function run(text: string, options: RunOptions = {}): TextRun {
   return new TextRun({
     text,
@@ -153,7 +179,10 @@ function referenceParagraphs(references: string[]): Paragraph[] {
 
 function createArticleDocument(input: DocxGenerationInput): Document {
   const blocks = parseEditorContent(input.editorText);
-  const bodyBlocks = blocks.filter((block) => block.type !== "reference");
+  const bodyBlocks = stripLeadingArticleMetadataBlocks(
+    blocks.filter((block) => block.type !== "reference"),
+    input,
+  );
   const references = [
     ...splitParagraphs(input.fields.referencias),
     ...blocks.filter((block) => block.type === "reference").map((block) => block.text),
