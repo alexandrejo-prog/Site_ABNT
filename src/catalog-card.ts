@@ -9,7 +9,6 @@ export interface CatalogCardStatus {
 
 export function catalogCardRequirement(workType: string): CatalogCardRequirement {
   if (workType === "monografia" || workType === "dissertacao" || workType === "tese") return "required";
-  if (workType === "projeto_pesquisa") return "recommended";
   return "not_applicable";
 }
 
@@ -38,15 +37,6 @@ export function catalogCardStatus(workType: string, content: string): CatalogCar
       hasContent,
       blocking,
       message: "Ficha catalografica obrigatoria ausente. Insira a ficha oficial da Biblioteca antes da versao final.",
-    };
-  }
-
-  if (requirement === "recommended" && !hasContent) {
-    return {
-      requirement,
-      hasContent,
-      blocking: false,
-      message: "Ficha catalografica nao e obrigatoria para projeto, mas o placeholder deve ser removido se nao for usado.",
     };
   }
 
