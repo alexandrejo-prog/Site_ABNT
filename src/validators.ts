@@ -203,3 +203,7 @@ export function validateWork(fields: AcademicFields, editorText = ""): Validatio
   if (hasValue(fields.anexos) && /\[Imagem detectada:/i.test(fields.anexos)) issues.push({ severity: "warning", code: "annex-image-partial", message: "Há imagem detectada em anexos; confira posição, qualidade e legenda antes da versão final.", what: "Imagens foram detectadas na seção de anexos.", why: "Anexos com imagens exigem verificação de legenda, fonte e qualidade.", action: "Revise a seção de anexos no DOCX gerado." });
   return issues;
 }
+
+export function hasBlockingErrors(issues: ValidationIssue[]): boolean {
+  return issues.some((issue) => issue.severity === "error");
+}
