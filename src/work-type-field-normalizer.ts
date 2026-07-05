@@ -84,6 +84,7 @@ function sanitizeAdvisorFields(fields: AcademicFields): AcademicFields {
 function sanitizeArticleFields(fields: AcademicFields): AcademicFields {
   return {
     ...fields,
+    title: hasText(fields.title) ? fields.title : "Artigo acadêmico sem título detectado",
     workNature: "",
     dedicatoria: "",
     agradecimentos: "",
