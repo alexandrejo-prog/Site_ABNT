@@ -1,11 +1,12 @@
 import { generateDocxBlob, type DocxGenerationInput } from "./export-docx";
+import { repairHeadingFragments } from "./heading-fragment-repair";
 
 function hasValue(value: string): boolean {
   return value.trim().length > 0;
 }
 
 function projectEditorText(input: DocxGenerationInput): string {
-  if (input.editorText.trim()) return input.editorText;
+  if (input.editorText.trim()) return repairHeadingFragments(input.editorText);
 
   const sections: Array<[string, string]> = [
     ["TEMA", input.fields.tema],
@@ -22,10 +23,12 @@ function projectEditorText(input: DocxGenerationInput): string {
     ["RESULTADOS ESPERADOS", input.fields.resultadosEsperados],
   ];
 
-  return sections
-    .filter(([, value]) => hasValue(value))
-    .flatMap(([title, value]) => [`# ${title}`, value.trim()])
-    .join("\n\n");
+  return repairHeadingFragments(
+    sections
+      .filter(([, value]) => hasValue(value))
+      .flatMap(([title, value]) => [`# ${title}`, value.trim()])
+      .join("\n\n"),
+  );
 }
 
 export async function generateResearchProjectDocxBlob(input: DocxGenerationInput): Promise<Blob> {
