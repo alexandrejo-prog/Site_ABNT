@@ -7,6 +7,20 @@ import {
 } from "../src/work-type-consistency";
 
 describe("consistencia entre tipo e natureza do trabalho", () => {
+  it("detecta projeto usado como natureza de monografia", () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "monografia" as const,
+      workNature: "Projeto de pesquisa apresentado à Universidade Federal de Lavras, como parte das atividades do Programa.",
+    };
+
+    expect(isGraduateNatureMismatch(fields)).toBe(true);
+    expect(workTypeConsistency(fields)).toMatchObject({
+      level: "warning",
+      expectedNatureStart: "Monografia apresentada à Universidade Federal de Lavras",
+    });
+  });
+
   it("detecta projeto usado como natureza de tese", () => {
     const fields = {
       ...emptyAcademicFields(),
