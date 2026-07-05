@@ -15,6 +15,7 @@ import {
   normalizePlainAcademicText,
 } from "./import-normalizer";
 import { repairHeadingFragments, repairRecordHeadingFragments } from "./heading-fragment-repair";
+import { sanitizeImportedTitle } from "./title-sanitizer";
 
 export interface ImportResult {
   text: string;
@@ -53,6 +54,23 @@ function withInferredWorkType(fields: AcademicFields, text: string): AcademicFie
   return { ...fields, workType: "projeto_pesquisa" };
 }
 
+function sanitizeFields(fields: AcademicFields): AcademicFields {
+  return {
+    ...fields,
+    title: sanitizeImportedTitle(fields.title),
+  };
+}
+
+function sanitizeConfidence(
+  confidence: Record<AcademicFieldKey, Confidence>,
+  fields: AcademicFields,
+): Record<AcademicFieldKey, Confidence> {
+  return {
+    ...confidence,
+    title: fields.title ? confidence.title : "nao-identificado",
+  };
+}
+
 function buildImportResult(
   normalized: ReturnType<typeof normalizePlainAcademicText>,
   detected: ReturnType<typeof detectAcademicFieldsFromStructure>,
@@ -60,13 +78,14 @@ function buildImportResult(
 ): ImportResult {
   const text = repairHeadingFragments(normalized.text);
   const editorText = repairHeadingFragments(detected.editorText || text);
-  const fields = repairRecordHeadingFragments(withInferredWorkType(detected.fields, text));
+  const fields = sanitizeFields(repairRecordHeadingFragments(withInferredWorkType(detected.fields, text)));
+  const confidence = sanitizeConfidence(detected.confidence, fields);
 
   return {
     text,
     editorText,
     fields,
-    confidence: detected.confidence,
+    confidence,
     messages,
     blocks: normalized.structure.blocks,
   };
@@ -78,9 +97,11 @@ export function identifyAcademicFields(
   const normalized = normalizePlainAcademicText(text);
   const identified = detectAcademicFieldsFromStructure(normalized.structure);
   const repairedText = repairHeadingFragments(normalized.text);
+  const fields = sanitizeFields(repairRecordHeadingFragments(withInferredWorkType(identified.fields, repairedText)));
+  const confidence = sanitizeConfidence(identified.confidence, fields);
   return {
-    fields: repairRecordHeadingFragments(withInferredWorkType(identified.fields, repairedText)),
-    confidence: identified.confidence,
+    fields,
+    confidence,
   };
 }
 
