@@ -19,8 +19,15 @@ function baseFields(overrides: Partial<AcademicFields> = {}): AcademicFields {
 }
 
 describe("validação normativa", () => {
-  it("acusa erro quando falta título", () => {
+  it("alerta quando falta título em artigo simples", () => {
     const issues = validateWork(baseFields({ title: "" }));
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "warning", code: "title-required" }),
+    );
+  });
+
+  it("mantem erro de titulo para monografia", () => {
+    const issues = validateWork(baseFields({ workType: "monografia", title: "" }));
     expect(issues).toContainEqual(
       expect.objectContaining({ severity: "error", code: "title-required" }),
     );
@@ -45,8 +52,8 @@ describe("validação normativa", () => {
     }
   });
 
-  it("alerta quando referências e introdução estão ausentes", () => {
-    const issues = validateWork(baseFields({ referencias: "", introducao: "" }));
+  it("alerta quando referências e introdução estão ausentes em trabalho completo", () => {
+    const issues = validateWork(baseFields({ workType: "monografia", referencias: "", introducao: "" }));
     expect(issues).toContainEqual(
       expect.objectContaining({ severity: "warning", code: "references-required" }),
     );
