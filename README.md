@@ -33,6 +33,10 @@ npm run verify
 - Geração de DOCX com A4, margens 3/3/2/2 cm, Times New Roman, corpo 12, citações longas 11, capa, folha de rosto, resumo, abstract, corpo, referências e sumário atualizável.
 - Fluxo recomendado: gerar DOCX, abrir no Word ou LibreOffice, atualizar sumário/campos quando necessário e exportar para PDF para submissão final.
 
+## Status normativo
+
+A situação detalhada por categoria está registrada em `STATUS_NORMATIVO.md`.
+
 ## Limites conhecidos
 
 - Ficha catalográfica, folha de aprovação, listas de ilustrações, listas de tabelas, listas de siglas e conferência visual de imagens ainda exigem revisão manual.
