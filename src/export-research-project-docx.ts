@@ -1,5 +1,6 @@
 import { generateDocxBlob, type DocxGenerationInput } from "./export-docx";
 import { repairHeadingFragments } from "./heading-fragment-repair";
+import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
 
 function hasValue(value: string): boolean {
   return value.trim().length > 0;
@@ -10,16 +11,16 @@ function projectEditorText(input: DocxGenerationInput): string {
 
   const sections: Array<[string, string]> = [
     ["TEMA", input.fields.tema],
-    ["DELIMITAÇÃO DO TEMA", input.fields.delimitacaoTema],
+    ["DELIMITACAO DO TEMA", input.fields.delimitacaoTema],
     ["PROBLEMA DE PESQUISA", input.fields.problemaPesquisa],
-    ["HIPÓTESE", input.fields.hipotese],
+    ["HIPOTESE", input.fields.hipotese],
     ["OBJETIVO GERAL", input.fields.objetivoGeral],
-    ["OBJETIVOS ESPECÍFICOS", input.fields.objetivosEspecificos],
+    ["OBJETIVOS ESPECIFICOS", input.fields.objetivosEspecificos],
     ["JUSTIFICATIVA", input.fields.justificativa],
-    ["REFERENCIAL TEÓRICO", input.fields.referencialTeorico],
+    ["REFERENCIAL TEORICO", input.fields.referencialTeorico],
     ["METODOLOGIA", input.fields.metodologia],
     ["CRONOGRAMA", input.fields.cronograma],
-    ["RECURSOS/ORÇAMENTO", input.fields.recursosOrcamento],
+    ["RECURSOS/ORCAMENTO", input.fields.recursosOrcamento],
     ["RESULTADOS ESPERADOS", input.fields.resultadosEsperados],
   ];
 
@@ -32,5 +33,6 @@ function projectEditorText(input: DocxGenerationInput): string {
 }
 
 export async function generateResearchProjectDocxBlob(input: DocxGenerationInput): Promise<Blob> {
-  return generateDocxBlob({ ...input, editorText: projectEditorText(input) });
+  const fields = normalizeFieldsForSelectedModel(input.fields);
+  return generateDocxBlob({ ...input, fields, editorText: projectEditorText({ ...input, fields }) });
 }
