@@ -53,6 +53,16 @@ describe("normalizacao de campos por modelo selecionado", () => {
     expect(fields.indicadoresImpacto).toBe("");
   });
 
+  it("usa titulo neutro quando artigo simples nao tem titulo detectado", () => {
+    const fields = normalizeFieldsForSelectedModel({
+      ...emptyAcademicFields(),
+      workType: "artigo",
+      title: "",
+    });
+
+    expect(fields.title).toBe("Artigo acadêmico sem título detectado");
+  });
+
   it("remove estrutura de monografia em modelos cpg", () => {
     const fields = normalizeFieldsForSelectedModel({
       ...emptyAcademicFields(),
