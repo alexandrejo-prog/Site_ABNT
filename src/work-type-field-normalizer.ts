@@ -36,13 +36,20 @@ function defaultCourse(fields: AcademicFields): string {
   return fields.course || "curso informado pelo usuário";
 }
 
+function undergraduateDegree(fields: AcademicFields): string {
+  const course = fold(fields.course);
+  if (course.includes("licenciatura")) return `Licenciado em ${fields.course.replace(/licenciatura em/i, "").trim() || "área informada"}`;
+  if (course.includes("bacharelado")) return `Bacharel em ${fields.course.replace(/bacharelado em/i, "").trim() || "área informada"}`;
+  return "título correspondente";
+}
+
 function natureForSelectedModel(fields: AcademicFields): string {
   if (fields.workType === "projeto_pesquisa") {
     return `Projeto de pesquisa apresentado à Universidade Federal de Lavras, como parte das atividades do ${defaultProgram(fields)}, para avaliação acadêmica.`;
   }
 
   if (fields.workType === "monografia") {
-    return `Monografia apresentada à Universidade Federal de Lavras, como parte das exigências do ${defaultCourse(fields)}, para obtenção do título correspondente.`;
+    return `Monografia apresentada à Universidade Federal de Lavras, como parte das exigências do ${defaultCourse(fields)}, para obtenção do título de ${undergraduateDegree(fields)}.`;
   }
 
   if (fields.workType === "dissertacao") {
@@ -76,6 +83,8 @@ function sanitizeCpgFields(fields: AcademicFields): AcademicFields {
     epigrafe: "",
     indicadoresImpacto: "",
     impactIndicators: "",
+    anexos: "",
+    apendices: "",
   };
 }
 
