@@ -7,11 +7,13 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          // Separa bibliotecas de geração/importação DOCX
+          // Separa bibliotecas de geração/exportação DOCX
           'docx-libs': ['docx', 'jszip'],
+          // Separa biblioteca de leitura/importação DOCX
+          'import-libs': ['mammoth'],
           // Separa ícones do lucide-react
           'icons': ['lucide-react'],
-          // Separa React core (já otimizado, mas garante separação)
+          // Separa React core
           'react-vendor': ['react', 'react-dom'],
         },
       },
