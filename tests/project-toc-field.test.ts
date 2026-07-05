@@ -11,12 +11,14 @@ async function documentXml(blob: Blob): Promise<string> {
 }
 
 describe("campo de sumario em projeto", () => {
-  it("gera campo TOC atualizavel", async () => {
+  it("gera campo TOC atualizavel sem ficha catalografica", async () => {
     const fields = {
       ...emptyAcademicFields(),
       workType: "projeto_pesquisa" as const,
       title: "Projeto",
       author: "Maria Silva",
+      resumo: "Resumo do projeto.",
+      abstractText: "Project abstract.",
       referencias: "SILVA, M. Projeto. Lavras: UFLA, 2024.",
     };
 
@@ -31,5 +33,7 @@ describe("campo de sumario em projeto", () => {
     expect(xml).toContain("TOC");
     expect(xml).toContain("1 INTRODUÇÃO");
     expect(xml).toContain("2 METODOLOGIA");
+    expect(xml).not.toContain("FICHA CATALOGRÁFICA");
+    expect(xml).not.toContain("BANCA EXAMINADORA");
   });
 });
