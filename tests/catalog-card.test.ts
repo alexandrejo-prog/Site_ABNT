@@ -8,8 +8,9 @@ describe("catalog card", () => {
     expect(catalogCardRequirement("tese")).toBe("required");
   });
 
-  it("trata projeto como recomendado", () => {
-    expect(catalogCardRequirement("projeto_pesquisa")).toBe("recommended");
+  it("trata projeto como nao aplicavel", () => {
+    expect(catalogCardRequirement("projeto_pesquisa")).toBe("not_applicable");
+    expect(catalogCardStatus("projeto_pesquisa", "").message).toContain("nao aplicavel");
   });
 
   it("rejeita texto padrao como conteudo valido", () => {
