@@ -33,14 +33,14 @@ function defaultProgram(fields: AcademicFields): string {
 }
 
 function defaultCourse(fields: AcademicFields): string {
-  return fields.course || "curso informado pelo usuário";
+  return fields.course || "curso de graduação informado pelo usuário";
 }
 
 function undergraduateDegree(fields: AcademicFields): string {
   const course = fold(fields.course);
   if (course.includes("licenciatura")) return `Licenciado em ${fields.course.replace(/licenciatura em/i, "").trim() || "área informada"}`;
   if (course.includes("bacharelado")) return `Bacharel em ${fields.course.replace(/bacharelado em/i, "").trim() || "área informada"}`;
-  return "título correspondente";
+  return "grau acadêmico correspondente";
 }
 
 function natureForSelectedModel(fields: AcademicFields): string {
@@ -49,7 +49,7 @@ function natureForSelectedModel(fields: AcademicFields): string {
   }
 
   if (fields.workType === "monografia") {
-    return `Monografia apresentada à Universidade Federal de Lavras, como parte das exigências do ${defaultCourse(fields)}, para obtenção do título de ${undergraduateDegree(fields)}.`;
+    return `Monografia apresentada à Universidade Federal de Lavras, como parte das exigências do ${defaultCourse(fields)}, para obtenção do ${undergraduateDegree(fields)}.`;
   }
 
   if (fields.workType === "dissertacao") {
@@ -61,6 +61,24 @@ function natureForSelectedModel(fields: AcademicFields): string {
   }
 
   return fields.workNature;
+}
+
+function isLocationLike(value: string, fields: AcademicFields): boolean {
+  const text = fold(value);
+  if (!text) return false;
+
+  const location = fold(fields.location);
+  if (location && text === location) return true;
+
+  return /^(lavras|lavras mg|lavras - mg|mg)$/i.test(value.trim()) || /^[a-zà-ú\s]+\s-\s[a-z]{2}$/i.test(value.trim());
+}
+
+function sanitizeAdvisorFields(fields: AcademicFields): AcademicFields {
+  return {
+    ...fields,
+    advisor: isLocationLike(fields.advisor, fields) ? "" : fields.advisor,
+    coadvisor: isLocationLike(fields.coadvisor, fields) ? "" : fields.coadvisor,
+  };
 }
 
 function sanitizeArticleFields(fields: AcademicFields): AcademicFields {
@@ -104,12 +122,13 @@ export function normalizeFieldsForSelectedModel(fields: AcademicFields): Academi
     fields.workType === "dissertacao" ||
     fields.workType === "tese"
   ) {
-    const workNature = isGenericOrMismatchedNature(fields.workNature, fields.workType)
-      ? natureForSelectedModel(fields)
-      : fields.workNature;
+    const sanitized = sanitizeAdvisorFields(fields);
+    const workNature = isGenericOrMismatchedNature(sanitized.workNature, sanitized.workType)
+      ? natureForSelectedModel(sanitized)
+      : sanitized.workNature;
 
     return {
-      ...fields,
+      ...sanitized,
       workNature,
     };
   }
@@ -122,5 +141,5 @@ export function normalizeFieldsForSelectedModel(fields: AcademicFields): Academi
     };
   }
 
-  return fields;
+  return sanitizeAdvisorFields(fields);
 }
