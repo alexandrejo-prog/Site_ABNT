@@ -175,3 +175,7 @@ export function normalizeReference(reference: string): NormalizedReference {
 export function normalizeReferencesText(value: string): NormalizedReference[] {
   return splitItems(value).map(normalizeReference);
 }
+
+export function normalizeReferences(references: string[]): NormalizedReference[] {
+  return references.flatMap((reference) => normalizeReferencesText(reference));
+}
