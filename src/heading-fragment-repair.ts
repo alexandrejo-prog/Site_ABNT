@@ -11,11 +11,19 @@ function stripMarkdownHeading(value: string): string {
   return value.replace(/^#{1,6}\s*/, "").trim();
 }
 
-function isObjectivesFragment(currentLine: string, nextLine: string): boolean {
+function numberedPrefixPattern(): string {
+  return "(?:\\d+(?:\\.\\d+)*\\s+)?";
+}
+
+function isKnownHeadingFragment(currentLine: string, nextLine: string): boolean {
   const current = normalize(stripMarkdownHeading(currentLine));
   const next = normalize(nextLine);
+  const prefix = numberedPrefixPattern();
 
-  return next === "ESPECIFICOS" && /^(?:\d+(?:\.\d+)*\s+)?OBJETIVOS$/.test(current);
+  return (
+    (next === "ESPECIFICOS" && new RegExp(`^${prefix}OBJETIVOS$`).test(current)) ||
+    (next === "DE EXECUCAO" && new RegExp(`^${prefix}CRONOGRAMA$`).test(current))
+  );
 }
 
 export function repairHeadingFragments(text: string): string {
@@ -26,7 +34,7 @@ export function repairHeadingFragments(text: string): string {
     const current = lines[index];
     const next = lines[index + 1];
 
-    if (next !== undefined && isObjectivesFragment(current.trim(), next.trim())) {
+    if (next !== undefined && isKnownHeadingFragment(current.trim(), next.trim())) {
       repaired.push(`${current.trim()} ${next.trim()}`);
       index += 1;
       continue;
