@@ -120,7 +120,7 @@ function titlePageChildren(fields: DocxGenerationInput["fields"]): Paragraph[] {
   ];
 }
 
-function preTextualChildren(fields: DocxGenerationInput["fields"]): Paragraph[] {
+function preTextualChildren(fields: DocxGenerationInput["fields"]): Array<Paragraph | TableOfContents> {
   return [
     pageBreak(),
     unnumberedTitle("Resumo"),
