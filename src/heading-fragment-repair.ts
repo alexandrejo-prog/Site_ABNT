@@ -38,11 +38,11 @@ export function repairHeadingFragments(text: string): string {
   return repaired.join("\n");
 }
 
-export function repairRecordHeadingFragments<T extends Record<string, unknown>>(record: T): T {
-  return Object.fromEntries(
-    Object.entries(record).map(([key, value]) => [
-      key,
-      typeof value === "string" ? repairHeadingFragments(value) : value,
-    ]),
-  ) as T;
+export function repairRecordHeadingFragments<T extends object>(record: T): T {
+  const repairedEntries = Object.entries(record as Record<string, unknown>).map(([key, value]) => [
+    key,
+    typeof value === "string" ? repairHeadingFragments(value) : value,
+  ]);
+
+  return Object.fromEntries(repairedEntries) as T;
 }
