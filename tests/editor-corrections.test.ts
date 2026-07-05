@@ -66,9 +66,10 @@ describe("editor e fluxo de importação", () => {
     expect(appSource).toContain('setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0)');
   });
 
-  it("importação preserva editorText completo", () => {
+  it("importação preserva editorText completo e aplica reparo seguro", () => {
     const importSource = readFileSync(join(process.cwd(), "src", "import-docx.ts"), "utf8");
-    expect(importSource).toContain("editorText: detected.editorText || normalized.text");
+    expect(importSource).toContain("detected.editorText || text");
+    expect(importSource).toContain("repairHeadingFragments");
   });
 
   it("field-detector gera editorText com corpo completo", () => {
