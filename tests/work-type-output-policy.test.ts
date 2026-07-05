@@ -46,7 +46,7 @@ describe("politica de saida por tipo de trabalho", () => {
   });
 
   it("define natureza esperada para modelos com folha de rosto", () => {
-    expect(outputPolicyFor("projeto_pesquisa").expectedNatureStart).toContain("Projeto de pesquisa apresentada");
+    expect(outputPolicyFor("projeto_pesquisa").expectedNatureStart).toContain("Projeto de pesquisa apresentado");
     expect(outputPolicyFor("monografia").expectedNatureStart).toContain("Monografia apresentada");
     expect(outputPolicyFor("dissertacao").expectedNatureStart).toContain("Dissertação apresentada");
     expect(outputPolicyFor("tese").expectedNatureStart).toContain("Tese apresentada");
