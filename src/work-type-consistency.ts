@@ -18,6 +18,7 @@ function fold(value: string): string {
 }
 
 export function expectedGraduateNatureStart(workType: AcademicFields["workType"]): string | undefined {
+  if (workType === "monografia") return "Monografia apresentada à Universidade Federal de Lavras";
   if (workType === "dissertacao") return "Dissertação apresentada à Universidade Federal de Lavras";
   if (workType === "tese") return "Tese apresentada à Universidade Federal de Lavras";
   return undefined;
@@ -28,7 +29,7 @@ export function isProjectNature(value: string): boolean {
 }
 
 export function isGraduateNatureMismatch(fields: AcademicFields): boolean {
-  if (fields.workType !== "dissertacao" && fields.workType !== "tese") return false;
+  if (fields.workType !== "monografia" && fields.workType !== "dissertacao" && fields.workType !== "tese") return false;
   return isProjectNature(fields.workNature);
 }
 
@@ -41,7 +42,7 @@ export function workTypeConsistency(fields: AcademicFields): WorkTypeConsistency
     return {
       level: "warning",
       expectedNatureStart,
-      reason: "A natureza do trabalho ainda descreve projeto de pesquisa, mas o tipo selecionado é de pós-graduação stricto sensu.",
+      reason: "A natureza do trabalho ainda descreve projeto de pesquisa, mas o tipo selecionado exige natureza própria.",
     };
   }
 
@@ -51,7 +52,7 @@ export function workTypeConsistency(fields: AcademicFields): WorkTypeConsistency
     return {
       level: "warning",
       expectedNatureStart,
-      reason: "A natureza do trabalho não começa com a forma esperada para dissertação ou tese.",
+      reason: "A natureza do trabalho não começa com a forma esperada para monografia, dissertação ou tese.",
     };
   }
 
