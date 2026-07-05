@@ -35,7 +35,10 @@ export function validateReferencesText(referencesText: string): ReferenceValidat
 
     if (!reference.detectedHighlight && reference.detectedType === "legislacao") {
       counts.normativePreserved += 1;
-    } else if (!reference.detectedHighlight) {
+    } else if (
+      !reference.detectedHighlight &&
+      (reference.detectedType === "artigo" || reference.detectedType === "livro" || reference.detectedType === "tese-dissertacao")
+    ) {
       counts.highlightMissing += 1;
     }
   }
