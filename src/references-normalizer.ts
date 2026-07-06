@@ -33,7 +33,13 @@ function fold(value: string): string {
 
 function isReferenceTitleNoise(value: string): boolean {
   const text = fold(value).replace(/\s+/g, " ").trim();
-  return text === "referencias" || text === "bibliograficas" || text === "referencias bibliograficas";
+  if (!text) return false;
+  const noiseTitles = [
+    "referencias",
+    "bibliograficas",
+    "referencias bibliograficas",
+  ];
+  return noiseTitles.includes(text);
 }
 
 function splitItems(value: string): string[] {

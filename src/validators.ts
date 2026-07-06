@@ -8,6 +8,13 @@ import {
 } from "./ufla-rules";
 import { validateReferencesText } from "./references-validator";
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
+import {
+  detectAbstractTopicConflict,
+  detectCpgForbiddenStructures,
+  detectGenericAiLikeText,
+  detectPlaceholderText,
+  detectProgramConflict,
+} from "./academic-guardrails";
 
 export type ValidationSeverity = "error" | "warning" | "info";
 
@@ -73,6 +80,112 @@ function paragraphCount(value: string): number {
 
 function keywordItems(value: string): string[] {
   return value.split(/[;\.]/).map((item) => item.trim()).filter(Boolean);
+}
+
+function addPlaceholderIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
+  const criticalTargets: [string, string, string][] = [
+    ["title", fields.title, "Título"],
+    ["author", fields.author, "Autor"],
+    ["program", fields.program, "Programa"],
+    ["course", fields.course, "Curso"],
+    ["workNature", fields.workNature, "Natureza do trabalho"],
+    ["resumo", fields.resumo, "Resumo"],
+    ["abstractText", fields.abstractText, "Abstract"],
+    ["indicadoresImpacto", fields.indicadoresImpacto, "Indicadores de impacto"],
+  ];
+  if (isAdvisorRequired(fields.workType)) criticalTargets.push(["advisor", fields.advisor, "Orientador"]);
+
+  const auxiliaryTargets: [string, string, string][] = [
+    ["subtitle", fields.subtitle, "Subtítulo"],
+    ["introducao", fields.introducao, "Introdução"],
+    ["conclusao", fields.conclusao, "Conclusão"],
+    ["palavrasChave", fields.palavrasChave, "Palavras-chave"],
+    ["keywords", fields.keywords, "Keywords"],
+    ["agradecimentos", fields.agradecimentos, "Agradecimentos"],
+    ["dedicatoria", fields.dedicatoria, "Dedicatória"],
+  ];
+
+  for (const [key, value, label] of criticalTargets) {
+    if (hasValue(value) && detectPlaceholderText(value)) {
+      issues.push({ severity: "error", code: "placeholder-detected", message: "Há marcador de preenchimento no documento.", what: `O campo ${label} contém placeholder ou instrução não substituída.`, why: "O DOCX final não pode conter campos genéricos ou instruções de preenchimento.", action: "Substitua o trecho por informação real antes da versão final." });
+      break;
+    }
+  }
+  for (const [key, value, label] of auxiliaryTargets) {
+    if (hasValue(value) && detectPlaceholderText(value)) {
+      issues.push({ severity: "warning", code: "placeholder-detected", message: "Há marcador de preenchimento no documento.", what: `O campo ${label} contém placeholder ou instrução não substituída.`, why: "O DOCX final não pode conter campos genéricos ou instruções de preenchimento.", action: "Substitua o trecho por informação real antes da versão final." });
+      break;
+    }
+  }
+  if (hasValue(editorText) && detectPlaceholderText(editorText)) {
+    issues.push({ severity: "warning", code: "placeholder-detected", message: "Há marcador de preenchimento no documento.", what: "O texto principal contém placeholder ou instrução não substituída.", why: "O DOCX final não pode conter campos genéricos ou instruções de preenchimento.", action: "Substitua o trecho por informação real antes da versão final." });
+  }
+}
+
+function addProgramConflictIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
+  if (detectProgramConflict(fields)) {
+    issues.push({
+      severity: "error",
+      code: "program-conflict",
+      message: "Há conflito entre programa/área informado e texto do documento.",
+      what: "O documento menciona programas ou áreas diferentes em campos centrais.",
+      why: "A folha de rosto, resumo e corpo do texto precisam ter metadados institucionais consistentes.",
+      action: "Revise Programa, Curso, Natureza do trabalho, Resumo, Abstract e texto principal.",
+    });
+  }
+}
+
+function addAbstractTopicIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
+  if (isCpgWork(fields.workType)) return;
+  const result = detectAbstractTopicConflict(fields);
+  if (result.conflict) {
+    issues.push({
+      severity: result.severity,
+      code: "abstract-topic-conflict",
+      message: "O Abstract parece não corresponder ao título/resumo.",
+      what: "O texto em inglês possui termos centrais incompatíveis com o tema em português.",
+      why: "Abstract incoerente passa impressão de texto alucinado ou reaproveitado.",
+      action: "Revise o Abstract e confirme se ele traduz fielmente o resumo.",
+    });
+  }
+}
+
+function addGenericAiLikeIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
+  const sources: [string, string][] = [
+    ["Resumo", fields.resumo],
+    ["Abstract", fields.abstractText],
+    ["Introdução", fields.introducao],
+    ["Conclusão", fields.conclusao],
+    ["Texto principal", editorText],
+  ];
+  for (const [label, value] of sources) {
+    if (hasValue(value) && detectGenericAiLikeText(value)) {
+      issues.push({
+        severity: "warning",
+        code: "generic-ai-like-text",
+        message: "Possível texto genérico ou com padrão de texto automático detectado.",
+        what: `O trecho em ${label} contém expressões genéricas ou de 'cara de IA'.`,
+        why: "Expressões genéricas podem enfraquecer a argumentação acadêmica e a originalidade do texto.",
+        action: "Reescreva com termos específicos do seu trabalho, evitando clichês de redação automática.",
+      });
+      break;
+    }
+  }
+}
+
+function addCpgForbiddenIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
+  if (!isCpgWork(fields.workType)) return;
+  const found = detectCpgForbiddenStructures(editorText);
+  if (found.length > 0) {
+    issues.push({
+      severity: "error",
+      code: "cpg-forbidden-structure",
+      message: "O texto contém elementos estruturais incompatíveis com o modelo CPG/UFLA.",
+      what: `Foram detectados: ${found.join(", ")}.`,
+      why: "Os modelos CPG/UFLA não devem conter capa, folha de rosto, ficha catalográfica, folha de aprovação, sumário ou indicadores de impacto no corpo do texto.",
+      action: "Remova esses elementos do editor; o CPG exige apenas Resumo, Palavras-chave, Abstract, Keywords e seções textuais.",
+    });
+  }
 }
 
 function addResumoAbstractIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
@@ -228,6 +341,11 @@ export function validateWork(fields: AcademicFields, editorText = ""): Validatio
   addCpgWarnings(fields, editorText, issues);
   addResearchProjectIssues(fields, editorText, issues);
   addUflaCollectionIssues(fields, issues);
+  addPlaceholderIssues(fields, editorText, issues);
+  addProgramConflictIssues(fields, issues);
+  addAbstractTopicIssues(fields, issues);
+  addGenericAiLikeIssues(fields, editorText, issues);
+  addCpgForbiddenIssues(fields, editorText, issues);
   if (hasLikelyImageWithoutCaption(editorText)) issues.push({ severity: "warning", code: "image-caption-warning", message: "Imagem detectada sem legenda provável. Confira posição, qualidade e legenda antes da versão final.", what: "Há possível imagem sem legenda no texto.", why: "Ilustrações precisam de legenda e fonte conforme ABNT/UFLA.", action: "Adicione legenda no formato 'Figura X - Título' e verifique a fonte da imagem." });
   if (hasLikelyUnmarkedLongQuote(editorText)) issues.push({ severity: "warning", code: "long-quote-warning", message: "Há possível citação longa não marcada como citação longa. Revise antes da versão final.", what: "Há parágrafo longo com data que pode ser citação direta.", why: "Citações longas exigem recuo de 4 cm, fonte 11 e espaço simples.", action: "Selecione o trecho e clique em Citação longa na barra de ferramentas." });
   if (hasValue(fields.imageWarnings)) issues.push({ severity: "warning", code: "imported-image-warning", message: `${fields.imageWarnings} A preservacao visual nao e garantida automaticamente.`, what: "Imagens foram detectadas no arquivo original.", why: "A importacao pode registrar a presenca da imagem sem manter sua aparencia, legenda ou posicao no DOCX final.", action: "Confira ou reinsira manualmente cada imagem no DOCX final e revise legendas e posicao." });

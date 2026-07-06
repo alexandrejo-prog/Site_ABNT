@@ -2,6 +2,17 @@
   box-sizing: border-box;
 }
 
+.global-draft-notice {
+  margin: 0;
+  padding: 10px 16px;
+  background: #fff4e5;
+  border-bottom: 1px solid #f0c987;
+  color: #7a4f01;
+  font-size: 0.9rem;
+  text-align: center;
+  font-weight: 600;
+}
+
 :root {
   color: #1f2933;
   background: #f5f7f4;

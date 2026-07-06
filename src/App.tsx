@@ -100,6 +100,8 @@ export default function App() {
   function updateWorkType(workType: AcademicFields["workType"]) {
     setFields((current) => normalizeFieldsForSelectedModel({ ...current, workType }));
     setConfidence((current) => ({ ...current, workNature: modelConfidence(workType) ? "media" : current.workNature, program: modelConfidence(workType) ? "media" : current.program }));
+    setGenerateAnyway(false);
+    setIssues((current) => current.filter((issue) => issue.code !== "work-type-required"));
   }
 
   function mergeImportedFields(importedFields: ReturnType<typeof emptyAcademicFields>, importedConfidence: Record<AcademicFieldKey, Confidence>) {
@@ -207,7 +209,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div><p className="eyebrow">Ferramenta de apoio UFLA/ABNT</p><h1>Normalização Acadêmica UFLA — DOCX editável</h1></div>
+        <div><p className="eyebrow">Ferramenta de apoio UFLA/ABNT</p><h1>Assistente de estruturação e pré-normalização UFLA/ABNT</h1></div>
         <div className="header-actions">
           <label className="upload-button"><Upload size={18} aria-hidden="true" />Importar<input type="file" accept=".docx,.txt,.md" onChange={handleImport} /></label>
           {importedFileName && <button className="primary-action" type="button" onClick={handleRemoveImport} title={`Remover importação: ${importedFileName}`}><XCircle size={18} aria-hidden="true" />Remover importação</button>}
@@ -215,6 +217,8 @@ export default function App() {
           <button className="primary-action strong" type="button" onClick={handleGenerateDocx} disabled={isGenerating}><FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar DOCX"}</button>
         </div>
       </header>
+
+      <p className="global-draft-notice" role="note">O sistema gera um rascunho técnico editável. A submissão final exige revisão humana no Word ou LibreOffice.</p>
 
       <main className="workspace">
         <section className="metadata-pane" aria-label="Campos acadêmicos">
