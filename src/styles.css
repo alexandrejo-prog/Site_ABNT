@@ -2,6 +2,106 @@
   box-sizing: border-box;
 }
 
+.global-draft-notice {
+  margin: 0;
+  padding: 10px 16px;
+  background: #fff4e5;
+  border-bottom: 1px solid #f0c987;
+  color: #7a4f01;
+  font-size: 0.9rem;
+  text-align: center;
+  font-weight: 600;
+}
+
+.diagnostic-panel {
+  border: 1px solid #cfe3cf;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #f3f8f3;
+  margin-bottom: 10px;
+}
+
+.diagnostic-panel h2 {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+}
+
+.diagnostic-disclaimer {
+  margin: 0 0 6px;
+  font-size: 0.75rem;
+  color: #5b6b5b;
+}
+
+.diagnostic-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.diag-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  padding: 2px 0;
+}
+
+.diag-dot {
+  font-weight: 700;
+}
+
+.diag-dot.ok {
+  color: #1a7f37;
+}
+
+.diag-dot.missing {
+  color: #b58105;
+}
+
+.assisted-panel {
+  border: 1px solid #bcd3ef;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #eef4fc;
+  margin-bottom: 12px;
+}
+
+.assisted-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.assisted-panel h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.assisted-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8rem;
+}
+
+.assisted-note {
+  margin: 6px 0 8px;
+  font-size: 0.78rem;
+  color: #34495e;
+}
+
+.impact-indicators-group {
+  border-top: 1px dashed #c7d2dd;
+  padding-top: 8px;
+}
+
+.impact-indicators-group h3 {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+}
+
 :root {
   color: #1f2933;
   background: #f5f7f4;

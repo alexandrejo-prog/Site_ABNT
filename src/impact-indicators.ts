@@ -1,3 +1,5 @@
+import type { AcademicFields } from "./ufla-rules";
+
 export type ImpactDimension = "social" | "cientifico" | "economico" | "cultural" | "ambiental" | "institucional";
 
 export interface ImpactDimensionDefinition {
@@ -56,4 +58,48 @@ export function impactPromptSkeleton(): string {
   return IMPACT_DIMENSIONS
     .map((dimension) => `${dimension.label}: ${dimension.question}`)
     .join("\n");
+}
+
+export interface ImpactFieldEntry {
+  key: string;
+  label: string;
+  value: string;
+}
+
+export const IMPACT_FIELD_ENTRIES: ImpactFieldEntry[] = [
+  { key: "impactoSocial", label: "Impacto social", value: "" },
+  { key: "impactoCientifico", label: "Impacto científico", value: "" },
+  { key: "impactoEducacional", label: "Impacto educacional", value: "" },
+  { key: "impactoAmbiental", label: "Impacto ambiental", value: "" },
+  { key: "impactoTecnologico", label: "Impacto tecnológico/econômico", value: "" },
+  { key: "publicoBeneficiado", label: "Público beneficiado", value: "" },
+  { key: "aderenciaOds", label: "Aderência a ODS/política institucional", value: "" },
+];
+
+function fieldValue(fields: AcademicFields, key: string): string {
+  return ((fields as unknown as Record<string, string>)[key] ?? "").trim();
+}
+
+// Texto consolidado usando somente dados informados pelo usuário.
+export function consolidateImpactIndicators(fields: AcademicFields): string {
+  const explicit = fieldValue(fields, "indicadoresImpacto");
+  if (explicit) return explicit;
+
+  const filled = IMPACT_FIELD_ENTRIES
+    .map((entry) => ({ label: entry.label, value: fieldValue(fields, entry.key) }))
+    .filter((entry) => entry.value.length > 0);
+
+  if (filled.length === 0) return "";
+  return filled.map((entry) => `${entry.label}: ${entry.value}`).join("\n");
+}
+
+// Considera suficiente quando há ao menos dois campos específicos de impacto
+// preenchidos com texto real, ou o campo consolidado preenchido.
+export function hasSufficientImpactIndicators(fields: AcademicFields): boolean {
+  if (fieldValue(fields, "indicadoresImpacto").length > 0) return true;
+  const impactKeys = ["impactoSocial", "impactoCientifico", "impactoEducacional", "impactoAmbiental", "impactoTecnologico"];
+  const filledImpacts = impactKeys.filter((key) => fieldValue(fields, key).length > 0).length;
+  if (filledImpacts >= 2) return true;
+  const allFields = IMPACT_FIELD_ENTRIES.filter((entry) => fieldValue(fields, entry.key).length > 0);
+  return allFields.length >= 2;
 }

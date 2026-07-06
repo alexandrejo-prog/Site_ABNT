@@ -12,15 +12,14 @@ import {
   Paragraph,
   Table,
   TableOfContents,
-  TableCell,
-  TableRow,
   TextRun,
   WidthType,
 } from "docx";
 import type { IParagraphOptions, IStylesOptions } from "docx";
-import { pageMargins } from "./docx-shared";
+import { pageMargins, ibgeTable } from "./docx-shared";
 import { AcademicFields, UFLA_RULES } from "./ufla-rules";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
+import { consolidateImpactIndicators } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
 
 export type EditorBlockType =
@@ -452,14 +451,6 @@ function tableTextParagraph(text: string, bold = false): Paragraph {
   });
 }
 
-function tableCell(text: string, width: number, bold = false): TableCell {
-  return new TableCell({
-    width: { size: width, type: WidthType.PERCENTAGE },
-    margins: { top: 80, bottom: 80, left: 80, right: 80 },
-    children: [tableTextParagraph(text, bold)],
-  });
-}
-
 function parseScheduleRow(line: string): ScheduleRow | null {
   const normalized = line.replace(/\s+/g, " ").trim();
   const match = normalized.match(
@@ -509,41 +500,15 @@ function scheduleRowsFromBlock(text: string): { caption: string; rows: ScheduleR
 
 function scheduleTableBlock(text: string): Array<Paragraph | Table> {
   const { caption, rows, source } = scheduleRowsFromBlock(text);
-  const header = new TableRow({
-    children: [
-      tableCell("Etapa", 17, true),
-      tableCell("Meses", 13, true),
-      tableCell("Período", 24, true),
-      tableCell("Atividades principais", 46, true),
-    ],
+  const ibge = ibgeTable({
+    headerLabels: ["Etapa", "Meses", "Período", "Atividades principais"],
+    columnWidths: [17, 13, 24, 46],
+    rows: rows.map((row) => [row.etapa, row.meses, row.periodo, row.atividades]),
   });
-
-  const tableRows = rows.map(
-    (row) =>
-      new TableRow({
-        children: [
-          tableCell(row.etapa, 17),
-          tableCell(row.meses, 13),
-          tableCell(row.periodo, 24),
-          tableCell(row.atividades, 46),
-        ],
-      }),
-  );
 
   return [
     scheduleCaptionParagraph(caption),
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: {
-        top: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
-        bottom: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
-        left: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
-        right: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
-        insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
-        insideVertical: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
-      },
-      rows: [header, ...tableRows],
-    }),
+    ibge,
     new Paragraph({
       alignment: AlignmentType.LEFT,
       spacing: { before: 120, after: 120, line: SINGLE_LINE },
@@ -986,20 +951,11 @@ function optionalUntitledRightPage(content: string, italics = false): Paragraph[
   ];
 }
 
-function defaultImpactIndicators(fields: AcademicFields): string {
-  const topic = fields.title || "a pesquisa proposta";
-  return `Esta pesquisa apresenta impacto social e institucional ao analisar ${topic} no contexto da Universidade Federal de Lavras, considerando relações entre gestão, trabalho, saúde, participação e produção do conhecimento. Ao investigar percepções dos Servidores Técnico-Administrativos em Educação sobre o Programa de Gestão e Desempenho, o estudo poderá subsidiar práticas de avaliação mais democráticas, sensíveis à complexidade do trabalho real e comprometidas com a função pública da universidade. Seus resultados poderão contribuir para o aprimoramento de políticas de gestão de pessoas, para a valorização dos saberes técnico-administrativos e para a prevenção de processos de sobrecarga e adoecimento relacionados à organização do trabalho. O impacto esperado alcança a comunidade universitária, gestores, trabalhadores, pesquisadores da área de Educação Ambiental Crítica e instituições públicas que adotam modelos de gestão por desempenho. A pesquisa também dialoga com os Objetivos de Desenvolvimento Sustentável relacionados à saúde e bem-estar, trabalho decente, educação de qualidade e instituições eficazes, ao tratar o ambiente universitário como espaço socioambiental de vida, trabalho e formação humana.`;
-}
-
-function defaultImpactIndicatorsEnglish(fields: AcademicFields): string {
-  const topic = fields.title || "the proposed research";
-  return `This research has social and institutional impact by analyzing ${topic} in the context of the Federal University of Lavras, considering relations among management, work, health, participation and knowledge production. By investigating the perceptions of Technical-Administrative Education Staff regarding the Management and Performance Program, the study may support more democratic evaluation practices, sensitive to the complexity of real work and committed to the public role of the university. Its results may contribute to improving people management policies, valuing technical-administrative knowledge and preventing overload and illness processes related to work organization. The expected impact reaches the university community, managers, workers, researchers in Critical Environmental Education and public institutions that adopt performance-based management models. The research also dialogues with the Sustainable Development Goals related to health and well-being, decent work, quality education and effective institutions, by understanding the university environment as a socio-environmental space of life, work and human formation.`;
-}
-
 function preTextualChildren(fields: AcademicFields): Paragraph[] {
   const impactRequired = fields.workType === "dissertacao" || fields.workType === "tese";
-  const indicadores = fields.indicadoresImpacto || (impactRequired ? defaultImpactIndicators(fields) : "");
-  const impactIndicators = fields.impactIndicators || (impactRequired ? defaultImpactIndicatorsEnglish(fields) : "");
+  const consolidated = consolidateImpactIndicators(fields);
+  const indicadores = consolidated || (impactRequired ? "[PREENCHER: indicadores de impacto]" : "");
+  const impactIndicators = fields.impactIndicators || (impactRequired ? "[PREENCHER: impact indicators]" : "");
 
   return [
     pageBreak(),

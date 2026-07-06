@@ -86,6 +86,17 @@ export const ACADEMIC_FIELD_KEYS = [
   "cronograma",
   "recursosOrcamento",
   "resultadosEsperados",
+  "corpusDados",
+  "contextoInstitucional",
+  "conclusaoProvisoria",
+  "contribuicoesImpactos",
+  "impactoSocial",
+  "impactoCientifico",
+  "impactoEducacional",
+  "impactoAmbiental",
+  "impactoTecnologico",
+  "publicoBeneficiado",
+  "aderenciaOds",
 ] as const;
 
 export type AcademicFieldKey = (typeof ACADEMIC_FIELD_KEYS)[number];
@@ -129,6 +140,17 @@ export interface AcademicFields {
   cronograma: string;
   recursosOrcamento: string;
   resultadosEsperados: string;
+  corpusDados: string;
+  contextoInstitucional: string;
+  conclusaoProvisoria: string;
+  contribuicoesImpactos: string;
+  impactoSocial: string;
+  impactoCientifico: string;
+  impactoEducacional: string;
+  impactoAmbiental: string;
+  impactoTecnologico: string;
+  publicoBeneficiado: string;
+  aderenciaOds: string;
 }
 
 const TWIPS_PER_CM = 1440 / 2.54;
@@ -358,6 +380,17 @@ export function emptyAcademicFields(): AcademicFields {
     cronograma: "",
     recursosOrcamento: "",
     resultadosEsperados: "",
+    corpusDados: "",
+    contextoInstitucional: "",
+    conclusaoProvisoria: "",
+    contribuicoesImpactos: "",
+    impactoSocial: "",
+    impactoCientifico: "",
+    impactoEducacional: "",
+    impactoAmbiental: "",
+    impactoTecnologico: "",
+    publicoBeneficiado: "",
+    aderenciaOds: "",
   };
 }
 

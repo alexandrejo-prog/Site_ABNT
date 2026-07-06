@@ -67,7 +67,7 @@ describe("validação de resumo, abstract e indicadores", () => {
     expect(codes).not.toContain("keywords-count");
   });
 
-  it("alerta indicadores de impacto em dissertação ou tese sem bloquear", () => {
+  it("bloqueia geração quando indicadores de impacto estão vazios em tese", () => {
     const fields = {
       ...emptyAcademicFields(),
       workType: "tese" as const,
@@ -84,7 +84,7 @@ describe("validação de resumo, abstract e indicadores", () => {
     const issues = validateWork(fields, "# INTRODUÇÃO\nTexto.");
     const codes = issues.map((issue) => issue.code);
 
-    expect(codes).toContain("impact-indicators-required");
-    expect(hasBlockingErrors(issues)).toBe(false);
+    expect(codes).toContain("impact-indicators-missing");
+    expect(hasBlockingErrors(issues)).toBe(true);
   });
 });
