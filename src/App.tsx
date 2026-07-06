@@ -9,12 +9,14 @@ import { editorHtmlToMarkup, editorMarkupToHtml } from "./editor-markup";
 import { templateForWorkType } from "./document-template";
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
 import { TextDiagnosticPanel } from "./text-diagnostic-panel";
+import { buildDraftFromFields, hasUnfilledPlaceholders, draftWorkTypeSupportsIndicators } from "./draft-builder";
 
 const FIELD_LABELS: Record<AcademicFieldKey, string> = {
-  author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho", course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador", location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave", abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão", referencias: "Referências", anexos: "Anexos", apendices: "Apêndices", dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators", imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema", problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese", objetivoGeral: "Objetivo Geral", objetivosEspecificos: "Objetivos Específicos", justificativa: "Justificativa", referencialTeorico: "Referencial Teórico", metodologia: "Metodologia", cronograma: "Cronograma", recursosOrcamento: "Recursos/Orçamento", resultadosEsperados: "Resultados Esperados",
+  author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho", course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador", location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave", abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão", referencias: "Referências", anexos: "Anexos", apendices: "Apêndices", dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators", imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema", problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese", objetivoGeral: "Objetivo Geral", objetivosEspecificos: "Objetivos Específicos", justificativa: "Justificativa", referencialTeorico: "Referencial Teórico", metodologia: "Metodologia", cronograma: "Cronograma",   recursosOrcamento: "Recursos/Orçamento", resultadosEsperados: "Resultados Esperados", corpusDados: "Corpus/Dados", contextoInstitucional: "Contexto Institucional", conclusaoProvisoria: "Conclusão Provisória", contribuicoesImpactos: "Contribuições/Impactos", impactoSocial: "Impacto social", impactoCientifico: "Impacto científico", impactoEducacional: "Impacto educacional", impactoAmbiental: "Impacto ambiental", impactoTecnologico: "Impacto tecnológico/econômico", publicoBeneficiado: "Público beneficiado", aderenciaOds: "Aderência a ODS/política institucional",
 };
 
 const RESEARCH_PROJECT_FIELD_KEYS: AcademicFieldKey[] = ["tema", "delimitacaoTema", "problemaPesquisa", "hipotese", "objetivoGeral", "objetivosEspecificos", "justificativa", "referencialTeorico", "metodologia", "cronograma", "recursosOrcamento", "resultadosEsperados"];
+const ASSISTED_FIELD_KEYS: AcademicFieldKey[] = ["tema", "problemaPesquisa", "objetivoGeral", "objetivosEspecificos", "justificativa", "referencialTeorico", "corpusDados", "contextoInstitucional", "metodologia", "resultadosEsperados", "conclusaoProvisoria", "contribuicoesImpactos"];
 const LONG_FIELDS = new Set<AcademicFieldKey>(["workNature", "resumo", "abstractText", "introducao", "conclusao", "referencias", "anexos", "apendices", "dedicatoria", "agradecimentos", "epigrafe", "indicadoresImpacto", "impactIndicators", "imageWarnings", ...RESEARCH_PROJECT_FIELD_KEYS]);
 type EditorMode = "body" | "references";
 
@@ -56,6 +58,7 @@ export default function App() {
   const [importedFileName, setImportedFileName] = useState<string | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>("body");
   const [adherenceExpanded, setAdherenceExpanded] = useState(false);
+  const [assistedMode, setAssistedMode] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
   const editorContentVersionRef = useRef(0);
   const lastAppliedEditorTextRef = useRef("");
@@ -180,6 +183,22 @@ export default function App() {
     setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0);
   }
 
+  function handleBuildDraft() {
+    const draft = buildDraftFromFields(fields);
+    const current = editorText.trim();
+    if (current && !window.confirm("O editor já contém texto. Substituir pelo rascunho estruturado?")) return;
+    setEditorText(draft);
+    lastAppliedEditorTextRef.current = draft;
+    if (editorRef.current) editorRef.current.innerHTML = editorMarkupToHtml(draft);
+    editorContentVersionRef.current += 1;
+    const hasPlaceholder = hasUnfilledPlaceholders(draft);
+    setStatus(
+      hasPlaceholder
+        ? "Rascunho montado. Campos vazios geraram marcadores [PREENCHER: ...]; preencha-os antes da versão final."
+        : "Rascunho montado a partir dos campos informados.",
+    );
+  }
+
   function runValidation(candidateFields = fields) {
     const normalizedFields = normalizeFieldsForSelectedModel(candidateFields);
     const textToValidate = editorMode === "references" ? fields.referencias : editorText;
@@ -229,12 +248,28 @@ export default function App() {
 
       <main className="workspace">
         <section className="metadata-pane" aria-label="Campos acadêmicos">
+          <div className="assisted-panel">
+            <div className="assisted-header-row">
+              <h2>Elaborar texto acadêmico assistido</h2>
+              <label className="assisted-toggle"><input type="checkbox" checked={assistedMode} onChange={(event) => setAssistedMode(event.target.checked)} /><span>Mostrar campos guiados</span></label>
+            </div>
+            <p className="assisted-note">Preencha os campos abaixo e use <strong>Montar rascunho</strong> para gerar a estrutura no editor. Campos vazios viram marcadores [PREENCHER: ...]; o sistema não inventa conteúdo.</p>
+            <button className="primary-action" type="button" onClick={handleBuildDraft}><FileCheck2 size={18} aria-hidden="true" />Montar rascunho a partir dos campos</button>
+          </div>
           <div className="field-group"><label htmlFor="work-type">Tipo de trabalho</label><select id="work-type" value={fields.workType} onChange={(event) => updateWorkType(event.target.value as typeof fields.workType)}><option value="">Selecione</option>{WORK_TYPES.map((type) => <option key={type} value={type}>{WORK_TYPE_LABELS[type]}</option>)}</select></div>
           {fields.workType === "artigo" && <div className="mode-panel"><h2>Artigo acadêmico simples</h2><p>Modelo sem capa, folha de rosto, ficha catalográfica, folha de aprovação, indicadores de impacto e sumário.</p></div>}
           {isCpgSelected && <div className="mode-panel"><h2>Modo CPG/UFLA selecionado</h2><p>Este modelo segue template CPG/UFLA. Quando o template CPG não for específico, use a ABNT aplicável.</p><p><strong>Saída do sistema:</strong> gere o DOCX e, se precisar de PDF, exporte por um editor de texto externo.</p></div>}
           {isResearchProject(fields.workType) && <div className="mode-panel"><h2>Estrutura do Projeto de Pesquisa</h2><p>Campos específicos para estrutura de projeto de pesquisa conforme ABNT NBR 15287:2025.</p></div>}
           {selectedUflaProductionType && <div className="mode-panel"><h2>{selectedUflaProductionType.label}</h2><p>{ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE}</p><p><strong>Saida do sistema:</strong> DOCX editavel; o PDF final deve ser exportado no Word ou LibreOffice.</p></div>}
-          {ACADEMIC_FIELD_KEYS.map((key) => visibleField(key, fields.workType) ? <div className="field-group" key={key}><div className="label-row"><label htmlFor={key}>{FIELD_LABELS[key]}</label><span className={`confidence confidence-${confidence[key]}`}>{CONFIDENCE_LABELS[confidence[key]]}</span></div>{LONG_FIELDS.has(key) ? <textarea id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} rows={rowsForField(key)} /> : <input id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} />}{key === "referencias" && <div className="field-note"><p>Para editar com mais espaço, use o botão <strong>Referências</strong> no painel central.</p><p>Use uma referência por linha. Para destacar manualmente, selecione o trecho e clique em Negrito ou Itálico.</p></div>}</div> : null)}
+          {ACADEMIC_FIELD_KEYS.map((key) => (visibleField(key, fields.workType) || (assistedMode && ASSISTED_FIELD_KEYS.includes(key))) ? <div className="field-group" key={key}><div className="label-row"><label htmlFor={key}>{FIELD_LABELS[key]}</label><span className={`confidence confidence-${confidence[key]}`}>{CONFIDENCE_LABELS[confidence[key]]}</span></div>{LONG_FIELDS.has(key) ? <textarea id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} rows={rowsForField(key)} /> : <input id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} />}{key === "referencias" && <div className="field-note"><p>Para editar com mais espaço, use o botão <strong>Referências</strong> no painel central.</p><p>Use uma referência por linha. Para destacar manualmente, selecione o trecho e clique em Negrito ou Itálico.</p></div>}</div> : null)}
+          {draftWorkTypeSupportsIndicators(fields.workType) && (
+            <div className="field-group impact-indicators-group">
+              <h3>Indicadores de impacto (dissertação/tese)</h3>
+              {(["impactoSocial", "impactoCientifico", "impactoEducacional", "impactoAmbiental", "impactoTecnologico", "publicoBeneficiado", "aderenciaOds"] as AcademicFieldKey[]).map((key) => (
+                <div className="field-group" key={key}><label htmlFor={key}>{FIELD_LABELS[key]}</label><textarea id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} rows={2} /></div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="editor-pane" aria-label="Editor do texto">
