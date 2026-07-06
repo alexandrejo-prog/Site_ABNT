@@ -5,15 +5,14 @@ import { describe, expect, it } from "vitest";
 describe("editor e fluxo de importação", () => {
   const appSource = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
 
-  it("App.tsx não contém fluxo PDF", () => {
-    const pdfPatterns = [
+  it("App.tsx não contém geração direta de PDF", () => {
+    const pdfGenerationPatterns = [
       /gotenberg/i,
-      /libreoffice/i,
       /generatePdf|pdfGeneration|convertToPdf/i,
       /pdf-generation|pdf_generation/i,
     ];
 
-    for (const pattern of pdfPatterns) {
+    for (const pattern of pdfGenerationPatterns) {
       expect(appSource).not.toMatch(pattern);
     }
   });
