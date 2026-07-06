@@ -31,8 +31,17 @@ function fold(value: string): string {
   return value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 }
 
+function isReferenceTitleNoise(value: string): boolean {
+  const text = fold(value).replace(/\s+/g, " ").trim();
+  return text === "referencias" || text === "bibliograficas" || text === "referencias bibliograficas";
+}
+
 function splitItems(value: string): string[] {
-  return value.split(/\n+/).map(clean).filter(Boolean);
+  return value
+    .split(/\n+/)
+    .map(clean)
+    .filter(Boolean)
+    .filter((item) => !isReferenceTitleNoise(item));
 }
 
 function hasYear(value: string): boolean {
