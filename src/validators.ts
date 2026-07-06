@@ -1,42 +1,13 @@
-import {
-  AcademicFields,
-  WorkTypeValue,
-  isAdvisorRequired,
-  isCpgWork,
-  isResearchProject,
-  isUflaCollectionWork,
-} from "./ufla-rules";
+import { AcademicFields, WorkTypeValue, isAdvisorRequired, isCpgWork, isResearchProject, isUflaCollectionWork } from "./ufla-rules";
 import { validateReferencesText } from "./references-validator";
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
-import {
-  detectAbstractTopicConflict,
-  detectCpgForbiddenStructures,
-  detectControlledPlaceholder,
-  detectGenericAiLikeText,
-  detectPlaceholderText,
-  detectProgramConflict,
-} from "./academic-guardrails";
+import { detectAbstractTopicConflict, detectCpgForbiddenStructures, detectControlledPlaceholder, detectGenericAiLikeText, detectPlaceholderText, detectProgramConflict } from "./academic-guardrails";
 import { assessAbstractHeuristics, assessResumoHeuristics } from "./text-diagnostics";
 import { hasSufficientImpactIndicators } from "./impact-indicators";
 
 export type ValidationSeverity = "error" | "warning" | "info";
-
-export interface ValidationIssue {
-  severity: ValidationSeverity;
-  code: string;
-  message: string;
-  what?: string;
-  why?: string;
-  action?: string;
-}
-
-export interface AdherenceCategory {
-  key: string;
-  label: string;
-  status: "implemented" | "partial" | "pending" | "manual";
-  statusLabel: string;
-  note?: string;
-}
+export interface ValidationIssue { severity: ValidationSeverity; code: string; message: string; what?: string; why?: string; action?: string; }
+export interface AdherenceCategory { key: string; label: string; status: "implemented" | "partial" | "pending" | "manual"; statusLabel: string; note?: string; }
 
 export const ADHERENCE_CATEGORIES: AdherenceCategory[] = [
   { key: "metadata", label: "Metadados", status: "implemented", statusLabel: "Implementado", note: "Tipo de trabalho, autor, título, orientador e campos básicos são editáveis." },
@@ -52,313 +23,81 @@ export const ADHERENCE_CATEGORIES: AdherenceCategory[] = [
   { key: "research-project", label: "Projeto de pesquisa / NBR 15287", status: "partial", statusLabel: "Parcial", note: "Suporte inicial para projeto de pesquisa com estrutura básica e validações parciais. A revisão final pelo usuário é obrigatória." },
 ];
 
-function hasValue(value: string | WorkTypeValue): boolean {
-  return value.trim().length > 0;
-}
-
-function isSimpleArticle(fields: AcademicFields): boolean {
-  return fields.workType === "artigo";
-}
-
-function normalizeForValidation(value: string): string {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
-}
-
-function stripHeadingSyntax(value: string): string {
-  return normalizeForValidation(value).replace(/^#+\s*/, "").replace(/^\d+(?:\.\d+)*\s+/, "").replace(/[:.\-–—]+$/, "").trim();
-}
-
-function hasSectionHeading(editorText: string, labels: string[]): boolean {
-  const normalizedLabels = labels.map(normalizeForValidation);
-  return editorText.split(/\n+/).map(stripHeadingSyntax).some((line) => normalizedLabels.includes(line));
-}
-
-function wordCount(value: string): number {
-  return value.trim().split(/\s+/).filter(Boolean).length;
-}
-
-function paragraphCount(value: string): number {
-  return value.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean).length;
-}
-
-function keywordItems(value: string): string[] {
-  return value.split(/[;\.]/).map((item) => item.trim()).filter(Boolean);
-}
+function hasValue(value: string | WorkTypeValue): boolean { return value.trim().length > 0; }
+function isSimpleArticle(fields: AcademicFields): boolean { return fields.workType === "artigo"; }
+function normalizeForValidation(value: string): string { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, " ").trim(); }
+function wordCount(value: string): number { return value.trim().split(/\s+/).filter(Boolean).length; }
+function paragraphCount(value: string): number { return value.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).length; }
+function keywordItems(value: string): string[] { return value.split(/[;\.]/).map((i) => i.trim()).filter(Boolean); }
+function stripHeadingSyntax(value: string): string { return normalizeForValidation(value).replace(/^#+\s*/, "").replace(/^\d+(?:\.\d+)*\s+/, "").replace(/[:.\-–—]+$/, "").trim(); }
+function hasSectionHeading(editorText: string, labels: string[]): boolean { const targets = labels.map(normalizeForValidation); return editorText.split(/\n+/).map(stripHeadingSyntax).some((l) => targets.includes(l)); }
+function push(issues: ValidationIssue[], severity: ValidationSeverity, code: string, message: string, what?: string, why?: string, action?: string): void { issues.push({ severity, code, message, what, why, action }); }
 
 function addPlaceholderIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
-  const criticalTargets: [string, string, string][] = [
-    ["title", fields.title, "Título"],
-    ["author", fields.author, "Autor"],
-    ["program", fields.program, "Programa"],
-    ["course", fields.course, "Curso"],
-    ["workNature", fields.workNature, "Natureza do trabalho"],
-    ["resumo", fields.resumo, "Resumo"],
-    ["abstractText", fields.abstractText, "Abstract"],
-    ["indicadoresImpacto", fields.indicadoresImpacto, "Indicadores de impacto"],
-  ];
-  if (isAdvisorRequired(fields.workType)) criticalTargets.push(["advisor", fields.advisor, "Orientador"]);
-
-  const auxiliaryTargets: [string, string, string][] = [
-    ["subtitle", fields.subtitle, "Subtítulo"],
-    ["introducao", fields.introducao, "Introdução"],
-    ["conclusao", fields.conclusao, "Conclusão"],
-    ["palavrasChave", fields.palavrasChave, "Palavras-chave"],
-    ["keywords", fields.keywords, "Keywords"],
-    ["agradecimentos", fields.agradecimentos, "Agradecimentos"],
-    ["dedicatoria", fields.dedicatoria, "Dedicatória"],
-  ];
-
-  for (const [key, value, label] of criticalTargets) {
-    if (hasValue(value) && detectPlaceholderText(value)) {
-      issues.push({ severity: "error", code: "placeholder-detected", message: "Há marcador de preenchimento no documento.", what: `O campo ${label} contém placeholder ou instrução não substituída.`, why: "O DOCX final não pode conter campos genéricos ou instruções de preenchimento.", action: "Substitua o trecho por informação real antes da versão final." });
-      break;
-    }
-  }
-  for (const [key, value, label] of auxiliaryTargets) {
-    if (hasValue(value) && detectPlaceholderText(value)) {
-      issues.push({ severity: "warning", code: "placeholder-detected", message: "Há marcador de preenchimento no documento.", what: `O campo ${label} contém placeholder ou instrução não substituída.`, why: "O DOCX final não pode conter campos genéricos ou instruções de preenchimento.", action: "Substitua o trecho por informação real antes da versão final." });
-      break;
-    }
-  }
-  if (hasValue(editorText)) {
-    if (detectControlledPlaceholder(editorText)) {
-      issues.push({ severity: "error", code: "draft-placeholder-detected", message: "O rascunho ainda contém campos a preencher.", what: "O texto principal contém marcadores controlados de rascunho como [PREENCHER: ...].", why: "O DOCX final não pode conter marcadores de preenchimento; eles indicam seções não redigidas.", action: "Substitua os marcadores por conteúdo real antes de gerar a versão final." });
-    } else if (detectPlaceholderText(editorText)) {
-      issues.push({ severity: "warning", code: "placeholder-detected", message: "Há marcador de preenchimento no documento.", what: "O texto principal contém placeholder ou instrução não substituída.", why: "O DOCX final não pode conter campos genéricos ou instruções de preenchimento.", action: "Substitua o trecho por informação real antes da versão final." });
-    }
-  }
+  const critical: [string, string][] = [["Título", fields.title], ["Autor", fields.author], ["Programa", fields.program], ["Curso", fields.course], ["Natureza do trabalho", fields.workNature], ["Resumo", fields.resumo], ["Abstract", fields.abstractText], ["Indicadores de impacto", fields.indicadoresImpacto]];
+  if (isAdvisorRequired(fields.workType)) critical.push(["Orientador", fields.advisor]);
+  for (const [label, value] of critical) if (hasValue(value) && detectPlaceholderText(value)) { push(issues, "error", "placeholder-detected", "Há marcador de preenchimento no documento.", `O campo ${label} contém placeholder ou instrução não substituída.`, "O DOCX final não pode conter campos genéricos ou instruções de preenchimento.", "Substitua o trecho por informação real antes da versão final."); break; }
+  const auxiliary: [string, string][] = [["Subtítulo", fields.subtitle], ["Introdução", fields.introducao], ["Conclusão", fields.conclusao], ["Palavras-chave", fields.palavrasChave], ["Keywords", fields.keywords], ["Agradecimentos", fields.agradecimentos], ["Dedicatória", fields.dedicatoria]];
+  for (const [label, value] of auxiliary) if (hasValue(value) && detectPlaceholderText(value)) { push(issues, "warning", "placeholder-detected", "Há marcador de preenchimento no documento.", `O campo ${label} contém placeholder ou instrução não substituída.`, "O DOCX final não pode conter campos genéricos ou instruções de preenchimento.", "Substitua o trecho por informação real antes da versão final."); break; }
+  if (hasValue(editorText) && detectControlledPlaceholder(editorText)) push(issues, "error", "draft-placeholder-detected", "O rascunho ainda contém campos a preencher.", "O texto principal contém marcadores controlados de rascunho como [PREENCHER: ...].", "O DOCX final não pode conter marcadores de preenchimento; eles indicam seções não redigidas.", "Substitua os marcadores por conteúdo real antes de gerar a versão final.");
+  else if (hasValue(editorText) && detectPlaceholderText(editorText)) push(issues, "warning", "placeholder-detected", "Há marcador de preenchimento no documento.", "O texto principal contém placeholder ou instrução não substituída.", "O DOCX final não pode conter campos genéricos ou instruções de preenchimento.", "Substitua o trecho por informação real antes da versão final.");
 }
 
-function addProgramConflictIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
-  if (detectProgramConflict(fields, editorText)) {
-    issues.push({
-      severity: "error",
-      code: "program-conflict",
-      message: "Há conflito entre programa/área informado e texto do documento.",
-      what: "O documento menciona programas ou áreas diferentes em campos centrais.",
-      why: "A folha de rosto, resumo e corpo do texto precisam ter metadados institucionais consistentes.",
-      action: "Revise Programa, Curso, Natureza do trabalho, Resumo, Abstract e texto principal.",
-    });
-  }
+function addCriticalMetadataIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
+  if (isAdvisorRequired(fields.workType) && !hasValue(fields.advisor)) push(issues, "error", "advisor-required", "Informe o orientador antes da versão final.", "O orientador não foi informado.", "Monografias, dissertações e teses exigem nome do orientador na folha de rosto; sem esse dado o DOCX pode sair com marcador de preenchimento.", "Preencha o campo Orientador com o nome completo antes de gerar o DOCX final.");
+  if (!hasValue(fields.workNature)) return;
+  const normalized = normalizeForValidation(fields.workNature);
+  if (/EXIGENCIAS? D[OA] EDUCACAO CIENTIFICA E AMBIENTAL/.test(normalized)) push(issues, "error", "work-nature-malformed", "A natureza do trabalho parece estar incompleta ou gramaticalmente incorreta.", "Foi detectado trecho como 'exigências do Educação Científica e Ambiental'.", "A folha de rosto precisa mencionar corretamente o Programa de Pós-Graduação e a unidade acadêmica.", "Corrija para algo como: 'como parte das exigências do Programa de Pós-Graduação em Educação Científica e Ambiental...'");
+  if ((fields.workType === "dissertacao" || fields.workType === "tese") && /PROJETO DE PESQUISA/.test(normalized)) push(issues, "error", "work-type-nature-conflict", "Há conflito entre o tipo selecionado e a natureza do trabalho.", "O tipo selecionado é dissertação/tese, mas a natureza do trabalho diz 'Projeto de pesquisa'.", "Projeto de pesquisa, dissertação e tese possuem estruturas e exigências diferentes.", "Selecione Projeto de pesquisa ou reescreva a natureza como dissertação/tese, conforme o caso real.");
+  if (fields.workType === "projeto_pesquisa" && /(DISSERTACAO|TESE) APRESENTADA/.test(normalized)) push(issues, "error", "work-type-nature-conflict", "Há conflito entre o tipo selecionado e a natureza do trabalho.", "O tipo selecionado é projeto de pesquisa, mas a natureza do trabalho diz dissertação/tese.", "Projeto de pesquisa, dissertação e tese possuem estruturas e exigências diferentes.", "Selecione Dissertação/Tese ou reescreva a natureza como projeto de pesquisa, conforme o caso real.");
 }
 
-function addAbstractTopicIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
-  const result = detectAbstractTopicConflict(fields);
-  if (result.conflict) {
-    issues.push({
-      severity: result.severity,
-      code: "abstract-topic-conflict",
-      message: "O Abstract parece não corresponder ao título/resumo.",
-      what: "O texto em inglês possui termos centrais incompatíveis com o tema em português.",
-      why: "Abstract incoerente passa impressão de texto alucinado ou reaproveitado.",
-      action: "Revise o Abstract e confirme se ele traduz fielmente o resumo.",
-    });
-  }
-}
-
-function addGenericAiLikeIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
-  const sources: [string, string][] = [
-    ["Resumo", fields.resumo],
-    ["Abstract", fields.abstractText],
-    ["Introdução", fields.introducao],
-    ["Conclusão", fields.conclusao],
-    ["Texto principal", editorText],
-  ];
-  for (const [label, value] of sources) {
-    if (hasValue(value) && detectGenericAiLikeText(value)) {
-      issues.push({
-        severity: "warning",
-        code: "generic-ai-like-text",
-        message: "Possível texto genérico ou com padrão de texto automático detectado.",
-        what: `O trecho em ${label} contém expressões genéricas ou de 'cara de IA'.`,
-        why: "Expressões genéricas podem enfraquecer a argumentação acadêmica e a originalidade do texto.",
-        action: "Reescreva com termos específicos do seu trabalho, evitando clichês de redação automática.",
-      });
-      break;
-    }
-  }
-}
-
-function addCpgForbiddenIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
-  if (!isCpgWork(fields.workType)) return;
-  const found = detectCpgForbiddenStructures(editorText);
-  if (found.length > 0) {
-    issues.push({
-      severity: "error",
-      code: "cpg-forbidden-structure",
-      message: "O texto contém elementos estruturais incompatíveis com o modelo CPG/UFLA.",
-      what: `Foram detectados: ${found.join(", ")}.`,
-      why: "Os modelos CPG/UFLA não devem conter capa, folha de rosto, ficha catalográfica, folha de aprovação, sumário ou indicadores de impacto no corpo do texto.",
-      action: "Remova esses elementos do editor; o CPG exige apenas Resumo, Palavras-chave, Abstract, Keywords e seções textuais.",
-    });
-  }
-}
+function addProgramConflictIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void { if (detectProgramConflict(fields, editorText)) push(issues, "error", "program-conflict", "Há conflito entre programa/área informado e texto do documento.", "O documento menciona programas ou áreas diferentes em campos centrais.", "A folha de rosto, resumo e corpo do texto precisam ter metadados institucionais consistentes.", "Revise Programa, Curso, Natureza do trabalho, Resumo, Abstract e texto principal."); }
+function addAbstractTopicIssues(fields: AcademicFields, issues: ValidationIssue[]): void { const r = detectAbstractTopicConflict(fields); if (r.conflict) push(issues, r.severity, "abstract-topic-conflict", "O Abstract parece não corresponder ao título/resumo.", "O texto em inglês possui termos centrais incompatíveis com o tema em português.", "Abstract incoerente passa impressão de texto alucinado ou reaproveitado.", "Revise o Abstract e confirme se ele traduz fielmente o resumo."); }
+function addGenericAiLikeIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void { for (const [label, value] of [["Resumo", fields.resumo], ["Abstract", fields.abstractText], ["Introdução", fields.introducao], ["Conclusão", fields.conclusao], ["Texto principal", editorText]] as [string, string][]) if (hasValue(value) && detectGenericAiLikeText(value)) { push(issues, "warning", "generic-ai-like-text", "Possível texto genérico ou com padrão de texto automático detectado.", `O trecho em ${label} contém expressões genéricas ou de 'cara de IA'.`, "Expressões genéricas podem enfraquecer a argumentação acadêmica e a originalidade do texto.", "Reescreva com termos específicos do seu trabalho, evitando clichês de redação automática."); break; } }
+function addCpgForbiddenIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void { if (!isCpgWork(fields.workType)) return; const found = detectCpgForbiddenStructures(editorText); if (found.length) push(issues, "error", "cpg-forbidden-structure", "O texto contém elementos estruturais incompatíveis com o modelo CPG/UFLA.", `Foram detectados: ${found.join(", ")}.`, "Os modelos CPG/UFLA não devem conter capa, folha de rosto, ficha catalográfica, folha de aprovação, sumário ou indicadores de impacto no corpo do texto.", "Remova esses elementos do editor; o CPG exige apenas Resumo, Palavras-chave, Abstract, Keywords e seções textuais."); }
 
 function addTextDiagnosticIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
-  if (isCpgWork(fields.workType)) return;
-  if (!hasValue(fields.resumo)) return;
-
-  const heuristics = assessResumoHeuristics(fields.resumo);
-  if (!heuristics.hasMethod) issues.push({ severity: "warning", code: "resumo-missing-method", message: "O resumo não parece descrever a metodologia utilizada.", what: "Não foram detectados termos de método no resumo (ex.: metodologia, análise, observação).", why: "O resumo deve sintetizar objetivo, método, resultados e conclusão quando aplicável.", action: "Adicione uma frase sobre a metodologia no campo Resumo." });
-  if (!heuristics.hasObjective) issues.push({ severity: "warning", code: "resumo-missing-objective", message: "O resumo não parece explicitar o objetivo.", what: "Não foram detectados termos de objetivo no resumo (ex.: objetivo, analisa, investiga).", why: "O objetivo orienta a leitura e a avaliação do trabalho.", action: "Adicione o objetivo no campo Resumo." });
-  if (!heuristics.hasResult && !heuristics.hasConclusion) issues.push({ severity: "warning", code: "resumo-missing-result-conclusion", message: "O resumo não parece apresentar resultado ou conclusão.", what: "Não foram detectados termos de resultado/conclusão no resumo.", why: "Resumos costumam encerrar com resultados ou conclusão.", action: "Adicione resultado ou conclusão no campo Resumo." });
-
-  const abstract = assessAbstractHeuristics(fields);
-  if (!abstract.isEmpty && abstract.tooMuchPortuguese) issues.push({ severity: "warning", code: "abstract-looks-portuguese", message: "O abstract parece conter português demais para um texto em inglês.", what: "Há mais termos em português do que em inglês no campo Abstract.", why: "O abstract deve estar em inglês ou idioma estrangeiro, traduzindo fielmente o resumo.", action: "Revise o Abstract e reescreva em inglês, se aplicável." });
-  if (!abstract.isEmpty && !abstract.looksEnglish && !abstract.tooMuchPortuguese) issues.push({ severity: "info", code: "abstract-language-review", message: "Confira se o abstract está em inglês ou idioma estrangeiro.", what: "O abstract não apresentou marcadores claros de inglês.", why: "A língua estrangeira deve espelhar o resumo.", action: "Confira a língua do Abstract antes da versão final." });
+  if (isCpgWork(fields.workType) || !hasValue(fields.resumo)) return;
+  const h = assessResumoHeuristics(fields.resumo);
+  if (!h.hasMethod) push(issues, "warning", "resumo-missing-method", "O resumo não parece descrever a metodologia utilizada.", "Não foram detectados termos de método no resumo (ex.: metodologia, análise, observação).", "O resumo deve sintetizar objetivo, método, resultados e conclusão quando aplicável.", "Adicione uma frase sobre a metodologia no campo Resumo.");
+  if (!h.hasObjective) push(issues, "warning", "resumo-missing-objective", "O resumo não parece explicitar o objetivo.", "Não foram detectados termos de objetivo no resumo (ex.: objetivo, analisa, investiga).", "O objetivo orienta a leitura e a avaliação do trabalho.", "Adicione o objetivo no campo Resumo.");
+  if (!h.hasResult && !h.hasConclusion) push(issues, "warning", "resumo-missing-result-conclusion", "O resumo não parece apresentar resultado ou conclusão.", "Não foram detectados termos de resultado/conclusão no resumo.", "Resumos costumam encerrar com resultados ou conclusão.", "Adicione resultado ou conclusão no campo Resumo.");
+  const a = assessAbstractHeuristics(fields);
+  if (!a.isEmpty && a.tooMuchPortuguese) push(issues, "warning", "abstract-looks-portuguese", "O abstract parece conter português demais para um texto em inglês.", "Há mais termos em português do que em inglês no campo Abstract.", "O abstract deve estar em inglês ou idioma estrangeiro, traduzindo fielmente o resumo.", "Revise o Abstract e reescreva em inglês, se aplicável.");
+  if (!a.isEmpty && !a.looksEnglish && !a.tooMuchPortuguese) push(issues, "info", "abstract-language-review", "Confira se o abstract está em inglês ou idioma estrangeiro.", "O abstract não apresentou marcadores claros de inglês.", "A língua estrangeira deve espelhar o resumo.", "Confira a língua do Abstract antes da versão final.");
 }
 
 function addResumoAbstractIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
   if (isCpgWork(fields.workType)) return;
-
-  if (hasValue(fields.resumo)) {
-    const count = wordCount(fields.resumo);
-    if (count < 150 || count > 500) issues.push({ severity: "warning", code: "resumo-word-count", message: `Resumo com ${count} palavra(s). Confira se está entre 150 e 500 palavras antes da versão final.`, what: "O resumo parece estar fora da faixa usual de extensão.", why: "Resumos acadêmicos normalmente exigem controle de extensão e síntese adequada.", action: "Revise o campo Resumo e ajuste a extensão, mantendo objetivo, método, resultados e conclusão quando aplicável." });
-    if (paragraphCount(fields.resumo) > 1) issues.push({ severity: "warning", code: "resumo-single-paragraph", message: "Resumo parece ter mais de um parágrafo. Revise antes da versão final.", what: "O campo Resumo contém quebras de parágrafo internas.", why: "O resumo costuma ser apresentado em parágrafo único nos modelos acadêmicos.", action: "Una o texto do resumo em um único parágrafo, se o manual/template aplicável exigir." });
-  }
-
-  if (hasValue(fields.palavrasChave)) {
-    const items = keywordItems(fields.palavrasChave);
-    if (items.length < 3 || items.length > 5) issues.push({ severity: "warning", code: "palavras-chave-count", message: `Palavras-chave com ${items.length} item(ns). Confira se há de 3 a 5 termos.`, what: "A quantidade de palavras-chave parece fora da faixa usual.", why: "Palavras-chave orientam indexação e recuperação do trabalho.", action: "Informe de 3 a 5 palavras-chave, preferencialmente separadas por ponto e vírgula." });
-    if (items.length > 1 && !fields.palavrasChave.includes(";")) issues.push({ severity: "warning", code: "palavras-chave-separator", message: "Palavras-chave parecem não estar separadas por ponto e vírgula.", what: "O separador entre os termos pode estar inconsistente.", why: "A separação padronizada facilita a normalização e a leitura do DOCX.", action: "Use ponto e vírgula entre as palavras-chave." });
-  }
-
-  if (hasValue(fields.abstractText)) {
-    const count = wordCount(fields.abstractText);
-    if (count < 150 || count > 500) issues.push({ severity: "warning", code: "abstract-word-count", message: `Abstract com ${count} palavra(s). Confira se está entre 150 e 500 palavras antes da versão final.`, what: "O abstract parece estar fora da faixa usual de extensão.", why: "O abstract deve corresponder ao resumo e manter extensão controlada.", action: "Revise o campo Abstract e ajuste a extensão conforme o template aplicável." });
-    if (paragraphCount(fields.abstractText) > 1) issues.push({ severity: "warning", code: "abstract-single-paragraph", message: "Abstract parece ter mais de um parágrafo. Revise antes da versão final.", what: "O campo Abstract contém quebras de parágrafo internas.", why: "O abstract costuma acompanhar o formato sintético do resumo.", action: "Una o abstract em um único parágrafo, se o manual/template aplicável exigir." });
-  }
-
-  if (hasValue(fields.keywords)) {
-    const items = keywordItems(fields.keywords);
-    if (items.length < 3 || items.length > 5) issues.push({ severity: "warning", code: "keywords-count", message: `Keywords com ${items.length} item(ns). Confira se há de 3 a 5 termos.`, what: "A quantidade de keywords parece fora da faixa usual.", why: "Keywords orientam indexação e recuperação internacional do trabalho.", action: "Informe de 3 a 5 keywords, preferencialmente separadas por ponto e vírgula." });
-    if (items.length > 1 && !fields.keywords.includes(";")) issues.push({ severity: "warning", code: "keywords-separator", message: "Keywords parecem não estar separadas por ponto e vírgula.", what: "O separador entre os termos pode estar inconsistente.", why: "A separação padronizada facilita a normalização e a leitura do DOCX.", action: "Use ponto e vírgula entre as keywords." });
-  }
+  if (hasValue(fields.resumo)) { const c = wordCount(fields.resumo); if (c < 150 || c > 500) push(issues, "warning", "resumo-word-count", `Resumo com ${c} palavra(s). Confira se está entre 150 e 500 palavras antes da versão final.`); if (paragraphCount(fields.resumo) > 1) push(issues, "warning", "resumo-single-paragraph", "Resumo parece ter mais de um parágrafo. Revise antes da versão final."); }
+  if (hasValue(fields.palavrasChave)) { const i = keywordItems(fields.palavrasChave); if (i.length < 3 || i.length > 5) push(issues, "warning", "palavras-chave-count", `Palavras-chave com ${i.length} item(ns). Confira se há de 3 a 5 termos.`); if (i.length > 1 && !fields.palavrasChave.includes(";")) push(issues, "warning", "palavras-chave-separator", "Palavras-chave parecem não estar separadas por ponto e vírgula."); }
+  if (hasValue(fields.abstractText)) { const c = wordCount(fields.abstractText); if (c < 150 || c > 500) push(issues, "warning", "abstract-word-count", `Abstract com ${c} palavra(s). Confira se está entre 150 e 500 palavras antes da versão final.`); if (paragraphCount(fields.abstractText) > 1) push(issues, "warning", "abstract-single-paragraph", "Abstract parece ter mais de um parágrafo. Revise antes da versão final."); }
+  if (hasValue(fields.keywords)) { const i = keywordItems(fields.keywords); if (i.length < 3 || i.length > 5) push(issues, "warning", "keywords-count", `Keywords com ${i.length} item(ns). Confira se há de 3 a 5 termos.`); if (i.length > 1 && !fields.keywords.includes(";")) push(issues, "warning", "keywords-separator", "Keywords parecem não estar separadas por ponto e vírgula."); }
 }
 
-function addImpactIndicatorIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
-  if (fields.workType !== "dissertacao" && fields.workType !== "tese") return;
-  const isInstructional = hasValue(fields.indicadoresImpacto) && detectPlaceholderText(fields.indicadoresImpacto);
-  const sufficient = hasSufficientImpactIndicators(fields);
-  if (!sufficient && !isInstructional) issues.push({ severity: "error", code: "impact-indicators-missing", message: "Preencha os Indicadores de Impacto antes da versão final.", what: "Os indicadores de impacto estão vazios ou insuficientes.", why: "A UFLA pode exigir indicadores de impacto em dissertações e teses; texto genérico não é aceitável.", action: "Preencha ao menos dois dos campos de impacto (social, científico, educacional, ambiental, tecnológico/econômico) e o público beneficiado com informações reais do trabalho." });
-  if (isInstructional) issues.push({ severity: "error", code: "impact-indicators-missing", message: "Preencha os Indicadores de Impacto com informações reais antes da versão final.", what: "Os indicadores de impacto contêm apenas texto instrucional.", why: "A UFLA pode exigir indicadores de impacto em dissertações e teses; texto genérico não é aceitável.", action: "Substitua o texto instrucional por informações reais do trabalho." });
-  if (hasValue(fields.indicadoresImpacto) && !isInstructional && !hasValue(fields.impactIndicators)) issues.push({ severity: "warning", code: "impact-indicators-english-recommended", message: "Inclua a versão em inglês dos indicadores de impacto quando exigida.", what: "Há indicadores de impacto em português, mas o campo Impact indicators está vazio.", why: "Alguns fluxos de pós-graduação exigem versão em português e inglês.", action: "Preencha o campo Impact indicators ou confirme se o template aplicado não exige versão em inglês." });
-}
-
-function looksInstitutionalAuthor(value: string): boolean {
-  const normalized = normalizeForValidation(value);
-  return /\b(UNIVERSIDADE|UFLA|INSTITUTO|PROGRAMA|POS-GRADUACAO|CURSO|DEPARTAMENTO|FACULDADE|ESCOLA|LAVRAS|MINAS GERAIS|MG)\b/.test(normalized);
-}
-
-function hasLikelyImageWithoutCaption(text: string): boolean {
-  const hasImageMarker = /!\[[^\]]*\]\(|<img\b|\bimagem\b|\[Imagem detectada:/i.test(text);
-  const hasCaption = /\b(figura|imagem)\s+\d+|\blegenda\b/i.test(text);
-  return hasImageMarker && !hasCaption;
-}
-
-function hasLikelyUnmarkedLongQuote(text: string): boolean {
-  return text.split(/\n{2,}/).map((part) => part.trim()).some((paragraph) => {
-    const looksLong = paragraph.length > 450;
-    const alreadyMarked = paragraph.startsWith(">");
-    const hasCitationClue = /\([A-ZÁÉÍÓÚÂÊÔÃÕÇ][^)]*,\s*(19|20)\d{2}/.test(paragraph);
-    return looksLong && hasCitationClue && !alreadyMarked;
-  });
-}
-
-function referenceIssueMessage(code: string, message: string): string {
-  if (code === "reference-normative-preserved") return `${message} Isso pode estar correto para leis, portarias e resoluções, mas confira no Word antes da entrega.`;
-  if (code === "reference-access-missing" || code === "reference-highlight-missing") return `${message} Revise antes da versão final.`;
-  return message;
-}
-
-function estimatePages(fields: AcademicFields, editorText: string): number {
-  const text = [fields.title, fields.author, fields.abstractText, fields.keywords, fields.resumo, fields.palavrasChave, editorText, fields.referencias].join("\n");
-  return Math.max(1, Math.ceil(text.length / 3200));
-}
-
-function estimateLineCount(value: string): number {
-  return value.split(/\n+/).map((line) => line.trim()).filter(Boolean).reduce((total, line) => total + Math.max(1, Math.ceil(line.length / 95)), 0);
-}
-
-function addCpgWarnings(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
-  if (!isCpgWork(fields.workType)) return;
-  issues.push({ severity: "warning", code: "cpg-mode-selected", message: "Modo CPG/UFLA selecionado: não use capa, folha de rosto, ficha catalográfica, folha de aprovação, indicadores de impacto, sumário, cabeçalho, rodapé ou número de página. A submissão final deve ser em PDF." });
-  if (fields.workType === "resumo_cpg") issues.push({ severity: "warning", code: "cpg-resumo-one-page", message: "Resumo CPG/UFLA deve ter apenas 1 página, em português, A4, coluna simples, margens 3,5 cm superior, 2,5 cm inferior e 3 cm laterais." });
-  if (fields.workType === "resumo_expandido_cpg") issues.push({ severity: "warning", code: "cpg-expanded-pages", message: "Resumo expandido CPG/UFLA deve ter de 4 a 6 páginas e conter abstract e resumo na primeira página." });
-  if (fields.workType === "artigo_completo_cpg") issues.push({ severity: "warning", code: "cpg-full-pages", message: "Artigo completo CPG/UFLA deve ter de 8 a 14 páginas e conter abstract e resumo na primeira página." });
-  const pages = estimatePages(fields, editorText);
-  if (fields.workType === "resumo_cpg" && pages > 1) issues.push({ severity: "warning", code: "cpg-resumo-estimated-pages", message: `Estimativa atual: ${pages} pagina(s). Para resumo CPG, ajuste o conteudo para 1 pagina.` });
-  if (fields.workType === "resumo_expandido_cpg" && (pages < 4 || pages > 6)) issues.push({ severity: "warning", code: "cpg-expanded-estimated-pages", message: `Estimativa atual: ${pages} página(s). Para resumo expandido CPG, ajuste para 4 a 6 páginas.` });
-  if (fields.workType === "artigo_completo_cpg" && (pages < 8 || pages > 14)) issues.push({ severity: "warning", code: "cpg-full-estimated-pages", message: `Estimativa atual: ${pages} página(s). Para artigo completo CPG, ajuste para 8 a 14 páginas.` });
-  if (fields.workType !== "resumo_cpg" && estimateLineCount(fields.abstractText) > 10) issues.push({ severity: "warning", code: "cpg-abstract-too-long", message: "Abstract CPG parece ultrapassar 10 linhas. Encurte ou revise a primeira pagina antes da submissao." });
-  if (fields.workType !== "resumo_cpg" && estimateLineCount(fields.resumo) > 10) issues.push({ severity: "warning", code: "cpg-resumo-too-long", message: "Resumo CPG parece ultrapassar 10 linhas. Encurte ou revise a primeira pagina antes da submissao." });
-  if (/<table\b|<\/table>|!\[[^\]]*\]\(|<img\b|\[Imagem detectada:/i.test(editorText)) issues.push({ severity: "warning", code: "cpg-complex-media-warning", message: "Modelos CPG com imagens ou tabelas complexas precisam de conferencia visual: legendas, qualidade e espacamento podem exigir ajuste manual." });
-}
-
-function addResearchProjectIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
-  if (!isResearchProject(fields.workType)) return;
-  issues.push({ severity: "warning", code: "research-project-partial", message: "Suporte inicial para Projeto de pesquisa (NBR 15287:2025). A revisão final pelo usuário é obrigatória.", what: "O sistema possui suporte inicial para projeto de pesquisa.", why: "A validação NBR 15287 é parcial e o sistema não substitui a norma oficial.", action: "Revise todos os campos e o DOCX gerado antes da versão final." });
-  const hasProblemStatement = hasValue(fields.problemaPesquisa) || hasSectionHeading(editorText, ["PROBLEMA DE PESQUISA", "PROBLEMA"]);
-  const hasObjective = hasValue(fields.objetivoGeral) || hasSectionHeading(editorText, ["OBJETIVO GERAL"]);
-  const hasJustification = hasValue(fields.justificativa) || hasSectionHeading(editorText, ["JUSTIFICATIVA"]);
-  const hasMethodology = hasValue(fields.metodologia) || hasSectionHeading(editorText, ["METODOLOGIA", "PROCEDIMENTOS METODOLÓGICOS", "PROCEDIMENTOS METODOLOGICOS"]);
-  const hasSchedule = hasValue(fields.cronograma) || hasSectionHeading(editorText, ["CRONOGRAMA"]);
-  const hasReferences = hasValue(fields.referencias) || hasSectionHeading(editorText, ["REFERÊNCIAS", "REFERENCIAS", "BIBLIOGRÁFICAS", "BIBLIOGRAFICAS"]);
-  if (!hasProblemStatement) issues.push({ severity: "error", code: "research-problem-required", message: "Informe o problema de pesquisa.", what: "O projeto de pesquisa não apresenta o problema a ser investigado.", why: "O problema delimita a investigação e orienta objetivos, metodologia e justificativa.", action: "Adicione conteúdo no campo 'Problema de pesquisa' ou uma seção chamada 'Problema de pesquisa' no editor." });
-  if (!hasObjective) issues.push({ severity: "error", code: "research-goal-required", message: "Informe o objetivo geral.", what: "O projeto de pesquisa não apresenta o objetivo geral.", why: "O objetivo geral direciona a pesquisa e fundamenta a metodologia.", action: "Adicione conteúdo no campo 'Objetivo geral' ou uma seção chamada 'Objetivo geral' no editor." });
-  if (!hasJustification) issues.push({ severity: "error", code: "research-justification-required", message: "Informe a justificativa.", what: "O projeto de pesquisa não apresenta a justificativa.", why: "A justificativa fundamenta a relevância e pertinência da pesquisa.", action: "Adicione conteúdo no campo 'Justificativa' ou uma seção chamada 'Justificativa' no editor." });
-  if (!hasMethodology) issues.push({ severity: "error", code: "research-methodology-required", message: "Informe a metodologia.", what: "O projeto de pesquisa não apresenta a metodologia.", why: "A metodologia descreve como a pesquisa será conduzida.", action: "Adicione conteúdo no campo 'Metodologia' ou uma seção chamada 'Metodologia' no editor." });
-  if (!hasSchedule) issues.push({ severity: "error", code: "research-schedule-required", message: "Informe o cronograma.", what: "O projeto de pesquisa não apresenta o cronograma.", why: "O cronograma orienta a execução e marcos do projeto.", action: "Adicione conteúdo no campo 'Cronograma' ou uma seção chamada 'Cronograma' no editor." });
-  if (!hasReferences) issues.push({ severity: "error", code: "research-references-required", message: "Informe as referências.", what: "O projeto de pesquisa não apresenta referências.", why: "Referências são necessárias para base teórica e aportes bibliográficos.", action: "Adicione referências no editor ou no campo Referências." });
-  if (hasValue(fields.objetivosEspecificos) && !hasValue(fields.objetivoGeral) && !hasObjective) issues.push({ severity: "error", code: "research-objective-mandatory", message: "Objetivo geral é obrigatório quando há objetivos específicos.", what: "Objetivos específicos foram informados, mas o objetivo geral está ausente.", why: "O objetivo geral é o alvo principal da pesquisa e deve estar presente antes dos objetivos específicos.", action: "Preencha o campo 'Objetivo Geral' antes da geração." });
-}
-
-function addUflaCollectionIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
-  if (!isUflaCollectionWork(fields.workType)) return;
-  const productionType = academicProductionTypeById(fields.workType);
-  if (!productionType) return;
-
-  issues.push({
-    severity: "warning",
-    code: "ufla-collection-initial-support",
-    message: ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE,
-    what: "O formato foi cadastrado no sistema com suporte inicial.",
-    why: "Os exportadores especificos da Colecao Producao Academica UFLA ainda serao evoluidos incrementalmente.",
-    action: "Confira estrutura, campos, sumario e paginacao no DOCX final antes de exportar o PDF pelo Word ou LibreOffice.",
-  });
-
-  for (const fieldKey of productionType.requiredFields) {
-    if (!hasValue(fields[fieldKey])) {
-      issues.push({
-        severity: "error",
-        code: `ufla-collection-${fieldKey}-required`,
-        message: `Preencha o campo obrigatorio para ${productionType.label}: ${fieldKey}.`,
-        what: "Um campo minimo do formato selecionado esta vazio.",
-        why: "A Colecao Producao Academica UFLA exige revisao da estrutura e dos metadados antes da submissao.",
-        action: "Preencha o campo indicado ou confirme manualmente se o guia especifico dispensa esse item.",
-      });
-    }
-  }
-}
+function addImpactIndicatorIssues(fields: AcademicFields, issues: ValidationIssue[]): void { if (fields.workType !== "dissertacao" && fields.workType !== "tese") return; const isInstructional = hasValue(fields.indicadoresImpacto) && detectPlaceholderText(fields.indicadoresImpacto); const sufficient = hasSufficientImpactIndicators(fields); if (!sufficient && !isInstructional) push(issues, "error", "impact-indicators-missing", "Preencha os Indicadores de Impacto antes da versão final.", "Os indicadores de impacto estão vazios ou insuficientes.", "A UFLA pode exigir indicadores de impacto em dissertações e teses; texto genérico não é aceitável.", "Preencha ao menos dois dos campos de impacto (social, científico, educacional, ambiental, tecnológico/econômico) e o público beneficiado com informações reais do trabalho."); if (isInstructional) push(issues, "error", "impact-indicators-missing", "Preencha os Indicadores de Impacto com informações reais antes da versão final.", "Os indicadores de impacto contêm apenas texto instrucional.", "A UFLA pode exigir indicadores de impacto em dissertações e teses; texto genérico não é aceitável.", "Substitua o texto instrucional por informações reais do trabalho."); if (hasValue(fields.indicadoresImpacto) && !isInstructional && !hasValue(fields.impactIndicators)) push(issues, "warning", "impact-indicators-english-recommended", "Inclua a versão em inglês dos indicadores de impacto quando exigida."); }
+function looksInstitutionalAuthor(value: string): boolean { return /\b(UNIVERSIDADE|UFLA|INSTITUTO|PROGRAMA|POS-GRADUACAO|CURSO|DEPARTAMENTO|FACULDADE|ESCOLA|LAVRAS|MINAS GERAIS|MG)\b/.test(normalizeForValidation(value)); }
+function hasLikelyImageWithoutCaption(text: string): boolean { return /!\[[^\]]*\]\(|<img\b|\bimagem\b|\[Imagem detectada:/i.test(text) && !/\b(figura|imagem)\s+\d+|\blegenda\b/i.test(text); }
+function hasLikelyUnmarkedLongQuote(text: string): boolean { return text.split(/\n{2,}/).map((p) => p.trim()).some((p) => p.length > 450 && !p.startsWith(">") && /\([A-ZÁÉÍÓÚÂÊÔÃÕÇ][^)]*,\s*(19|20)\d{2}/.test(p)); }
+function referenceIssueMessage(code: string, message: string): string { if (code === "reference-normative-preserved") return `${message} Isso pode estar correto para leis, portarias e resoluções, mas confira no Word antes da entrega.`; if (code === "reference-access-missing" || code === "reference-highlight-missing") return `${message} Revise antes da versão final.`; return message; }
+function estimatePages(fields: AcademicFields, editorText: string): number { return Math.max(1, Math.ceil([fields.title, fields.author, fields.abstractText, fields.keywords, fields.resumo, fields.palavrasChave, editorText, fields.referencias].join("\n").length / 3200)); }
+function estimateLineCount(value: string): number { return value.split(/\n+/).map((l) => l.trim()).filter(Boolean).reduce((total, line) => total + Math.max(1, Math.ceil(line.length / 95)), 0); }
+function addCpgWarnings(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void { if (!isCpgWork(fields.workType)) return; push(issues, "warning", "cpg-mode-selected", "Modo CPG/UFLA selecionado: não use capa, folha de rosto, ficha catalográfica, folha de aprovação, indicadores de impacto, sumário, cabeçalho, rodapé ou número de página. A submissão final deve ser em PDF."); if (fields.workType === "resumo_cpg") push(issues, "warning", "cpg-resumo-one-page", "Resumo CPG/UFLA deve ter apenas 1 página, em português, A4, coluna simples, margens 3,5 cm superior, 2,5 cm inferior e 3 cm laterais."); if (fields.workType === "resumo_expandido_cpg") push(issues, "warning", "cpg-expanded-pages", "Resumo expandido CPG/UFLA deve ter de 4 a 6 páginas e conter abstract e resumo na primeira página."); if (fields.workType === "artigo_completo_cpg") push(issues, "warning", "cpg-full-pages", "Artigo completo CPG/UFLA deve ter de 8 a 14 páginas e conter abstract e resumo na primeira página."); const p = estimatePages(fields, editorText); if (fields.workType === "resumo_cpg" && p > 1) push(issues, "warning", "cpg-resumo-estimated-pages", `Estimativa atual: ${p} pagina(s). Para resumo CPG, ajuste o conteudo para 1 pagina.`); if (fields.workType === "resumo_expandido_cpg" && (p < 4 || p > 6)) push(issues, "warning", "cpg-expanded-estimated-pages", `Estimativa atual: ${p} página(s). Para resumo expandido CPG, ajuste para 4 a 6 páginas.`); if (fields.workType === "artigo_completo_cpg" && (p < 8 || p > 14)) push(issues, "warning", "cpg-full-estimated-pages", `Estimativa atual: ${p} página(s). Para artigo completo CPG, ajuste para 8 a 14 páginas.`); if (fields.workType !== "resumo_cpg" && estimateLineCount(fields.abstractText) > 10) push(issues, "warning", "cpg-abstract-too-long", "Abstract CPG parece ultrapassar 10 linhas. Encurte ou revise a primeira pagina antes da submissao."); if (fields.workType !== "resumo_cpg" && estimateLineCount(fields.resumo) > 10) push(issues, "warning", "cpg-resumo-too-long", "Resumo CPG parece ultrapassar 10 linhas. Encurte ou revise a primeira pagina antes da submissao."); if (/<table\b|<\/table>|!\[[^\]]*\]\(|<img\b|\[Imagem detectada:/i.test(editorText)) push(issues, "warning", "cpg-complex-media-warning", "Modelos CPG com imagens ou tabelas complexas precisam de conferencia visual: legendas, qualidade e espacamento podem exigir ajuste manual."); }
+function addResearchProjectIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void { if (!isResearchProject(fields.workType)) return; push(issues, "warning", "research-project-partial", "Suporte inicial para Projeto de pesquisa (NBR 15287:2025). A revisão final pelo usuário é obrigatória."); const checks: [boolean, string, string][] = [[hasValue(fields.problemaPesquisa) || hasSectionHeading(editorText, ["PROBLEMA DE PESQUISA", "PROBLEMA"]), "research-problem-required", "Informe o problema de pesquisa."], [hasValue(fields.objetivoGeral) || hasSectionHeading(editorText, ["OBJETIVO GERAL"]), "research-goal-required", "Informe o objetivo geral."], [hasValue(fields.justificativa) || hasSectionHeading(editorText, ["JUSTIFICATIVA"]), "research-justification-required", "Informe a justificativa."], [hasValue(fields.metodologia) || hasSectionHeading(editorText, ["METODOLOGIA", "PROCEDIMENTOS METODOLÓGICOS", "PROCEDIMENTOS METODOLOGICOS"]), "research-methodology-required", "Informe a metodologia."], [hasValue(fields.cronograma) || hasSectionHeading(editorText, ["CRONOGRAMA"]), "research-schedule-required", "Informe o cronograma."], [hasValue(fields.referencias) || hasSectionHeading(editorText, ["REFERÊNCIAS", "REFERENCIAS", "BIBLIOGRÁFICAS", "BIBLIOGRAFICAS"]), "research-references-required", "Informe as referências."]]; for (const [ok, code, msg] of checks) if (!ok) push(issues, "error", code, msg); }
+function addUflaCollectionIssues(fields: AcademicFields, issues: ValidationIssue[]): void { if (!isUflaCollectionWork(fields.workType)) return; const t = academicProductionTypeById(fields.workType); if (!t) return; push(issues, "warning", "ufla-collection-initial-support", ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE); for (const k of t.requiredFields) if (!hasValue(fields[k])) push(issues, "error", `ufla-collection-${k}-required`, `Preencha o campo obrigatorio para ${t.label}: ${k}.`); }
 
 export function validateWork(fields: AcademicFields, editorText = ""): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const simpleArticle = isSimpleArticle(fields);
-
-  if (!hasValue(fields.workType)) issues.push({ severity: "error", code: "work-type-required", message: "Selecione o tipo de trabalho.", what: "O tipo de trabalho não foi informado.", why: "O tipo define quais elementos pré-textuais e regras de formatação serão aplicados no DOCX.", action: "Escolha artigo, monografia, dissertação, tese ou outro na lista suspensa." });
-
-  if (!hasValue(fields.title)) issues.push({ severity: simpleArticle ? "warning" : "error", code: "title-required", message: simpleArticle ? "Título não detectado automaticamente; será usado título provisório no artigo simples." : "Informe o título do trabalho.", what: "O título do trabalho está vazio.", why: simpleArticle ? "Artigo simples pode ser gerado como rascunho com título provisório." : "O título é obrigatório na capa, folha de rosto e cabeçalhos do documento.", action: "Preencha o campo Título com a designação oficial do trabalho antes da versão final." });
-
-  if (!hasValue(fields.author)) issues.push({ severity: "error", code: "author-required", message: "Informe o autor do trabalho.", what: "O autor do trabalho não foi informado.", why: "O nome do autor aparece na capa, folha de rosto e elementos pré-textuais.", action: "Preencha o campo Autor com o nome completo do autor ou autores separados por vírgula." });
-  else if (looksInstitutionalAuthor(fields.author)) issues.push({ severity: "error", code: "author-institutional", message: "O campo autor parece conter uma instituição, programa, unidade ou localidade, não um nome de pessoa. Revise a identificação automática.", what: "O campo Autor contém texto que parece institucional.", why: "A capa e a folha de rosto esperam o nome de pessoa física, não o nome da instituição.", action: "Substitua por nome(s) de pessoa(s). Se houver múltiplos autores, separe por vírgula." });
-
-  if (isAdvisorRequired(fields.workType) && !hasValue(fields.advisor)) issues.push({ severity: "warning", code: "advisor-required", message: "Informe o orientador para monografia, dissertação ou tese.", what: "O orientador não foi informado.", why: "Monografias, dissertações e teses exigem nome do orientador na folha de rosto.", action: "Preencha o campo Orientador antes de gerar o DOCX." });
-  if (!hasValue(fields.resumo)) issues.push({ severity: "warning", code: "resumo-required", message: "Inclua o resumo antes da versão final.", what: "O resumo está vazio.", why: "O resumo é elemento pré-textual obrigatório na maioria dos tipos de trabalho.", action: "Escreva o resumo no campo correspondente. Verifique extensão e palavras-chave." });
-  if (!hasValue(fields.referencias) && !isCpgWork(fields.workType)) issues.push({ severity: "warning", code: "references-required", message: "Inclua as referências do trabalho.", what: "O bloco de referências está vazio.", why: "Referências são obrigatórias para a seção pós-textual.", action: "Adicione as referências no campo Referências, uma por linha." });
-  else if (hasValue(fields.referencias)) for (const referenceIssue of validateReferencesText(fields.referencias)) issues.push({ severity: "warning", code: referenceIssue.code, message: referenceIssueMessage(referenceIssue.code, referenceIssue.message), what: referenceIssue.code.includes("year-missing") ? "Há referência sem ano detectável." : referenceIssue.code.includes("access-missing") ? "Há referência online sem informação de acesso." : referenceIssue.code.includes("highlight-missing") ? "Há referência sem destaque de título detectado." : referenceIssue.code.includes("too-short") ? "Há referência muito curta para validação segura." : referenceIssue.code.includes("normative-preserved") ? "Há referência normativa preservada sem destaque automático." : "Referência precisa de revisão.", why: "A conformidade ABNT/UFLA depende de autor, ano, acesso e destaque corretos.", action: "Revise o item no campo Referências e use Negrito/Itálico para ajustar o destaque." });
-  if (!hasValue(fields.introducao) && !isCpgWork(fields.workType) && !simpleArticle) issues.push({ severity: "warning", code: "intro-required", message: "A introdução não foi detectada ou está vazia.", what: "A seção de introdução não foi identificada.", why: "A introdução é a primeira seção textual obrigatória na estrutura UFLA.", action: "Insira a introdução no editor ou no campo Introdução." });
-  if (!hasValue(fields.abstractText) && fields.workType !== "resumo_cpg" && !simpleArticle) issues.push({ severity: "warning", code: "abstract-recommended", message: "Inclua o abstract quando exigido pelo trabalho.", what: "O abstract está vazio.", why: "O abstract é obrigatório para a maioria dos trabalhos acadêmicos da UFLA.", action: "Preencha o campo Abstract com a versão do resumo em inglês ou idioma estrangeiro." });
-
+  if (!hasValue(fields.workType)) push(issues, "error", "work-type-required", "Selecione o tipo de trabalho.", "O tipo de trabalho não foi informado.", "O tipo define quais elementos pré-textuais e regras de formatação serão aplicados no DOCX.", "Escolha artigo, monografia, dissertação, tese ou outro na lista suspensa.");
+  if (!hasValue(fields.title)) push(issues, simpleArticle ? "warning" : "error", "title-required", simpleArticle ? "Título não detectado automaticamente; será usado título provisório no artigo simples." : "Informe o título do trabalho.");
+  if (!hasValue(fields.author)) push(issues, "error", "author-required", "Informe o autor do trabalho."); else if (looksInstitutionalAuthor(fields.author)) push(issues, "error", "author-institutional", "O campo autor parece conter uma instituição, programa, unidade ou localidade, não um nome de pessoa. Revise a identificação automática.");
+  if (!hasValue(fields.resumo)) push(issues, "warning", "resumo-required", "Inclua o resumo antes da versão final.");
+  if (!hasValue(fields.referencias) && !isCpgWork(fields.workType)) push(issues, "warning", "references-required", "Inclua as referências do trabalho."); else if (hasValue(fields.referencias)) for (const r of validateReferencesText(fields.referencias)) push(issues, "warning", r.code, referenceIssueMessage(r.code, r.message));
+  if (!hasValue(fields.introducao) && !isCpgWork(fields.workType) && !simpleArticle) push(issues, "warning", "intro-required", "A introdução não foi detectada ou está vazia.");
+  if (!hasValue(fields.abstractText) && fields.workType !== "resumo_cpg" && !simpleArticle) push(issues, "warning", "abstract-recommended", "Inclua o abstract quando exigido pelo trabalho.");
+  addCriticalMetadataIssues(fields, issues);
   addResumoAbstractIssues(fields, issues);
   addImpactIndicatorIssues(fields, issues);
   addCpgWarnings(fields, editorText, issues);
@@ -370,13 +109,11 @@ export function validateWork(fields: AcademicFields, editorText = ""): Validatio
   addGenericAiLikeIssues(fields, editorText, issues);
   addTextDiagnosticIssues(fields, issues);
   addCpgForbiddenIssues(fields, editorText, issues);
-  if (hasLikelyImageWithoutCaption(editorText)) issues.push({ severity: "warning", code: "image-caption-warning", message: "Imagem detectada sem legenda provável. Confira posição, qualidade e legenda antes da versão final.", what: "Há possível imagem sem legenda no texto.", why: "Ilustrações precisam de legenda e fonte conforme ABNT/UFLA.", action: "Adicione legenda no formato 'Figura X - Título' e verifique a fonte da imagem." });
-  if (hasLikelyUnmarkedLongQuote(editorText)) issues.push({ severity: "warning", code: "long-quote-warning", message: "Há possível citação longa não marcada como citação longa. Revise antes da versão final.", what: "Há parágrafo longo com data que pode ser citação direta.", why: "Citações longas exigem recuo de 4 cm, fonte 11 e espaço simples.", action: "Selecione o trecho e clique em Citação longa na barra de ferramentas." });
-  if (hasValue(fields.imageWarnings)) issues.push({ severity: "warning", code: "imported-image-warning", message: `${fields.imageWarnings} A preservacao visual nao e garantida automaticamente.`, what: "Imagens foram detectadas no arquivo original.", why: "A importacao pode registrar a presenca da imagem sem manter sua aparencia, legenda ou posicao no DOCX final.", action: "Confira ou reinsira manualmente cada imagem no DOCX final e revise legendas e posicao." });
-  if (hasValue(fields.anexos) && /\[Imagem detectada:/i.test(fields.anexos)) issues.push({ severity: "warning", code: "annex-image-partial", message: "Há imagem detectada em anexos; confira posição, qualidade e legenda antes da versão final.", what: "Imagens foram detectadas na seção de anexos.", why: "Anexos com imagens exigem verificação de legenda, fonte e qualidade.", action: "Revise a seção de anexos no DOCX gerado." });
+  if (hasLikelyImageWithoutCaption(editorText)) push(issues, "warning", "image-caption-warning", "Imagem detectada sem legenda provável. Confira posição, qualidade e legenda antes da versão final.");
+  if (hasLikelyUnmarkedLongQuote(editorText)) push(issues, "warning", "long-quote-warning", "Há possível citação longa não marcada como citação longa. Revise antes da versão final.");
+  if (hasValue(fields.imageWarnings)) push(issues, "warning", "imported-image-warning", `${fields.imageWarnings} A preservacao visual nao e garantida automaticamente.`);
+  if (hasValue(fields.anexos) && /\[Imagem detectada:/i.test(fields.anexos)) push(issues, "warning", "annex-image-partial", "Há imagem detectada em anexos; confira posição, qualidade e legenda antes da versão final.");
   return issues;
 }
 
-export function hasBlockingErrors(issues: ValidationIssue[]): boolean {
-  return issues.some((issue) => issue.severity === "error");
-}
+export function hasBlockingErrors(issues: ValidationIssue[]): boolean { return issues.some((issue) => issue.severity === "error"); }
