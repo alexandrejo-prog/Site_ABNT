@@ -16,7 +16,7 @@ export interface WorkTypeOutputPolicy {
   finalCheck: string[];
 }
 
-export const WORK_TYPE_OUTPUT_POLICIES: Record<WorkType, WorkTypeOutputPolicy> = {
+export const WORK_TYPE_OUTPUT_POLICIES: Partial<Record<WorkType, WorkTypeOutputPolicy>> = {
   artigo: {
     workType: "artigo",
     label: "Artigo acadêmico simples",
@@ -149,8 +149,23 @@ export const WORK_TYPE_OUTPUT_POLICIES: Record<WorkType, WorkTypeOutputPolicy> =
   },
 };
 
+const GENERIC_UFLA_POLICY: WorkTypeOutputPolicy = {
+  workType: "outro",
+  label: "Formato UFLA com suporte inicial",
+  usesFullUflaPreTextual: true,
+  usesCpgTemplate: false,
+  hasCover: true,
+  hasTitlePage: true,
+  hasCatalogCard: false,
+  hasApprovalPage: false,
+  hasSummary: true,
+  hasImpactIndicators: false,
+  hasPageHeader: true,
+  finalCheck: ["guia da Coleção Produção Acadêmica UFLA", "estrutura específica", "sumário", "referências", "validação manual"],
+};
+
 export function outputPolicyFor(workType: WorkType): WorkTypeOutputPolicy {
-  return WORK_TYPE_OUTPUT_POLICIES[workType];
+  return WORK_TYPE_OUTPUT_POLICIES[workType] ?? { ...GENERIC_UFLA_POLICY, workType };
 }
 
 export function shouldShowCatalogCard(workType: WorkType): boolean {
