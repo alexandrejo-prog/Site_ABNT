@@ -1,4 +1,4 @@
-import { AlignmentType, Header, ImageRun, PageBreak, PageNumber, Paragraph, TextRun } from "docx";
+import { AlignmentType, BorderStyle, Header, ImageRun, PageBreak, PageNumber, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
 import type { IParagraphOptions } from "docx";
 import type { DocxLogoAsset } from "./export-docx";
 import { UFLA_RULES } from "./ufla-rules";
@@ -77,5 +77,57 @@ export function pageNumberHeader(): Header {
         children: [new TextRun({ children: [PageNumber.CURRENT], font: UFLA_RULES.typography.fontFamily, size: UFLA_RULES.typography.pageNumberFontSizePt * 2, color: BLACK })],
       }),
     ],
+  });
+}
+
+export interface IbgeTableOptions {
+  caption?: string;
+  headerLabels: string[];
+  rows: string[][];
+  columnWidths?: number[];
+}
+
+const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+
+export function ibgeTable(options: IbgeTableOptions): Table {
+  const widths = options.columnWidths ?? options.headerLabels.map(() => Math.floor(100 / options.headerLabels.length));
+  const headerRow = new TableRow({
+    tableHeader: true,
+    children: options.headerLabels.map(
+      (label, index) =>
+        new TableCell({
+          width: { size: widths[index], type: WidthType.PERCENTAGE },
+          shading: { fill: "D9E2F3" },
+          margins: { top: 80, bottom: 80, left: 80, right: 80 },
+          children: [new Paragraph({ children: [new TextRun({ text: label, bold: true, font: UFLA_RULES.typography.fontFamily, size: 20, color: BLACK })] })],
+        }),
+    ),
+  });
+
+  const bodyRows = options.rows.map(
+    (row) =>
+      new TableRow({
+        children: row.map(
+          (cell, index) =>
+            new TableCell({
+              width: { size: widths[index], type: WidthType.PERCENTAGE },
+              margins: { top: 80, bottom: 80, left: 80, right: 80 },
+              children: [new Paragraph({ children: [new TextRun({ text: cell, font: UFLA_RULES.typography.fontFamily, size: 20, color: BLACK })] })],
+            }),
+        ),
+      }),
+  );
+
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+      bottom: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+      left: NO_BORDER,
+      right: NO_BORDER,
+      insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+      insideVertical: NO_BORDER,
+    },
+    rows: [headerRow, ...bodyRows],
   });
 }

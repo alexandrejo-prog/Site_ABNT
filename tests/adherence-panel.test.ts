@@ -62,8 +62,8 @@ describe("painel de aderência normativa", () => {
     const appSource = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
 
     expect(appSource).toContain("Após gerar o DOCX:");
-    expect(appSource).toContain("abra no Word ou em outro editor de texto");
-    expect(appSource).toContain("atualize o sumário");
-    expect(appSource).toContain("exporte para PDF para submissão final");
+    expect(appSource).toContain("Abra no Word ou LibreOffice");
+    expect(appSource).toContain("atualize campos dinâmicos e o sumário");
+    expect(appSource).toContain("exporte para PDF para submissão");
   });
 });

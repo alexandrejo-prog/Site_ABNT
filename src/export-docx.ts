@@ -12,13 +12,11 @@ import {
   Paragraph,
   Table,
   TableOfContents,
-  TableCell,
-  TableRow,
   TextRun,
   WidthType,
 } from "docx";
 import type { IParagraphOptions, IStylesOptions } from "docx";
-import { pageMargins } from "./docx-shared";
+import { pageMargins, ibgeTable } from "./docx-shared";
 import { AcademicFields, UFLA_RULES } from "./ufla-rules";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { normalizeForDetection } from "./word-structure-extractor";
@@ -452,14 +450,6 @@ function tableTextParagraph(text: string, bold = false): Paragraph {
   });
 }
 
-function tableCell(text: string, width: number, bold = false): TableCell {
-  return new TableCell({
-    width: { size: width, type: WidthType.PERCENTAGE },
-    margins: { top: 80, bottom: 80, left: 80, right: 80 },
-    children: [tableTextParagraph(text, bold)],
-  });
-}
-
 function parseScheduleRow(line: string): ScheduleRow | null {
   const normalized = line.replace(/\s+/g, " ").trim();
   const match = normalized.match(
@@ -509,41 +499,16 @@ function scheduleRowsFromBlock(text: string): { caption: string; rows: ScheduleR
 
 function scheduleTableBlock(text: string): Array<Paragraph | Table> {
   const { caption, rows, source } = scheduleRowsFromBlock(text);
-  const header = new TableRow({
-    children: [
-      tableCell("Etapa", 17, true),
-      tableCell("Meses", 13, true),
-      tableCell("Período", 24, true),
-      tableCell("Atividades principais", 46, true),
-    ],
+  const ibge = ibgeTable({
+    caption,
+    headerLabels: ["Etapa", "Meses", "Período", "Atividades principais"],
+    columnWidths: [17, 13, 24, 46],
+    rows: rows.map((row) => [row.etapa, row.meses, row.periodo, row.atividades]),
   });
-
-  const tableRows = rows.map(
-    (row) =>
-      new TableRow({
-        children: [
-          tableCell(row.etapa, 17),
-          tableCell(row.meses, 13),
-          tableCell(row.periodo, 24),
-          tableCell(row.atividades, 46),
-        ],
-      }),
-  );
 
   return [
     scheduleCaptionParagraph(caption),
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: {
-        top: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
-        bottom: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
-        left: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
-        right: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
-        insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
-        insideVertical: { style: BorderStyle.SINGLE, size: 1, color: BLACK },
-      },
-      rows: [header, ...tableRows],
-    }),
+    ibge,
     new Paragraph({
       alignment: AlignmentType.LEFT,
       spacing: { before: 120, after: 120, line: SINGLE_LINE },
