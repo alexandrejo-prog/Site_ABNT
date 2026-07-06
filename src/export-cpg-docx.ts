@@ -36,24 +36,47 @@ interface RunOptions {
 
 type DocxHeadingLevel = (typeof HeadingLevel)[keyof typeof HeadingLevel];
 
+function cleanCpgText(value: string): string {
+  return value
+    .replace(/([\p{L}\p{N}])[\u00ad\ufffe\uffff]([\p{L}\p{N}])/gu, "$1-$2")
+    .replace(/[\u00ad\ufffe\uffff\ufeff]/g, "")
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
+    .replace(/Ã¡/g, "á")
+    .replace(/Ã /g, "à")
+    .replace(/Ã¢/g, "â")
+    .replace(/Ã£/g, "ã")
+    .replace(/Ã©/g, "é")
+    .replace(/Ãª/g, "ê")
+    .replace(/Ã­/g, "í")
+    .replace(/Ã³/g, "ó")
+    .replace(/Ã´/g, "ô")
+    .replace(/Ãµ/g, "õ")
+    .replace(/Ãº/g, "ú")
+    .replace(/Ã§/g, "ç")
+    .replace(/Ã/g, "Á")
+    .replace(/Ã‰/g, "É")
+    .replace(/Ã“/g, "Ó")
+    .replace(/Ã‡/g, "Ç");
+}
+
 function hasText(value: string): boolean {
-  return value.trim().length > 0;
+  return cleanCpgText(value).trim().length > 0;
 }
 
 function splitParagraphs(value: string): string[] {
-  return value
+  return cleanCpgText(value)
     .split(/\n+/)
     .map((line) => line.trim())
     .filter(Boolean);
 }
 
 function stripMarkup(value: string): string {
-  return value.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1");
+  return cleanCpgText(value).replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1");
 }
 
 function run(text: string, options: RunOptions = {}): TextRun {
   return new TextRun({
-    text,
+    text: cleanCpgText(text),
     font: options.font ?? CPG_RULES.typography.fontFamily,
     size: options.size ?? BODY_SIZE,
     color: BLACK,
@@ -63,14 +86,15 @@ function run(text: string, options: RunOptions = {}): TextRun {
 }
 
 function textRunsFromMarkup(text: string, size = BODY_SIZE, font = CPG_RULES.typography.fontFamily): TextRun[] {
+  const sanitizedText = cleanCpgText(text);
   const runs: TextRun[] = [];
   const tokenPattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
   let cursor = 0;
   let match: RegExpExecArray | null;
 
-  while ((match = tokenPattern.exec(text)) !== null) {
+  while ((match = tokenPattern.exec(sanitizedText)) !== null) {
     if (match.index > cursor) {
-      runs.push(run(text.slice(cursor, match.index), { size, font }));
+      runs.push(run(sanitizedText.slice(cursor, match.index), { size, font }));
     }
 
     const token = match[0];
@@ -79,7 +103,7 @@ function textRunsFromMarkup(text: string, size = BODY_SIZE, font = CPG_RULES.typ
     cursor = match.index + token.length;
   }
 
-  if (cursor < text.length) runs.push(run(text.slice(cursor), { size, font }));
+  if (cursor < sanitizedText.length) runs.push(run(sanitizedText.slice(cursor), { size, font }));
   return runs.length ? runs : [run(" ", { size, font })];
 }
 
@@ -179,8 +203,8 @@ function captionParagraph(text: string, tableCaption: boolean): Paragraph {
 }
 
 function isCaption(text: string): "figure" | "table" | null {
-  if (/^(figura|imagem)\s+\d+/i.test(text.trim())) return "figure";
-  if (/^(tabela|quadro)\s+\d+/i.test(text.trim())) return "table";
+  if (/^(figura|imagem)\s+\d+/i.test(cleanCpgText(text).trim())) return "figure";
+  if (/^(tabela|quadro)\s+\d+/i.test(cleanCpgText(text).trim())) return "table";
   return null;
 }
 
@@ -210,17 +234,17 @@ function blockToParagraph(block: EditorBlock, firstParagraphInSection: boolean):
 }
 
 function isReferenceTitleNoise(text: string): boolean {
-  const normalized = text.trim().toUpperCase();
+  const normalized = cleanCpgText(text).trim().toUpperCase();
   return /^(REFERENCIAS|REFERÊNCIAS|BIBLIOGRÁFICAS|BIBLIOGRAFICAS)$/.test(normalized);
 }
 
 function referenceTitleFor(references: string[]): string {
-  const upper = references.map((r) => r.trim().toUpperCase());
+  const upper = references.map((r) => cleanCpgText(r).trim().toUpperCase());
   const hasRef = upper.some((r) => /^(REFERENCIAS|REFERÊNCIAS)$/.test(r));
   const hasBiblio = upper.some((r) => /^(BIBLIOGRÁFICAS|BIBLIOGRAFICAS)$/.test(r));
   if (hasRef && hasBiblio) return "REFERÊNCIAS BIBLIOGRÁFICAS";
   if (hasBiblio) return "REFERÊNCIAS BIBLIOGRÁFICAS";
-  return "Referencias";
+  return "REFERÊNCIAS";
 }
 
 function filterReferenceNoise(reference: string): boolean {
@@ -265,17 +289,17 @@ function cpgResumoChildren(input: DocxGenerationInput): Paragraph[] {
     centered(input.fields.author || "Autores", true),
     ...affiliationParagraphs(input.fields.program),
     ...emailParagraph(input.fields.course),
-    ...(hasText(input.fields.abstractText)
-      ? insetLabeledParagraph("Abstract", input.fields.abstractText, ".")
-      : []),
-    ...(hasText(input.fields.keywords)
-      ? insetLabeledParagraph("Keywords", input.fields.keywords, ":")
-      : []),
     ...(hasText(input.fields.resumo)
       ? insetLabeledParagraph("Resumo", input.fields.resumo, ".")
       : []),
     ...(hasText(input.fields.palavrasChave)
       ? insetLabeledParagraph("Palavras-chave", input.fields.palavrasChave, ":")
+      : []),
+    ...(hasText(input.fields.abstractText)
+      ? insetLabeledParagraph("Abstract", input.fields.abstractText, ".")
+      : []),
+    ...(hasText(input.fields.keywords)
+      ? insetLabeledParagraph("Keywords", input.fields.keywords, ":")
       : []),
     ...(hasText(input.fields.agradecimentos)
       ? [
@@ -302,10 +326,10 @@ function cpgFullChildren(input: DocxGenerationInput): Paragraph[] {
     centered(input.fields.author || "Autores", true),
     ...affiliationParagraphs(input.fields.program),
     ...emailParagraph(input.fields.course),
-    ...insetLabeledParagraph("Abstract", input.fields.abstractText, "."),
-    ...insetLabeledParagraph("Keywords", input.fields.keywords, ":"),
     ...insetLabeledParagraph("Resumo", input.fields.resumo, "."),
     ...insetLabeledParagraph("Palavras-chave", input.fields.palavrasChave, ":"),
+    ...insetLabeledParagraph("Abstract", input.fields.abstractText, "."),
+    ...insetLabeledParagraph("Keywords", input.fields.keywords, ":"),
     ...bodyBlocks.flatMap((block) => {
       if (block.type === "heading1" || block.type === "heading2" || block.type === "heading3") {
         firstParagraphInSection = true;
