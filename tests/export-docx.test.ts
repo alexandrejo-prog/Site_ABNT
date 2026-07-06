@@ -250,7 +250,9 @@ describe("DOCX export", () => {
     expect(documentXml).toContain("Keywords");
     expect(documentXml).toContain("Resumo");
     expect(documentXml).toContain("Palavras-chave");
-    expect(documentXml.indexOf("Abstract")).toBeLessThan(documentXml.indexOf("Resumo"));
+    expect(documentXml.indexOf("Resumo")).toBeLessThan(documentXml.indexOf("Palavras-chave"));
+    expect(documentXml.indexOf("Palavras-chave")).toBeLessThan(documentXml.indexOf("Abstract"));
+    expect(documentXml.indexOf("Abstract")).toBeLessThan(documentXml.indexOf("Keywords"));
     expectNoGraduateOnlyElements(documentXml);
     expectCpgMargins(documentXml);
 
@@ -412,7 +414,7 @@ describe("DOCX export", () => {
     expect(advisorPos).toBe(-1);
   });
 
-  it("CPG resumo page places abstract and keywords before resumo", async () => {
+  it("CPG resumo page places resumo before abstract", async () => {
     const documentXml = await generatedCpgXml("", {
       ...fields,
       workType: "resumo_cpg",
@@ -431,9 +433,9 @@ describe("DOCX export", () => {
     expect(keywordsPos).toBeGreaterThan(-1);
     expect(resumoPos).toBeGreaterThan(-1);
     expect(palavrasPos).toBeGreaterThan(-1);
-    expect(abstractPos).toBeLessThan(resumoPos);
-    expect(keywordsPos).toBeLessThan(resumoPos);
     expect(resumoPos).toBeLessThan(palavrasPos);
+    expect(palavrasPos).toBeLessThan(abstractPos);
+    expect(abstractPos).toBeLessThan(keywordsPos);
   });
 
   it("joins reference entries Referencias and BIBLIOGRAFICAS into a single title", async () => {
