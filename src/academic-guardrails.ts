@@ -1,28 +1,40 @@
-import { AcademicFields, WorkTypeValue, isCpgWork } from "./ufla-rules";
+import { AcademicFields } from "./ufla-rules";
 
 const PLACEHOLDER_PATTERNS: RegExp[] = [
   /\[nome do orientador\]/i,
   /\[preencher\]/i,
+  /\[preencher:.*?\]/i,
+  /\[preencha aqui\]/i,
   /\[insira aqui\]/i,
   /\[insira o texto\]/i,
+  /\[insira:.*?\]/i,
+  /\[inserir:.*?\]/i,
   /\[digite aqui\]/i,
+  /\[digite:.*?\]/i,
   /\{\{titulo\}\}/i,
-  /\{\{autor\}\}/i,
+  /\{\{.*?\}\}/i,
   /<preencher>/i,
   /lorem ipsum/i,
   /o relato dos impactos deve ser inserido/i,
   /texto a ser preenchido/i,
   /insira o texto/i,
   /digite aqui/i,
-  /\[preencha aqui\]/i,
   /\(preencher\)/i,
   /xxx+/i,
   /\[*\s*insira\s*\]/i,
 ];
 
+const CONTROLLED_PLACEHOLDER = /\[(?:\s*)(?:preencha|preenche|preencher|insira|inserir|digite|coloque|adicione|complete|substitua)[\s:.-]*/i;
+
+export function detectControlledPlaceholder(value: string): boolean {
+  if (!value) return false;
+  return CONTROLLED_PLACEHOLDER.test(value);
+}
+
 export function detectPlaceholderText(value: string): boolean {
   if (!value) return false;
-  const normalized = value.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const normalized = normalizeTextForMatch(value);
+  if (detectControlledPlaceholder(value)) return true;
   if (PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(value) || pattern.test(normalized))) return true;
   const bracketMatches = value.match(/\[[^\]]+\]/g) || [];
   return bracketMatches.some((token) => {
@@ -32,31 +44,77 @@ export function detectPlaceholderText(value: string): boolean {
   });
 }
 
-const INSTITUTIONAL_TERMS: { terms: string[]; label: string }[] = [
+// Termos de programas institucionais REAIS. O conflito bloqueante só considera
+// estes marcadores quando aparecem como programa declarado ou como programa
+// institucional citado no corpo do trabalho (heading, metadado, ficha, etc.).
+const PROGRAM_TERMS: { terms: string[]; label: string }[] = [
   { label: "Educação Científica e Ambiental", terms: ["educacao cientifica e ambiental", "educação científica e ambiental", "ppgeca", "ppg-eca", "eca"] },
-  { label: "Engenharia de Controle e Automação", terms: ["engenharia de controle e automacao", "controle e automacao", "engenharia de automacao", "automacao"] },
-  { label: "Biologia", terms: ["biologia", "ciencias e biologia", "ciências e biologia"] },
+  { label: "Engenharia de Controle e Automação", terms: ["engenharia de controle e automacao", "controle e automacao", "engenharia de automacao"] },
   { label: "Engenharia", terms: ["engenharia"] },
 ];
 
-function normalizeInstitutional(value: string): string {
+// Termos de área/tema do CONTEÚDO. Usados apenas para diagnóstico; NÃO geram
+// conflito bloqueante contra programas institucionais.
+const TOPIC_TERMS: { terms: string[]; label: string }[] = [
+  { label: "Biologia", terms: ["biologia", "ciencias e biologia", "ciências e biologia"] },
+  { label: "Ciências", terms: ["ciencias", "ciências"] },
+  { label: "Pedagogia", terms: ["pedagogia", "pedagogico", "pedagógica", "pedagógico", "docencia", "docência", "ensino", "formação de professores", "formacao de professores"] },
+];
+
+export function normalizeTextForMatch(value: string): string {
   return value
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
 }
 
+// Detecta um marcador de programa institucional como termo contextual, ou seja,
+// quando o texto aponta para um programa de outra área (ex.: "curso de Engenharia
+// de Controle e Automação", "programa de Pós-Graduação em X"). Evita falso positivo
+// com uso genérico como "engenharia didática", "engenharia pedagógica", "engenharia social".
+const INSTITUTIONAL_CONTEXT = [
+  "programa de pos-graduacao em",
+  "programa de pós-graduação em",
+  "programa de pos graduacao em",
+  "pos-graduacao em",
+  "pós-graduação em",
+  "pos graduacao em",
+  "curso de",
+  "curso de graduacao em",
+  "graduacao em",
+  "graduação em",
+  "departamento de",
+  "instituto de",
+  "faculdade de",
+  "ppg em",
+  "ppgeca",
+  "ppg-eca",
+];
+
+function isInstitutionalProgramMention(normalized: string, term: string): boolean {
+  if (term === "engenharia") {
+    // Só conta como programa institucional "Engenharia" quando acompanhado de
+    // curso/programa/departamento ou de um complemento institucional específico.
+    if (INSTITUTIONAL_CONTEXT.some((ctx) => normalized.includes(`${ctx} engenharia`))) return true;
+    if (/\bengenharia (de|em|elétrica|eletrica|mecanica|mecânica|civil|de producao|de produção|quimica|química|de controle e automacao|de automacao|de materiais|aeroespacial|aeroespacial)\b/.test(normalized)) return true;
+    return false;
+  }
+  if (INSTITUTIONAL_CONTEXT.some((ctx) => normalized.includes(`${ctx} ${term}`))) return true;
+  // Programas curtos também casam direto (ppgeca, eca, controle e automacao...).
+  return normalized.includes(term);
+}
+
 function detectProgramLabel(value: string): string | null {
-  const normalized = normalizeInstitutional(value);
-  for (const group of INSTITUTIONAL_TERMS) {
-    if (group.terms.some((term) => normalized.includes(term))) return group.label;
+  const normalized = normalizeTextForMatch(value);
+  for (const group of PROGRAM_TERMS) {
+    if (group.terms.some((term) => isInstitutionalProgramMention(normalized, term))) return group.label;
   }
   return null;
 }
 
-export function detectProgramConflict(fields: AcademicFields): boolean {
+export function detectProgramConflict(fields: AcademicFields, editorText = ""): boolean {
   const declaredProgram = detectProgramLabel(fields.program) || detectProgramLabel(fields.course);
   if (!declaredProgram) return false;
 
@@ -67,10 +125,12 @@ export function detectProgramConflict(fields: AcademicFields): boolean {
     fields.title,
     fields.introducao,
     fields.conclusao,
+    editorText,
   ].join(" ");
+  const normalizedBody = normalizeTextForMatch(bodySources);
   const mentionedLabels = new Set<string>();
-  for (const group of INSTITUTIONAL_TERMS) {
-    if (group.terms.some((term) => normalizeInstitutional(bodySources).includes(term))) {
+  for (const group of PROGRAM_TERMS) {
+    if (group.terms.some((term) => isInstitutionalProgramMention(normalizedBody, term))) {
       mentionedLabels.add(group.label);
     }
   }
@@ -98,7 +158,7 @@ const EN_STOPWORDS = new Set([
 function tokenize(value: string): string[] {
   return value
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-zà-ÿ0-9\s]/g, " ")
     .split(/\s+/)
@@ -112,10 +172,10 @@ function relevantTerms(value: string, stopwords: Set<string>): Set<string> {
 const DOMAIN_INCOMPATIBLE: { domain: string[]; opposite: string[] }[] = [
   {
     domain: ["agriculture", "agricultural", "crop", "crops", "farming", "soil", "plant", "plants", "harvest", "yield", "agronomy"],
-    opposite: ["docencia", "docencia", "estagio", "estágio", "pedagogia", "pedagogical", "ensino", "teaching", "pgd", "gerencialismo", "gestao", "gestão", "school", "classroom", "aluno", "alunos", "professor", "professores"],
+    opposite: ["docencia", "docência", "estagio", "estágio", "pedagogia", "pedagogical", "ensino", "teaching", "pgd", "gerencialismo", "gestao", "gestão", "school", "classroom", "aluno", "alunos", "professor", "professores", "biologia", "biológica", "biológico", "biological", "biologic", "ciencias", "ciências", "discente", "formacao", "formação"],
   },
   {
-    domain: ["docencia", "docência", "estagio", "estágio", "pedagogia", "pedagogical", "ensino", "teaching", "pgd", "gerencialismo", "gestao", "gestão", "school", "classroom", "aluno", "alunos", "professor", "professores"],
+    domain: ["docencia", "docência", "estagio", "estágio", "pedagogia", "pedagogical", "ensino", "teaching", "pgd", "gerencialismo", "gestao", "gestão", "school", "classroom", "aluno", "alunos", "professor", "professores", "biologia", "biológica", "biológico", "biological", "biologic", "ciencias", "ciências", "discente", "formacao", "formação"],
     opposite: ["agriculture", "agricultural", "crop", "crops", "farming", "soil", "plant", "plants", "harvest", "yield", "agronomy"],
   },
 ];
@@ -144,8 +204,8 @@ export function detectAbstractTopicConflict(fields: AcademicFields): AbstractTop
     }
   }
 
-  const ptJoined = normalizeInstitutional(ptText);
-  const enJoined = normalizeInstitutional(enText);
+  const ptJoined = normalizeTextForMatch(ptText);
+  const enJoined = normalizeTextForMatch(enText);
   const incompatible: string[] = [];
   for (const pair of DOMAIN_INCOMPATIBLE) {
     const ptHasDomain = pair.domain.some((term) => ptJoined.includes(term));
@@ -186,8 +246,9 @@ export function detectGenericAiLikeText(value: string): boolean {
   return GENERIC_AI_LIKE_PATTERNS.some((pattern) => pattern.test(value));
 }
 
-const CPG_FORBIDDEN_HEADINGS = [
+const CPG_FORBIDDEN_TERMS = [
   "CAPA",
+  "CAPA DO TRABALHO",
   "FOLHA DE ROSTO",
   "FICHA CATALOGRAFICA",
   "FICHA CATALOGRÁFICA",
@@ -196,22 +257,28 @@ const CPG_FORBIDDEN_HEADINGS = [
   "SUMARIO",
   "SUMÁRIO",
   "INDICADORES DE IMPACTO",
-  "INDICADORES DE IMPACTO ",
 ];
+
+function normalizeHeadingLine(line: string): string {
+  return normalizeTextForMatch(line)
+    .replace(/^#+\s*/, "")
+    .replace(/^\d+(?:\.\d+)*\s*/, "")
+    .replace(/^\[/, "")
+    .replace(/\]$/, "")
+    .replace(/[:\-–—]+\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export function detectCpgForbiddenStructures(editorText: string): string[] {
   const normalizedLines = editorText
     .split(/\n+/)
-    .map((line) => normalizeInstitutional(line).trim())
+    .map(normalizeHeadingLine)
     .filter(Boolean);
   const found: string[] = [];
-  for (const forbidden of CPG_FORBIDDEN_HEADINGS) {
-    const term = normalizeInstitutional(forbidden).trim();
+  for (const forbidden of CPG_FORBIDDEN_TERMS) {
+    const term = normalizeTextForMatch(forbidden).trim();
     if (normalizedLines.includes(term)) found.push(forbidden);
   }
   return found;
-}
-
-export function isCpgForbidden(workType: WorkTypeValue): boolean {
-  return isCpgWork(workType);
 }

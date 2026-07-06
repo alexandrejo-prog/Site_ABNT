@@ -69,21 +69,18 @@ export function buildDraftFromFields(fields: AcademicFields): string {
 
 export function buildCpgDraft(fields: AcademicFields): string {
   const sections: string[] = [];
-  sections.push(heading(1, "1 INTRODUÇÃO"));
-  sections.push(line(fields.introducao) || `${PLACEHOLDER_PREFIX} introdução]`);
-  sections.push("");
-  sections.push(heading(1, "2 MATERIAIS E MÉTODOS"));
-  sections.push(line(fields.metodologia) || `${PLACEHOLDER_PREFIX} materiais e métodos]`);
-  sections.push("");
-  sections.push(heading(1, "3 RESULTADOS E DISCUSSÃO"));
-  sections.push(line(fields.resultadosEsperados) || `${PLACEHOLDER_PREFIX} resultados e discussão]`);
-  sections.push("");
-  sections.push(heading(1, "4 CONCLUSÃO"));
-  sections.push(line(fields.conclusaoProvisoria) || line(fields.conclusao) || `${PLACEHOLDER_PREFIX} conclusão]`);
-  sections.push("");
-  sections.push(heading(1, "AGRADECIMENTOS"));
-  sections.push(line(fields.agradecimentos) || `${PLACEHOLDER_PREFIX} agradecimentos]`);
-  sections.push("");
+  const introducao = line(fields.introducao) || `${PLACEHOLDER_PREFIX} introdução]`;
+  sections.push(heading(1, "1 INTRODUÇÃO"), introducao, "");
+  const materiais = line(fields.metodologia) || `${PLACEHOLDER_PREFIX} materiais e métodos]`;
+  sections.push(heading(1, "2 MATERIAIS E MÉTODOS"), materiais, "");
+  const resultados = line(fields.resultadosEsperados) || `${PLACEHOLDER_PREFIX} resultados e discussão]`;
+  sections.push(heading(1, "3 RESULTADOS E DISCUSSÃO"), resultados, "");
+  const conclusao = line(fields.conclusaoProvisoria) || line(fields.conclusao) || `${PLACEHOLDER_PREFIX} conclusão]`;
+  sections.push(heading(1, "4 CONCLUSÃO"), conclusao, "");
+  const agradecimentos = line(fields.agradecimentos);
+  if (agradecimentos) {
+    sections.push(heading(1, "AGRADECIMENTOS"), agradecimentos, "");
+  }
   sections.push(heading(1, "REFERÊNCIAS"));
   sections.push(line(fields.referencias) || `${PLACEHOLDER_PREFIX} referências]`);
   return sections.join("\n");

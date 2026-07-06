@@ -81,7 +81,6 @@ export function pageNumberHeader(): Header {
 }
 
 export interface IbgeTableOptions {
-  caption?: string;
   headerLabels: string[];
   rows: string[][];
   columnWidths?: number[];
@@ -97,7 +96,7 @@ export function ibgeTable(options: IbgeTableOptions): Table {
       (label, index) =>
         new TableCell({
           width: { size: widths[index], type: WidthType.PERCENTAGE },
-          shading: { fill: "D9E2F3" },
+          shading: { fill: "EDF1F7" },
           margins: { top: 80, bottom: 80, left: 80, right: 80 },
           children: [new Paragraph({ children: [new TextRun({ text: label, bold: true, font: UFLA_RULES.typography.fontFamily, size: 20, color: BLACK })] })],
         }),

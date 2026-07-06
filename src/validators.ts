@@ -11,11 +11,13 @@ import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById 
 import {
   detectAbstractTopicConflict,
   detectCpgForbiddenStructures,
+  detectControlledPlaceholder,
   detectGenericAiLikeText,
   detectPlaceholderText,
   detectProgramConflict,
 } from "./academic-guardrails";
 import { assessAbstractHeuristics, assessResumoHeuristics } from "./text-diagnostics";
+import { hasSufficientImpactIndicators } from "./impact-indicators";
 
 export type ValidationSeverity = "error" | "warning" | "info";
 
@@ -118,13 +120,17 @@ function addPlaceholderIssues(fields: AcademicFields, editorText: string, issues
       break;
     }
   }
-  if (hasValue(editorText) && detectPlaceholderText(editorText)) {
-    issues.push({ severity: "warning", code: "placeholder-detected", message: "Há marcador de preenchimento no documento.", what: "O texto principal contém placeholder ou instrução não substituída.", why: "O DOCX final não pode conter campos genéricos ou instruções de preenchimento.", action: "Substitua o trecho por informação real antes da versão final." });
+  if (hasValue(editorText)) {
+    if (detectControlledPlaceholder(editorText)) {
+      issues.push({ severity: "error", code: "draft-placeholder-detected", message: "O rascunho ainda contém campos a preencher.", what: "O texto principal contém marcadores controlados de rascunho como [PREENCHER: ...].", why: "O DOCX final não pode conter marcadores de preenchimento; eles indicam seções não redigidas.", action: "Substitua os marcadores por conteúdo real antes de gerar a versão final." });
+    } else if (detectPlaceholderText(editorText)) {
+      issues.push({ severity: "warning", code: "placeholder-detected", message: "Há marcador de preenchimento no documento.", what: "O texto principal contém placeholder ou instrução não substituída.", why: "O DOCX final não pode conter campos genéricos ou instruções de preenchimento.", action: "Substitua o trecho por informação real antes da versão final." });
+    }
   }
 }
 
-function addProgramConflictIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
-  if (detectProgramConflict(fields)) {
+function addProgramConflictIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
+  if (detectProgramConflict(fields, editorText)) {
     issues.push({
       severity: "error",
       code: "program-conflict",
@@ -137,7 +143,6 @@ function addProgramConflictIssues(fields: AcademicFields, issues: ValidationIssu
 }
 
 function addAbstractTopicIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
-  if (isCpgWork(fields.workType)) return;
   const result = detectAbstractTopicConflict(fields);
   if (result.conflict) {
     issues.push({
@@ -233,9 +238,10 @@ function addResumoAbstractIssues(fields: AcademicFields, issues: ValidationIssue
 
 function addImpactIndicatorIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
   if (fields.workType !== "dissertacao" && fields.workType !== "tese") return;
-  const isEmpty = !hasValue(fields.indicadoresImpacto);
   const isInstructional = hasValue(fields.indicadoresImpacto) && detectPlaceholderText(fields.indicadoresImpacto);
-  if (isEmpty || isInstructional) issues.push({ severity: "error", code: "impact-indicators-missing", message: "Preencha os Indicadores de Impacto antes da versão final.", what: "Os indicadores de impacto estão vazios ou contêm apenas texto instrucional.", why: "A UFLA pode exigir indicadores de impacto em dissertações e teses; texto genérico não é aceitável.", action: "Preencha os impactos social, científico, educacional, ambiental ou tecnológico com informações reais do trabalho." });
+  const sufficient = hasSufficientImpactIndicators(fields);
+  if (!sufficient && !isInstructional) issues.push({ severity: "error", code: "impact-indicators-missing", message: "Preencha os Indicadores de Impacto antes da versão final.", what: "Os indicadores de impacto estão vazios ou insuficientes.", why: "A UFLA pode exigir indicadores de impacto em dissertações e teses; texto genérico não é aceitável.", action: "Preencha ao menos dois dos campos de impacto (social, científico, educacional, ambiental, tecnológico/econômico) e o público beneficiado com informações reais do trabalho." });
+  if (isInstructional) issues.push({ severity: "error", code: "impact-indicators-missing", message: "Preencha os Indicadores de Impacto com informações reais antes da versão final.", what: "Os indicadores de impacto contêm apenas texto instrucional.", why: "A UFLA pode exigir indicadores de impacto em dissertações e teses; texto genérico não é aceitável.", action: "Substitua o texto instrucional por informações reais do trabalho." });
   if (hasValue(fields.indicadoresImpacto) && !isInstructional && !hasValue(fields.impactIndicators)) issues.push({ severity: "warning", code: "impact-indicators-english-recommended", message: "Inclua a versão em inglês dos indicadores de impacto quando exigida.", what: "Há indicadores de impacto em português, mas o campo Impact indicators está vazio.", why: "Alguns fluxos de pós-graduação exigem versão em português e inglês.", action: "Preencha o campo Impact indicators ou confirme se o template aplicado não exige versão em inglês." });
 }
 
@@ -359,7 +365,7 @@ export function validateWork(fields: AcademicFields, editorText = ""): Validatio
   addResearchProjectIssues(fields, editorText, issues);
   addUflaCollectionIssues(fields, issues);
   addPlaceholderIssues(fields, editorText, issues);
-  addProgramConflictIssues(fields, issues);
+  addProgramConflictIssues(fields, editorText, issues);
   addAbstractTopicIssues(fields, issues);
   addGenericAiLikeIssues(fields, editorText, issues);
   addTextDiagnosticIssues(fields, issues);

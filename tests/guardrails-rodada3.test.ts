@@ -45,14 +45,20 @@ describe("Rodada 3 - montagem de rascunho", () => {
     expect(detectPlaceholderText(draft)).toBe(true);
   });
 
-  it("CPG gera seções esperadas", () => {
+  it("CPG gera seções esperadas (agradecimentos omitido quando vazio)", () => {
     const draft = buildCpgDraft(baseFields({ workType: "resumo_expandido_cpg" }));
     expect(draft).toContain("1 INTRODUÇÃO");
     expect(draft).toContain("2 MATERIAIS E MÉTODOS");
     expect(draft).toContain("3 RESULTADOS E DISCUSSÃO");
     expect(draft).toContain("4 CONCLUSÃO");
-    expect(draft).toContain("AGRADECIMENTOS");
+    expect(draft).not.toContain("AGRADECIMENTOS");
     expect(draft).toContain("REFERÊNCIAS");
+  });
+
+  it("CPG gera AGRADECIMENTOS quando preenchido", () => {
+    const draft = buildCpgDraft(baseFields({ workType: "resumo_expandido_cpg", agradecimentos: "Aos meus orientadores." }));
+    expect(draft).toContain("AGRADECIMENTOS");
+    expect(draft).toContain("Aos meus orientadores.");
   });
 
   it("dissertação/tese com indicadores vazios não gera texto", () => {

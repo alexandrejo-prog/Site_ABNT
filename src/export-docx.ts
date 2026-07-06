@@ -19,6 +19,7 @@ import type { IParagraphOptions, IStylesOptions } from "docx";
 import { pageMargins, ibgeTable } from "./docx-shared";
 import { AcademicFields, UFLA_RULES } from "./ufla-rules";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
+import { consolidateImpactIndicators } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
 
 export type EditorBlockType =
@@ -500,7 +501,6 @@ function scheduleRowsFromBlock(text: string): { caption: string; rows: ScheduleR
 function scheduleTableBlock(text: string): Array<Paragraph | Table> {
   const { caption, rows, source } = scheduleRowsFromBlock(text);
   const ibge = ibgeTable({
-    caption,
     headerLabels: ["Etapa", "Meses", "Período", "Atividades principais"],
     columnWidths: [17, 13, 24, 46],
     rows: rows.map((row) => [row.etapa, row.meses, row.periodo, row.atividades]),
@@ -953,7 +953,8 @@ function optionalUntitledRightPage(content: string, italics = false): Paragraph[
 
 function preTextualChildren(fields: AcademicFields): Paragraph[] {
   const impactRequired = fields.workType === "dissertacao" || fields.workType === "tese";
-  const indicadores = fields.indicadoresImpacto || (impactRequired ? "[PREENCHER: indicadores de impacto]" : "");
+  const consolidated = consolidateImpactIndicators(fields);
+  const indicadores = consolidated || (impactRequired ? "[PREENCHER: indicadores de impacto]" : "");
   const impactIndicators = fields.impactIndicators || (impactRequired ? "[PREENCHER: impact indicators]" : "");
 
   return [

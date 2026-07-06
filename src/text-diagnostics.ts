@@ -1,4 +1,5 @@
 import { AcademicFields } from "./ufla-rules";
+import { detectGenericAiLikeText } from "./academic-guardrails";
 
 export interface ResumoHeuristics {
   hasObjective: boolean;
@@ -13,7 +14,7 @@ const RESULT_TERMS = ["resultados indicam", "verificou-se", "evidencia", "eviden
 const CONCLUSION_TERMS = ["conclui-se", "considera-se", "conclui", "considera", "infere-se", "portanto", "dessa forma"];
 
 function hasAny(text: string, terms: string[]): boolean {
-  const normalized = text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   return terms.some((term) => normalized.includes(term));
 }
 
@@ -55,7 +56,7 @@ export function assessAbstractHeuristics(fields: AcademicFields): AbstractHeuris
 
   const ptTerms = new Set(
     `${fields.title} ${fields.resumo} ${fields.workNature}`
-      .normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().split(/\s+/).filter((t) => t.length > 2 && !PT_WORDS.has(t)),
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/\s+/).filter((t) => t.length > 2 && !PT_WORDS.has(t)),
   );
   const enTerms = new Set(words.filter((t) => t.length > 2 && !EN_MARKERS.includes(t) && !PT_WORDS.has(t)));
   let shared = 0;
@@ -71,22 +72,31 @@ export interface TextDiagnostic {
   hasMethod: boolean;
   hasResultConclusion: boolean;
   hasKeywords: boolean;
+  resumoMissing: boolean;
+  abstractMissing: boolean;
+  resumoApproved: boolean;
+  abstractApproved: boolean;
   genericWarnings: number;
 }
 
-export function buildTextDiagnostic(fields: AcademicFields): TextDiagnostic {
+export function buildTextDiagnostic(fields: AcademicFields, editorText = ""): TextDiagnostic {
   const resumo = assessResumoHeuristics(fields.resumo);
   const abstract = assessAbstractHeuristics(fields);
   const hasKeywords = fields.palavrasChave.split(/[;.]/).map((t) => t.trim()).filter(Boolean).length >= 3;
+  const resumoMissing = fields.resumo.trim().length === 0;
+  const abstractMissing = fields.abstractText.trim().length === 0;
 
-  const titleTerms = new Set(fields.title.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().split(/\s+/).filter((t) => t.length > 3));
-  const resumoTerms = new Set(fields.resumo.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().split(/\s+/).filter((t) => t.length > 3));
+  const titleTerms = new Set(fields.title.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/\s+/).filter((t) => t.length > 3));
+  const resumoTerms = new Set(fields.resumo.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/\s+/).filter((t) => t.length > 3));
   const sharedTitleResume = [...titleTerms].filter((t) => resumoTerms.has(t)).length;
   const titleResumeConsistent = titleTerms.size === 0 || sharedTitleResume > 0;
 
-  const abstractTerms = new Set(fields.abstractText.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().split(/\s+/).filter((t) => t.length > 3));
+  const abstractTerms = new Set(fields.abstractText.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/\s+/).filter((t) => t.length > 3));
   const sharedResumeAbstract = [...resumoTerms].filter((t) => abstractTerms.has(t)).length;
   const resumeAbstractConsistent = fields.abstractText.trim().length === 0 || resumoTerms.size === 0 || sharedResumeAbstract > 0 || abstract.sharedTerms > 0;
+
+  const genericSources = [fields.resumo, fields.abstractText, fields.introducao, fields.conclusao, editorText];
+  const genericWarnings = genericSources.filter((value) => value.trim().length > 0 && detectGenericAiLikeText(value)).length;
 
   return {
     titleResumeConsistent,
@@ -95,6 +105,10 @@ export function buildTextDiagnostic(fields: AcademicFields): TextDiagnostic {
     hasMethod: resumo.hasMethod,
     hasResultConclusion: resumo.hasResult || resumo.hasConclusion,
     hasKeywords,
-    genericWarnings: 0,
+    resumoMissing,
+    abstractMissing,
+    resumoApproved: !resumoMissing && resumo.hasObjective && resumo.hasMethod && (resumo.hasResult || resumo.hasConclusion),
+    abstractApproved: !abstractMissing && abstract.looksEnglish && abstract.sharedTerms > 0,
+    genericWarnings,
   };
 }

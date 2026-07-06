@@ -74,7 +74,7 @@ describe("Indicadores de impacto - sem texto genérico", () => {
     expect(error?.message).toBe("Preencha os Indicadores de Impacto antes da versão final.");
     expect(error?.what).toContain("vazios");
     expect(error?.why).toContain("UFLA");
-    expect(error?.action).toContain("impactos social");
+    expect(error?.action).toContain("campos de impacto");
   });
 
   it("dissertação/tese com texto instrucional gera error", () => {

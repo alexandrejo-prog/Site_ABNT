@@ -32,12 +32,16 @@ function fold(value: string): string {
 }
 
 function isReferenceTitleNoise(value: string): boolean {
-  const text = fold(value).replace(/\s+/g, " ").trim();
+  const text = fold(value).replace(/[#*:.\-–—]/g, "").replace(/\s+/g, " ").trim();
   if (!text) return false;
   const noiseTitles = [
     "referencias",
+    "referencia",
     "bibliograficas",
+    "bibliografia",
     "referencias bibliograficas",
+    "referencia bibliografica",
+    "bibliograficas referencias",
   ];
   return noiseTitles.includes(text);
 }
