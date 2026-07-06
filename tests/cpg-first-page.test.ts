@@ -58,6 +58,10 @@ function paragraphText(paragraphXml: string): string {
     .join("");
 }
 
+function documentText(documentXml: string): string {
+  return paragraphsIn(documentXml).map(paragraphText).join("\n");
+}
+
 function titleOccurrences(documentXml: string, title: string): number {
   return paragraphsIn(documentXml).filter((paragraph) => paragraph.includes(title)).length;
 }
@@ -85,11 +89,8 @@ const cpgFields: AcademicFields = {
   referencias: "SILVA, M. Qualidade do cafe. Lavras: UFLA, 2024.",
 };
 
-async function generatedCpgXml(): Promise<string> {
-  const blob = await generateCpgDocxBlob({
-    fields: cpgFields,
-    editorText: "# Introducao\nTexto comum.",
-  });
+async function generatedCpgXml(fields: AcademicFields = cpgFields, editorText = "# Introducao\nTexto comum."): Promise<string> {
+  const blob = await generateCpgDocxBlob({ fields, editorText });
   return extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
 }
 
@@ -119,5 +120,45 @@ describe("CPG first page layout", () => {
     expect(affiliation).toContain('w:jc w:val="center"');
     expect(affiliation).toContain('w:sz w:val="24"');
     expect(hasPositiveBold(affiliation)).toBe(false);
+  });
+
+  it("keeps resumo before abstract in CPG templates", async () => {
+    const documentXml = await generatedCpgXml();
+    const text = documentText(documentXml);
+
+    expect(text.indexOf("Resumo. Resumo do trabalho.")).toBeGreaterThan(-1);
+    expect(text.indexOf("Palavras-chave: cafe; qualidade")).toBeGreaterThan(text.indexOf("Resumo. Resumo do trabalho."));
+    expect(text.indexOf("Abstract. Abstract text.")).toBeGreaterThan(text.indexOf("Palavras-chave: cafe; qualidade"));
+    expect(text.indexOf("Keywords: coffee; quality")).toBeGreaterThan(text.indexOf("Abstract. Abstract text."));
+  });
+
+  it("does not include full-work pretextual sections in CPG export", async () => {
+    const documentXml = await generatedCpgXml();
+    const text = documentText(documentXml);
+
+    expect(text).not.toContain("FICHA CATALOGRÁFICA");
+    expect(text).not.toContain("SUMÁRIO");
+    expect(text).not.toContain("Trabalho apresentado");
+  });
+
+  it("normalizes invisible hyphenation/control characters", async () => {
+    const documentXml = await generatedCpgXml(
+      { ...cpgFields, abstractText: "Historical\ufffeCritical Pedagogy.", resumo: "Pedagogia Histórico\ufffeCrítica." },
+      "# Introducao\nTexto com Pós\ufffeGraduação e sem controle.",
+    );
+    const text = documentText(documentXml);
+
+    expect(text).toContain("Historical-Critical Pedagogy");
+    expect(text).toContain("Pedagogia Histórico-Crítica");
+    expect(text).toContain("Pós-Graduação");
+    expect(text).not.toContain("\ufffe");
+  });
+
+  it("uses REFERÊNCIAS as the default CPG reference title", async () => {
+    const documentXml = await generatedCpgXml();
+    const text = documentText(documentXml);
+
+    expect(text).toContain("REFERÊNCIAS");
+    expect(text).not.toContain("Referencias");
   });
 });
