@@ -7,6 +7,14 @@ export const WORK_TYPES = [
   "dissertacao",
   "tese",
   "projeto_pesquisa",
+  "artigo_cientifico_ufla",
+  "patente_ufla",
+  "revisao_sistematica_ufla",
+  "estudo_caso_ufla",
+  "software_aplicativo_ufla",
+  "cultivar_ufla",
+  "relatorio_estagio_ufla",
+  "proposta_intervencao_ufla",
   "outro",
 ] as const;
 
@@ -22,6 +30,14 @@ export const WORK_TYPE_LABELS: Record<WorkType, string> = {
   dissertacao: "Dissertação",
   tese: "Tese",
   projeto_pesquisa: "Projeto de pesquisa (NBR 15287:2025)",
+  artigo_cientifico_ufla: "Artigo científico UFLA",
+  patente_ufla: "Patente UFLA",
+  revisao_sistematica_ufla: "Revisão sistemática e aprofundada UFLA",
+  estudo_caso_ufla: "Estudo de caso ou casos múltiplos UFLA",
+  software_aplicativo_ufla: "Desenvolvimento de software e aplicativos UFLA",
+  cultivar_ufla: "Cultivar UFLA",
+  relatorio_estagio_ufla: "Relatório de estágio UFLA",
+  proposta_intervencao_ufla: "Proposta de intervenção UFLA",
   outro: "Outro",
 };
 
