@@ -951,20 +951,10 @@ function optionalUntitledRightPage(content: string, italics = false): Paragraph[
   ];
 }
 
-function defaultImpactIndicators(fields: AcademicFields): string {
-  const topic = fields.title || "a pesquisa proposta";
-  return `Esta pesquisa apresenta impacto social e institucional ao analisar ${topic} no contexto da Universidade Federal de Lavras, considerando relações entre gestão, trabalho, saúde, participação e produção do conhecimento. Ao investigar percepções dos Servidores Técnico-Administrativos em Educação sobre o Programa de Gestão e Desempenho, o estudo poderá subsidiar práticas de avaliação mais democráticas, sensíveis à complexidade do trabalho real e comprometidas com a função pública da universidade. Seus resultados poderão contribuir para o aprimoramento de políticas de gestão de pessoas, para a valorização dos saberes técnico-administrativos e para a prevenção de processos de sobrecarga e adoecimento relacionados à organização do trabalho. O impacto esperado alcança a comunidade universitária, gestores, trabalhadores, pesquisadores da área de Educação Ambiental Crítica e instituições públicas que adotam modelos de gestão por desempenho. A pesquisa também dialoga com os Objetivos de Desenvolvimento Sustentável relacionados à saúde e bem-estar, trabalho decente, educação de qualidade e instituições eficazes, ao tratar o ambiente universitário como espaço socioambiental de vida, trabalho e formação humana.`;
-}
-
-function defaultImpactIndicatorsEnglish(fields: AcademicFields): string {
-  const topic = fields.title || "the proposed research";
-  return `This research has social and institutional impact by analyzing ${topic} in the context of the Federal University of Lavras, considering relations among management, work, health, participation and knowledge production. By investigating the perceptions of Technical-Administrative Education Staff regarding the Management and Performance Program, the study may support more democratic evaluation practices, sensitive to the complexity of real work and committed to the public role of the university. Its results may contribute to improving people management policies, valuing technical-administrative knowledge and preventing overload and illness processes related to work organization. The expected impact reaches the university community, managers, workers, researchers in Critical Environmental Education and public institutions that adopt performance-based management models. The research also dialogues with the Sustainable Development Goals related to health and well-being, decent work, quality education and effective institutions, by understanding the university environment as a socio-environmental space of life, work and human formation.`;
-}
-
 function preTextualChildren(fields: AcademicFields): Paragraph[] {
   const impactRequired = fields.workType === "dissertacao" || fields.workType === "tese";
-  const indicadores = fields.indicadoresImpacto || (impactRequired ? defaultImpactIndicators(fields) : "");
-  const impactIndicators = fields.impactIndicators || (impactRequired ? defaultImpactIndicatorsEnglish(fields) : "");
+  const indicadores = fields.indicadoresImpacto || (impactRequired ? "[PREENCHER: indicadores de impacto]" : "");
+  const impactIndicators = fields.impactIndicators || (impactRequired ? "[PREENCHER: impact indicators]" : "");
 
   return [
     pageBreak(),

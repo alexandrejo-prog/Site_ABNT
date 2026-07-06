@@ -28,7 +28,7 @@ export function detectPlaceholderText(value: string): boolean {
   return bracketMatches.some((token) => {
     const inner = token.slice(1, -1).toLowerCase().trim();
     if (inner.length < 3) return false;
-    return /(preenche|insira|coloque|adicione|inserir|digite|complete|substitua|exemplo|placeholder|nome do|nome da)/.test(inner);
+    return /(preenche|preencha|preencher|insira|coloque|adicione|inserir|digite|complete|substitua|exemplo|placeholder|nome do|nome da)/.test(inner);
   });
 }
 

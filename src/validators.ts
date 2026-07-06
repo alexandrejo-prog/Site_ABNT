@@ -233,8 +233,10 @@ function addResumoAbstractIssues(fields: AcademicFields, issues: ValidationIssue
 
 function addImpactIndicatorIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
   if (fields.workType !== "dissertacao" && fields.workType !== "tese") return;
-  if (!hasValue(fields.indicadoresImpacto)) issues.push({ severity: "warning", code: "impact-indicators-required", message: "Inclua os indicadores de impacto quando exigidos para dissertação ou tese.", what: "O campo Indicadores de impacto está vazio.", why: "Dissertações e teses podem exigir descrição de impacto social, científico, econômico, cultural ou ambiental.", action: "Preencha o campo Indicadores de impacto ou confirme se o modelo aplicado dispensa esse elemento." });
-  if (hasValue(fields.indicadoresImpacto) && !hasValue(fields.impactIndicators)) issues.push({ severity: "warning", code: "impact-indicators-english-recommended", message: "Inclua a versão em inglês dos indicadores de impacto quando exigida.", what: "Há indicadores de impacto em português, mas o campo Impact indicators está vazio.", why: "Alguns fluxos de pós-graduação exigem versão em português e inglês.", action: "Preencha o campo Impact indicators ou confirme se o template aplicado não exige versão em inglês." });
+  const isEmpty = !hasValue(fields.indicadoresImpacto);
+  const isInstructional = hasValue(fields.indicadoresImpacto) && detectPlaceholderText(fields.indicadoresImpacto);
+  if (isEmpty || isInstructional) issues.push({ severity: "error", code: "impact-indicators-missing", message: "Preencha os Indicadores de Impacto antes da versão final.", what: "Os indicadores de impacto estão vazios ou contêm apenas texto instrucional.", why: "A UFLA pode exigir indicadores de impacto em dissertações e teses; texto genérico não é aceitável.", action: "Preencha os impactos social, científico, educacional, ambiental ou tecnológico com informações reais do trabalho." });
+  if (hasValue(fields.indicadoresImpacto) && !isInstructional && !hasValue(fields.impactIndicators)) issues.push({ severity: "warning", code: "impact-indicators-english-recommended", message: "Inclua a versão em inglês dos indicadores de impacto quando exigida.", what: "Há indicadores de impacto em português, mas o campo Impact indicators está vazio.", why: "Alguns fluxos de pós-graduação exigem versão em português e inglês.", action: "Preencha o campo Impact indicators ou confirme se o template aplicado não exige versão em inglês." });
 }
 
 function looksInstitutionalAuthor(value: string): boolean {
