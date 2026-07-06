@@ -15,6 +15,7 @@ import {
   detectPlaceholderText,
   detectProgramConflict,
 } from "./academic-guardrails";
+import { assessAbstractHeuristics, assessResumoHeuristics } from "./text-diagnostics";
 
 export type ValidationSeverity = "error" | "warning" | "info";
 
@@ -188,6 +189,20 @@ function addCpgForbiddenIssues(fields: AcademicFields, editorText: string, issue
   }
 }
 
+function addTextDiagnosticIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
+  if (isCpgWork(fields.workType)) return;
+  if (!hasValue(fields.resumo)) return;
+
+  const heuristics = assessResumoHeuristics(fields.resumo);
+  if (!heuristics.hasMethod) issues.push({ severity: "warning", code: "resumo-missing-method", message: "O resumo não parece descrever a metodologia utilizada.", what: "Não foram detectados termos de método no resumo (ex.: metodologia, análise, observação).", why: "O resumo deve sintetizar objetivo, método, resultados e conclusão quando aplicável.", action: "Adicione uma frase sobre a metodologia no campo Resumo." });
+  if (!heuristics.hasObjective) issues.push({ severity: "warning", code: "resumo-missing-objective", message: "O resumo não parece explicitar o objetivo.", what: "Não foram detectados termos de objetivo no resumo (ex.: objetivo, analisa, investiga).", why: "O objetivo orienta a leitura e a avaliação do trabalho.", action: "Adicione o objetivo no campo Resumo." });
+  if (!heuristics.hasResult && !heuristics.hasConclusion) issues.push({ severity: "warning", code: "resumo-missing-result-conclusion", message: "O resumo não parece apresentar resultado ou conclusão.", what: "Não foram detectados termos de resultado/conclusão no resumo.", why: "Resumos costumam encerrar com resultados ou conclusão.", action: "Adicione resultado ou conclusão no campo Resumo." });
+
+  const abstract = assessAbstractHeuristics(fields);
+  if (!abstract.isEmpty && abstract.tooMuchPortuguese) issues.push({ severity: "warning", code: "abstract-looks-portuguese", message: "O abstract parece conter português demais para um texto em inglês.", what: "Há mais termos em português do que em inglês no campo Abstract.", why: "O abstract deve estar em inglês ou idioma estrangeiro, traduzindo fielmente o resumo.", action: "Revise o Abstract e reescreva em inglês, se aplicável." });
+  if (!abstract.isEmpty && !abstract.looksEnglish && !abstract.tooMuchPortuguese) issues.push({ severity: "info", code: "abstract-language-review", message: "Confira se o abstract está em inglês ou idioma estrangeiro.", what: "O abstract não apresentou marcadores claros de inglês.", why: "A língua estrangeira deve espelhar o resumo.", action: "Confira a língua do Abstract antes da versão final." });
+}
+
 function addResumoAbstractIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
   if (isCpgWork(fields.workType)) return;
 
@@ -345,6 +360,7 @@ export function validateWork(fields: AcademicFields, editorText = ""): Validatio
   addProgramConflictIssues(fields, issues);
   addAbstractTopicIssues(fields, issues);
   addGenericAiLikeIssues(fields, editorText, issues);
+  addTextDiagnosticIssues(fields, issues);
   addCpgForbiddenIssues(fields, editorText, issues);
   if (hasLikelyImageWithoutCaption(editorText)) issues.push({ severity: "warning", code: "image-caption-warning", message: "Imagem detectada sem legenda provável. Confira posição, qualidade e legenda antes da versão final.", what: "Há possível imagem sem legenda no texto.", why: "Ilustrações precisam de legenda e fonte conforme ABNT/UFLA.", action: "Adicione legenda no formato 'Figura X - Título' e verifique a fonte da imagem." });
   if (hasLikelyUnmarkedLongQuote(editorText)) issues.push({ severity: "warning", code: "long-quote-warning", message: "Há possível citação longa não marcada como citação longa. Revise antes da versão final.", what: "Há parágrafo longo com data que pode ser citação direta.", why: "Citações longas exigem recuo de 4 cm, fonte 11 e espaço simples.", action: "Selecione o trecho e clique em Citação longa na barra de ferramentas." });

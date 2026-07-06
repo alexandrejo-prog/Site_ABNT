@@ -13,6 +13,51 @@
   font-weight: 600;
 }
 
+.diagnostic-panel {
+  border: 1px solid #cfe3cf;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #f3f8f3;
+  margin-bottom: 10px;
+}
+
+.diagnostic-panel h2 {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+}
+
+.diagnostic-disclaimer {
+  margin: 0 0 6px;
+  font-size: 0.75rem;
+  color: #5b6b5b;
+}
+
+.diagnostic-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.diag-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  padding: 2px 0;
+}
+
+.diag-dot {
+  font-weight: 700;
+}
+
+.diag-dot.ok {
+  color: #1a7f37;
+}
+
+.diag-dot.missing {
+  color: #b58105;
+}
+
 :root {
   color: #1f2933;
   background: #f5f7f4;
