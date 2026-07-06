@@ -1,29 +1,19 @@
 import {
   AlignmentType,
   Document,
-  Header,
   HeadingLevel,
-  ImageRun,
   Packer,
-  PageBreak,
-  PageNumber,
   PageOrientation,
   Paragraph,
   TableOfContents,
   TextRun,
 } from "docx";
 import { parseEditorContent, type DocxGenerationInput, type DocxLogoAsset, type EditorBlock, loadDefaultLogoAsset } from "./export-docx";
+import { AUTHOR_SIZE, BLACK, BODY_SIZE, ONE_AND_HALF_LINE, SINGLE_LINE, TITLE_SIZE, centered, logoParagraph, pageBreak, pageMargins, pageNumberHeader, paragraph, run, unnumberedTitle } from "./docx-shared";
 import { repairHeadingFragments } from "./heading-fragment-repair";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { UFLA_RULES } from "./ufla-rules";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
-
-const BODY_SIZE = UFLA_RULES.typography.bodyFontSizePt * 2;
-const TITLE_SIZE = UFLA_RULES.typography.coverTitleFontSizePt * 2;
-const AUTHOR_SIZE = UFLA_RULES.typography.coverAuthorFontSizePt * 2;
-const SINGLE_LINE = UFLA_RULES.spacing.singleLineTwip;
-const ONE_AND_HALF_LINE = UFLA_RULES.spacing.bodyLineTwip;
-const BLACK = "000000";
 
 function hasValue(value: string): boolean {
   return value.trim().length > 0;
@@ -31,64 +21,6 @@ function hasValue(value: string): boolean {
 
 function splitParagraphs(value: string): string[] {
   return value.split(/\n+/).map((line) => line.trim()).filter(Boolean);
-}
-
-function pageBreak(): Paragraph {
-  return new Paragraph({ children: [new PageBreak()] });
-}
-
-function run(text: string, bold = false, size = BODY_SIZE): TextRun {
-  return new TextRun({ text, bold, size, font: UFLA_RULES.typography.fontFamily, color: BLACK });
-}
-
-function paragraph(text: string): Paragraph {
-  return new Paragraph({
-    alignment: AlignmentType.BOTH,
-    spacing: { line: ONE_AND_HALF_LINE, after: UFLA_RULES.spacing.afterParagraphTwip },
-    indent: { firstLine: UFLA_RULES.typography.paragraphFirstLineTwip },
-    children: [run(text || " ")],
-  });
-}
-
-function centered(text: string, bold = false, size = BODY_SIZE, before = 0, after = 240): Paragraph {
-  return new Paragraph({
-    alignment: AlignmentType.CENTER,
-    spacing: { before, after, line: SINGLE_LINE },
-    children: [run(text || " ", bold, size)],
-  });
-}
-
-function unnumberedTitle(text: string): Paragraph {
-  return centered(text.toUpperCase(), true, BODY_SIZE, 240, 240);
-}
-
-function logoParagraph(logo?: DocxLogoAsset): Paragraph[] {
-  if (!logo) return [centered("UNIVERSIDADE FEDERAL DE LAVRAS", true, AUTHOR_SIZE, 0, 0)];
-
-  return [
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 0 },
-      children: [
-        new ImageRun({
-          data: logo.data,
-          transformation: { width: logo.width ?? 265, height: logo.height ?? 108 },
-          altText: { title: "Logo UFLA", description: "Universidade Federal de Lavras", name: "Logo UFLA" },
-        }),
-      ],
-    }),
-  ];
-}
-
-function pageMargins() {
-  return {
-    top: UFLA_RULES.margins.topTwip,
-    left: UFLA_RULES.margins.leftTwip,
-    bottom: UFLA_RULES.margins.bottomTwip,
-    right: UFLA_RULES.margins.rightTwip,
-    header: UFLA_RULES.header.distanceFromTopTwip,
-    footer: UFLA_RULES.footer.distanceFromBottomTwip,
-  };
 }
 
 function coverChildren(input: DocxGenerationInput): Paragraph[] {
@@ -124,11 +56,11 @@ function preTextualChildren(fields: DocxGenerationInput["fields"]): Array<Paragr
   return [
     pageBreak(),
     unnumberedTitle("Resumo"),
-    ...splitParagraphs(fields.resumo).map(paragraph),
+    ...splitParagraphs(fields.resumo).map((line) => paragraph(line)),
     ...(fields.palavrasChave ? [paragraph(`Palavras-chave: ${fields.palavrasChave}`)] : []),
     pageBreak(),
     unnumberedTitle("Abstract"),
-    ...splitParagraphs(fields.abstractText).map(paragraph),
+    ...splitParagraphs(fields.abstractText).map((line) => paragraph(line)),
     ...(fields.keywords ? [paragraph(`Keywords: ${fields.keywords}`)] : []),
     pageBreak(),
     unnumberedTitle("Sumário"),
@@ -182,7 +114,7 @@ function blockToParagraph(block: EditorBlock, first: boolean): Paragraph[] {
   if (block.type === "longQuote") {
     return [new Paragraph({ alignment: AlignmentType.BOTH, spacing: { line: SINGLE_LINE, after: 120 }, indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip }, children: [run(block.text)] })];
   }
-  if (block.type === "scheduleTable") return splitParagraphs(block.text).map(paragraph);
+  if (block.type === "scheduleTable") return splitParagraphs(block.text).map((line) => paragraph(line));
   return [paragraph(block.text)];
 }
 
@@ -206,17 +138,6 @@ function referenceParagraphs(references: string[]): Paragraph[] {
       .sort((a, b) => a.text.localeCompare(b.text, "pt-BR", { sensitivity: "base" }))
       .map((reference) => new Paragraph({ alignment: AlignmentType.LEFT, spacing: { line: SINGLE_LINE, after: SINGLE_LINE }, children: reference.runs.length ? reference.runs.map(referenceRunToTextRun) : [run(reference.text)] })),
   ];
-}
-
-function pageNumberHeader(): Header {
-  return new Header({
-    children: [
-      new Paragraph({
-        alignment: AlignmentType.RIGHT,
-        children: [new TextRun({ children: [PageNumber.CURRENT], font: UFLA_RULES.typography.fontFamily, size: UFLA_RULES.typography.pageNumberFontSizePt * 2, color: BLACK })],
-      }),
-    ],
-  });
 }
 
 function createProjectDocument(input: DocxGenerationInput): Document {

@@ -4,8 +4,10 @@ import {
   isAdvisorRequired,
   isCpgWork,
   isResearchProject,
+  isUflaCollectionWork,
 } from "./ufla-rules";
 import { validateReferencesText } from "./references-validator";
+import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
 
 export type ValidationSeverity = "error" | "warning" | "info";
 
@@ -175,6 +177,34 @@ function addResearchProjectIssues(fields: AcademicFields, editorText: string, is
   if (hasValue(fields.objetivosEspecificos) && !hasValue(fields.objetivoGeral) && !hasObjective) issues.push({ severity: "error", code: "research-objective-mandatory", message: "Objetivo geral é obrigatório quando há objetivos específicos.", what: "Objetivos específicos foram informados, mas o objetivo geral está ausente.", why: "O objetivo geral é o alvo principal da pesquisa e deve estar presente antes dos objetivos específicos.", action: "Preencha o campo 'Objetivo Geral' antes da geração." });
 }
 
+function addUflaCollectionIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
+  if (!isUflaCollectionWork(fields.workType)) return;
+  const productionType = academicProductionTypeById(fields.workType);
+  if (!productionType) return;
+
+  issues.push({
+    severity: "warning",
+    code: "ufla-collection-initial-support",
+    message: ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE,
+    what: "O formato foi cadastrado no sistema com suporte inicial.",
+    why: "Os exportadores especificos da Colecao Producao Academica UFLA ainda serao evoluidos incrementalmente.",
+    action: "Confira estrutura, campos, sumario e paginacao no DOCX final antes de exportar o PDF pelo Word ou LibreOffice.",
+  });
+
+  for (const fieldKey of productionType.requiredFields) {
+    if (!hasValue(fields[fieldKey])) {
+      issues.push({
+        severity: "error",
+        code: `ufla-collection-${fieldKey}-required`,
+        message: `Preencha o campo obrigatorio para ${productionType.label}: ${fieldKey}.`,
+        what: "Um campo minimo do formato selecionado esta vazio.",
+        why: "A Colecao Producao Academica UFLA exige revisao da estrutura e dos metadados antes da submissao.",
+        action: "Preencha o campo indicado ou confirme manualmente se o guia especifico dispensa esse item.",
+      });
+    }
+  }
+}
+
 export function validateWork(fields: AcademicFields, editorText = ""): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const simpleArticle = isSimpleArticle(fields);
@@ -197,9 +227,10 @@ export function validateWork(fields: AcademicFields, editorText = ""): Validatio
   addImpactIndicatorIssues(fields, issues);
   addCpgWarnings(fields, editorText, issues);
   addResearchProjectIssues(fields, editorText, issues);
+  addUflaCollectionIssues(fields, issues);
   if (hasLikelyImageWithoutCaption(editorText)) issues.push({ severity: "warning", code: "image-caption-warning", message: "Imagem detectada sem legenda provável. Confira posição, qualidade e legenda antes da versão final.", what: "Há possível imagem sem legenda no texto.", why: "Ilustrações precisam de legenda e fonte conforme ABNT/UFLA.", action: "Adicione legenda no formato 'Figura X - Título' e verifique a fonte da imagem." });
   if (hasLikelyUnmarkedLongQuote(editorText)) issues.push({ severity: "warning", code: "long-quote-warning", message: "Há possível citação longa não marcada como citação longa. Revise antes da versão final.", what: "Há parágrafo longo com data que pode ser citação direta.", why: "Citações longas exigem recuo de 4 cm, fonte 11 e espaço simples.", action: "Selecione o trecho e clique em Citação longa na barra de ferramentas." });
-  if (hasValue(fields.imageWarnings)) issues.push({ severity: "warning", code: "imported-image-warning", message: `${fields.imageWarnings} Confira posição, qualidade e legenda antes da versão final.`, what: "Imagens foram importadas do arquivo original.", why: "Imagens importadas podem perder qualidade ou legenda na conversão.", action: "Verifique cada imagem no DOCX gerado e ajuste legendas se necessário." });
+  if (hasValue(fields.imageWarnings)) issues.push({ severity: "warning", code: "imported-image-warning", message: `${fields.imageWarnings} A preservacao visual nao e garantida automaticamente.`, what: "Imagens foram detectadas no arquivo original.", why: "A importacao pode registrar a presenca da imagem sem manter sua aparencia, legenda ou posicao no DOCX final.", action: "Confira ou reinsira manualmente cada imagem no DOCX final e revise legendas e posicao." });
   if (hasValue(fields.anexos) && /\[Imagem detectada:/i.test(fields.anexos)) issues.push({ severity: "warning", code: "annex-image-partial", message: "Há imagem detectada em anexos; confira posição, qualidade e legenda antes da versão final.", what: "Imagens foram detectadas na seção de anexos.", why: "Anexos com imagens exigem verificação de legenda, fonte e qualidade.", action: "Revise a seção de anexos no DOCX gerado." });
   return issues;
 }

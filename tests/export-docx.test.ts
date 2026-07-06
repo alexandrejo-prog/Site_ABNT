@@ -472,7 +472,9 @@ describe("DOCX export", () => {
 
   it("App.tsx keeps DOCX-only CPG generation and no PDF workflow", () => {
     const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-    expect(source).toContain("generateCpgDocxBlob");
+    const templateSource = readFileSync(new URL("../src/document-template.ts", import.meta.url), "utf8");
+    expect(source).toContain("templateForWorkType");
+    expect(templateSource).toContain("generateCpgDocxBlob");
     expect(source).toContain("Gerar DOCX");
     expect(source).toContain("isCpgSelected");
     expect(source).toContain("Saída do sistema");

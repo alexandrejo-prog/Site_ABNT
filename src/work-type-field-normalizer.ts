@@ -1,4 +1,5 @@
-import type { AcademicFields } from "./ufla-rules";
+import { isUflaCollectionWork, type AcademicFields } from "./ufla-rules";
+import { academicProductionTypeById } from "./academic-production-types";
 
 function fold(value: string): string {
   return value
@@ -132,6 +133,18 @@ export function normalizeFieldsForSelectedModel(fields: AcademicFields): Academi
       ...sanitized,
       workNature,
     };
+  }
+
+  if (isUflaCollectionWork(fields.workType)) {
+    const sanitized = sanitizeAdvisorFields(fields);
+    const productionType = academicProductionTypeById(fields.workType);
+    if (!hasText(sanitized.workNature) || isGenericOrMismatchedNature(sanitized.workNature, sanitized.workType)) {
+      return {
+        ...sanitized,
+        workNature: `${productionType?.label ?? "Producao academica"} apresentada a Universidade Federal de Lavras conforme formato da Colecao Producao Academica UFLA, com suporte inicial no sistema.`,
+      };
+    }
+    return sanitized;
   }
 
   if (!hasText(fields.workNature)) {

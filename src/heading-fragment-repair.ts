@@ -11,19 +11,37 @@ function stripMarkdownHeading(value: string): string {
   return value.replace(/^#{1,6}\s*/, "").trim();
 }
 
-function numberedPrefixPattern(): string {
-  return "(?:\\d+(?:\\.\\d+)*\\s+)?";
+interface HeadingFragmentPair {
+  currentHeadings: string[];
+  nextFragment: string;
 }
 
-function isKnownHeadingFragment(currentLine: string, nextLine: string): boolean {
-  const current = normalize(stripMarkdownHeading(currentLine));
-  const next = normalize(nextLine);
-  const prefix = numberedPrefixPattern();
+const HEADING_FRAGMENT_PAIRS: HeadingFragmentPair[] = [
+  { currentHeadings: ["OBJETIVOS"], nextFragment: "ESPECIFICOS" },
+  { currentHeadings: ["CRONOGRAMA"], nextFragment: "DE EXECUCAO" },
+  { currentHeadings: ["CONSIDERACOES"], nextFragment: "FINAIS" },
+  { currentHeadings: ["REFERENCIAS"], nextFragment: "BIBLIOGRAFICAS" },
+  { currentHeadings: ["FUNDAMENTACAO"], nextFragment: "TEORICA" },
+  { currentHeadings: ["REVISAO"], nextFragment: "BIBLIOGRAFICA" },
+  { currentHeadings: ["RESULTADOS"], nextFragment: "ESPERADOS" },
+  { currentHeadings: ["MATERIAL E"], nextFragment: "METODOS" },
+  { currentHeadings: ["RECURSOS"], nextFragment: "E ORCAMENTO" },
+];
 
-  return (
-    (next === "ESPECIFICOS" && new RegExp(`^${prefix}OBJETIVOS$`).test(current)) ||
-    (next === "DE EXECUCAO" && new RegExp(`^${prefix}CRONOGRAMA$`).test(current))
-  );
+function isKnownHeadingFragment(currentLine: string, nextLine: string): boolean {
+  const current = normalize(stripMarkdownHeading(currentLine)).replace(/^\d+(?:\.\d+)*\s+/, "");
+  const next = normalize(nextLine);
+
+  for (const pair of HEADING_FRAGMENT_PAIRS) {
+    const normalizedHeadings = pair.currentHeadings.map((h) => normalize(h));
+    const headingPattern = new RegExp(`^(${normalizedHeadings.join("|")})$`);
+
+    if (headingPattern.test(current) && next === normalize(pair.nextFragment)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function nextNonEmptyLineIndex(lines: string[], startIndex: number): number | undefined {

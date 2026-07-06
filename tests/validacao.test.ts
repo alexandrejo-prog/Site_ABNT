@@ -100,7 +100,9 @@ describe("validação normativa", () => {
     const imageIssues = issues.filter((issue) => issue.code === "imported-image-warning");
 
     expect(imageIssues).toHaveLength(1);
-    expect(imageIssues[0].message).toContain("Confira posição, qualidade e legenda");
+    expect(imageIssues[0].message).toContain("preservacao visual nao e garantida");
+    expect(imageIssues[0].action).toContain("reinsira manualmente");
+    expect(imageIssues[0].action).toContain("legendas e posicao");
     expect(imageIssues[0].message).not.toContain("Documento ainda não está plenamente conforme");
   });
 

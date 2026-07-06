@@ -9,10 +9,11 @@ import {
   VerticalAlign,
 } from "docx";
 import type { IParagraphOptions } from "docx";
+import { BLACK as SHARED_BLACK } from "./docx-shared";
 import { parseEditorContent, type DocxGenerationInput, type EditorBlock } from "./export-docx";
 import { CPG_RULES, UFLA_RULES, cmToTwip } from "./ufla-rules";
 
-const BLACK = "000000";
+const BLACK = SHARED_BLACK;
 const BODY_SIZE = CPG_RULES.typography.bodyFontSizePt * 2;
 const TITLE_SIZE = CPG_RULES.typography.titleFontSizePt * 2;
 const SECTION_SIZE = CPG_RULES.typography.sectionTitleFontSizePt * 2;

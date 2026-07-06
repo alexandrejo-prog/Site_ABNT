@@ -18,6 +18,7 @@ import {
   WidthType,
 } from "docx";
 import type { IParagraphOptions, IStylesOptions } from "docx";
+import { pageMargins } from "./docx-shared";
 import { AcademicFields, UFLA_RULES } from "./ufla-rules";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { normalizeForDetection } from "./word-structure-extractor";
@@ -1023,17 +1024,6 @@ function preTextualChildren(fields: AcademicFields): Paragraph[] {
     ...optionalPage("Indicadores de impacto", indicadores),
     ...optionalPage("Impact indicators", impactIndicators),
   ];
-}
-
-function pageMargins() {
-  return {
-    top: UFLA_RULES.margins.topTwip,
-    left: UFLA_RULES.margins.leftTwip,
-    bottom: UFLA_RULES.margins.bottomTwip,
-    right: UFLA_RULES.margins.rightTwip,
-    header: UFLA_RULES.header.distanceFromTopTwip,
-    footer: UFLA_RULES.footer.distanceFromBottomTwip,
-  };
 }
 
 export function createDocxDocument(input: DocxGenerationInput): Document {

@@ -1,26 +1,31 @@
 # UFLA DOCX Academico
 
-Ferramenta de apoio a normalizacao academica UFLA/ABNT para gerar documentos .docx editaveis em trabalhos de graduacao, pos-graduacao, projeto de pesquisa e modelos CPG/UFLA.
+Ferramenta de apoio a normalizacao academica UFLA/ABNT para gerar documentos `.docx` editaveis em trabalhos de graduacao, pos-graduacao, projeto de pesquisa e modelos CPG/UFLA.
 
 **Posicionamento:** este sistema estrutura e valida parcialmente o documento, mas a submissao final continua exigindo revisao do usuario no DOCX gerado.
 
 ## Como rodar
 
-1. Instale as dependencias com npm install.
-2. Rode npm run dev.
-3. Abra o endereco exibido pelo Vite.
+```bash
+npm install
+npm run dev
+```
+
+Depois abra o endereco exibido pelo Vite.
 
 ## Comandos
 
-- npm test
-- npm run build
-- npm run verify
+```bash
+npm test
+npm run build
+npm run verify
+```
 
 ## Implementado nesta rodada
 
-- Importacao de .docx, .txt e .md.
-- Extracao de texto DOCX com mammoth e estrutura OOXML complementar.
-- Limpeza de sumario importado e reparo de titulo quebrado, incluindo Objetivos especificos.
+- Importacao de `.docx`, `.txt` e `.md`.
+- Extracao de texto DOCX com `mammoth` e estrutura OOXML complementar.
+- Limpeza de sumario importado e reparo de titulo quebrado, incluindo `Objetivos especificos`.
 - Identificacao provavel de campos academicos com indicacao de confianca.
 - Editor visual com texto principal e referencias.
 - Validacao normativa com erros bloqueantes e alertas nao bloqueantes.
@@ -32,9 +37,7 @@ Ferramenta de apoio a normalizacao academica UFLA/ABNT para gerar documentos .do
 
 ## Status normativo
 
-O status real de cobertura, limitacoes conhecidas e pontos que exigem validacao manual esta registrado em STATUS_NORMATIVO.md.
-
-A matriz tecnica da Colecao Producao Academica UFLA esta em docs/colecao-producao-academica-ufla.md.
+O status real de cobertura, limitacoes conhecidas e pontos que exigem validacao manual esta registrado em `STATUS_NORMATIVO.md`.
 
 ## Conferencia final
 
@@ -45,4 +48,4 @@ A matriz tecnica da Colecao Producao Academica UFLA esta em docs/colecao-produca
 
 ## Observacoes
 
-O PRD.md e o PDF do Manual da UFLA permanecem preservados na raiz do projeto. A evolucao normativa deve continuar por comparacao com documentos reais e revisao final humana.
+O `PRD.md` e o PDF do Manual da UFLA permanecem preservados na raiz do projeto. A evolucao normativa deve continuar por comparacao com documentos reais e revisao final humana.

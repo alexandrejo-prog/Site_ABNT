@@ -14,6 +14,7 @@ import {
   ImportedBlock,
   normalizeForDetection,
 } from "./word-structure-extractor";
+import { getSectionKeyFromTitle, isEquivalentSectionTitle } from "./section-aliases";
 
 export interface FieldDetectionResult {
   fields: AcademicFields;
@@ -111,6 +112,10 @@ function isPageHeading(block: ImportedBlock, targets: string[]): boolean {
   return normalizedTargets.includes(normalized);
 }
 
+function sectionKeyForBlock(block: ImportedBlock): AcademicFieldKey | undefined {
+  return getSectionKeyFromTitle(blockText(block));
+}
+
 function looksLikePrimaryHeading(block: ImportedBlock, text = blockText(block)): boolean {
   const normalized = normalizeForDetection(text);
   return (
@@ -122,12 +127,13 @@ function looksLikePrimaryHeading(block: ImportedBlock, text = blockText(block)):
       "APENDICES",
       "CONCLUSAO",
       "CONSIDERACOES FINAIS",
-    ].includes(headingBase(text))
+    ].includes(headingBase(text)) ||
+    Boolean(getSectionKeyFromTitle(text))
   );
 }
 
 function isReferenceHeading(block: ImportedBlock): boolean {
-  return isPageHeading(block, ["REFERENCIAS", "REFERÊNCIAS"]);
+  return isPageHeading(block, ["REFERENCIAS", "REFERÊNCIAS"]) || isEquivalentSectionTitle(blockText(block), "referencias");
 }
 
 function isAnnexHeading(block: ImportedBlock): boolean {
@@ -196,6 +202,14 @@ function detectWorkType(text: string): WorkType | "" {
   if (/\bTESE\b/.test(normalized)) return "tese";
   if (/\bDISSERTACAO\b/.test(normalized)) return "dissertacao";
   if (/\bMONOGRAFIA\b|\bTCC\b/.test(normalized)) return "monografia";
+  if (/\bPATENTE\b|\bPEDIDO DE PATENTE\b|\bREIVINDICACOES\b/.test(normalized)) return "patente_ufla";
+  if (/\bREVISAO SISTEMATICA\b|\bREVISAO APROFUNDADA\b/.test(normalized)) return "revisao_sistematica_ufla";
+  if (/\bESTUDO DE CASO\b|\bCASOS MULTIPLOS\b/.test(normalized)) return "estudo_caso_ufla";
+  if (/\bSOFTWARE\b|\bAPLICATIVO\b|\bDESENVOLVIMENTO DE SOFTWARE\b/.test(normalized)) return "software_aplicativo_ufla";
+  if (/\bCULTIVAR\b|\bMELHORAMENTO GENETICO\b/.test(normalized)) return "cultivar_ufla";
+  if (/\bRELATORIO DE ESTAGIO\b|\bESTAGIO SUPERVISIONADO\b/.test(normalized)) return "relatorio_estagio_ufla";
+  if (/\bPROPOSTA DE INTERVENCAO\b|\bINTERVENCAO CLINICA\b|\bINTERVENCAO EM SERVICO\b/.test(normalized)) return "proposta_intervencao_ufla";
+  if (/\bARTIGO CIENTIFICO\b/.test(normalized)) return "artigo_cientifico_ufla";
   if (/\bARTIGO\b/.test(normalized)) return "artigo";
   return "";
 }
@@ -465,7 +479,8 @@ function collectIntroduction(blocks: ImportedBlock[]): string {
 
 function collectConclusion(blocks: ImportedBlock[]): string {
   const start = findHeadingIndex(blocks, (block) =>
-    isPageHeading(block, ["CONCLUSAO", "CONCLUSÃO", "CONSIDERACOES FINAIS", "CONSIDERAÇÕES FINAIS"]),
+    isPageHeading(block, ["CONCLUSAO", "CONCLUSÃO", "CONSIDERACOES FINAIS", "CONSIDERAÇÕES FINAIS"]) ||
+    sectionKeyForBlock(block) === "conclusao",
   );
   if (start < 0) return "";
   return collectAfterHeading(blocks, start, (block) => isReferenceHeading(block));
@@ -502,6 +517,15 @@ function collectPreTextualSection(blocks: ImportedBlock[], headings: string[]): 
     if (!looksLikePrimaryHeading(block)) return false;
     const normalized = headingBase(blockText(block));
     return !headings.map(normalizeForDetection).includes(normalized);
+  });
+}
+
+function collectSectionByAlias(blocks: ImportedBlock[], key: AcademicFieldKey): string {
+  const start = findHeadingIndex(blocks, (block) => sectionKeyForBlock(block) === key);
+  return collectAfterHeading(blocks, start, (block) => {
+    if (block.type === "pageBreak") return false;
+    if (isReferenceHeading(block) || isAnnexHeading(block) || isAppendixHeading(block)) return true;
+    return looksLikePrimaryHeading(block) && sectionKeyForBlock(block) !== key;
   });
 }
 
@@ -548,7 +572,8 @@ function structureFromText(text: string): DocxStructure {
           "ANEXOS",
           "APENDICES",
           "INTRODUCAO",
-        ].includes(headingBase(trimmed));
+        ].includes(headingBase(trimmed)) ||
+        Boolean(getSectionKeyFromTitle(trimmed));
 
       if (isHeading) {
         return {
@@ -663,6 +688,12 @@ export function detectAcademicFieldsFromStructure(
   fields.introducao = collectIntroduction(structure.blocks);
   fields.conclusao = collectConclusion(structure.blocks);
   fields.referencias = collectReferences(structure.blocks);
+  fields.objetivoGeral = collectSectionByAlias(structure.blocks, "objetivoGeral");
+  fields.objetivosEspecificos = collectSectionByAlias(structure.blocks, "objetivosEspecificos");
+  fields.referencialTeorico = collectSectionByAlias(structure.blocks, "referencialTeorico");
+  fields.metodologia = collectSectionByAlias(structure.blocks, "metodologia");
+  fields.cronograma = collectSectionByAlias(structure.blocks, "cronograma");
+  fields.resultadosEsperados = collectSectionByAlias(structure.blocks, "resultadosEsperados");
   fields.anexos = collectAnnexes(structure.blocks);
   fields.apendices = collectAppendices(structure.blocks);
   fields.agradecimentos = collectPreTextualSection(structure.blocks, ["AGRADECIMENTOS"]);
@@ -673,7 +704,7 @@ export function detectAcademicFieldsFromStructure(
 
   const imageBlocks = structure.blocks.filter((block) => block.type === "image");
   if (imageBlocks.length) {
-    fields.imageWarnings = `${imageBlocks.length} imagem(ns) detectada(s). Textos e legendas foram preservados; confira imagens antes da versão final.`;
+    fields.imageWarnings = `${imageBlocks.length} imagem(ns) detectada(s). O sistema registra a presenca de imagens, mas nao garante preservacao visual; confira ou reinsira manualmente cada imagem no DOCX final e revise legendas e posicao.`;
     messages.push(fields.imageWarnings);
   }
 

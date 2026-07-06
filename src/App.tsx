@@ -2,9 +2,12 @@ import { ChangeEvent, ClipboardEvent as ReactClipboardEvent, ReactNode, useEffec
 import { saveAs } from "file-saver";
 import { Bold, Eraser, FileCheck2, FileDown, Heading1, Heading2, Italic, Pilcrow, Quote, Upload, XCircle } from "lucide-react";
 import { importDocumentFile } from "./import-docx";
-import { ACADEMIC_FIELD_KEYS, AcademicFieldKey, type AcademicFields, CONFIDENCE_LABELS, Confidence, WORK_TYPE_LABELS, WORK_TYPES, emptyAcademicFields, emptyConfidenceMap, isCpgWork, isResearchProject } from "./ufla-rules";
+import { ACADEMIC_FIELD_KEYS, AcademicFieldKey, type AcademicFields, CONFIDENCE_LABELS, Confidence, WORK_TYPE_LABELS, WORK_TYPES, emptyAcademicFields, emptyConfidenceMap, isCpgWork, isResearchProject, isUflaCollectionWork } from "./ufla-rules";
 import { ValidationIssue, hasBlockingErrors, validateWork, ADHERENCE_CATEGORIES } from "./validators";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
+import { editorHtmlToMarkup, editorMarkupToHtml } from "./editor-markup";
+import { templateForWorkType } from "./document-template";
+import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
 
 const FIELD_LABELS: Record<AcademicFieldKey, string> = {
   author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho", course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador", location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave", abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão", referencias: "Referências", anexos: "Anexos", apendices: "Apêndices", dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators", imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema", problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese", objetivoGeral: "Objetivo Geral", objetivosEspecificos: "Objetivos Específicos", justificativa: "Justificativa", referencialTeorico: "Referencial Teórico", metodologia: "Metodologia", cronograma: "Cronograma", recursosOrcamento: "Recursos/Orçamento", resultadosEsperados: "Resultados Esperados",
@@ -19,68 +22,6 @@ function safeFileName(title: string): string {
   return `${normalized || "trabalho-ufla"}.docx`;
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-function inlineMarkupToHtml(value: string): string {
-  const parts: string[] = [];
-  const tokenPattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
-  let cursor = 0;
-  let match: RegExpExecArray | null;
-  while ((match = tokenPattern.exec(value)) !== null) {
-    if (match.index > cursor) parts.push(escapeHtml(value.slice(cursor, match.index)));
-    const token = match[0];
-    parts.push(token.startsWith("**") ? `<strong>${escapeHtml(token.slice(2, -2))}</strong>` : `<em>${escapeHtml(token.slice(1, -1))}</em>`);
-    cursor = match.index + token.length;
-  }
-  if (cursor < value.length) parts.push(escapeHtml(value.slice(cursor)));
-  return parts.join("") || "<br />";
-}
-
-function editorMarkupToHtml(value: string): string {
-  if (!value.trim()) return "<p><br /></p>";
-  return value.split(/\n/).map((rawLine) => {
-    const line = rawLine.trimEnd();
-    if (!line.trim()) return "<p><br /></p>";
-    if (/^###\s+/.test(line)) return `<h3>${inlineMarkupToHtml(line.replace(/^###\s+/, ""))}</h3>`;
-    if (/^##\s+/.test(line)) return `<h2>${inlineMarkupToHtml(line.replace(/^##\s+/, ""))}</h2>`;
-    if (/^#\s+/.test(line)) return `<h1>${inlineMarkupToHtml(line.replace(/^#\s+/, ""))}</h1>`;
-    if (/^>\s+/.test(line)) return `<blockquote>${inlineMarkupToHtml(line.replace(/^>\s+/, ""))}</blockquote>`;
-    if (/^\[REF\]\s+/i.test(line)) return `<p data-reference="true">${inlineMarkupToHtml(line.replace(/^\[REF\]\s+/i, ""))}</p>`;
-    return `<p>${inlineMarkupToHtml(line)}</p>`;
-  }).join("");
-}
-
-function inlineNodeToMarkup(node: Node): string {
-  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
-  if (node.nodeType !== Node.ELEMENT_NODE) return "";
-  const element = node as HTMLElement;
-  if (element.tagName === "BR") return "\n";
-  const text = Array.from(element.childNodes).map(inlineNodeToMarkup).join("");
-  if (element.tagName === "STRONG" || element.tagName === "B") return `**${text}**`;
-  if (element.tagName === "EM" || element.tagName === "I") return `*${text}*`;
-  return text;
-}
-
-function blockNodeToMarkup(node: Node): string {
-  if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? "").trim();
-  if (node.nodeType !== Node.ELEMENT_NODE) return "";
-  const element = node as HTMLElement;
-  const text = Array.from(element.childNodes).map(inlineNodeToMarkup).join("").replace(/\n+$/g, "").trimEnd();
-  if (!text.trim()) return "";
-  if (element.tagName === "H1") return `# ${text}`;
-  if (element.tagName === "H2") return `## ${text}`;
-  if (element.tagName === "H3") return `### ${text}`;
-  if (element.tagName === "BLOCKQUOTE") return `> ${text}`;
-  if (element.dataset.reference === "true") return `[REF] ${text}`;
-  return text;
-}
-
-function editorHtmlToMarkup(element: HTMLElement): string {
-  return Array.from(element.childNodes).map(blockNodeToMarkup).filter((line) => line.trim().length > 0).join("\n");
-}
-
 function rowsForField(key: AcademicFieldKey): number {
   if (key === "referencias") return 12;
   if (key === "anexos" || key === "apendices") return 7;
@@ -90,6 +31,7 @@ function rowsForField(key: AcademicFieldKey): number {
 function visibleField(key: AcademicFieldKey, workType: AcademicFields["workType"]): boolean {
   if (RESEARCH_PROJECT_FIELD_KEYS.includes(key)) return isResearchProject(workType);
   if (workType === "artigo") return !["workNature", "dedicatoria", "agradecimentos", "epigrafe", "indicadoresImpacto", "impactIndicators"].includes(key);
+  if (isUflaCollectionWork(workType)) return !["dedicatoria", "agradecimentos", "epigrafe", "indicadoresImpacto", "impactIndicators"].includes(key);
   if (isCpgWork(workType)) return !["workNature", "dedicatoria", "epigrafe", "indicadoresImpacto", "impactIndicators", "anexos", "apendices"].includes(key);
   return true;
 }
@@ -119,6 +61,7 @@ export default function App() {
   const errors = useMemo(() => issues.filter((issue) => issue.severity === "error"), [issues]);
   const warnings = useMemo(() => issues.filter((issue) => issue.severity === "warning"), [issues]);
   const isCpgSelected = isCpgWork(fields.workType);
+  const selectedUflaProductionType = isUflaCollectionWork(fields.workType) ? academicProductionTypeById(fields.workType) : undefined;
   const activeEditorText = editorMode === "references" ? fields.referencias : editorText;
 
   useEffect(() => {
@@ -251,12 +194,7 @@ export default function App() {
     try {
       setIsGenerating(true);
       setStatus("Gerando DOCX...");
-      const [{ generateDocxBlob }, { generateArticleDocxBlob }, { generateCpgDocxBlob }, { generateResearchProjectDocxBlob }] = await Promise.all([import("./export-docx"), import("./export-article-docx"), import("./export-cpg-docx"), import("./export-research-project-docx")]);
-      let blob: Blob;
-      if (isCpgWork(generationFields.workType)) blob = await generateCpgDocxBlob({ fields: generationFields, editorText });
-      else if (generationFields.workType === "artigo") blob = await generateArticleDocxBlob({ fields: generationFields, editorText });
-      else if (isResearchProject(generationFields.workType)) blob = await generateResearchProjectDocxBlob({ fields: generationFields, editorText });
-      else blob = await generateDocxBlob({ fields: generationFields, editorText });
+      const blob = await templateForWorkType(generationFields.workType).generate({ fields: generationFields, editorText });
       saveAs(blob, safeFileName(generationFields.title));
       setStatus("DOCX gerado. Confira o arquivo baixado.");
     } catch (error) {
@@ -284,6 +222,7 @@ export default function App() {
           {fields.workType === "artigo" && <div className="mode-panel"><h2>Artigo acadêmico simples</h2><p>Modelo sem capa, folha de rosto, ficha catalográfica, folha de aprovação, indicadores de impacto e sumário.</p></div>}
           {isCpgSelected && <div className="mode-panel"><h2>Modo CPG/UFLA selecionado</h2><p>Este modelo segue template CPG/UFLA. Quando o template CPG não for específico, use a ABNT aplicável.</p><p><strong>Saída do sistema:</strong> gere o DOCX e, se precisar de PDF, exporte por um editor de texto externo.</p></div>}
           {isResearchProject(fields.workType) && <div className="mode-panel"><h2>Estrutura do Projeto de Pesquisa</h2><p>Campos específicos para estrutura de projeto de pesquisa conforme ABNT NBR 15287:2025.</p></div>}
+          {selectedUflaProductionType && <div className="mode-panel"><h2>{selectedUflaProductionType.label}</h2><p>{ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE}</p><p><strong>Saida do sistema:</strong> DOCX editavel; o PDF final deve ser exportado no Word ou LibreOffice.</p></div>}
           {ACADEMIC_FIELD_KEYS.map((key) => visibleField(key, fields.workType) ? <div className="field-group" key={key}><div className="label-row"><label htmlFor={key}>{FIELD_LABELS[key]}</label><span className={`confidence confidence-${confidence[key]}`}>{CONFIDENCE_LABELS[confidence[key]]}</span></div>{LONG_FIELDS.has(key) ? <textarea id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} rows={rowsForField(key)} /> : <input id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} />}{key === "referencias" && <div className="field-note"><p>Para editar com mais espaço, use o botão <strong>Referências</strong> no painel central.</p><p>Use uma referência por linha. Para destacar manualmente, selecione o trecho e clique em Negrito ou Itálico.</p></div>}</div> : null)}
         </section>
 
