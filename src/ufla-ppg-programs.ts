@@ -71,7 +71,7 @@ export function normalizeUflaPpgProgramName(value: string): string {
 
 export function formatUflaPpgProgram(value: string): string {
   const name = normalizeUflaPpgProgramName(value);
-  if (!name) return "Programa de Pós-Graduação informado pelo usuário";
+  if (!name) return "";
   if (fold(name).includes("programa de pos-graduacao")) return name;
   return `Programa de Pós-Graduação em ${name}`;
 }

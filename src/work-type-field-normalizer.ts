@@ -57,35 +57,48 @@ function isGenericOrMismatchedNature(value: string, workType: AcademicFields["wo
 }
 
 function defaultProgram(fields: AcademicFields): string {
+  if (!fields.program || !fields.program.trim()) return "";
   return formatUflaPpgProgram(fields.program);
 }
 
 function defaultCourse(fields: AcademicFields): string {
-  return fields.course || "curso de graduação informado pelo usuário";
+  return fields.course || "";
 }
 
 function undergraduateDegree(fields: AcademicFields): string {
   const course = fold(fields.course);
+  if (!course) return "";
   if (course.includes("licenciatura")) return `Licenciado em ${fields.course.replace(/licenciatura em/i, "").trim() || "área informada"}`;
   if (course.includes("bacharelado")) return `Bacharel em ${fields.course.replace(/bacharelado em/i, "").trim() || "área informada"}`;
-  return "grau acadêmico correspondente";
+  return "";
 }
 
+// Não gera prosa falsa/placeholder quando metadados obrigatórios estão ausentes.
+// Retorna string vazia para que a validação sinalize o campo obrigatório.
 function natureForSelectedModel(fields: AcademicFields): string {
   if (fields.workType === "projeto_pesquisa") {
-    return `Projeto de pesquisa apresentado à Universidade Federal de Lavras, como parte das atividades do ${defaultProgram(fields)}, para avaliação acadêmica.`;
+    const program = defaultProgram(fields);
+    if (!program) return "";
+    return `Projeto de pesquisa apresentado à Universidade Federal de Lavras, como parte das atividades do ${program}, para avaliação acadêmica.`;
   }
 
   if (fields.workType === "monografia") {
-    return `Monografia apresentada à Universidade Federal de Lavras, como parte das exigências do ${defaultCourse(fields)}, para obtenção do ${undergraduateDegree(fields)}.`;
+    const course = defaultCourse(fields);
+    const degree = undergraduateDegree(fields);
+    if (!course || !degree) return "";
+    return `Monografia apresentada à Universidade Federal de Lavras, como parte das exigências do ${course}, para obtenção do ${degree}.`;
   }
 
   if (fields.workType === "dissertacao") {
-    return `Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do ${defaultProgram(fields)}, para obtenção do título de Mestre em Ciências.`;
+    const program = defaultProgram(fields);
+    if (!program) return "";
+    return `Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do ${program}, para obtenção do título de Mestre em Ciências.`;
   }
 
   if (fields.workType === "tese") {
-    return `Tese apresentada à Universidade Federal de Lavras, como parte das exigências do ${defaultProgram(fields)}, para obtenção do título de Doutor em Ciências.`;
+    const program = defaultProgram(fields);
+    if (!program) return "";
+    return `Tese apresentada à Universidade Federal de Lavras, como parte das exigências do ${program}, para obtenção do título de Doutor em Ciências.`;
   }
 
   return fields.workNature;

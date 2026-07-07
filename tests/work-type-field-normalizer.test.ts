@@ -16,15 +16,15 @@ describe("normalizacao de campos por modelo selecionado", () => {
     expect(fields.workNature).not.toContain("Projeto de pesquisa apresentado");
   });
 
-  it("evita titulo duplicado quando monografia nao tem curso informado", () => {
+  it("nao gera prosa falsa quando monografia nao tem curso informado", () => {
     const fields = normalizeFieldsForSelectedModel({
       ...emptyAcademicFields(),
       workType: "monografia",
       workNature: "Projeto de pesquisa apresentado à Universidade Federal de Lavras.",
     });
 
-    expect(fields.workNature).toContain("curso de graduação informado pelo usuário");
-    expect(fields.workNature).toContain("grau acadêmico correspondente");
+    expect(fields.workNature).not.toContain("curso de graduação informado pelo usuário");
+    expect(fields.workNature).not.toContain("grau acadêmico correspondente");
     expect(fields.workNature).not.toContain("título de título correspondente");
   });
 
