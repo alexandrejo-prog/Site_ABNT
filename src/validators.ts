@@ -18,6 +18,7 @@ import {
 } from "./academic-guardrails";
 import { assessAbstractHeuristics, assessResumoHeuristics } from "./text-diagnostics";
 import { hasSufficientImpactIndicators } from "./impact-indicators";
+import { findUflaPpgProgram } from "./ufla-ppg-programs";
 
 export type ValidationSeverity = "error" | "warning" | "info";
 
@@ -341,6 +342,46 @@ function addUflaCollectionIssues(fields: AcademicFields, issues: ValidationIssue
   }
 }
 
+function addProgramCompatibilityIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
+  const programValue = fields.program.trim();
+  if (!programValue) return;
+
+  const program = findUflaPpgProgram(programValue);
+  if (!program) {
+    issues.push({
+      severity: "warning",
+      code: "program-not-recognized",
+      message: "O programa informado não foi reconhecido na lista local da PRPG/UFLA.",
+      what: "O campo Programa não corresponde exatamente a um programa cadastrado no snapshot local.",
+      why: "Usar o nome oficial reduz erro na folha de rosto e na natureza do trabalho.",
+      action: "Revise o nome do programa conforme a lista oficial da PRPG/UFLA.",
+    });
+    return;
+  }
+
+  if (fields.workType === "dissertacao" && !program.masters) {
+    issues.push({
+      severity: "error",
+      code: "program-degree-incompatible",
+      message: "O programa informado não é compatível com o tipo de trabalho selecionado.",
+      what: "A lista oficial da PRPG/UFLA indica que o programa não oferece o nível exigido pelo tipo selecionado.",
+      why: "Dissertação exige programa com mestrado; tese exige programa com doutorado.",
+      action: "Selecione um programa compatível ou revise o tipo de trabalho.",
+    });
+  }
+
+  if (fields.workType === "tese" && !program.doctorate) {
+    issues.push({
+      severity: "error",
+      code: "program-degree-incompatible",
+      message: "O programa informado não é compatível com o tipo de trabalho selecionado.",
+      what: "A lista oficial da PRPG/UFLA indica que o programa não oferece o nível exigido pelo tipo selecionado.",
+      why: "Dissertação exige programa com mestrado; tese exige programa com doutorado.",
+      action: "Selecione um programa compatível ou revise o tipo de trabalho.",
+    });
+  }
+}
+
 export function validateWork(fields: AcademicFields, editorText = ""): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const simpleArticle = isSimpleArticle(fields);
@@ -352,7 +393,10 @@ export function validateWork(fields: AcademicFields, editorText = ""): Validatio
   if (!hasValue(fields.author)) issues.push({ severity: "error", code: "author-required", message: "Informe o autor do trabalho.", what: "O autor do trabalho não foi informado.", why: "O nome do autor aparece na capa, folha de rosto e elementos pré-textuais.", action: "Preencha o campo Autor com o nome completo do autor ou autores separados por vírgula." });
   else if (looksInstitutionalAuthor(fields.author)) issues.push({ severity: "error", code: "author-institutional", message: "O campo autor parece conter uma instituição, programa, unidade ou localidade, não um nome de pessoa. Revise a identificação automática.", what: "O campo Autor contém texto que parece institucional.", why: "A capa e a folha de rosto esperam o nome de pessoa física, não o nome da instituição.", action: "Substitua por nome(s) de pessoa(s). Se houver múltiplos autores, separe por vírgula." });
 
-  if (isAdvisorRequired(fields.workType) && !hasValue(fields.advisor)) issues.push({ severity: "warning", code: "advisor-required", message: "Informe o orientador para monografia, dissertação ou tese.", what: "O orientador não foi informado.", why: "Monografias, dissertações e teses exigem nome do orientador na folha de rosto.", action: "Preencha o campo Orientador antes de gerar o DOCX." });
+  if (isAdvisorRequired(fields.workType) && !hasValue(fields.advisor)) {
+    const severity = fields.workType === "monografia" ? "warning" : "error";
+    issues.push({ severity, code: "advisor-required", message: "Informe o orientador para dissertação ou tese.", what: "O orientador não foi informado.", why: "Dissertações e teses exigem identificação do orientador na folha de rosto.", action: "Preencha o campo Orientador com o nome completo antes da versão final." });
+  }
   if (!hasValue(fields.resumo)) issues.push({ severity: "warning", code: "resumo-required", message: "Inclua o resumo antes da versão final.", what: "O resumo está vazio.", why: "O resumo é elemento pré-textual obrigatório na maioria dos tipos de trabalho.", action: "Escreva o resumo no campo correspondente. Verifique extensão e palavras-chave." });
   if (!hasValue(fields.referencias) && !isCpgWork(fields.workType)) issues.push({ severity: "warning", code: "references-required", message: "Inclua as referências do trabalho.", what: "O bloco de referências está vazio.", why: "Referências são obrigatórias para a seção pós-textual.", action: "Adicione as referências no campo Referências, uma por linha." });
   else if (hasValue(fields.referencias)) for (const referenceIssue of validateReferencesText(fields.referencias)) issues.push({ severity: "warning", code: referenceIssue.code, message: referenceIssueMessage(referenceIssue.code, referenceIssue.message), what: referenceIssue.code.includes("year-missing") ? "Há referência sem ano detectável." : referenceIssue.code.includes("access-missing") ? "Há referência online sem informação de acesso." : referenceIssue.code.includes("highlight-missing") ? "Há referência sem destaque de título detectado." : referenceIssue.code.includes("too-short") ? "Há referência muito curta para validação segura." : referenceIssue.code.includes("normative-preserved") ? "Há referência normativa preservada sem destaque automático." : "Referência precisa de revisão.", why: "A conformidade ABNT/UFLA depende de autor, ano, acesso e destaque corretos.", action: "Revise o item no campo Referências e use Negrito/Itálico para ajustar o destaque." });
@@ -367,6 +411,7 @@ export function validateWork(fields: AcademicFields, editorText = ""): Validatio
   addPlaceholderIssues(fields, editorText, issues);
   addProgramConflictIssues(fields, editorText, issues);
   addAbstractTopicIssues(fields, issues);
+  addProgramCompatibilityIssues(fields, issues);
   addGenericAiLikeIssues(fields, editorText, issues);
   addTextDiagnosticIssues(fields, issues);
   addCpgForbiddenIssues(fields, editorText, issues);

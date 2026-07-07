@@ -46,7 +46,7 @@ function titlePageChildren(fields: DocxGenerationInput["fields"]): Paragraph[] {
       spacing: { line: SINGLE_LINE, after: 180 },
       children: [run(fields.workNature || "Projeto de pesquisa apresentado à Universidade Federal de Lavras.")],
     }),
-    ...(fields.advisor ? [paragraph(`Orientador: ${fields.advisor}`)] : [paragraph("Orientador: Prof. Dr. [nome do orientador]")]),
+    ...(fields.advisor ? [paragraph(`Orientador: ${fields.advisor}`)] : []),
     centered((fields.location || "LAVRAS - MG").toUpperCase(), false, BODY_SIZE, 1800, 120),
     centered(fields.year || new Date().getFullYear().toString(), false, BODY_SIZE, 0, 0),
   ];

@@ -173,6 +173,37 @@ Objetivo principal da pesquisa.
       expect(blob.type).toMatch(/^application\/(vnd\.openxmlformats-officedocument\.wordprocessingml\.document|octet-stream)/);
     });
 
+    it("nao insere placeholder de orientador quando advisor esta vazio", async () => {
+      const fields = {
+        ...emptyAcademicFields(),
+        workType: "projeto_pesquisa" as const,
+        title: "Título do Projeto de Pesquisa",
+        author: "Maria Silva",
+        location: "Lavras - MG",
+        year: "2026",
+        advisor: "",
+        referencias: "SILVA, M. Projeto de pesquisa. Lavras: UFLA, 2024.",
+      };
+
+      const editorText = `# INTRODUÇÃO
+Texto da introdução do projeto.
+
+# PROBLEMA DE PESQUISA
+Descrição do problema investigado.
+
+# OBJETIVO GERAL
+Objetivo principal da pesquisa.
+`;
+
+      const blob = await generateResearchProjectDocxBlob({ fields, editorText });
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const documentXml = zip.file("word/document.xml");
+      expect(documentXml).toBeTruthy();
+      const xml = await documentXml!.async("text");
+
+      expect(xml).not.toContain("[nome do orientador]");
+    });
+
     it("inclui sumário visível com entradas do projeto", async () => {
       const fields = {
         ...emptyAcademicFields(),

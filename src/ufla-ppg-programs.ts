@@ -7,6 +7,8 @@ export interface UflaPpgProgram {
 
 export const UFLA_PPG_PROGRAMS_SOURCE = "https://prpg.ufla.br/servicos-em-destaque/mestrado-e-doutorado";
 
+// Snapshot local baseado na página da PRPG/UFLA. Atualizar manualmente se a PRPG alterar a lista de programas.
+
 export const UFLA_PPG_PROGRAMS: UflaPpgProgram[] = [
   { name: "Administração", type: "academico", masters: true, doctorate: true },
   { name: "Agroquímica", type: "academico", masters: true, doctorate: true },
