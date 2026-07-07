@@ -1,3 +1,5 @@
+import { editorCommandAdapter } from "./editor-command-adapter";
+
 function createEditorButton(label: string, title: string, command: "undo" | "redo"): HTMLButtonElement {
   const button = document.createElement("button");
   button.className = "icon-button editor-history-button";
@@ -13,7 +15,7 @@ function createEditorButton(label: string, title: string, command: "undo" | "red
   button.addEventListener("click", () => {
     const editor = document.querySelector<HTMLElement>(".rich-editor");
     editor?.focus({ preventScroll: true });
-    document.execCommand(command, false);
+    editorCommandAdapter.applyEditorCommand(command);
     editor?.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: command === "undo" ? "historyUndo" : "historyRedo" }));
   });
 

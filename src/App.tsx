@@ -11,6 +11,8 @@ import { templateForWorkType } from "./document-template";
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
 import { TextDiagnosticPanel } from "./text-diagnostic-panel";
 import { buildDraftFromFields, hasUnfilledPlaceholders, draftWorkTypeSupportsIndicators } from "./draft-builder";
+import { editorCommandAdapter } from "./editor-command-adapter";
+import { hasDraft, loadDraft, saveDraft } from "./draft-storage";
 
 const FIELD_LABELS: Record<AcademicFieldKey, string> = {
   author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho", course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador", location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave", abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão", referencias: "Referências", anexos: "Anexos", apendices: "Apêndices", dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators", imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema", problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese", objetivoGeral: "Objetivo Geral", objetivosEspecificos: "Objetivos Específicos", justificativa: "Justificativa", referencialTeorico: "Referencial Teórico",   metodologia: "Metodologia", cronograma: "Cronograma", recursosOrcamento: "Recursos/Orçamento", resultadosEsperados: "Resultados Esperados", corpusDados: "Corpus/Dados", contextoInstitucional: "Contexto Institucional", conclusaoProvisoria: "Conclusão Provisória", contribuicoesImpactos: "Contribuições/Impactos", impactoSocial: "Impacto social", impactoCientifico: "Impacto científico", impactoEducacional: "Impacto educacional", impactoAmbiental: "Impacto ambiental", impactoTecnologico: "Impacto tecnológico/econômico", publicoBeneficiado: "Público beneficiado", aderenciaOds: "Aderência a ODS/política institucional",
@@ -89,6 +91,36 @@ export default function App() {
   const isCpgSelected = isCpgWork(fields.workType);
   const selectedUflaProductionType = isUflaCollectionWork(fields.workType) ? academicProductionTypeById(fields.workType) : undefined;
   const activeEditorText = editorMode === "references" ? fields.referencias : editorText;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const draft = loadDraft(window.localStorage);
+    if (!draft) return;
+    const isEmpty = !draft.fields && !draft.editorText;
+    if (isEmpty) return;
+    if (fields.author || fields.title || editorText) return;
+    try {
+      setFields((current) => ({ ...current, ...(draft.fields as Partial<AcademicFields>) }));
+      if (draft.editorText) setEditorText(draft.editorText);
+      if (draft.workType) setEditorMode(draft.workType as EditorMode);
+    } catch {
+      // Ignora rascunho incompatível.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const timeout = setTimeout(() => {
+      saveDraft({
+        fields: fields as unknown as Record<string, unknown>,
+        editorText,
+        references: fields.referencias ? [fields.referencias] : [],
+        workType: fields.workType,
+        updatedAt: new Date().toISOString(),
+      }, window.localStorage);
+    }, 800);
+    return () => clearTimeout(timeout);
+  }, [fields, editorText]);
 
   useEffect(() => {
     if (!editorRef.current) return;
@@ -181,27 +213,27 @@ export default function App() {
 
   function applyBlockStyle(prefix: string) {
     editorRef.current?.focus();
-    document.execCommand("formatBlock", false, prefix === "# " ? "h1" : prefix === "## " ? "h2" : prefix === "> " ? "blockquote" : "p");
-    if (prefix === "[REF] ") document.execCommand("insertText", false, "[REF] ");
+    const block = prefix === "# " ? "h1" : prefix === "## " ? "h2" : prefix === "> " ? "blockquote" : "p";
+    editorCommandAdapter.formatEditorBlock(block);
+    if (prefix === "[REF] ") editorCommandAdapter.insertEditorText("[REF] ");
     setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0);
   }
 
   function wrapSelection(command: "bold" | "italic") {
     editorRef.current?.focus();
-    document.execCommand(command, false);
+    editorCommandAdapter.applyEditorCommand(command);
     setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0);
   }
 
   function clearFormatting() {
     editorRef.current?.focus();
-    document.execCommand("removeFormat", false);
-    document.execCommand("formatBlock", false, "p");
+    editorCommandAdapter.clearEditorFormatting();
     setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0);
   }
 
   function handleEditorPaste(event: ReactClipboardEvent<HTMLDivElement>) {
     event.preventDefault();
-    document.execCommand("insertText", false, event.clipboardData.getData("text/plain"));
+    editorCommandAdapter.insertEditorText(event.clipboardData.getData("text/plain"));
     setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0);
   }
 
@@ -308,7 +340,7 @@ export default function App() {
         <section className="editor-pane" aria-label="Editor do texto">
           <div className="editor-toolbar-sticky">
             <div className="toolbar" aria-label="Modo de edição"><button className={`text-button ${editorMode === "body" ? "active" : ""}`} type="button" onClick={() => setEditorMode("body")}>Texto</button><button className={`text-button ${editorMode === "references" ? "active" : ""}`} type="button" onClick={() => setEditorMode("references")}>Referências</button></div>
-            <div className="toolbar" aria-label="Ferramentas do editor"><ToolButton title="Desfazer (Ctrl+Z)" onClick={() => { editorRef.current?.focus(); document.execCommand("undo", false); }}><span className="toolbar-text">Desfazer</span></ToolButton><ToolButton title="Refazer (Ctrl+Y)" onClick={() => { editorRef.current?.focus(); document.execCommand("redo", false); }}><span className="toolbar-text">Refazer</span></ToolButton><ToolButton title="Parágrafo normal" onClick={() => applyBlockStyle("")}><Pilcrow size={18} aria-hidden="true" /></ToolButton><ToolButton title="Título primário" onClick={() => applyBlockStyle("# ")}><Heading1 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Título secundário" onClick={() => applyBlockStyle("## ")}><Heading2 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Negrito" onClick={() => wrapSelection("bold")}><Bold size={18} aria-hidden="true" /></ToolButton><ToolButton title="Itálico" onClick={() => wrapSelection("italic")}><Italic size={18} aria-hidden="true" /></ToolButton><ToolButton title="Citação longa" onClick={() => applyBlockStyle("> ")}><Quote size={18} aria-hidden="true" /></ToolButton><ToolButton title="Referência" onClick={() => applyBlockStyle("[REF] ")}><FileCheck2 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Limpar formatação" onClick={clearFormatting}><Eraser size={18} aria-hidden="true" /></ToolButton></div>
+            <div className="toolbar" aria-label="Ferramentas do editor"><ToolButton title="Desfazer (Ctrl+Z)" onClick={() => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("undo"); }}><span className="toolbar-text">Desfazer</span></ToolButton><ToolButton title="Refazer (Ctrl+Y)" onClick={() => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("redo"); }}><span className="toolbar-text">Refazer</span></ToolButton><ToolButton title="Parágrafo normal" onClick={() => applyBlockStyle("")}><Pilcrow size={18} aria-hidden="true" /></ToolButton><ToolButton title="Título primário" onClick={() => applyBlockStyle("# ")}><Heading1 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Título secundário" onClick={() => applyBlockStyle("## ")}><Heading2 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Negrito" onClick={() => wrapSelection("bold")}><Bold size={18} aria-hidden="true" /></ToolButton><ToolButton title="Itálico" onClick={() => wrapSelection("italic")}><Italic size={18} aria-hidden="true" /></ToolButton><ToolButton title="Citação longa" onClick={() => applyBlockStyle("> ")}><Quote size={18} aria-hidden="true" /></ToolButton><ToolButton title="Referência" onClick={() => applyBlockStyle("[REF] ")}><FileCheck2 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Limpar formatação" onClick={clearFormatting}><Eraser size={18} aria-hidden="true" /></ToolButton></div>
             <p className="field-note editor-mode-note">{editorMode === "references" ? "Editando referências no painel central. Selecione palavras e use Negrito/Itálico como no Word." : "Editando texto principal. Selecione palavras e use Negrito/Itálico como no Word."}</p>
           </div>
           <div ref={editorRef} className="editor rich-editor" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-label={editorMode === "references" ? "Editor de referências" : "Editor do texto principal"} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />

@@ -15,7 +15,7 @@
 
 - [ ] Refatorar `App.tsx` monolítico
 - [ ] Ampliar cobertura de testes de UI
-- [ ] Substituir `document.execCommand` por API moderna
-- [ ] Implementar autosave/persistência
+- [x] Isolar `document.execCommand` em adapter (`src/editor-command-adapter.ts`) — migração para editor moderno permanece futura
+- [x] Implementar autosave/persistência local (`src/draft-storage.ts`)
 - [ ] Criar rotina de atualização do snapshot de PPGs
 - [ ] Validar saída DOCX visualmente no Word/LibreOffice
