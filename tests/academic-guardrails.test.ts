@@ -62,8 +62,6 @@ describe("academic guardrails - conflito de programa", () => {
     expect(detectProgramConflict(fields, "Comparado com a Engenharia de Controle e Automação.")).toBe(true);
   });
 
-
-
   it("reconhece programa real da lista UFLA com contexto institucional", () => {
     const fields = { ...emptyAcademicFields(), program: "Ciência do Solo" };
     expect(detectProgramConflict(fields, "Texto vinculado ao Programa de Pós-Graduação em Educação Física.")).toBe(true);

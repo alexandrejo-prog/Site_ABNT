@@ -438,8 +438,6 @@ describe("DOCX export", () => {
     expect(abstractPos).toBeLessThan(keywordsPos);
   });
 
-
-
   it("formata legendas basicas no exportador geral usando nucleo compartilhado", async () => {
     const documentXml = await generatedXml("# 1 Introducao\nFigura 1 - Mapa da area\nTexto comum.\nGráfico 1 - Resultados\nTabela 1 - Dados", {
       ...fields,

@@ -163,10 +163,10 @@ describe("CPG first page layout", () => {
     expect(text).not.toContain("Referencias");
   });
 
-  it("documenta caminho proprio de referencias CPG", () => {
+  it("protege decisao tecnica documentada de manter caminho proprio de referencias CPG", () => {
     const source = readFileSync(new URL("../src/export-cpg-docx.ts", import.meta.url), "utf8");
 
     expect(source).toContain("CPG keeps this local path");
-    expect(source).not.toMatch(/from \"\.\/references-normalizer\"/);
+    expect(source).not.toMatch(/from "\.\/references-normalizer"/);
   });
 });
