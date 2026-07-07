@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clearDraft, hasDraft, loadDraft, saveDraft } from "../src/draft-storage";
+import { clearDraft, hasDraft, loadDraft, saveDraft, type DraftPayload } from "../src/draft-storage";
 
 const SAMPLE_DRAFT = {
   fields: { author: "Ana", title: "Trabalho" },
@@ -52,5 +52,16 @@ describe("draft-storage", () => {
       expect(loadDraft(undefined as unknown as Storage)).toBeNull();
       clearDraft(undefined as unknown as Storage);
     }).not.toThrow();
+  });
+
+  it("rejeita payloads invalidos", () => {
+    const storage = createStorage();
+    expect(loadDraft(storage)).toBeNull();
+    saveDraft({ fields: {}, updatedAt: new Date().toISOString() } as unknown as DraftPayload, storage);
+    expect(loadDraft(storage)).toBeNull();
+    saveDraft({ fields: null, editorText: "", updatedAt: new Date().toISOString() } as unknown as DraftPayload, storage);
+    expect(loadDraft(storage)).toBeNull();
+    saveDraft({ fields: {}, editorText: 123 as unknown as string, updatedAt: new Date().toISOString() } as unknown as DraftPayload, storage);
+    expect(loadDraft(storage)).toBeNull();
   });
 });

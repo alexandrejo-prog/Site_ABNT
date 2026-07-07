@@ -47,4 +47,16 @@ describe("editor-command-adapter", () => {
     expect(adapter.insertEditorText("<b>nao</b>")).toBe(true);
     expect(calls[0].value).toBe("<b>nao</b>");
   });
+
+  it("nao lança erro quando execCommand falha", () => {
+    const fakeDocument = {
+      execCommand: () => {
+        throw new Error("falha");
+      },
+    };
+
+    const adapter = createEditorCommandAdapter({ document: fakeDocument as unknown as Document });
+    expect(() => adapter.applyEditorCommand("bold")).not.toThrow();
+    expect(adapter.applyEditorCommand("bold")).toBe(false);
+  });
 });

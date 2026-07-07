@@ -245,7 +245,9 @@ describe("PF13 - regressão com caso real de resumo expandido", () => {
 });
 
 describe("PF3 - campos guiados não poluem a tela (teste estático)", () => {
-  const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const sidebarSource = readFileSync(new URL("../src/components/ValidationSidebar.tsx", import.meta.url), "utf8");
+  const source = `${appSource}\n${sidebarSource}`;
   it("App contém o título correto e aviso de rascunho editável", () => {
     expect(source).toContain("Assistente de estruturação e pré-normalização UFLA/ABNT");
     expect(source).toContain("O sistema gera um rascunho técnico editável");

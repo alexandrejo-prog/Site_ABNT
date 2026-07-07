@@ -4,18 +4,21 @@ import { describe, expect, it } from "vitest";
 
 describe("interface estática", () => {
   const app = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
+  const sidebar = readFileSync(join(process.cwd(), "src", "components", "ValidationSidebar.tsx"), "utf8");
+  const adherence = readFileSync(join(process.cwd(), "src", "components", "AdherencePanel.tsx"), "utf8");
   const styles = readFileSync(join(process.cwd(), "src", "styles.css"), "utf8");
+  const combined = `${app}\n${sidebar}\n${adherence}`;
 
   it("mantém regiões nomeadas para revisão", () => {
-    expect(app).toContain('aria-label="Campos acadêmicos"');
-    expect(app).toContain('aria-label="Editor do texto"');
-    expect(app).toContain('aria-label="Validação"');
+    expect(combined).toContain('aria-label="Campos acadêmicos"');
+    expect(combined).toContain('aria-label="Editor do texto"');
+    expect(combined).toContain('aria-label="Validação"');
   });
 
   it("mantém avisos anunciáveis", () => {
-    expect(app).toContain('aria-live="polite"');
-    expect(app).toContain('role="alert"');
-    expect(app).toContain('role="status"');
+    expect(combined).toContain('aria-live="polite"');
+    expect(combined).toContain('role="alert"');
+    expect(combined).toContain('role="status"');
   });
 
   it("mantém breakpoints para tablet e celular", () => {

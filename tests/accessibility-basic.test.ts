@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+const sidebarSource = readFileSync(new URL("../src/components/ValidationSidebar.tsx", import.meta.url), "utf8");
 const stylesSource = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+const combined = `${appSource}\n${sidebarSource}`;
 
 describe("Acessibilidade básica da interface", () => {
   it("possui rótulo acessível no botão de importação", () => {
@@ -12,9 +14,10 @@ describe("Acessibilidade básica da interface", () => {
   });
 
   it("painel de aderência possui atributos ARIA de expansão", () => {
-    expect(appSource).toContain('aria-expanded={adherenceExpanded}');
-    expect(appSource).toContain('aria-controls');
-    expect(appSource).toContain('id="');
+    const panelSource = readFileSync(new URL("../src/components/AdherencePanel.tsx", import.meta.url), "utf8");
+    expect(panelSource).toContain('aria-expanded={expanded}');
+    expect(panelSource).toContain('aria-controls');
+    expect(panelSource).toContain('id="');
   });
 
   it("botões da toolbar possuem type e title", () => {
@@ -28,7 +31,7 @@ describe("Acessibilidade básica da interface", () => {
   });
 
   it("área de status possui aria-live", () => {
-    expect(appSource).toContain('aria-live="polite"');
+    expect(combined).toContain('aria-live="polite"');
   });
 
   it("editor rich-text possui aria-label", () => {
@@ -49,24 +52,24 @@ describe("Acessibilidade básica da interface", () => {
   });
 
   it("erros bloqueantes possuem role=\"alert\"", () => {
-    const count = (appSource.match(/role="alert"/g) || []).length;
+    const count = (combined.match(/role="alert"/g) || []).length;
     expect(count).toBeGreaterThanOrEqual(1);
   });
 
   it("alertas não bloqueantes possuem role=\"status\"", () => {
-    const count = (appSource.match(/role="status"/g) || []).length;
+    const count = (combined.match(/role="status"/g) || []).length;
     expect(count).toBeGreaterThanOrEqual(3);
   });
 
   it("estados vazios de validação possuem role=\"status\"", () => {
-    const emptyStatus = appSource.match(/className="empty-state"[^>]*role="status"/g);
+    const emptyStatus = combined.match(/className="empty-state"[^>]*role="status"/g);
     expect(emptyStatus).not.toBeNull();
     expect(emptyStatus!.length).toBeGreaterThanOrEqual(2);
   });
 
   it("listas de validação possuem aria-label", () => {
-    expect(appSource).toContain('aria-label="Erros de validação"');
-    expect(appSource).toContain('aria-label="Alertas de validação"');
+    expect(combined).toContain('aria-label="Erros de validação"');
+    expect(combined).toContain('aria-label="Alertas de validação"');
   });
 
   it("não há referências funcionais a IA ou APIs externas", () => {
