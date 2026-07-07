@@ -1,10 +1,7 @@
-function normalize(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase()
-    .replace(/\s+/g, " ")
-    .trim();
+import { normalizeForDetection } from "./word-structure-extractor";
+
+function normalizeHeadingFragment(value: string): string {
+  return normalizeForDetection(value).replace(/^\d+(?:\.\d+)*\s+/, "").replace(/\s*-\s*$/, "");
 }
 
 function stripMarkdownHeading(value: string): string {
@@ -29,14 +26,14 @@ const HEADING_FRAGMENT_PAIRS: HeadingFragmentPair[] = [
 ];
 
 function isKnownHeadingFragment(currentLine: string, nextLine: string): boolean {
-  const current = normalize(stripMarkdownHeading(currentLine)).replace(/^\d+(?:\.\d+)*\s+/, "");
-  const next = normalize(nextLine);
+  const current = normalizeHeadingFragment(stripMarkdownHeading(currentLine));
+  const next = normalizeHeadingFragment(nextLine);
 
   for (const pair of HEADING_FRAGMENT_PAIRS) {
-    const normalizedHeadings = pair.currentHeadings.map((h) => normalize(h));
+    const normalizedHeadings = pair.currentHeadings.map((h) => normalizeHeadingFragment(h));
     const headingPattern = new RegExp(`^(${normalizedHeadings.join("|")})$`);
 
-    if (headingPattern.test(current) && next === normalize(pair.nextFragment)) {
+    if (headingPattern.test(current) && next === normalizeHeadingFragment(pair.nextFragment)) {
       return true;
     }
   }

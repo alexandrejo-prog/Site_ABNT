@@ -1,4 +1,4 @@
-import JSZip from "jszip";
+﻿import JSZip from "jszip";
 
 export type ImportedSectionKind = "pre-textual" | "textual" | "post-textual";
 
@@ -103,7 +103,8 @@ export interface DocxStructureOptions {
 }
 
 const TEXT_TOKEN_PATTERN =
-  /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\b[^>]*\/>|<w:br\b[^>]*\/>/g;
+  /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\b[^>]*\/>|<w:br\b[^>]*\/>|<w:lastRenderedPageBreak\b[^>]*\/>/g;
+const PAGE_BREAK_PATTERN = /<w:br\b[^>]*w:type="page"[^>]*\/>|<w:lastRenderedPageBreak\b[^>]*\/>/g;
 
 const PRE_TEXTUAL_HEADINGS = new Set([
   "RESUMO",
@@ -138,7 +139,7 @@ export function normalizeForDetection(value: string): string {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toUpperCase()
-    .replace(/[–—]/g, "-")
+    .replace(/[\u2013\u2014â€“â€”]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -151,13 +152,20 @@ function cleanText(value: string): string {
     .trim();
 }
 
+function isPageBreakToken(token: string): boolean {
+  return /<w:lastRenderedPageBreak\b/.test(token) || /<w:br\b[^>]*w:type="page"/.test(token);
+}
+
 function extractTextFromXml(xml: string): { rawText: string; text: string } {
   const parts: string[] = [];
   let match: RegExpExecArray | null;
 
+  TEXT_TOKEN_PATTERN.lastIndex = 0;
   while ((match = TEXT_TOKEN_PATTERN.exec(xml)) !== null) {
     if (match[0].startsWith("<w:tab")) {
       parts.push(" ");
+    } else if (isPageBreakToken(match[0])) {
+      continue;
     } else if (match[0].startsWith("<w:br")) {
       parts.push("\n");
     } else {
@@ -167,6 +175,34 @@ function extractTextFromXml(xml: string): { rawText: string; text: string } {
 
   const rawText = parts.join("");
   return { rawText, text: cleanText(rawText) };
+}
+
+function splitParagraphXmlByPageBreak(xml: string): Array<{ xml: string; pageBreakAfter: boolean }> {
+  const segments: Array<{ xml: string; pageBreakAfter: boolean }> = [];
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  PAGE_BREAK_PATTERN.lastIndex = 0;
+  while ((match = PAGE_BREAK_PATTERN.exec(xml)) !== null) {
+    const before = xml.slice(cursor, match.index);
+    if (before || !segments.length) {
+      segments.push({ xml: before, pageBreakAfter: true });
+    } else {
+      segments[segments.length - 1].pageBreakAfter = true;
+    }
+    cursor = match.index + match[0].length;
+  }
+
+  if (!segments.length) {
+    return [{ xml, pageBreakAfter: false }];
+  }
+
+  const after = xml.slice(cursor);
+  if (after) {
+    segments.push({ xml: after, pageBreakAfter: false });
+  }
+
+  return segments;
 }
 
 function hasEnabledRunProperty(runXml: string, property: "b" | "i"): boolean {
@@ -488,62 +524,65 @@ export async function extractDocxStructure(
       continue;
     }
 
-    const { rawText, text } = extractTextFromXml(xml);
     const styleId = xml.match(/<w:pStyle\b[^>]*w:val="([^"]+)"/)?.[1];
     const styleName = styleId ? styleNames[styleId] : undefined;
-    const headingLevel = detectHeadingLevel(text, styleId, styleName);
-    const isHeading = Boolean(text && headingLevel);
 
-    if (isHeading) {
-      currentSection = sectionForHeading(text, currentSection);
+    for (const segment of splitParagraphXmlByPageBreak(xml)) {
+      const { rawText, text } = extractTextFromXml(segment.xml);
+      const headingLevel = detectHeadingLevel(text, styleId, styleName);
+      const isHeading = Boolean(text && headingLevel);
+
+      if (isHeading) {
+        currentSection = sectionForHeading(text, currentSection);
+      }
+
+      const imageRelationshipIds = extractImageRelationshipIds(segment.xml, relationships);
+      const isLongQuote = !isHeading && isLongQuoteParagraph(xml, styleId, styleName);
+      const runs = extractRunsFromParagraphXml(segment.xml, styleId);
+
+      if (text || imageRelationshipIds.length) {
+        const paragraph: ImportedParagraph = {
+          index: paragraphIndex,
+          text,
+          rawText,
+          runs,
+          styleId,
+          styleName,
+          headingLevel,
+          isHeading,
+          isNormalParagraph: Boolean(text && !isHeading && !isLongQuote),
+          isLongQuote,
+          containsPageBreak: segment.pageBreakAfter,
+          appearsPreTextual: currentSection === "pre-textual",
+          appearsTextual: currentSection === "textual",
+          appearsPostTextual: currentSection === "post-textual",
+          imageRelationshipIds,
+          section: currentSection,
+        };
+
+        paragraphs.push(paragraph);
+
+        const textBlock = paragraphBlockFromMetadata(paragraph);
+        if (textBlock) {
+          blocks.push(textBlock);
+        }
+
+        for (const relationshipId of imageRelationshipIds) {
+          blocks.push({
+            type: "image",
+            relationshipId,
+            target: relationships[relationshipId],
+            section: currentSection,
+          });
+        }
+
+        paragraphIndex += 1;
+      }
+
+      if (segment.pageBreakAfter) {
+        blocks.push({ type: "pageBreak" });
+      }
     }
-
-    const containsPageBreak =
-      /<w:br\b[^>]*w:type="page"/.test(xml) ||
-      /<w:lastRenderedPageBreak\b/.test(xml);
-    const imageRelationshipIds = extractImageRelationshipIds(xml, relationships);
-    const isLongQuote = !isHeading && isLongQuoteParagraph(xml, styleId, styleName);
-
-    const paragraph: ImportedParagraph = {
-      index: paragraphIndex,
-      text,
-      rawText,
-      runs: [{ text }],
-      styleId,
-      styleName,
-      headingLevel,
-      isHeading,
-      isNormalParagraph: Boolean(text && !isHeading && !isLongQuote),
-      isLongQuote,
-      containsPageBreak,
-      appearsPreTextual: currentSection === "pre-textual",
-      appearsTextual: currentSection === "textual",
-      appearsPostTextual: currentSection === "post-textual",
-      imageRelationshipIds,
-      section: currentSection,
-    };
-
-    paragraphs.push(paragraph);
-
-    const textBlock = paragraphBlockFromMetadata(paragraph);
-    if (textBlock) {
-      blocks.push(textBlock);
-    }
-
-    for (const relationshipId of imageRelationshipIds) {
-      blocks.push({
-        type: "image",
-        relationshipId,
-        target: relationships[relationshipId],
-        section: currentSection,
-      });
-    }
-
-    if (containsPageBreak) {
-      blocks.push({ type: "pageBreak" });
-    }
-
-    paragraphIndex += 1;
   }
 
   const text = blocks

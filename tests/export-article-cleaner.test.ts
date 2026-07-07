@@ -1,4 +1,4 @@
-import JSZip from "jszip";
+﻿import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { generateArticleDocxBlob } from "../src/export-article-docx";
 import { emptyAcademicFields } from "../src/ufla-rules";
@@ -39,5 +39,26 @@ describe("exportacao de artigo simples", () => {
     expect(countOccurrences(xml, "A constelação do Homem Velho")).toBe(2);
     expect(countOccurrences(xml, "Alexandre")).toBe(1);
     expect(xml).toContain("A constelação do Homem Velho dos guaranis");
+  });
+
+  it("converte marcação markdown do corpo em runs negrito e italico", async () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "artigo" as const,
+      title: "Artigo com marcação",
+      author: "Alexandre",
+    };
+
+    const xml = await documentXml(
+      await generateArticleDocxBlob({
+        fields,
+        editorText: "# Introdução\nTexto com **negrito** e *italico* no corpo.",
+      }),
+    );
+
+    expect(xml).not.toContain("**negrito**");
+    expect(xml).not.toContain("*italico*");
+    expect(xml).toMatch(/<w:b\/>[\s\S]*<w:t[^>]*>negrito<\/w:t>/);
+    expect(xml).toMatch(/<w:i\/>[\s\S]*<w:t[^>]*>italico<\/w:t>/);
   });
 });

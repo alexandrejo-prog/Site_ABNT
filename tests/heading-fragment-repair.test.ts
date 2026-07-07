@@ -91,3 +91,10 @@ describe("reparo de titulos quebrados", () => {
     expect(repairHeadingFragments(input)).toBe(input);
   });
 });
+
+it("une referencias bibliograficas mesmo com travessao no fim da linha", () => {
+  const input = "# Referências —\nbibliográficas\nTexto.";
+
+  expect(repairHeadingFragments(input)).toContain("# Referências — bibliográficas");
+  expect(repairHeadingFragments(input)).not.toContain("Referências —\nbibliográficas");
+});
