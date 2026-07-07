@@ -24,6 +24,10 @@ export const IMPACT_DIMENSIONS: ImpactDimensionDefinition[] = [
   { id: "institucional", label: "Impacto institucional", question: "A pesquisa contribui para políticas, processos ou tomada de decisão institucional?" },
 ];
 
+// IMPACT_DIMENSIONS representa dimensões de análise de texto livre usadas por assessImpactIndicators.
+// IMPACT_FIELD_ENTRIES representa campos estruturados do formulário do usuário usados por consolidateImpactIndicators.
+// São taxonomias complementares: uma mede texto livre, outra mede formulário estruturado.
+
 const DIMENSION_PATTERNS: Record<ImpactDimension, RegExp> = {
   social: /\b(social|sociedade|comunidade|trabalhadores|servidores|publico|público)\b/i,
   cientifico: /\b(cientific|conhecimento|teoric|metodologic|pesquisa|lacuna|evidencia|evidência)\b/i,

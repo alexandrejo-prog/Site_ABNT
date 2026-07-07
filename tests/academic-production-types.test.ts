@@ -39,6 +39,18 @@ describe("Colecao Producao Academica UFLA", () => {
     expect(academicProductionTypeFor("relatorio_estagio_ufla")?.sourceCollectionNumber).toBe(7);
   });
 
+  it("relatorio_estagio_ufla nao exige resumo/referencias por definicao propria", () => {
+    const type = academicProductionTypeFor("relatorio_estagio_ufla");
+    expect(type?.requiredFields).not.toContain("resumo");
+    expect(type?.requiredFields).not.toContain("referencias");
+  });
+
+  it("todos os tipos possuem aliases documentados", () => {
+    for (const type of ACADEMIC_PRODUCTION_TYPES) {
+      expect(type.sectionAliases.length).toBeGreaterThan(0);
+    }
+  });
+
   it("novos tipos entram no fluxo de validacao sem quebrar", () => {
     for (const id of EXPECTED_IDS) {
       const issues = validateWork({ ...emptyAcademicFields(), workType: id }, "");

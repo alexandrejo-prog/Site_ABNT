@@ -111,6 +111,7 @@ export const ACADEMIC_PRODUCTION_TYPES: AcademicProductionTypeDefinition[] = [
     sourceCollectionNumber: 7,
     requiredFields: ["author", "title", "course", "introducao", "metodologia", "conclusao"],
     optionalFields: [...COMMON_OPTIONAL_FIELDS, "referencias", "anexos"],
+    // RelatÃ³rio de estÃ¡gio nÃ£o exige resumo/referÃªncias por padrÃ£o: Ã© documento descritivo da coleÃ§Ã£o UFLA, com foco em curso, introduÃ§Ã£o, metodologia e conclusÃ£o, nÃ£o estrutura de TCC/artigo.
     sectionAliases: ["relatorio de estagio", "relatÃ³rio de estÃ¡gio", "estagio supervisionado", "estÃ¡gio supervisionado", "atividades de estagio"],
     recommendedSections: ["IdentificaÃ§Ã£o", "Plano de atividades", "Atividades desenvolvidas", "Aprendizados", "ConsideraÃ§Ãµes finais"],
     manualValidationNotes: ["Conferir regras do curso, dados do local, carga horÃ¡ria, supervisor, assinaturas e anexos."],

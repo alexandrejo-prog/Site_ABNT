@@ -10,6 +10,10 @@ import {
   isCpgWork,
 } from "./ufla-rules";
 import {
+  ACADEMIC_PRODUCTION_TYPES,
+  type UflaAcademicProductionTypeId,
+} from "./academic-production-types";
+import {
   DocxStructure,
   ImportedBlock,
   normalizeForDetection,
@@ -76,6 +80,16 @@ const GENERIC_COVER_WORDS = new Set([
   "LOCAL",
   "ANO",
 ]);
+
+const AMBIGUOUS_ALIASES = new Set(["artigo"]);
+
+function buildAliasPattern(alias: string): RegExp {
+  const parts = alias.split(/\s+/).filter(Boolean);
+  const pattern = parts
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("\\s+");
+  return new RegExp(`\\b${pattern}\\b`, "i");
+}
 
 function cleanValue(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -199,18 +213,28 @@ function findByLabel(text: string, patterns: RegExp[]): string {
 
 function detectWorkType(text: string): WorkType | "" {
   const normalized = normalizeForDetection(text);
+
+  for (const type of ACADEMIC_PRODUCTION_TYPES) {
+    for (const alias of type.sectionAliases) {
+      if (AMBIGUOUS_ALIASES.has(alias.toLowerCase())) continue;
+      if (buildAliasPattern(alias).test(normalized)) return type.id;
+    }
+  }
+
   if (/\bTESE\b/.test(normalized)) return "tese";
   if (/\bDISSERTACAO\b/.test(normalized)) return "dissertacao";
   if (/\bMONOGRAFIA\b|\bTCC\b/.test(normalized)) return "monografia";
+  if (/\bPROPOSTA DE INTERVENCAO\b|\bINTERVENCAO CLINICA\b|\bINTERVENCAO EM SERVICO\b/.test(normalized)) return "proposta_intervencao_ufla";
+  if (/\bSOFTWARE\b|\bAPLICATIVO\b|\bDESENVOLVIMENTO DE SOFTWARE\b/.test(normalized)) return "software_aplicativo_ufla";
   if (/\bPATENTE\b|\bPEDIDO DE PATENTE\b|\bREIVINDICACOES\b/.test(normalized)) return "patente_ufla";
   if (/\bREVISAO SISTEMATICA\b|\bREVISAO APROFUNDADA\b/.test(normalized)) return "revisao_sistematica_ufla";
   if (/\bESTUDO DE CASO\b|\bCASOS MULTIPLOS\b/.test(normalized)) return "estudo_caso_ufla";
-  if (/\bSOFTWARE\b|\bAPLICATIVO\b|\bDESENVOLVIMENTO DE SOFTWARE\b/.test(normalized)) return "software_aplicativo_ufla";
   if (/\bCULTIVAR\b|\bMELHORAMENTO GENETICO\b/.test(normalized)) return "cultivar_ufla";
   if (/\bRELATORIO DE ESTAGIO\b|\bESTAGIO SUPERVISIONADO\b/.test(normalized)) return "relatorio_estagio_ufla";
-  if (/\bPROPOSTA DE INTERVENCAO\b|\bINTERVENCAO CLINICA\b|\bINTERVENCAO EM SERVICO\b/.test(normalized)) return "proposta_intervencao_ufla";
   if (/\bARTIGO CIENTIFICO\b/.test(normalized)) return "artigo_cientifico_ufla";
   if (/\bARTIGO\b/.test(normalized)) return "artigo";
+
+  // CPG e projeto de pesquisa são cobertos por isCpgWork / isResearchProject no fluxo superior.
   return "";
 }
 
