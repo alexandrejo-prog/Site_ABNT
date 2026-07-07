@@ -21,6 +21,7 @@ import { AcademicFields, UFLA_RULES } from "./ufla-rules";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { consolidateImpactIndicators } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
+import { cleanMojibakeText } from "./docx-render-core";
 
 export type EditorBlockType =
   | "paragraph"
@@ -786,29 +787,29 @@ function coverChildren(fields: AcademicFields, logo?: DocxLogoAsset): Paragraph[
   return [
     ...logoParagraph(logo),
     new Paragraph({ spacing: { before: 1100 } }),
-    centeredParagraph((fields.author || "AUTOR").toUpperCase(), true, COVER_AUTHOR_SIZE, {
+    centeredParagraph(cleanMojibakeText((fields.author || "AUTOR").toUpperCase()), true, COVER_AUTHOR_SIZE, {
       after: 0,
       line: SINGLE_LINE,
     }),
     new Paragraph({ spacing: { before: 1700 } }),
-    centeredParagraph((fields.title || "TÍTULO DO TRABALHO").toUpperCase(), true, COVER_TITLE_SIZE, {
+    centeredParagraph(cleanMojibakeText((fields.title || "TÍTULO DO TRABALHO").toUpperCase()), true, COVER_TITLE_SIZE, {
       after: 0,
       line: ONE_AND_HALF_LINE,
     }),
     ...(fields.subtitle
       ? [
-          centeredParagraph(fields.subtitle.toUpperCase(), false, COVER_TITLE_SIZE, {
+          centeredParagraph(cleanMojibakeText(fields.subtitle.toUpperCase()), false, COVER_TITLE_SIZE, {
             after: 0,
             line: ONE_AND_HALF_LINE,
           }),
         ]
       : []),
     new Paragraph({ spacing: { before: 2200 } }),
-    centeredParagraph((fields.location || "LAVRAS - MG").toUpperCase(), true, COVER_AUTHOR_SIZE, {
+    centeredParagraph(cleanMojibakeText((fields.location || "LAVRAS - MG").toUpperCase()), true, COVER_AUTHOR_SIZE, {
       after: 120,
       line: SINGLE_LINE,
     }),
-    centeredParagraph(fields.year || new Date().getFullYear().toString(), true, COVER_AUTHOR_SIZE, {
+    centeredParagraph(cleanMojibakeText(fields.year || new Date().getFullYear().toString()), true, COVER_AUTHOR_SIZE, {
       after: 0,
       line: SINGLE_LINE,
     }),
@@ -818,20 +819,22 @@ function coverChildren(fields: AcademicFields, logo?: DocxLogoAsset): Paragraph[
 function buildTitlePageSupplementalLines(fields: AcademicFields, nature: string): string[] {
   const normalizedNature = normalizeForDetection(nature);
   return [
-    fields.course && !normalizedNature.includes("CURSO") ? `Curso: ${fields.course}` : "",
-    fields.program && !normalizedNature.includes("PROGRAMA") ? `Programa: ${fields.program}` : "",
-    fields.advisor && !normalizedNature.includes("ORIENTADOR") ? `Orientador(a): ${fields.advisor}` : "",
+    fields.course && !normalizedNature.includes("CURSO") ? cleanMojibakeText(`Curso: ${fields.course}`) : "",
+    fields.program && !normalizedNature.includes("PROGRAMA") ? cleanMojibakeText(`Programa: ${fields.program}`) : "",
+    fields.advisor && !normalizedNature.includes("ORIENTADOR") ? cleanMojibakeText(`Orientador(a): ${fields.advisor}`) : "",
     fields.coadvisor && !normalizedNature.includes("COORIENTADOR")
-      ? `Coorientador(a): ${fields.coadvisor}`
+      ? cleanMojibakeText(`Coorientador(a): ${fields.coadvisor}`)
       : "",
   ].filter(Boolean);
 }
 
 function workNature(fields: AcademicFields): string {
-  return normalizeNatureForWorkType(
-    fields.workNature ||
-      "Trabalho apresentado à Universidade Federal de Lavras como requisito acadêmico, conforme dados revisados pelo usuário.",
-    fields,
+  return cleanMojibakeText(
+    normalizeNatureForWorkType(
+      fields.workNature ||
+        "Trabalho apresentado à Universidade Federal de Lavras como requisito acadêmico, conforme dados revisados pelo usuário.",
+      fields,
+    ),
   );
 }
 
@@ -840,34 +843,34 @@ function titlePageChildren(fields: AcademicFields): Paragraph[] {
   const supplementalLines = buildTitlePageSupplementalLines(fields, nature);
 
   return [
-    centeredParagraph((fields.author || "AUTOR").toUpperCase(), true, BODY_SIZE, {
+    centeredParagraph(cleanMojibakeText((fields.author || "AUTOR").toUpperCase()), true, BODY_SIZE, {
       after: 0,
       line: SINGLE_LINE,
     }),
     new Paragraph({ spacing: { before: 1500 } }),
-    centeredParagraph((fields.title || "TÍTULO DO TRABALHO").toUpperCase(), true, BODY_SIZE, {
+    centeredParagraph(cleanMojibakeText((fields.title || "TÍTULO DO TRABALHO").toUpperCase()), true, BODY_SIZE, {
       after: 0,
       line: ONE_AND_HALF_LINE,
     }),
     ...(fields.subtitle
       ? [
-          centeredParagraph(fields.subtitle.toUpperCase(), false, BODY_SIZE, {
+          centeredParagraph(cleanMojibakeText(fields.subtitle.toUpperCase()), false, BODY_SIZE, {
             after: 0,
             line: ONE_AND_HALF_LINE,
           }),
         ]
       : []),
     new Paragraph({ spacing: { before: 900 } }),
-    natureParagraph(nature),
+    natureParagraph(cleanMojibakeText(nature)),
     ...supplementalLines.map((line) =>
-      centeredParagraph(line, false, BODY_SIZE, { after: 0, line: SINGLE_LINE }),
+      centeredParagraph(cleanMojibakeText(line), false, BODY_SIZE, { after: 0, line: SINGLE_LINE }),
     ),
     new Paragraph({ spacing: { before: 1500 } }),
-    centeredParagraph((fields.location || "LAVRAS - MG").toUpperCase(), false, BODY_SIZE, {
+    centeredParagraph(cleanMojibakeText((fields.location || "LAVRAS - MG").toUpperCase()), false, BODY_SIZE, {
       after: 120,
       line: SINGLE_LINE,
     }),
-    centeredParagraph(fields.year || new Date().getFullYear().toString(), false, BODY_SIZE, {
+    centeredParagraph(cleanMojibakeText(fields.year || new Date().getFullYear().toString()), false, BODY_SIZE, {
       after: 0,
       line: SINGLE_LINE,
     }),
@@ -879,23 +882,23 @@ function approvalPageChildren(fields: AcademicFields): Paragraph[] {
 
   const orientationLines = fields.advisor
     ? [
-        centeredParagraph(fields.advisor, false, BODY_SIZE, { after: 0, line: SINGLE_LINE }),
+        centeredParagraph(cleanMojibakeText(fields.advisor), false, BODY_SIZE, { after: 0, line: SINGLE_LINE }),
         centeredParagraph("Orientador(a) - UFLA", false, BODY_SIZE, { after: 360, line: SINGLE_LINE }),
       ]
     : [];
 
   return [
     pageBreak(),
-    centeredParagraph((fields.author || "AUTOR").toUpperCase(), true, BODY_SIZE, {
+    centeredParagraph(cleanMojibakeText((fields.author || "AUTOR").toUpperCase()), true, BODY_SIZE, {
       after: 0,
       line: SINGLE_LINE,
     }),
     new Paragraph({ spacing: { before: 900 } }),
-    centeredParagraph((fields.title || "TÍTULO DO TRABALHO").toUpperCase(), true, BODY_SIZE, {
+    centeredParagraph(cleanMojibakeText((fields.title || "TÍTULO DO TRABALHO").toUpperCase()), true, BODY_SIZE, {
       after: 600,
       line: ONE_AND_HALF_LINE,
     }),
-    natureParagraph(workNature(fields)),
+    natureParagraph(cleanMojibakeText(workNature(fields))),
     simpleParagraph("Aprovado em: ____ de ____________________ de ______.", {
       alignment: AlignmentType.CENTER,
       spacing: { before: 480, after: 240, line: SINGLE_LINE },
@@ -941,24 +944,24 @@ function preTextualChildren(fields: AcademicFields): Paragraph[] {
     pageBreak(),
     unnumberedTitle("Ficha catalográfica"),
     simpleParagraph(
-      "Inserir aqui a ficha catalográfica oficial gerada pela Biblioteca Universitária da UFLA. Não substitua por texto manual na versão final.",
+      cleanMojibakeText("Inserir aqui a ficha catalográfica oficial gerada pela Biblioteca Universitária da UFLA. Não substitua por texto manual na versão final."),
     ),
     ...approvalPageChildren(fields),
-    ...optionalUntitledRightPage(fields.dedicatoria),
-    ...optionalPage("Agradecimentos", fields.agradecimentos),
-    ...optionalUntitledRightPage(fields.epigrafe, true),
+    ...optionalUntitledRightPage(cleanMojibakeText(fields.dedicatoria)),
+    ...optionalPage("Agradecimentos", cleanMojibakeText(fields.agradecimentos)),
+    ...optionalUntitledRightPage(cleanMojibakeText(fields.epigrafe), true),
     pageBreak(),
     unnumberedTitle("Resumo"),
-    simpleParagraph(fields.resumo || " "),
+    simpleParagraph(cleanMojibakeText(fields.resumo || " ")),
     ...(fields.palavrasChave
-      ? [simpleParagraph(`Palavras-chave: ${fields.palavrasChave}`)]
+      ? [simpleParagraph(cleanMojibakeText(`Palavras-chave: ${fields.palavrasChave}`))]
       : []),
     pageBreak(),
     unnumberedTitle("Abstract"),
-    simpleParagraph(fields.abstractText || " "),
-    ...(fields.keywords ? [simpleParagraph(`Keywords: ${fields.keywords}`)] : []),
-    ...optionalPage("Indicadores de impacto", indicadores),
-    ...optionalPage("Impact indicators", impactIndicators),
+    simpleParagraph(cleanMojibakeText(fields.abstractText || " ")),
+    ...(fields.keywords ? [simpleParagraph(cleanMojibakeText(`Keywords: ${fields.keywords}`))] : []),
+    ...optionalPage("Indicadores de impacto", cleanMojibakeText(indicadores)),
+    ...optionalPage("Impact indicators", cleanMojibakeText(impactIndicators)),
   ];
 }
 

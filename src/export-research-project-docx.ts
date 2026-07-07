@@ -14,41 +14,42 @@ import { repairHeadingFragments } from "./heading-fragment-repair";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { UFLA_RULES } from "./ufla-rules";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
+import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs } from "./docx-render-core";
 
 function hasValue(value: string): boolean {
   return value.trim().length > 0;
 }
 
 function splitParagraphs(value: string): string[] {
-  return value.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  return coreSplitParagraphs(cleanMojibakeText(value));
 }
 
 function coverChildren(input: DocxGenerationInput): Paragraph[] {
   const { fields, logo } = input;
   return [
     ...logoParagraph(logo),
-    centered(fields.author || "Autor", true, AUTHOR_SIZE, 1250, 1600),
-    centered((fields.title || "Título do trabalho").toUpperCase(), true, TITLE_SIZE, 0, 240),
-    ...(fields.subtitle ? [centered(fields.subtitle, false, BODY_SIZE, 0, 240)] : []),
-    centered((fields.location || "LAVRAS - MG").toUpperCase(), true, AUTHOR_SIZE, 2500, 120),
-    centered(fields.year || new Date().getFullYear().toString(), true, AUTHOR_SIZE, 0, 0),
+    centered(cleanMojibakeText(fields.author || "Autor"), true, AUTHOR_SIZE, 1250, 1600),
+    centered(cleanMojibakeText((fields.title || "Título do trabalho").toUpperCase()), true, TITLE_SIZE, 0, 240),
+    ...(fields.subtitle ? [centered(cleanMojibakeText(fields.subtitle), false, BODY_SIZE, 0, 240)] : []),
+    centered(cleanMojibakeText((fields.location || "LAVRAS - MG").toUpperCase()), true, AUTHOR_SIZE, 2500, 120),
+    centered(cleanMojibakeText(fields.year || new Date().getFullYear().toString()), true, AUTHOR_SIZE, 0, 0),
   ];
 }
 
 function titlePageChildren(fields: DocxGenerationInput["fields"]): Paragraph[] {
   return [
     pageBreak(),
-    centered(fields.author || "Autor", false, BODY_SIZE, 0, 520),
-    centered((fields.title || "Título do trabalho").toUpperCase(), false, BODY_SIZE, 0, 520),
+    centered(cleanMojibakeText(fields.author || "Autor"), false, BODY_SIZE, 0, 520),
+    centered(cleanMojibakeText((fields.title || "Título do trabalho").toUpperCase()), false, BODY_SIZE, 0, 520),
     new Paragraph({
       alignment: AlignmentType.BOTH,
       indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
       spacing: { line: SINGLE_LINE, after: 180 },
-      children: [run(fields.workNature || "Projeto de pesquisa apresentado à Universidade Federal de Lavras.")],
+      children: [run(cleanMojibakeText(fields.workNature || "Projeto de pesquisa apresentado à Universidade Federal de Lavras."))],
     }),
-    ...(fields.advisor ? [paragraph(`Orientador: ${fields.advisor}`)] : []),
-    centered((fields.location || "LAVRAS - MG").toUpperCase(), false, BODY_SIZE, 1800, 120),
-    centered(fields.year || new Date().getFullYear().toString(), false, BODY_SIZE, 0, 0),
+    ...(fields.advisor ? [paragraph(`Orientador: ${cleanMojibakeText(fields.advisor)}`)] : []),
+    centered(cleanMojibakeText((fields.location || "LAVRAS - MG").toUpperCase()), false, BODY_SIZE, 1800, 120),
+    centered(cleanMojibakeText(fields.year || new Date().getFullYear().toString()), false, BODY_SIZE, 0, 0),
   ];
 }
 
@@ -56,12 +57,12 @@ function preTextualChildren(fields: DocxGenerationInput["fields"]): Array<Paragr
   return [
     pageBreak(),
     unnumberedTitle("Resumo"),
-    ...splitParagraphs(fields.resumo).map((line) => paragraph(line)),
-    ...(fields.palavrasChave ? [paragraph(`Palavras-chave: ${fields.palavrasChave}`)] : []),
+    ...coreSplitParagraphs(cleanMojibakeText(fields.resumo)).map((line) => paragraph(line)),
+    ...(fields.palavrasChave ? [paragraph(cleanMojibakeText(`Palavras-chave: ${fields.palavrasChave}`))] : []),
     pageBreak(),
     unnumberedTitle("Abstract"),
-    ...splitParagraphs(fields.abstractText).map((line) => paragraph(line)),
-    ...(fields.keywords ? [paragraph(`Keywords: ${fields.keywords}`)] : []),
+    ...coreSplitParagraphs(cleanMojibakeText(fields.abstractText)).map((line) => paragraph(line)),
+    ...(fields.keywords ? [paragraph(cleanMojibakeText(`Keywords: ${fields.keywords}`))] : []),
     pageBreak(),
     unnumberedTitle("Sumário"),
     new TableOfContents("", {
@@ -94,7 +95,7 @@ function projectEditorText(input: DocxGenerationInput): string {
   return repairHeadingFragments(
     sections
       .filter(([, value]) => hasValue(value))
-      .flatMap(([title, value]) => [`# ${title}`, value.trim()])
+      .flatMap(([title, value]) => [`# ${title}`, coreSplitParagraphs(cleanMojibakeText(value)).join("\n")])
       .join("\n\n"),
   );
 }
@@ -104,7 +105,7 @@ function headingParagraph(block: EditorBlock, first: boolean): Paragraph[] {
   const title = new Paragraph({
     heading: level,
     spacing: { before: first ? 0 : 240, after: 240, line: ONE_AND_HALF_LINE },
-    children: [run(block.type === "heading1" ? block.text.toUpperCase() : block.text, block.type !== "heading3")],
+    children: [run(block.type === "heading1" ? cleanMojibakeText(block.text.toUpperCase()) : cleanMojibakeText(block.text), block.type !== "heading3")],
   });
   return first || block.type !== "heading1" ? [title] : [pageBreak(), title];
 }
@@ -112,15 +113,15 @@ function headingParagraph(block: EditorBlock, first: boolean): Paragraph[] {
 function blockToParagraph(block: EditorBlock, first: boolean): Paragraph[] {
   if (block.type === "heading1" || block.type === "heading2" || block.type === "heading3") return headingParagraph(block, first);
   if (block.type === "longQuote") {
-    return [new Paragraph({ alignment: AlignmentType.BOTH, spacing: { line: SINGLE_LINE, after: 120 }, indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip }, children: [run(block.text)] })];
+    return [new Paragraph({ alignment: AlignmentType.BOTH, spacing: { line: SINGLE_LINE, after: 120 }, indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip }, children: [run(cleanMojibakeText(block.text))] })];
   }
-  if (block.type === "scheduleTable") return splitParagraphs(block.text).map((line) => paragraph(line));
-  return [paragraph(block.text)];
+  if (block.type === "scheduleTable") return coreSplitParagraphs(cleanMojibakeText(block.text)).map((line) => paragraph(line));
+  return [paragraph(cleanMojibakeText(block.text))];
 }
 
 function referenceRunToTextRun(referenceRun: ReferenceRun): TextRun {
   return new TextRun({
-    text: referenceRun.text,
+    text: cleanMojibakeText(referenceRun.text),
     bold: referenceRun.bold,
     italics: referenceRun.italics,
     font: UFLA_RULES.typography.fontFamily,
@@ -135,8 +136,8 @@ function referenceParagraphs(references: string[]): Paragraph[] {
     pageBreak(),
     new Paragraph({ heading: HeadingLevel.HEADING_1, spacing: { before: 0, after: 240, line: ONE_AND_HALF_LINE }, children: [run("REFERÊNCIAS", true)] }),
     ...normalizeReferences(references)
-      .sort((a, b) => a.text.localeCompare(b.text, "pt-BR", { sensitivity: "base" }))
-      .map((reference) => new Paragraph({ alignment: AlignmentType.LEFT, spacing: { line: SINGLE_LINE, after: SINGLE_LINE }, children: reference.runs.length ? reference.runs.map(referenceRunToTextRun) : [run(reference.text)] })),
+      .sort((a, b) => cleanMojibakeText(a.text).localeCompare(cleanMojibakeText(b.text), "pt-BR", { sensitivity: "base" }))
+      .map((reference) => new Paragraph({ alignment: AlignmentType.LEFT, spacing: { line: SINGLE_LINE, after: SINGLE_LINE }, children: reference.runs.length ? reference.runs.map(referenceRunToTextRun) : [run(cleanMojibakeText(reference.text || " "))] })),
   ];
 }
 

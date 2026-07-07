@@ -10,6 +10,7 @@ import {
 } from "docx";
 import type { IParagraphOptions } from "docx";
 import { BLACK as SHARED_BLACK } from "./docx-shared";
+import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, hasText, detectCaption } from "./docx-render-core";
 import { parseEditorContent, type DocxGenerationInput, type EditorBlock } from "./export-docx";
 import { CPG_RULES, UFLA_RULES, cmToTwip } from "./ufla-rules";
 
@@ -36,47 +37,9 @@ interface RunOptions {
 
 type DocxHeadingLevel = (typeof HeadingLevel)[keyof typeof HeadingLevel];
 
-function cleanCpgText(value: string): string {
-  return value
-    .replace(/([\p{L}\p{N}])[\u00ad\ufffe\uffff]([\p{L}\p{N}])/gu, "$1-$2")
-    .replace(/[\u00ad\ufffe\uffff\ufeff]/g, "")
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
-    .replace(/Ã¡/g, "á")
-    .replace(/Ã /g, "à")
-    .replace(/Ã¢/g, "â")
-    .replace(/Ã£/g, "ã")
-    .replace(/Ã©/g, "é")
-    .replace(/Ãª/g, "ê")
-    .replace(/Ã­/g, "í")
-    .replace(/Ã³/g, "ó")
-    .replace(/Ã´/g, "ô")
-    .replace(/Ãµ/g, "õ")
-    .replace(/Ãº/g, "ú")
-    .replace(/Ã§/g, "ç")
-    .replace(/Ã/g, "Á")
-    .replace(/Ã‰/g, "É")
-    .replace(/Ã“/g, "Ó")
-    .replace(/Ã‡/g, "Ç");
-}
-
-function hasText(value: string): boolean {
-  return cleanCpgText(value).trim().length > 0;
-}
-
-function splitParagraphs(value: string): string[] {
-  return cleanCpgText(value)
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-function stripMarkup(value: string): string {
-  return cleanCpgText(value).replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1");
-}
-
 function run(text: string, options: RunOptions = {}): TextRun {
   return new TextRun({
-    text: cleanCpgText(text),
+    text: cleanMojibakeText(text),
     font: options.font ?? CPG_RULES.typography.fontFamily,
     size: options.size ?? BODY_SIZE,
     color: BLACK,
@@ -85,26 +48,18 @@ function run(text: string, options: RunOptions = {}): TextRun {
   });
 }
 
+function splitParagraphs(value: string): string[] {
+  return coreSplitParagraphs(cleanMojibakeText(value))
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function stripMarkup(value: string): string {
+  return cleanMojibakeText(value).replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1");
+}
+
 function textRunsFromMarkup(text: string, size = BODY_SIZE, font = CPG_RULES.typography.fontFamily): TextRun[] {
-  const sanitizedText = cleanCpgText(text);
-  const runs: TextRun[] = [];
-  const tokenPattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
-  let cursor = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = tokenPattern.exec(sanitizedText)) !== null) {
-    if (match.index > cursor) {
-      runs.push(run(sanitizedText.slice(cursor, match.index), { size, font }));
-    }
-
-    const token = match[0];
-    const bold = token.startsWith("**");
-    runs.push(run(bold ? token.slice(2, -2) : token.slice(1, -1), { bold, italics: !bold, size, font }));
-    cursor = match.index + token.length;
-  }
-
-  if (cursor < sanitizedText.length) runs.push(run(sanitizedText.slice(cursor), { size, font }));
-  return runs.length ? runs : [run(" ", { size, font })];
+  return coreTextRunsFromMarkup(cleanMojibakeText(text), size, font);
 }
 
 function paragraph(text: string, options: Partial<IParagraphOptions> = {}): Paragraph {
@@ -121,7 +76,7 @@ function titleParagraph(text: string): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { before: TWELVE_PT, after: TWELVE_PT, line: SINGLE_LINE },
-    children: [run(text || "Titulo do trabalho", { bold: true, size: TITLE_SIZE })],
+    children: [run(cleanMojibakeText(text || "Titulo do trabalho"), { bold: true, size: TITLE_SIZE })],
   });
 }
 
@@ -135,7 +90,7 @@ function centered(
   return new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing,
-    children: [run(text, { bold, size, font })],
+    children: [run(cleanMojibakeText(text), { bold, size, font })],
   });
 }
 
@@ -178,7 +133,7 @@ function sectionTitle(text: string, level: DocxHeadingLevel = HeadingLevel.HEADI
     alignment: AlignmentType.LEFT,
     spacing: { before: TWELVE_PT, after: 0, line: SINGLE_LINE },
     children: [
-      run(text, {
+      run(cleanMojibakeText(text), {
         bold: level !== HeadingLevel.HEADING_3,
         size: level === HeadingLevel.HEADING_1 ? SECTION_SIZE : SUBSECTION_SIZE,
       }),
@@ -186,13 +141,13 @@ function sectionTitle(text: string, level: DocxHeadingLevel = HeadingLevel.HEADI
   });
 }
 
-function captionParagraph(text: string, tableCaption: boolean): Paragraph {
+function cpgCaptionParagraph(text: string, tableCaption: boolean): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { before: SIX_PT, after: SIX_PT, line: SINGLE_LINE },
     indent: { left: ABSTRACT_INDENT, right: ABSTRACT_INDENT },
     children: [
-      run(text, {
+      run(cleanMojibakeText(text), {
         bold: true,
         size: CAPTION_SIZE,
         font: "Helvetica",
@@ -203,9 +158,9 @@ function captionParagraph(text: string, tableCaption: boolean): Paragraph {
 }
 
 function isCaption(text: string): "figure" | "table" | null {
-  if (/^(figura|imagem)\s+\d+/i.test(cleanCpgText(text).trim())) return "figure";
-  if (/^(tabela|quadro)\s+\d+/i.test(cleanCpgText(text).trim())) return "table";
-  return null;
+  const result = detectCaption(cleanMojibakeText(text).trim());
+  if (!result) return null;
+  return result.kind === "table" ? "table" : "figure";
 }
 
 function blockToParagraph(block: EditorBlock, firstParagraphInSection: boolean): Paragraph[] {
@@ -224,7 +179,7 @@ function blockToParagraph(block: EditorBlock, firstParagraphInSection: boolean):
   }
 
   const caption = isCaption(block.text);
-  if (caption) return [captionParagraph(block.text, caption === "table")];
+  if (caption) return [cpgCaptionParagraph(block.text, caption === "table")];
 
   return [
     paragraph(block.text, {
@@ -234,12 +189,12 @@ function blockToParagraph(block: EditorBlock, firstParagraphInSection: boolean):
 }
 
 function isReferenceTitleNoise(text: string): boolean {
-  const normalized = cleanCpgText(text).trim().toUpperCase();
+  const normalized = cleanMojibakeText(text).trim().toUpperCase();
   return /^(REFERENCIAS|REFERÊNCIAS|BIBLIOGRÁFICAS|BIBLIOGRAFICAS)$/.test(normalized);
 }
 
 function referenceTitleFor(references: string[]): string {
-  const upper = references.map((r) => cleanCpgText(r).trim().toUpperCase());
+  const upper = references.map((r) => cleanMojibakeText(r).trim().toUpperCase());
   const hasRef = upper.some((r) => /^(REFERENCIAS|REFERÊNCIAS)$/.test(r));
   const hasBiblio = upper.some((r) => /^(BIBLIOGRÁFICAS|BIBLIOGRAFICAS)$/.test(r));
   if (hasRef && hasBiblio) return "REFERÊNCIAS BIBLIOGRÁFICAS";
@@ -286,7 +241,7 @@ function compactFirstPage(children: Paragraph[]): Paragraph[] {
 function cpgResumoChildren(input: DocxGenerationInput): Paragraph[] {
   return compactFirstPage([
     titleParagraph(input.fields.title),
-    centered(input.fields.author || "Autores", true),
+    centered(cleanMojibakeText(input.fields.author || "Autores"), true),
     ...affiliationParagraphs(input.fields.program),
     ...emailParagraph(input.fields.course),
     ...(hasText(input.fields.resumo)
@@ -323,7 +278,7 @@ function cpgFullChildren(input: DocxGenerationInput): Paragraph[] {
 
   return compactFirstPage([
     titleParagraph(input.fields.title),
-    centered(input.fields.author || "Autores", true),
+    centered(cleanMojibakeText(input.fields.author || "Autores"), true),
     ...affiliationParagraphs(input.fields.program),
     ...emailParagraph(input.fields.course),
     ...insetLabeledParagraph("Resumo", input.fields.resumo, "."),
