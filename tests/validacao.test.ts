@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AcademicFields, emptyAcademicFields } from "../src/ufla-rules";
 import { validateWork } from "../src/validators";
+import { ACADEMIC_PRODUCTION_TYPE_IDS, academicProductionTypeFor } from "../src/academic-production-types";
 
 function baseFields(overrides: Partial<AcademicFields> = {}): AcademicFields {
   return {
@@ -209,5 +210,22 @@ describe("validação normativa", () => {
     expect(issues).not.toContainEqual(
       expect.objectContaining({ code: "program-ambiguous" }),
     );
+  });
+
+  it("usuflaCollectionIssues usa requiredFields de academic-production-types para cada tipo", () => {
+    for (const id of ACADEMIC_PRODUCTION_TYPE_IDS) {
+      const definition = academicProductionTypeFor(id);
+      expect(definition).toBeTruthy();
+      if (!definition) continue;
+
+      const emptyFields = { ...emptyAcademicFields(), workType: id };
+      const issues = validateWork(emptyFields);
+
+      for (const fieldKey of definition.requiredFields) {
+        expect(issues).toContainEqual(
+          expect.objectContaining({ code: `ufla-collection-${fieldKey}-required` }),
+        );
+      }
+    }
   });
 });

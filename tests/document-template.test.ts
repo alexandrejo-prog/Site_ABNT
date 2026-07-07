@@ -21,4 +21,8 @@ describe("document-template", () => {
     expect(templateForWorkType("monografia").id).toBe("geral");
     expect(templateForWorkType("tipo_desconhecido").id).toBe("geral");
   });
+
+  it("roteia artigo_cientifico_ufla para modelo geral", () => {
+    expect(templateForWorkType("artigo_cientifico_ufla").id).toBe("geral");
+  });
 });
