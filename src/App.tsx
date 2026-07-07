@@ -4,6 +4,7 @@ import { Bold, Eraser, FileCheck2, FileDown, Heading1, Heading2, Italic, Pilcrow
 import { importDocumentFile } from "./import-docx";
 import { ACADEMIC_FIELD_KEYS, AcademicFieldKey, type AcademicFields, CONFIDENCE_LABELS, Confidence, WORK_TYPE_LABELS, WORK_TYPES, emptyAcademicFields, emptyConfidenceMap, isCpgWork, isResearchProject, isUflaCollectionWork } from "./ufla-rules";
 import { ValidationIssue, hasBlockingErrors, validateWork } from "./validators";
+import { isAbsoluteGenerationBlocker, isNonOverridableError } from "./generation-blockers";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
 import { UFLA_PPG_PROGRAMS } from "./ufla-ppg-programs";
 import { editorHtmlToMarkup, editorMarkupToHtml } from "./editor-markup";
@@ -50,40 +51,6 @@ function visibleField(key: AcademicFieldKey, workType: AcademicFields["workType"
 
 function modelConfidence(workType: AcademicFields["workType"]): boolean {
   return ["monografia", "dissertacao", "tese", "projeto_pesquisa"].includes(workType);
-}
-
-const NON_OVERRIDABLE_ERROR_CODES = [
-  "work-type-required",
-  "author-required",
-  "author-institutional",
-  "title-required",
-  "advisor-required",
-  "placeholder-detected",
-  "draft-placeholder-detected",
-  "natural-placeholder-detected",
-  "impact-indicators-missing",
-  "program-conflict",
-  "abstract-topic-conflict",
-  "program-degree-incompatible",
-] as const;
-
-const ABSOLUTE_GENERATION_BLOCKER_CODES = [
-  "work-type-required",
-  "author-required",
-  "title-required",
-  "advisor-required",
-  "placeholder-detected",
-  "draft-placeholder-detected",
-  "natural-placeholder-detected",
-  "impact-indicators-missing",
-] as const;
-
-export function isNonOverridableError(issue: ValidationIssue): boolean {
-  return NON_OVERRIDABLE_ERROR_CODES.includes(issue.code as typeof NON_OVERRIDABLE_ERROR_CODES[number]);
-}
-
-function isAbsoluteGenerationBlocker(issue: ValidationIssue): boolean {
-  return ABSOLUTE_GENERATION_BLOCKER_CODES.includes(issue.code as typeof ABSOLUTE_GENERATION_BLOCKER_CODES[number]);
 }
 
 export default function App() {

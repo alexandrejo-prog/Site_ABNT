@@ -114,4 +114,40 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     fireEvent.click(getButtonByText(/Gerar DOCX/));
     expect(screen.getByText("Há conflito entre programa/área informado e texto do documento.")).toBeInTheDocument();
   });
+
+  it("rascunho gera mesmo com indicadores de impacto ausentes", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "dissertacao");
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Título de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.change(screen.getByLabelText("Orientador"), { target: { value: "Orientador Teste" } });
+    fireEvent.click(screen.getByLabelText("Gerar rascunho mesmo com pendências"));
+    fireEvent.click(getButtonByText(/Gerar DOCX/));
+    await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("rascunho gera mesmo com aviso de imagem", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Título de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.change(screen.getByLabelText("Resumo"), { target: { value: "Resumo sem imagem." } });
+    fireEvent.click(screen.getByLabelText("Gerar rascunho mesmo com pendências"));
+    fireEvent.click(getButtonByText(/Gerar DOCX/));
+    await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("botão Gerar DOCX não fica disabled por pendências revisáveis", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Título de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "Educação Científica e Ambiental" } });
+    fireEvent.change(screen.getByLabelText("Resumo"), { target: { value: "Este trabalho apresenta análise no programa de pós-graduação em Engenharia de Sistemas e Automação." } });
+    const button = getButtonByText(/Gerar DOCX/);
+    expect(button.disabled).toBe(false);
+  });
 });

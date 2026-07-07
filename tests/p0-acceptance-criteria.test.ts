@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { inflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { isNonOverridableError } from "../src/App";
+import { isNonOverridableError } from "../src/generation-blockers";
 import { generateDocxBlob } from "../src/export-docx";
 import { emptyAcademicFields, type AcademicFields } from "../src/ufla-rules";
 import { validateWork, type ValidationIssue } from "../src/validators";
