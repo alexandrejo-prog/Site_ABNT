@@ -14,7 +14,7 @@ import { repairHeadingFragments } from "./heading-fragment-repair";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { UFLA_RULES } from "./ufla-rules";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
-import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs } from "./docx-render-core";
+import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup } from "./docx-render-core";
 
 function hasValue(value: string): boolean {
   return value.trim().length > 0;
@@ -110,13 +110,22 @@ function headingParagraph(block: EditorBlock, first: boolean): Paragraph[] {
   return first || block.type !== "heading1" ? [title] : [pageBreak(), title];
 }
 
+function markupParagraph(text: string, singleLine = false, indent = UFLA_RULES.typography.paragraphFirstLineTwip): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.BOTH,
+    spacing: { line: singleLine ? SINGLE_LINE : ONE_AND_HALF_LINE, after: singleLine ? 120 : UFLA_RULES.spacing.afterParagraphTwip },
+    indent: { firstLine: indent },
+    children: textRunsFromMarkup(cleanMojibakeText(text || " "), BODY_SIZE, UFLA_RULES.typography.fontFamily, BLACK),
+  });
+}
+
 function blockToParagraph(block: EditorBlock, first: boolean): Paragraph[] {
   if (block.type === "heading1" || block.type === "heading2" || block.type === "heading3") return headingParagraph(block, first);
   if (block.type === "longQuote") {
-    return [new Paragraph({ alignment: AlignmentType.BOTH, spacing: { line: SINGLE_LINE, after: 120 }, indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip }, children: [run(cleanMojibakeText(block.text))] })];
+    return [new Paragraph({ alignment: AlignmentType.BOTH, spacing: { line: SINGLE_LINE, after: 120 }, indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip }, children: textRunsFromMarkup(cleanMojibakeText(block.text || " "), BODY_SIZE, UFLA_RULES.typography.fontFamily, BLACK) })];
   }
-  if (block.type === "scheduleTable") return coreSplitParagraphs(cleanMojibakeText(block.text)).map((line) => paragraph(line));
-  return [paragraph(cleanMojibakeText(block.text))];
+  if (block.type === "scheduleTable") return coreSplitParagraphs(cleanMojibakeText(block.text)).map((line) => markupParagraph(line));
+  return [markupParagraph(block.text)];
 }
 
 function referenceRunToTextRun(referenceRun: ReferenceRun): TextRun {

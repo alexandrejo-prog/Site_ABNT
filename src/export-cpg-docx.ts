@@ -1,4 +1,4 @@
-import {
+﻿import {
   AlignmentType,
   Document,
   HeadingLevel,
@@ -206,6 +206,7 @@ function filterReferenceNoise(reference: string): boolean {
   return !isReferenceTitleNoise(reference);
 }
 
+// CPG keeps this local path because it derives title noise, heading wording and hanging indentation from the CPG rules. A later migration to normalizeReferences should preserve those CPG-specific decisions first.
 function referenceParagraphs(references: string[]): Paragraph[] {
   const cleanReferences = references
     .map((item) => stripMarkup(item).trim())

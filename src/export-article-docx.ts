@@ -1,4 +1,4 @@
-import {
+﻿import {
   AlignmentType,
   Document,
   HeadingLevel,
@@ -11,6 +11,7 @@ import type { IParagraphOptions } from "docx";
 import { parseEditorContent, type DocxGenerationInput, type EditorBlock } from "./export-docx";
 import { UFLA_RULES } from "./ufla-rules";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
+import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup } from "./docx-render-core";
 
 const BLACK = "000000";
 const BODY_SIZE = 24;
@@ -30,10 +31,7 @@ function hasText(value: string): boolean {
 }
 
 function splitParagraphs(value: string): string[] {
-  return value
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+  return coreSplitParagraphs(cleanMojibakeText(value));
 }
 
 function normalizeComparable(value: string): string {
@@ -64,7 +62,7 @@ function stripLeadingArticleMetadataBlocks(blocks: EditorBlock[], input: DocxGen
 
 function run(text: string, options: RunOptions = {}): TextRun {
   return new TextRun({
-    text,
+    text: cleanMojibakeText(text),
     font: UFLA_RULES.typography.fontFamily,
     size: BODY_SIZE,
     color: BLACK,
@@ -73,24 +71,7 @@ function run(text: string, options: RunOptions = {}): TextRun {
 }
 
 function textRunsFromMarkup(text: string): TextRun[] {
-  const runs: TextRun[] = [];
-  const tokenPattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
-  let cursor = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = tokenPattern.exec(text)) !== null) {
-    if (match.index > cursor) {
-      runs.push(run(text.slice(cursor, match.index)));
-    }
-
-    const token = match[0];
-    const bold = token.startsWith("**");
-    runs.push(run(bold ? token.slice(2, -2) : token.slice(1, -1), { bold, italics: !bold }));
-    cursor = match.index + token.length;
-  }
-
-  if (cursor < text.length) runs.push(run(text.slice(cursor)));
-  return runs.length ? runs : [run(" ")];
+  return coreTextRunsFromMarkup(cleanMojibakeText(text || " "), BODY_SIZE, UFLA_RULES.typography.fontFamily, BLACK);
 }
 
 function paragraph(text: string, options: Partial<IParagraphOptions> = {}): Paragraph {

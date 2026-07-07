@@ -1,4 +1,4 @@
-import JSZip from "jszip";
+﻿import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { WORK_TYPES, WORK_TYPE_LABELS, isResearchProject, emptyAcademicFields } from "../src/ufla-rules";
 import { validateWork, hasBlockingErrors } from "../src/validators";
@@ -19,7 +19,7 @@ describe("Projeto de pesquisa (NBR 15287:2025)", () => {
       expect(WORK_TYPES).toContain("projeto_pesquisa");
     });
 
-    it("rótulo do tipo está definido", () => {
+    it("rÃ³tulo do tipo estÃ¡ definido", () => {
       expect(WORK_TYPE_LABELS.projeto_pesquisa).toBeDefined();
       expect(WORK_TYPE_LABELS.projeto_pesquisa).toContain("Projeto de pesquisa");
     });
@@ -31,7 +31,7 @@ describe("Projeto de pesquisa (NBR 15287:2025)", () => {
     });
   });
 
-  describe("B. Validação", () => {
+  describe("B. ValidaÃ§Ã£o", () => {
     it("projeto incompleto gera erros coerentes", () => {
       const fields = { ...emptyAcademicFields(), workType: "projeto_pesquisa" as const, title: "", author: "" };
       const issues = validateWork(fields, "");
@@ -144,8 +144,8 @@ SILVA, M. Projeto de pesquisa. Lavras: UFLA, 2024.
     });
   });
 
-  describe("C. Exportação DOCX", () => {
-    it("gera Blob válido para projeto de pesquisa", async () => {
+  describe("C. ExportaÃ§Ã£o DOCX", () => {
+    it("gera Blob vÃ¡lido para projeto de pesquisa", async () => {
       const fields = {
         ...emptyAcademicFields(),
         workType: "projeto_pesquisa" as const,
@@ -204,7 +204,7 @@ Objetivo principal da pesquisa.
       expect(xml).not.toContain("[nome do orientador]");
     });
 
-    it("inclui sumário visível com entradas do projeto", async () => {
+    it("inclui sumÃ¡rio visÃ­vel com entradas do projeto", async () => {
       const fields = {
         ...emptyAcademicFields(),
         workType: "projeto_pesquisa" as const,
@@ -219,7 +219,7 @@ Objetivo principal da pesquisa.
 Texto da introdução do projeto.
 
 ## 1.1 Contextualização e delimitação do tema
-Texto da contextualização.
+Texto da contextualizaÃ§Ã£o.
 
 ## 1.2 Problema de pesquisa
 Descrição do problema investigado.
@@ -247,7 +247,7 @@ Texto do cronograma.
     });
   });
 
-  describe("D. Painel de aderência", () => {
+  describe("D. Painel de aderÃªncia", () => {
     it("indica suporte parcial para Projeto de pesquisa / NBR 15287", () => {
       const researchCategory = ADHERENCE_CATEGORIES.find((cat) => cat.key === "research-project");
       expect(researchCategory).toBeDefined();
@@ -257,8 +257,8 @@ Texto do cronograma.
     });
   });
 
-  describe("E. Detecção de seções no importador", () => {
-    it("detecta cabeçalhos essenciais de projeto de pesquisa", () => {
+  describe("E. DetecÃ§Ã£o de seções no importador", () => {
+    it("detecta cabeÃ§alhos essenciais de projeto de pesquisa", () => {
       const text = `# PROBLEMA DE PESQUISA
 Descrição do problema.
 
@@ -275,7 +275,7 @@ Metodologia.
 Planejamento.
 
 # REFERÊNCIAS
-Referências bibliográficas.
+ReferÃªncias bibliogrÃ¡ficas.
 `;
 
       const result = normalizePlainAcademicText(text);
@@ -285,3 +285,27 @@ Referências bibliográficas.
     });
   });
 });
+
+  it("converte marcação markdown do corpo em runs negrito e italico", async () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "projeto_pesquisa" as const,
+      title: "Projeto com marcação",
+      author: "Maria Silva",
+      location: "Lavras - MG",
+      year: "2026",
+      referencias: "SILVA, M. Projeto de pesquisa. Lavras: UFLA, 2024.",
+    };
+
+    const xml = await getDocumentXml(
+      await generateResearchProjectDocxBlob({
+        fields,
+        editorText: "# INTRODUÇÃO\nTexto com **negrito** e *italico* no corpo.",
+      }),
+    );
+
+    expect(xml).not.toContain("**negrito**");
+    expect(xml).not.toContain("*italico*");
+    expect(xml).toMatch(/<w:b\/>[\s\S]*<w:t[^>]*>negrito<\/w:t>/);
+    expect(xml).toMatch(/<w:i\/>[\s\S]*<w:t[^>]*>italico<\/w:t>/);
+  });
