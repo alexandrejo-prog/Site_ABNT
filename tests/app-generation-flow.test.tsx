@@ -66,4 +66,15 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     await user.click(getButtonByText(/Gerar DOCX/));
     await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
   });
+
+  it("placeholder natural em título impede a geração", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "grau acadêmico correspondente" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.click(getButtonByText(/Gerar DOCX/));
+    expect(saveAsMock).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/pendência|erro/i).length).toBeGreaterThan(0);
+  });
 });

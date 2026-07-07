@@ -15,6 +15,8 @@ import { editorCommandAdapter } from "./editor-command-adapter";
 import { clearDraft, hasDraft, loadDraft, saveDraft } from "./draft-storage";
 import { AdherencePanel } from "./components/AdherencePanel";
 import { ValidationSidebar } from "./components/ValidationSidebar";
+import { DraftStatus } from "./components/DraftStatus";
+import { ToolButton } from "./components/ToolButton";
 
 const FIELD_LABELS: Record<AcademicFieldKey, string> = {
   author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho", course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador", location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave", abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão", referencias: "Referências", anexos: "Anexos", apendices: "Apêndices", dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators", imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema", problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese", objetivoGeral: "Objetivo Geral", objetivosEspecificos: "Objetivos Específicos", justificativa: "Justificativa", referencialTeorico: "Referencial Teórico",   metodologia: "Metodologia", cronograma: "Cronograma", recursosOrcamento: "Recursos/Orçamento", resultadosEsperados: "Resultados Esperados", corpusDados: "Corpus/Dados", contextoInstitucional: "Contexto Institucional", conclusaoProvisoria: "Conclusão Provisória", contribuicoesImpactos: "Contribuições/Impactos", impactoSocial: "Impacto social", impactoCientifico: "Impacto científico", impactoEducacional: "Impacto educacional", impactoAmbiental: "Impacto ambiental", impactoTecnologico: "Impacto tecnológico/econômico", publicoBeneficiado: "Público beneficiado", aderenciaOds: "Aderência a ODS/política institucional",
@@ -69,10 +71,6 @@ export function isNonOverridableError(issue: ValidationIssue): boolean {
   return NON_OVERRIDABLE_ERROR_CODES.includes(issue.code as typeof NON_OVERRIDABLE_ERROR_CODES[number]);
 }
 
-function ToolButton({ title, children, onClick }: { title: string; children: ReactNode; onClick: () => void }) {
-  return <button className="icon-button" type="button" title={title} onClick={onClick}>{children}<span className="sr-only">{title}</span></button>;
-}
-
 export default function App() {
   const [fields, setFields] = useState(emptyAcademicFields);
   const [confidence, setConfidence] = useState(emptyConfidenceMap);
@@ -85,7 +83,7 @@ export default function App() {
   const [editorMode, setEditorMode] = useState<EditorMode>("body");
   const [adherenceExpanded, setAdherenceExpanded] = useState(false);
   const [assistedMode, setAssistedMode] = useState(false);
-  const [draftStatus, setDraftStatus] = useState<"idle" | "saved" | "error">("idle");
+  const [draftStatus, setDraftStatus] = useState<"idle" | "saved" | "restored" | "error">("idle");
   const editorRef = useRef<HTMLDivElement>(null);
   const editorContentVersionRef = useRef(0);
   const lastAppliedEditorTextRef = useRef("");
@@ -106,6 +104,7 @@ export default function App() {
       setFields((current) => ({ ...current, ...(draft.fields as Partial<AcademicFields>) }));
       if (draft.editorText) setEditorText(draft.editorText);
       if (draft.workType) setEditorMode(draft.workType as EditorMode);
+      setDraftStatus("restored");
     } catch {
       // Ignora rascunho incompatível.
     }
@@ -311,8 +310,7 @@ export default function App() {
         <div className="header-actions">
           <label className="upload-button"><Upload size={18} aria-hidden="true" />Importar<input type="file" accept=".docx,.txt,.md" onChange={handleImport} /></label>
           {importedFileName && <button className="primary-action" type="button" onClick={handleRemoveImport} title={`Remover importação: ${importedFileName}`}><XCircle size={18} aria-hidden="true" />Remover importação</button>}
-          {hasDraft(window.localStorage) && <button className="primary-action draft-clear-button" type="button" onClick={handleClearDraft} title="Limpar rascunho local"><Eraser size={18} aria-hidden="true" />Limpar rascunho</button>}
-          <span className="draft-status" aria-live="polite" role="status">{draftStatus === "saved" ? "Rascunho salvo localmente" : draftStatus === "error" ? "Não foi possível acessar armazenamento local" : ""}</span>
+          <DraftStatus draftStatus={draftStatus} hasDraft={hasDraft(window.localStorage)} onClearDraft={handleClearDraft} />
           <button className="primary-action" type="button" onClick={() => runValidation()}><FileCheck2 size={18} aria-hidden="true" />Validar trabalho</button>
           <button className="primary-action strong" type="button" onClick={handleGenerateDocx} disabled={isGenerating}><FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar DOCX"}</button>
         </div>

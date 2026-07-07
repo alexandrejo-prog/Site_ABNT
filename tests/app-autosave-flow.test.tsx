@@ -108,4 +108,43 @@ describe("fluxo de autosave e restauração (App)", () => {
 
     Object.defineProperty(globalThis, "localStorage", { value: originalLocalStorage, writable: true, configurable: true });
   });
+
+  it("limpa rascunho e remove botão/status", async () => {
+    const storage = createStorage();
+    storage.setItem("site-abnt:draft:v1", JSON.stringify({
+      fields: { title: "Título", author: "Autor", workType: "artigo" },
+      editorText: "",
+      references: [],
+      workType: "artigo",
+      updatedAt: new Date().toISOString(),
+    }));
+    const originalLocalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", { value: storage, writable: true, configurable: true });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /limpar rascunho/i }));
+
+    expect(storage.getItem("site-abnt:draft:v1")).toBeNull();
+    expect(screen.queryByRole("button", { name: /limpar rascunho/i })).not.toBeInTheDocument();
+
+    Object.defineProperty(globalThis, "localStorage", { value: originalLocalStorage, writable: true, configurable: true });
+  });
+
+  it("exibe status de rascunho restaurado", async () => {
+    const storage = createStorage();
+    storage.setItem("site-abnt:draft:v1", JSON.stringify({
+      fields: { title: "Título restaurado", author: "Autor restaurado", workType: "artigo" },
+      editorText: "",
+      references: [],
+      workType: "artigo",
+      updatedAt: new Date().toISOString(),
+    }));
+    const originalLocalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", { value: storage, writable: true, configurable: true });
+
+    render(<App />);
+    expect(screen.getByText("Rascunho restaurado")).toBeInTheDocument();
+
+    Object.defineProperty(globalThis, "localStorage", { value: originalLocalStorage, writable: true, configurable: true });
+  });
 });
