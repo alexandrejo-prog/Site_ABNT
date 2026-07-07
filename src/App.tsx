@@ -12,7 +12,7 @@ import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById 
 import { TextDiagnosticPanel } from "./text-diagnostic-panel";
 import { buildDraftFromFields, hasUnfilledPlaceholders, draftWorkTypeSupportsIndicators } from "./draft-builder";
 import { editorCommandAdapter } from "./editor-command-adapter";
-import { hasDraft, loadDraft, saveDraft } from "./draft-storage";
+import { clearDraft, hasDraft, loadDraft, saveDraft } from "./draft-storage";
 import { AdherencePanel } from "./components/AdherencePanel";
 import { ValidationSidebar } from "./components/ValidationSidebar";
 
@@ -85,6 +85,7 @@ export default function App() {
   const [editorMode, setEditorMode] = useState<EditorMode>("body");
   const [adherenceExpanded, setAdherenceExpanded] = useState(false);
   const [assistedMode, setAssistedMode] = useState(false);
+  const [draftStatus, setDraftStatus] = useState<"idle" | "saved" | "error">("idle");
   const editorRef = useRef<HTMLDivElement>(null);
   const editorContentVersionRef = useRef(0);
   const lastAppliedEditorTextRef = useRef("");
@@ -113,13 +114,18 @@ export default function App() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const timeout = setTimeout(() => {
-      saveDraft({
-        fields: fields as unknown as Record<string, unknown>,
-        editorText,
-        references: fields.referencias ? [fields.referencias] : [],
-        workType: fields.workType,
-        updatedAt: new Date().toISOString(),
-      }, window.localStorage);
+      try {
+        saveDraft({
+          fields: fields as unknown as Record<string, unknown>,
+          editorText,
+          references: fields.referencias ? [fields.referencias] : [],
+          workType: fields.workType,
+          updatedAt: new Date().toISOString(),
+        }, window.localStorage);
+        setDraftStatus("saved");
+      } catch {
+        setDraftStatus("error");
+      }
     }, 800);
     return () => clearTimeout(timeout);
   }, [fields, editorText]);
@@ -213,6 +219,12 @@ export default function App() {
     setStatus("Importação removida. Escolha outro arquivo ou preencha manualmente.");
   }
 
+  function handleClearDraft() {
+    clearDraft(window.localStorage);
+    setDraftStatus("idle");
+    setStatus("Rascunho local limpo.");
+  }
+
   function applyBlockStyle(prefix: string) {
     editorRef.current?.focus();
     const block = prefix === "# " ? "h1" : prefix === "## " ? "h2" : prefix === "> " ? "blockquote" : "p";
@@ -299,6 +311,8 @@ export default function App() {
         <div className="header-actions">
           <label className="upload-button"><Upload size={18} aria-hidden="true" />Importar<input type="file" accept=".docx,.txt,.md" onChange={handleImport} /></label>
           {importedFileName && <button className="primary-action" type="button" onClick={handleRemoveImport} title={`Remover importação: ${importedFileName}`}><XCircle size={18} aria-hidden="true" />Remover importação</button>}
+          {hasDraft(window.localStorage) && <button className="primary-action draft-clear-button" type="button" onClick={handleClearDraft} title="Limpar rascunho local"><Eraser size={18} aria-hidden="true" />Limpar rascunho</button>}
+          <span className="draft-status" aria-live="polite" role="status">{draftStatus === "saved" ? "Rascunho salvo localmente" : draftStatus === "error" ? "Não foi possível acessar armazenamento local" : ""}</span>
           <button className="primary-action" type="button" onClick={() => runValidation()}><FileCheck2 size={18} aria-hidden="true" />Validar trabalho</button>
           <button className="primary-action strong" type="button" onClick={handleGenerateDocx} disabled={isGenerating}><FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar DOCX"}</button>
         </div>

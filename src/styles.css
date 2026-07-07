@@ -13,6 +13,27 @@
   font-weight: 600;
 }
 
+.draft-status {
+  font-size: 0.75rem;
+  color: #d8ece5;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.draft-clear-button {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #f8fafc;
+  font-size: 0.82rem;
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.draft-clear-button:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.36);
+}
+
 .diagnostic-panel {
   border: 1px solid #cfe3cf;
   border-radius: 8px;
