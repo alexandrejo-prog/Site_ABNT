@@ -61,6 +61,18 @@ describe("academic guardrails - conflito de programa", () => {
     expect(detectProgramConflict(fields, "Comparado com a Engenharia de Controle e Automação.")).toBe(true);
   });
 
+
+
+  it("reconhece programa real da lista UFLA com contexto institucional", () => {
+    const fields = { ...emptyAcademicFields(), program: "Ciência do Solo" };
+    expect(detectProgramConflict(fields, "Texto vinculado ao Programa de Pós-Graduação em Educação Física.")).toBe(true);
+  });
+
+  it("nao trata mencao tematica comum como outro programa", () => {
+    const fields = { ...emptyAcademicFields(), program: "Educação Científica e Ambiental" };
+    expect(detectProgramConflict(fields, "A revisao discute conceitos de ciencia do solo no ensino de ciencias.")).toBe(false);
+  });
+
   it("'engenharia didática' não gera conflito", () => {
     const fields = { ...emptyAcademicFields(), program: "Educação Científica e Ambiental" };
     expect(detectProgramConflict(fields, "Abordamos a engenharia didática em sala de aula.")).toBe(false);

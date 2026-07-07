@@ -438,6 +438,26 @@ describe("DOCX export", () => {
     expect(abstractPos).toBeLessThan(keywordsPos);
   });
 
+
+
+  it("formata legendas basicas no exportador geral usando nucleo compartilhado", async () => {
+    const documentXml = await generatedXml("# 1 Introducao\nFigura 1 - Mapa da area\nTexto comum.\nGráfico 1 - Resultados\nTabela 1 - Dados", {
+      ...fields,
+      workType: "monografia",
+    });
+
+    const figure = paragraphXmlContaining(documentXml, "Figura 1 - Mapa da area");
+    const chart = paragraphXmlContaining(documentXml, "Gráfico 1 - Resultados");
+    const table = paragraphXmlContaining(documentXml, "Tabela 1 - Dados");
+
+    for (const caption of [figure, chart, table]) {
+      expect(caption).toContain('w:jc w:val="center"');
+      expect(caption).toContain('w:sz w:val="20"');
+      expect(caption).toMatch(/<w:b\s*\/?>|w:b w:val="1"/);
+      expectNoHeadingStyle(caption);
+    }
+  });
+
   it("joins reference entries Referencias and BIBLIOGRAFICAS into a single title", async () => {
     const documentXml = await generatedCpgXml("", {
       ...fields,

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { inflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { generateCpgDocxBlob } from "../src/export-cpg-docx";
@@ -160,5 +161,12 @@ describe("CPG first page layout", () => {
 
     expect(text).toContain("REFERÊNCIAS");
     expect(text).not.toContain("Referencias");
+  });
+
+  it("documenta caminho proprio de referencias CPG", () => {
+    const source = readFileSync(new URL("../src/export-cpg-docx.ts", import.meta.url), "utf8");
+
+    expect(source).toContain("CPG keeps this local path");
+    expect(source).not.toMatch(/from \"\.\/references-normalizer\"/);
   });
 });

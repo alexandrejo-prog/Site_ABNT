@@ -1,3 +1,4 @@
+import { UFLA_PPG_PROGRAMS } from "./ufla-ppg-programs";
 import { AcademicFields } from "./ufla-rules";
 
 const PLACEHOLDER_PATTERNS: RegExp[] = [
@@ -59,16 +60,82 @@ export function detectPlaceholderText(value: string): boolean {
   });
 }
 
-// Termos de programas institucionais REAIS. O conflito bloqueante só considera
-// estes marcadores quando aparecem como programa declarado ou como programa
-// institucional citado no corpo do trabalho (heading, metadado, ficha, etc.).
-const PROGRAM_TERMS: { terms: string[]; label: string }[] = [
-  { label: "Educação Científica e Ambiental", terms: ["educacao cientifica e ambiental", "educação científica e ambiental", "ppgeca", "ppg-eca", "eca"] },
-  { label: "Engenharia de Controle e Automação", terms: ["engenharia de controle e automacao", "controle e automacao", "engenharia de automacao"] },
-  { label: "Engenharia", terms: ["engenharia"] },
+interface ProgramTermEntry {
+  value: string;
+  contextualOnly: boolean;
+}
+
+interface ProgramTermGroup {
+  label: string;
+  terms: ProgramTermEntry[];
+}
+
+const PROGRAM_TERM_ALIASES: Record<string, Array<string | { value: string; contextualOnly?: boolean }>> = {
+  "educacao cientifica e ambiental": [
+    { value: "educacao cientifica e ambiental", contextualOnly: false },
+    { value: "ppgeca", contextualOnly: false },
+    { value: "ppg-eca", contextualOnly: false },
+  ],
+};
+
+const PROGRAM_TERM_SUPPLEMENTS: ProgramTermGroup[] = [
+  {
+    label: "Engenharia de Controle e Automação",
+    terms: [
+      { value: "engenharia de controle e automacao", contextualOnly: false },
+      { value: "controle e automacao", contextualOnly: false },
+      { value: "engenharia de automacao", contextualOnly: false },
+    ],
+  },
 ];
 
-// Termos de área/tema do CONTEÚDO. Usados apenas para diagnóstico; NÃO geram
+function normalizedProgramName(value: string): string {
+  return normalizeTextForMatch(value).replace(/\s+[\u2013-]\s+profmat$/i, "");
+}
+
+function addProgramTerm(groups: Map<string, ProgramTermGroup>, label: string, value: string, contextualOnly: boolean): void {
+  const normalized = normalizeTextForMatch(value);
+  if (!normalized) return;
+  const key = normalizeTextForMatch(label);
+  const group = groups.get(key) ?? { label, terms: [] };
+  const existing = group.terms.find((term) => term.value === normalized);
+  if (existing) {
+    existing.contextualOnly = existing.contextualOnly && contextualOnly;
+  } else {
+    group.terms.push({ value: normalized, contextualOnly });
+  }
+  groups.set(key, group);
+}
+
+function buildProgramTerms(): ProgramTermGroup[] {
+  const groups = new Map<string, ProgramTermGroup>();
+
+  for (const program of UFLA_PPG_PROGRAMS) {
+    const baseName = normalizedProgramName(program.name);
+    addProgramTerm(groups, program.name, baseName, true);
+
+    for (const alias of PROGRAM_TERM_ALIASES[baseName] ?? []) {
+      if (typeof alias === "string") addProgramTerm(groups, program.name, alias, true);
+      else addProgramTerm(groups, program.name, alias.value, alias.contextualOnly ?? true);
+    }
+  }
+
+  for (const supplement of PROGRAM_TERM_SUPPLEMENTS) {
+    for (const term of supplement.terms) {
+      addProgramTerm(groups, supplement.label, term.value, term.contextualOnly);
+    }
+  }
+
+  return [...groups.values()];
+}
+
+// Termos de programas institucionais reais derivados do snapshot da PRPG/UFLA.
+// Nomes oficiais exigem contexto institucional no corpo do texto; aliases muito
+// especificos cobrem siglas e nomes historicos sem reabrir falso positivo para
+// expressoes academicas comuns como "ciencia do solo".
+const PROGRAM_TERMS = buildProgramTerms();
+
+// Termos de area/tema do CONTEUDO. Usados apenas para diagnostico; NAO geram
 // conflito bloqueante contra programas institucionais.
 const TOPIC_TERMS: { terms: string[]; label: string }[] = [
   { label: "Biologia", terms: ["biologia", "ciencias e biologia", "ciências e biologia"] },
@@ -76,8 +143,18 @@ const TOPIC_TERMS: { terms: string[]; label: string }[] = [
   { label: "Pedagogia", terms: ["pedagogia", "pedagogico", "pedagógica", "pedagógico", "docencia", "docência", "ensino", "formação de professores", "formacao de professores"] },
 ];
 
+function repairMojibakeForMatch(value: string): string {
+  if (!/[ÃÂâ]/.test(value)) return value;
+  try {
+    const bytes = Uint8Array.from(value, (char) => char.charCodeAt(0) & 0xff);
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return value;
+  }
+}
+
 export function normalizeTextForMatch(value: string): string {
-  return value
+  return repairMojibakeForMatch(value)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
@@ -108,29 +185,29 @@ const INSTITUTIONAL_CONTEXT = [
   "ppg-eca",
 ];
 
-function isInstitutionalProgramMention(normalized: string, term: string): boolean {
-  if (term === "engenharia") {
+function isInstitutionalProgramMention(normalized: string, term: ProgramTermEntry, allowPlain = false): boolean {
+  if (term.value === "engenharia") {
     // Só conta como programa institucional "Engenharia" quando acompanhado de
     // curso/programa/departamento ou de um complemento institucional específico.
     if (INSTITUTIONAL_CONTEXT.some((ctx) => normalized.includes(`${ctx} engenharia`))) return true;
     if (/\bengenharia (de|em|elétrica|eletrica|mecanica|mecânica|civil|de producao|de produção|quimica|química|de controle e automacao|de automacao|de materiais|aeroespacial|aeroespacial)\b/.test(normalized)) return true;
     return false;
   }
-  if (INSTITUTIONAL_CONTEXT.some((ctx) => normalized.includes(`${ctx} ${term}`))) return true;
+  if (INSTITUTIONAL_CONTEXT.some((ctx) => normalized.includes(`${ctx} ${term.value}`))) return true;
   // Programas curtos também casam direto (ppgeca, eca, controle e automacao...).
-  return normalized.includes(term);
+  return allowPlain || !term.contextualOnly ? normalized.includes(term.value) : false;
 }
 
-function detectProgramLabel(value: string): string | null {
+function detectProgramLabel(value: string, allowPlain = true): string | null {
   const normalized = normalizeTextForMatch(value);
   for (const group of PROGRAM_TERMS) {
-    if (group.terms.some((term) => isInstitutionalProgramMention(normalized, term))) return group.label;
+    if (group.terms.some((term) => isInstitutionalProgramMention(normalized, term, allowPlain))) return group.label;
   }
   return null;
 }
 
 export function detectProgramConflict(fields: AcademicFields, editorText = ""): boolean {
-  const declaredProgram = detectProgramLabel(fields.program) || detectProgramLabel(fields.course);
+  const declaredProgram = detectProgramLabel(fields.program, true) || detectProgramLabel(fields.course, true);
   if (!declaredProgram) return false;
 
   const bodySources = [
@@ -145,7 +222,7 @@ export function detectProgramConflict(fields: AcademicFields, editorText = ""): 
   const normalizedBody = normalizeTextForMatch(bodySources);
   const mentionedLabels = new Set<string>();
   for (const group of PROGRAM_TERMS) {
-    if (group.terms.some((term) => isInstitutionalProgramMention(normalizedBody, term))) {
+    if (group.terms.some((term) => isInstitutionalProgramMention(normalizedBody, term, false))) {
       mentionedLabels.add(group.label);
     }
   }
