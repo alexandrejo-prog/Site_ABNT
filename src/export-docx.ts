@@ -618,6 +618,59 @@ function buildSimpleParagraphs(value: string): Paragraph[] {
   return splitParagraphs(value).map((line) => simpleParagraph(line));
 }
 
+interface SummaryEntry {
+  text: string;
+  level: 1 | 2 | 3;
+}
+
+function summaryLevelForBlock(block: EditorBlock): SummaryEntry["level"] | null {
+  if (block.type === "heading1") return 1;
+  if (block.type === "heading2") return 2;
+  if (block.type === "heading3") return 3;
+  return null;
+}
+
+function summaryEntryParagraph(entry: SummaryEntry): Paragraph {
+  return new Paragraph({
+    style: `TOC${entry.level}`,
+    spacing: { before: 0, after: 0, line: SINGLE_LINE },
+    indent: { left: (entry.level - 1) * 360 },
+    children: [
+      new TextRun({
+        text: cleanMojibakeText(entry.text),
+        font: UFLA_RULES.typography.fontFamily,
+        size: BODY_SIZE,
+        color: BLACK,
+        bold: entry.level < 3,
+      }),
+    ],
+  });
+}
+
+function addSummaryEntry(entries: SummaryEntry[], seen: Set<string>, text: string, level: SummaryEntry["level"]): void {
+  const cleaned = cleanMojibakeText(text).trim();
+  const key = normalizeForDetection(cleaned);
+  if (!cleaned || key === "SUMARIO" || seen.has(key)) return;
+  seen.add(key);
+  entries.push({ text: cleaned, level });
+}
+
+function collectSummaryEntries(bodyBlocks: EditorBlock[], references: string[], fields: AcademicFields): SummaryEntry[] {
+  const entries: SummaryEntry[] = [];
+  const seen = new Set<string>();
+
+  for (const block of bodyBlocks) {
+    const level = summaryLevelForBlock(block);
+    if (level) addSummaryEntry(entries, seen, level === 1 ? block.text.toUpperCase() : block.text, level);
+  }
+
+  if (references.length > 0) addSummaryEntry(entries, seen, "REFERÊNCIAS", 1);
+  if (fields.anexos) addSummaryEntry(entries, seen, "ANEXOS", 1);
+  if (fields.apendices) addSummaryEntry(entries, seen, appendixTitle(fields), 1);
+
+  return entries;
+}
+
 function buildReferences(references: string[]): Paragraph[] {
   return normalizeReferences(references)
     .sort((a, b) => a.text.localeCompare(b.text, "pt-BR", { sensitivity: "base" }))
@@ -706,19 +759,13 @@ function buildSummary(
 ): Array<Paragraph | TableOfContents> {
   void textualStartPage;
 
-  const hasEntries =
-    bodyBlocks.some(
-      (block) =>
-        block.type === "heading1" || block.type === "heading2" || block.type === "heading3",
-    ) ||
-    references.length > 0 ||
-    Boolean(fields.apendices || fields.anexos);
-
-  if (!hasEntries) return [];
+  const entries = collectSummaryEntries(bodyBlocks, references, fields);
+  if (!entries.length) return [];
 
   return [
     pageBreak(),
     unnumberedTitle("Sumário"),
+    ...entries.map(summaryEntryParagraph),
     new TableOfContents("", {
       headingStyleRange: "1-3",
       hyperlink: true,
@@ -834,14 +881,27 @@ function buildTitlePageSupplementalLines(fields: AcademicFields, nature: string)
   ].filter(Boolean);
 }
 
-function workNature(fields: AcademicFields): string {
-  return cleanMojibakeText(
-    normalizeNatureForWorkType(
-      fields.workNature ||
-        "Trabalho apresentado à Universidade Federal de Lavras como requisito acadêmico, conforme dados revisados pelo usuário.",
-      fields,
-    ),
+function isInternalWorkNature(value: string): boolean {
+  const normalized = normalizeForDetection(cleanMojibakeText(value));
+  return (
+    normalized.includes("COLECAO PRODUCAO ACADEMICA") ||
+    normalized.includes("SUPORTE INICIAL NO SISTEMA") ||
+    normalized.includes("SOFTWARE E APLICATIVOS UFLA")
   );
+}
+
+function fallbackWorkNature(fields: AcademicFields): string {
+  if (fields.workType === "projeto_pesquisa") {
+    return "Projeto de pesquisa apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis.";
+  }
+  return "Trabalho acadêmico apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis.";
+}
+
+function workNature(fields: AcademicFields): string {
+  const providedNature = cleanMojibakeText(fields.workNature).trim();
+  const safeNature = providedNature && !isInternalWorkNature(providedNature) ? providedNature : fallbackWorkNature(fields);
+
+  return cleanMojibakeText(normalizeNatureForWorkType(safeNature, fields));
 }
 
 function titlePageChildren(fields: AcademicFields): Paragraph[] {

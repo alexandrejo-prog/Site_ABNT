@@ -28,6 +28,10 @@ describe("generation blockers", () => {
     expect(isAbsoluteGenerationBlocker({ severity: "error", code: "course-required", message: "" })).toBe(false);
   });
 
+  it("ficha catalografica provisoria nao e bloqueador absoluto", () => {
+    expect(isAbsoluteGenerationBlocker({ severity: "warning", code: "catalog-card-missing", message: "ficha" })).toBe(false);
+  });
+
   it("getAbsoluteGenerationBlockers returns only absolute blockers", () => {
     const issues: ValidationIssue[] = [
       { severity: "error", code: "program-conflict", message: "conflito" },

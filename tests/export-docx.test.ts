@@ -122,6 +122,14 @@ function fieldInstructionRuns(documentXml: string): string {
     .join(" ");
 }
 
+function summaryXmlBeforeToc(documentXml: string): string {
+  const summaryStart = documentXml.indexOf("SUMÁRIO");
+  expect(summaryStart).toBeGreaterThan(-1);
+  const tocStart = documentXml.indexOf("<w:instrText", summaryStart);
+  expect(tocStart).toBeGreaterThan(summaryStart);
+  return documentXml.slice(summaryStart, tocStart);
+}
+
 function expectNoHeadingStyle(paragraphXml: string): void {
   expect(paragraphXml).not.toContain('w:val="Heading1"');
   expect(paragraphXml).not.toContain('w:val="Heading2"');
@@ -202,6 +210,26 @@ describe("DOCX export", () => {
     expect(tocInstruction).toContain("\\h");
     expect(tocInstruction).toContain("\\z");
     expect(tocInstruction).toContain("\\u");
+
+    const staticSummary = summaryXmlBeforeToc(documentXml);
+    expect(staticSummary).toContain("1 INTRODUCAO");
+    expect(staticSummary).toContain("1.1 Contexto");
+    expect(staticSummary).toContain("REFERÊNCIAS");
+  });
+
+  it("remove texto interno da natureza do trabalho no DOCX geral", async () => {
+    const documentXml = await generatedXml("# 1 Introducao\nTexto comum.", {
+      ...fields,
+      workType: "software_aplicativo_ufla",
+      workNature:
+        "Software e aplicativos UFLA apresentada a Universidade Federal de Lavras conforme formato da Colecao Producao Academica UFLA, com suporte inicial no sistema.",
+    });
+
+    expect(documentXml).not.toContain("Software e aplicativos UFLA");
+    expect(documentXml).not.toContain("Colecao Producao Academica");
+    expect(documentXml).not.toContain("suporte inicial no sistema");
+    expect(documentXml).toContain("Trabalho acadêmico apresentado à Universidade Federal de Lavras");
+    expect(documentXml).toContain("requisitos acadêmicos aplicáveis");
   });
 
   it("generates simple article without graduate pre-textual structure", async () => {

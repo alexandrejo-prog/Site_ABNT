@@ -20,6 +20,7 @@ function isGenericOrMismatchedNature(value: string, workType: AcademicFields["wo
   if (!text) return true;
 
   if (text.includes("requisito academico") || text.includes("dados revisados pelo usuario")) return true;
+  if (text.includes("colecao producao academica") || text.includes("suporte inicial no sistema")) return true;
   if (text.includes("trabalho apresentado a universidade federal de lavras como requisito")) return true;
 
   if (workType !== "projeto_pesquisa" && text.includes("projeto de pesquisa apresentado a universidade federal de lavras")) return true;
@@ -181,7 +182,7 @@ export function normalizeFieldsForSelectedModel(fields: AcademicFields): Academi
     if (!hasText(sanitized.workNature) || isGenericOrMismatchedNature(sanitized.workNature, sanitized.workType)) {
       return {
         ...sanitized,
-        workNature: `${productionType?.label ?? "Producao academica"} apresentada a Universidade Federal de Lavras conforme formato da Colecao Producao Academica UFLA, com suporte inicial no sistema.`,
+        workNature: "Trabalho acadêmico apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis.",
       };
     }
     return sanitized;
