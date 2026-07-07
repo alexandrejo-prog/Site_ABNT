@@ -13,12 +13,13 @@ import {
   detectCpgForbiddenStructures,
   detectControlledPlaceholder,
   detectGenericAiLikeText,
+  detectNaturalPlaceholder,
   detectPlaceholderText,
   detectProgramConflict,
 } from "./academic-guardrails";
 import { assessAbstractHeuristics, assessResumoHeuristics } from "./text-diagnostics";
 import { hasSufficientImpactIndicators } from "./impact-indicators";
-import { findUflaPpgProgram } from "./ufla-ppg-programs";
+import { findUflaPpgProgram, findUflaPpgPrograms, resolveUflaPpgProgram, type UflaPpgProgram } from "./ufla-ppg-programs";
 
 export type ValidationSeverity = "error" | "warning" | "info";
 
@@ -126,6 +127,55 @@ function addPlaceholderIssues(fields: AcademicFields, editorText: string, issues
       issues.push({ severity: "error", code: "draft-placeholder-detected", message: "O rascunho ainda contém campos a preencher.", what: "O texto principal contém marcadores controlados de rascunho como [PREENCHER: ...].", why: "O DOCX final não pode conter marcadores de preenchimento; eles indicam seções não redigidas.", action: "Substitua os marcadores por conteúdo real antes de gerar a versão final." });
     } else if (detectPlaceholderText(editorText)) {
       issues.push({ severity: "warning", code: "placeholder-detected", message: "Há marcador de preenchimento no documento.", what: "O texto principal contém placeholder ou instrução não substituída.", why: "O DOCX final não pode conter campos genéricos ou instruções de preenchimento.", action: "Substitua o trecho por informação real antes da versão final." });
+    }
+  }
+}
+
+function addRequiredFieldIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
+  if (fields.workType === "monografia" && !hasValue(fields.course)) {
+    issues.push({
+      severity: "error",
+      code: "course-required",
+      message: "Informe o curso da monografia antes de gerar o DOCX.",
+      what: "A monografia não tem o curso informado.",
+      why: "A natureza do trabalho (folha de rosto) exige o curso para a gradação correspondente.",
+      action: "Preencha o campo Curso com o nome oficial (ex.: Licenciatura em Física, Bacharelado em Biologia).",
+    });
+  }
+
+  if ((fields.workType === "dissertacao" || fields.workType === "tese") && !hasValue(fields.program)) {
+    issues.push({
+      severity: "error",
+      code: "program-required",
+      message: "Informe o programa de pós-graduação antes de gerar o DOCX.",
+      what: "A dissertação/tese não tem o programa de pós-graduação informado.",
+      why: "A natureza do trabalho (folha de rosto) exige o programa para o título solicitado.",
+      action: "Preencha o campo Programa com o nome oficial do PPG (ex.: Educação Científica e Ambiental).",
+    });
+  }
+}
+
+function addNaturalPlaceholderIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
+  const targets: [string, string][] = [
+    ["Título", fields.title],
+    ["Natureza do trabalho", fields.workNature],
+    ["Resumo", fields.resumo],
+    ["Abstract", fields.abstractText],
+    ["Introdução", fields.introducao],
+    ["Conclusão", fields.conclusao],
+    ["Texto principal", editorText],
+  ];
+  for (const [label, value] of targets) {
+    if (hasValue(value) && detectNaturalPlaceholder(value)) {
+      issues.push({
+        severity: "error",
+        code: "natural-placeholder-detected",
+        message: "Há texto provisório de preenchimento no documento.",
+        what: "O sistema detectou uma frase genérica como 'informado pelo usuário' ou 'grau acadêmico correspondente'.",
+        why: "Esse tipo de texto não pode aparecer em versão acadêmica final.",
+        action: "Preencha os campos obrigatórios reais antes de gerar o DOCX.",
+      });
+      break;
     }
   }
 }
@@ -346,6 +396,24 @@ function addProgramCompatibilityIssues(fields: AcademicFields, issues: Validatio
   const programValue = fields.program.trim();
   if (!programValue) return;
 
+  const matches = findUflaPpgPrograms(programValue);
+  if (matches.length > 1) {
+    const resolved = resolveUflaPpgProgram(programValue, { workType: fields.workType });
+    if (resolved.ambiguous || !resolved.program) {
+      issues.push({
+        severity: "warning",
+        code: "program-ambiguous",
+        message: "O programa informado corresponde a mais de um programa da UFLA (acadêmico e profissional).",
+        what: "Há mais de um programa com esse nome na lista oficial da PRPG/UFLA.",
+        why: "Dissertação/tese exigem a definição exata da modalidade (acadêmica ou profissional) e do nível.",
+        action: "Confirme se o programa é acadêmico ou profissional antes da versão final.",
+      });
+      return;
+    }
+    applyProgramDegreeChecks(resolved.program, fields, issues);
+    return;
+  }
+
   const program = findUflaPpgProgram(programValue);
   if (!program) {
     issues.push({
@@ -359,6 +427,10 @@ function addProgramCompatibilityIssues(fields: AcademicFields, issues: Validatio
     return;
   }
 
+  applyProgramDegreeChecks(program, fields, issues);
+}
+
+function applyProgramDegreeChecks(program: UflaPpgProgram, fields: AcademicFields, issues: ValidationIssue[]): void {
   if (fields.workType === "dissertacao" && !program.masters) {
     issues.push({
       severity: "error",
@@ -408,7 +480,9 @@ export function validateWork(fields: AcademicFields, editorText = ""): Validatio
   addCpgWarnings(fields, editorText, issues);
   addResearchProjectIssues(fields, editorText, issues);
   addUflaCollectionIssues(fields, issues);
+  addRequiredFieldIssues(fields, issues);
   addPlaceholderIssues(fields, editorText, issues);
+  addNaturalPlaceholderIssues(fields, editorText, issues);
   addProgramConflictIssues(fields, editorText, issues);
   addAbstractTopicIssues(fields, issues);
   addProgramCompatibilityIssues(fields, issues);

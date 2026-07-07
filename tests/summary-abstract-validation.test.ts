@@ -22,7 +22,8 @@ describe("validação de resumo, abstract e indicadores", () => {
 
     expect(codes).toContain("resumo-word-count");
     expect(codes).toContain("resumo-single-paragraph");
-    expect(hasBlockingErrors(issues)).toBe(false);
+    expect(codes).toContain("course-required");
+    expect(hasBlockingErrors(issues)).toBe(true);
   });
 
   it("alerta palavras-chave e keywords fora da faixa ou sem separador esperado", () => {

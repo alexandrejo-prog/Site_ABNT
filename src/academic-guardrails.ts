@@ -31,6 +31,21 @@ export function detectControlledPlaceholder(value: string): boolean {
   return CONTROLLED_PLACEHOLDER.test(value);
 }
 
+// Frases genéricas em linguagem natural que o sistema usava como fallback quando
+// cursos/programas estavam vazios. Elas não podem aparecer em versão acadêmica
+// final. A detecção é feita sobre o texto normalizado (sem acento / minúsculo).
+const NATURAL_PLACEHOLDER_SUBSTRINGS = [
+  "informado pelo usuario",
+  "grau academico correspondente",
+  "programa de pos-graduacao informado pelo usuario",
+];
+
+export function detectNaturalPlaceholder(value: string): boolean {
+  if (!value) return false;
+  const normalized = normalizeTextForMatch(value);
+  return NATURAL_PLACEHOLDER_SUBSTRINGS.some((token) => normalized.includes(token));
+}
+
 export function detectPlaceholderText(value: string): boolean {
   if (!value) return false;
   const normalized = normalizeTextForMatch(value);
@@ -233,8 +248,8 @@ const GENERIC_AI_LIKE_PATTERNS: RegExp[] = [
   /a presente pesquisa busca contribuir de forma significativa/i,
   /este artigo aborda diversos aspectos/i,
   /este estudo aborda diversos aspectos/i,
-  /é importante ressaltar que/i,
-  /e importante ressaltar que/i,
+  /este artigo aborda diversos aspectos/i,
+  /este estudo aborda diversos aspectos/i,
   /busca contribuir significativamente/i,
   /no mundo atual/i,
   /neste contexto, faz-se necessário/i,

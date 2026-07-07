@@ -54,6 +54,7 @@ const NON_OVERRIDABLE_ERROR_CODES = [
   "advisor-required",
   "placeholder-detected",
   "draft-placeholder-detected",
+  "natural-placeholder-detected",
   "impact-indicators-missing",
   "program-conflict",
   "abstract-topic-conflict",
@@ -222,9 +223,8 @@ export default function App() {
 
   function runValidation(candidateFields = fields) {
     const normalizedFields = normalizeFieldsForSelectedModel(candidateFields);
-    const textToValidate = editorMode === "references" ? fields.referencias : editorText;
+    const textToValidate = editorMode === "references" ? normalizedFields.referencias : editorText;
     const nextIssues = validateWork(normalizedFields, textToValidate);
-    setFields(normalizedFields);
     setIssues(nextIssues);
     const errorCount = nextIssues.filter((issue) => issue.severity === "error").length;
     const warningCount = nextIssues.filter((issue) => issue.severity === "warning" || issue.severity === "info").length;
@@ -290,9 +290,9 @@ export default function App() {
            {ACADEMIC_FIELD_KEYS.map((key) => (visibleField(key, fields.workType) || (assistedMode && ASSISTED_FIELD_KEYS.includes(key))) ? <div className="field-group" key={key}><div className="label-row"><label htmlFor={key}>{FIELD_LABELS[key]}</label><span className={`confidence confidence-${confidence[key]}`}>{CONFIDENCE_LABELS[confidence[key]]}</span></div>{LONG_FIELDS.has(key) ? <textarea id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} rows={rowsForField(key)} /> : key === "program" && ["dissertacao", "tese", "projeto_pesquisa"].includes(fields.workType) ? <input id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} list="ufla-ppg-programs" /> : <input id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} />}{key === "referencias" && <div className="field-note"><p>Para editar com mais espaço, use o botão <strong>Referências</strong> no painel central.</p><p>Use uma referência por linha. Para destacar manualmente, selecione o trecho e clique em Negrito ou Itálico.</p></div>}</div> : null)}
            {["dissertacao", "tese", "projeto_pesquisa"].includes(fields.workType) && (
              <datalist id="ufla-ppg-programs">
-               {UFLA_PPG_PROGRAMS.map((program) => (
-                 <option key={program.name} value={program.name} />
-               ))}
+                {UFLA_PPG_PROGRAMS.map((program) => (
+                  <option key={`${program.type}-${program.name}`} value={program.name} />
+                ))}
              </datalist>
            )}
           {draftWorkTypeSupportsIndicators(fields.workType) && (

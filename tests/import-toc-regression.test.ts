@@ -60,9 +60,10 @@ describe("regressão de importação com sumário", () => {
     expect(detected.editorText).not.toContain("1.2 Problema de pesquisa 3");
   });
 
-  it("classifica projeto de pesquisa antes de inferir tese pelo título de Doutor", () => {
+  it("sugere projeto de pesquisa sem reclassificar workType automaticamente", () => {
     const result = identifyAcademicFields(PROJECT_WITH_TOC);
 
-    expect(result.fields.workType).toBe("projeto_pesquisa");
+    expect(result.fields.workType).not.toBe("projeto_pesquisa");
+    expect(result.workTypeSuggestion?.workType).toBe("projeto_pesquisa");
   });
 });

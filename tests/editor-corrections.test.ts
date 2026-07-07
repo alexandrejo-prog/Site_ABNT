@@ -57,8 +57,8 @@ describe("editor e fluxo de importação", () => {
     expect(appSource).toContain("editorMode === \"references\" ? fields.referencias : editorText");
   });
 
-  it("App.tsx valida com texto do modo ativo", () => {
-    expect(appSource).toContain("textToValidate = editorMode === \"references\" ? fields.referencias : editorText");
+  it("App.tsx valida com texto do modo ativo usando candidateFields", () => {
+    expect(appSource).toContain("textToValidate = editorMode === \"references\" ? normalizedFields.referencias : editorText");
   });
 
   it("funções de formatação usam setTimeout para evitar perda de seleção", () => {
