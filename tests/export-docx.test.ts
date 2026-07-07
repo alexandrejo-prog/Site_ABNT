@@ -485,4 +485,29 @@ describe("DOCX export", () => {
     expect(source).not.toContain("Gerar PDF experimental");
     expect(source).not.toContain("PDF direto experimental");
   });
+
+  it("dissertação não gera placeholders nem programa duplicado no XML", async () => {
+    const documentXml = await generatedXml("# 1 Introducao\nTexto comum.", {
+      ...fields,
+      workType: "dissertacao",
+      workNature: "Dissertacao apresentada a Universidade Federal de Lavras como parte das exigencias do Programa de Pos-Graduacao em Ciencia do Solo, para obtencao do titulo de Mestre em Ciencias.",
+      program: "Ciência do Solo",
+      title: "Titulo valido",
+      author: "Maria Silva",
+      advisor: "Prof. Dr. João Silva",
+      resumo: "Resumo do trabalho.",
+      palavrasChave: "palavra1; palavra2",
+      abstractText: "Abstract text.",
+      keywords: "keyword1; keyword2",
+      indicadoresImpacto: "Impacto social informado.",
+      impactIndicators: "Social impact text.",
+      referencias: "SILVA, M. Qualidade do cafe. Lavras: UFLA, 2024.",
+    });
+
+    expect(documentXml).not.toContain("[PREENCHER");
+    expect(documentXml).not.toContain("[nome do orientador]");
+    expect(documentXml).not.toContain("[nome do membro da banca]");
+    expect(documentXml).not.toContain("Programa de Pós-Graduação em Programa de Pós-Graduação em");
+    expect(documentXml).toContain("SUMÁRIO");
+  });
 });

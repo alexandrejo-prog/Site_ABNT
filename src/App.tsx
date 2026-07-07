@@ -2,7 +2,7 @@ import { ChangeEvent, ClipboardEvent as ReactClipboardEvent, ReactNode, useEffec
 import { saveAs } from "file-saver";
 import { Bold, Eraser, FileCheck2, FileDown, Heading1, Heading2, Italic, Pilcrow, Quote, Upload, XCircle } from "lucide-react";
 import { importDocumentFile } from "./import-docx";
-import { ACADEMIC_FIELD_KEYS, AcademicFieldKey, type AcademicFields, CONFIDENCE_LABELS, Confidence, WORK_TYPE_LABELS, WORK_TYPES, emptyAcademicFields, emptyConfidenceMap, isCpgWork, isResearchProject, isUflaCollectionWork, type WorkType } from "./ufla-rules";
+import { ACADEMIC_FIELD_KEYS, AcademicFieldKey, type AcademicFields, CONFIDENCE_LABELS, Confidence, WORK_TYPE_LABELS, WORK_TYPES, emptyAcademicFields, emptyConfidenceMap, isCpgWork, isResearchProject, isUflaCollectionWork } from "./ufla-rules";
 import { ValidationIssue, hasBlockingErrors, validateWork, ADHERENCE_CATEGORIES } from "./validators";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
 import { UFLA_PPG_PROGRAMS } from "./ufla-ppg-programs";
@@ -54,6 +54,7 @@ const NON_OVERRIDABLE_ERROR_CODES = [
   "advisor-required",
   "placeholder-detected",
   "draft-placeholder-detected",
+  "natural-placeholder-detected",
   "impact-indicators-missing",
   "program-conflict",
   "abstract-topic-conflict",
@@ -77,7 +78,6 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateAnyway, setGenerateAnyway] = useState(false);
   const [importedFileName, setImportedFileName] = useState<string | null>(null);
-  const [workTypeSuggestion, setWorkTypeSuggestion] = useState<{ workType: WorkType; message: string } | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>("body");
   const [adherenceExpanded, setAdherenceExpanded] = useState(false);
   const [assistedMode, setAssistedMode] = useState(false);
@@ -153,7 +153,6 @@ export default function App() {
       mergeImportedFields(result.fields, result.confidence);
       setImportedFileName(file.name);
       setEditorMode("body");
-      setWorkTypeSuggestion(result.workTypeSuggestion ? { workType: result.workTypeSuggestion.workType as WorkType, message: result.workTypeSuggestion.message } : null);
       const newEditorText = result.editorText || result.fields.introducao || result.text;
       setEditorText(newEditorText);
       if (editorRef.current) editorRef.current.innerHTML = editorMarkupToHtml(newEditorText);
@@ -174,7 +173,6 @@ export default function App() {
     setIssues([]);
     setGenerateAnyway(false);
     setImportedFileName(null);
-    setWorkTypeSuggestion(null);
     setEditorMode("body");
     lastAppliedEditorTextRef.current = "";
     editorContentVersionRef.current += 1;
@@ -266,12 +264,7 @@ export default function App() {
         <div><p className="eyebrow">Ferramenta de apoio UFLA/ABNT</p><h1>Assistente de estruturação e pré-normalização UFLA/ABNT</h1></div>
         <div className="header-actions">
           <label className="upload-button"><Upload size={18} aria-hidden="true" />Importar<input type="file" accept=".docx,.txt,.md" onChange={handleImport} /></label>
-           {importedFileName && <button className="primary-action" type="button" onClick={handleRemoveImport} title={`Remover importação: ${importedFileName}`}><XCircle size={18} aria-hidden="true" />Remover importação</button>}
-           {workTypeSuggestion && (
-             <button className="primary-action" type="button" onClick={() => { updateWorkType(workTypeSuggestion.workType); setWorkTypeSuggestion(null); }} title={workTypeSuggestion.message}>
-               Aplicar tipo sugerido: {WORK_TYPE_LABELS[workTypeSuggestion.workType]}
-             </button>
-           )}
+          {importedFileName && <button className="primary-action" type="button" onClick={handleRemoveImport} title={`Remover importação: ${importedFileName}`}><XCircle size={18} aria-hidden="true" />Remover importação</button>}
           <button className="primary-action" type="button" onClick={() => runValidation()}><FileCheck2 size={18} aria-hidden="true" />Validar trabalho</button>
           <button className="primary-action strong" type="button" onClick={handleGenerateDocx} disabled={isGenerating}><FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar DOCX"}</button>
         </div>
@@ -297,9 +290,9 @@ export default function App() {
            {ACADEMIC_FIELD_KEYS.map((key) => (visibleField(key, fields.workType) || (assistedMode && ASSISTED_FIELD_KEYS.includes(key))) ? <div className="field-group" key={key}><div className="label-row"><label htmlFor={key}>{FIELD_LABELS[key]}</label><span className={`confidence confidence-${confidence[key]}`}>{CONFIDENCE_LABELS[confidence[key]]}</span></div>{LONG_FIELDS.has(key) ? <textarea id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} rows={rowsForField(key)} /> : key === "program" && ["dissertacao", "tese", "projeto_pesquisa"].includes(fields.workType) ? <input id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} list="ufla-ppg-programs" /> : <input id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} />}{key === "referencias" && <div className="field-note"><p>Para editar com mais espaço, use o botão <strong>Referências</strong> no painel central.</p><p>Use uma referência por linha. Para destacar manualmente, selecione o trecho e clique em Negrito ou Itálico.</p></div>}</div> : null)}
            {["dissertacao", "tese", "projeto_pesquisa"].includes(fields.workType) && (
              <datalist id="ufla-ppg-programs">
-               {UFLA_PPG_PROGRAMS.map((program) => (
-                 <option key={program.name} value={program.name} />
-               ))}
+                {UFLA_PPG_PROGRAMS.map((program) => (
+                  <option key={`${program.type}-${program.name}`} value={program.name} />
+                ))}
              </datalist>
            )}
           {draftWorkTypeSupportsIndicators(fields.workType) && (

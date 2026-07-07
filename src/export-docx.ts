@@ -877,6 +877,13 @@ function titlePageChildren(fields: AcademicFields): Paragraph[] {
 function approvalPageChildren(fields: AcademicFields): Paragraph[] {
   if (!hasApprovalPage(fields)) return [];
 
+  const orientationLines = fields.advisor
+    ? [
+        centeredParagraph(fields.advisor, false, BODY_SIZE, { after: 0, line: SINGLE_LINE }),
+        centeredParagraph("Orientador(a) - UFLA", false, BODY_SIZE, { after: 360, line: SINGLE_LINE }),
+      ]
+    : [];
+
   return [
     pageBreak(),
     centeredParagraph((fields.author || "AUTOR").toUpperCase(), true, BODY_SIZE, {
@@ -885,42 +892,15 @@ function approvalPageChildren(fields: AcademicFields): Paragraph[] {
     }),
     new Paragraph({ spacing: { before: 900 } }),
     centeredParagraph((fields.title || "TÍTULO DO TRABALHO").toUpperCase(), true, BODY_SIZE, {
-      after: 0,
+      after: 600,
       line: ONE_AND_HALF_LINE,
     }),
-    new Paragraph({ spacing: { before: 600 } }),
     natureParagraph(workNature(fields)),
     simpleParagraph("Aprovado em: ____ de ____________________ de ______.", {
       alignment: AlignmentType.CENTER,
       spacing: { before: 480, after: 240, line: SINGLE_LINE },
     }),
-    centeredParagraph("BANCA EXAMINADORA", true, BODY_SIZE, { after: 480, line: SINGLE_LINE }),
-    centeredParagraph("________________________________________", false, BODY_SIZE, { after: 0, line: SINGLE_LINE }),
-    centeredParagraph(fields.advisor || "Prof. Dr. [nome do orientador]", false, BODY_SIZE, {
-      after: 0,
-      line: SINGLE_LINE,
-    }),
-    centeredParagraph("Orientador(a) - UFLA", false, BODY_SIZE, { after: 360, line: SINGLE_LINE }),
-    centeredParagraph("________________________________________", false, BODY_SIZE, { after: 0, line: SINGLE_LINE }),
-    centeredParagraph("Prof. Dr. [nome do membro da banca]", false, BODY_SIZE, {
-      after: 0,
-      line: SINGLE_LINE,
-    }),
-    centeredParagraph("Instituição", false, BODY_SIZE, { after: 360, line: SINGLE_LINE }),
-    centeredParagraph("________________________________________", false, BODY_SIZE, { after: 0, line: SINGLE_LINE }),
-    centeredParagraph("Prof. Dr. [nome do membro da banca]", false, BODY_SIZE, {
-      after: 0,
-      line: SINGLE_LINE,
-    }),
-    centeredParagraph("Instituição", false, BODY_SIZE, { after: 600, line: SINGLE_LINE }),
-    centeredParagraph((fields.location || "LAVRAS - MG").toUpperCase(), false, BODY_SIZE, {
-      after: 120,
-      line: SINGLE_LINE,
-    }),
-    centeredParagraph(fields.year || new Date().getFullYear().toString(), false, BODY_SIZE, {
-      after: 0,
-      line: SINGLE_LINE,
-    }),
+    ...orientationLines,
   ];
 }
 
