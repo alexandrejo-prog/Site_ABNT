@@ -67,8 +67,23 @@ const NON_OVERRIDABLE_ERROR_CODES = [
   "program-degree-incompatible",
 ] as const;
 
+const ABSOLUTE_GENERATION_BLOCKER_CODES = [
+  "work-type-required",
+  "author-required",
+  "title-required",
+  "advisor-required",
+  "placeholder-detected",
+  "draft-placeholder-detected",
+  "natural-placeholder-detected",
+  "impact-indicators-missing",
+] as const;
+
 export function isNonOverridableError(issue: ValidationIssue): boolean {
   return NON_OVERRIDABLE_ERROR_CODES.includes(issue.code as typeof NON_OVERRIDABLE_ERROR_CODES[number]);
+}
+
+function isAbsoluteGenerationBlocker(issue: ValidationIssue): boolean {
+  return ABSOLUTE_GENERATION_BLOCKER_CODES.includes(issue.code as typeof ABSOLUTE_GENERATION_BLOCKER_CODES[number]);
 }
 
 export default function App() {
@@ -285,11 +300,15 @@ export default function App() {
     const generationFields = normalizeFieldsForSelectedModel(fields);
     const nextIssues = runValidation(generationFields);
     const nonOverridable = nextIssues.some((issue) => issue.severity === "error" && isNonOverridableError(issue));
-    if (nonOverridable) {
+    if (nonOverridable && !generateAnyway) {
       setStatus("Há pendências críticas que impedem a geração do DOCX. Corrija os campos obrigatórios e marcadores [PREENCHER: ...] antes de gerar.");
       return;
     }
-    if (hasBlockingErrors(nextIssues) && !generateAnyway) return;
+    const absoluteBlocker = nextIssues.some((issue) => issue.severity === "error" && isAbsoluteGenerationBlocker(issue));
+    if (absoluteBlocker) {
+      setStatus("Há pendências que impedem a geração do DOCX. Corrija os marcadores [PREENCHER: ...] e campos mínimos antes de gerar.");
+      return;
+    }
     try {
       setIsGenerating(true);
       setStatus("Gerando DOCX...");
