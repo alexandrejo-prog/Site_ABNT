@@ -41,14 +41,16 @@ describe("validação normativa", () => {
   });
 
   it("alerta orientador ausente para monografia, dissertação e tese", () => {
+    const expected: Record<string, "warning" | "error"> = {
+      monografia: "warning",
+      dissertacao: "error",
+      tese: "error",
+    };
     for (const workType of ["monografia", "dissertacao", "tese"] as const) {
       const issues = validateWork(baseFields({ workType, advisor: "" }));
-      expect(issues).toContainEqual(
-        expect.objectContaining({
-          severity: "warning",
-          code: "advisor-required",
-        }),
-      );
+      const advisorIssue = issues.find((issue) => issue.code === "advisor-required");
+      expect(advisorIssue).toBeDefined();
+      expect(advisorIssue?.severity).toBe(expected[workType]);
     }
   });
 
@@ -146,6 +148,45 @@ describe("validação normativa", () => {
         severity: "warning",
         code: "cpg-full-pages",
       }),
+    );
+  });
+
+  it("nao acusa incompatibilidade para dissertacao com PPGECA", () => {
+    const issues = validateWork(
+      baseFields({ workType: "dissertacao", program: "Educação Científica e Ambiental" }),
+    );
+    expect(issues).not.toContainEqual(
+      expect.objectContaining({ code: "program-degree-incompatible" }),
+    );
+  });
+
+  it("acusa incompatibilidade para tese com PPGECA", () => {
+    const issues = validateWork(
+      baseFields({ workType: "tese", program: "Educação Científica e Ambiental" }),
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "error", code: "program-degree-incompatible" }),
+    );
+  });
+
+  it("nao acusa incompatibilidade para tese com programa que tem doutorado", () => {
+    const issues = validateWork(
+      baseFields({ workType: "tese", program: "Administração" }),
+    );
+    expect(issues).not.toContainEqual(
+      expect.objectContaining({ code: "program-degree-incompatible" }),
+    );
+  });
+
+  it("alerta programa nao reconhecido sem bloquear dissertacao", () => {
+    const issues = validateWork(
+      baseFields({ workType: "dissertacao", program: "Programa Inventado" }),
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "warning", code: "program-not-recognized" }),
+    );
+    expect(issues).not.toContainEqual(
+      expect.objectContaining({ code: "program-degree-incompatible" }),
     );
   });
 });

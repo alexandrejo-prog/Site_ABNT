@@ -1,5 +1,6 @@
 import { isUflaCollectionWork, type AcademicFields } from "./ufla-rules";
 import { academicProductionTypeById } from "./academic-production-types";
+import { findUflaPpgProgram, formatUflaPpgProgram } from "./ufla-ppg-programs";
 
 function fold(value: string): string {
   return value
@@ -26,11 +27,37 @@ function isGenericOrMismatchedNature(value: string, workType: AcademicFields["wo
   if (workType !== "dissertacao" && text.includes("dissertacao apresentada a universidade federal de lavras")) return true;
   if (workType !== "tese" && text.includes("tese apresentada a universidade federal de lavras")) return true;
 
+  if (
+    (workType === "dissertacao" || workType === "tese") &&
+    /como\s+parte\s+das\s+exig[eê]ncias\s+do\s+[^.,]+/i.test(value)
+  ) {
+    const match = value.match(/como\s+parte\s+das\s+exig[eê]ncias\s+do\s+([^.,]+)/i);
+    if (match) {
+      const program = findUflaPpgProgram(match[1]);
+      if (program && !value.includes(`Programa de Pós-Graduação em ${program.name}`)) {
+        return true;
+      }
+    }
+  }
+
+  if (
+    (workType === "dissertacao" || workType === "tese") &&
+    /exig[eê]ncias\s+do\s+[^.,]+/i.test(value)
+  ) {
+    const match = value.match(/exig[eê]ncias\s+do\s+([^.,]+)/i);
+    if (match) {
+      const program = findUflaPpgProgram(match[1]);
+      if (program && !value.includes(`Programa de Pós-Graduação em ${program.name}`)) {
+        return true;
+      }
+    }
+  }
+
   return false;
 }
 
 function defaultProgram(fields: AcademicFields): string {
-  return fields.program || "Programa de Pós-Graduação informado pelo usuário";
+  return formatUflaPpgProgram(fields.program);
 }
 
 function defaultCourse(fields: AcademicFields): string {

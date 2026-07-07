@@ -76,4 +76,43 @@ describe("normalizacao de campos por modelo selecionado", () => {
     expect(fields.epigrafe).toBe("");
     expect(fields.impactIndicators).toBe("");
   });
+
+  it("normaliza natureza malformada de dissertacao com PPGECA", () => {
+    const fields = normalizeFieldsForSelectedModel({
+      ...emptyAcademicFields(),
+      workType: "dissertacao",
+      program: "Educação Científica e Ambiental",
+      workNature: "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do Educação Científica e Ambiental...",
+    });
+
+    expect(fields.workNature).toContain("Dissertação apresentada à Universidade Federal de Lavras");
+    expect(fields.workNature).toContain("Programa de Pós-Graduação em Educação Científica e Ambiental");
+    expect(fields.workNature).toContain("para obtenção do título de Mestre em Ciências.");
+    expect(fields.workNature).not.toContain("exigências do Educação Científica");
+  });
+
+  it("nao duplica prefixo quando programa ja vem formatado", () => {
+    const fields = normalizeFieldsForSelectedModel({
+      ...emptyAcademicFields(),
+      workType: "dissertacao",
+      program: "Programa de Pós-Graduação em Educação Científica e Ambiental",
+      workNature: "",
+    });
+
+    expect(fields.workNature).toContain("Programa de Pós-Graduação em Educação Científica e Ambiental");
+    expect(fields.workNature).not.toContain("Programa de Pós-Graduação em Programa de Pós-Graduação");
+  });
+
+  it("normaliza natureza de tese com programa valido para doutorado", () => {
+    const fields = normalizeFieldsForSelectedModel({
+      ...emptyAcademicFields(),
+      workType: "tese",
+      program: "Administração",
+      workNature: "Tese apresentada à Universidade Federal de Lavras, como parte das exigências do Administração...",
+    });
+
+    expect(fields.workNature).toContain("Tese apresentada à Universidade Federal de Lavras");
+    expect(fields.workNature).toContain("Programa de Pós-Graduação em Administração");
+    expect(fields.workNature).toContain("para obtenção do título de Doutor em Ciências.");
+  });
 });
