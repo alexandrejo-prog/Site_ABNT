@@ -21,7 +21,7 @@ import { AcademicFields, UFLA_RULES } from "./ufla-rules";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { consolidateImpactIndicators } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
-import { cleanMojibakeText } from "./docx-render-core";
+import { captionParagraph, cleanMojibakeText, detectCaption } from "./docx-render-core";
 
 export type EditorBlockType =
   | "paragraph"
@@ -596,6 +596,12 @@ function blockToParagraph(
 
   if (block.type === "scheduleTable") {
     return scheduleTableBlock(block.text);
+  }
+
+  const cleanedText = cleanMojibakeText(block.text);
+  const caption = detectCaption(cleanedText);
+  if (caption) {
+    return [captionParagraph(cleanedText, caption.kind)];
   }
 
   return [textParagraph(block.text)];

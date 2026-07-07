@@ -10,3 +10,12 @@
 - [ ] Run npm.cmd test
 - [ ] Run npm.cmd run build
 - [ ] Run npm.cmd run verify
+
+## Pendências futuras da auditoria
+
+- [ ] Refatorar `App.tsx` monolítico
+- [ ] Ampliar cobertura de testes de UI
+- [ ] Substituir `document.execCommand` por API moderna
+- [ ] Implementar autosave/persistência
+- [ ] Criar rotina de atualização do snapshot de PPGs
+- [ ] Validar saída DOCX visualmente no Word/LibreOffice

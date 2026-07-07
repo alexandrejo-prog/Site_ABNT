@@ -11,7 +11,7 @@ export interface DocumentTemplate {
 export const generalTemplate: DocumentTemplate = {
   id: "geral",
   label: "Modelo geral",
-  // artigo_cientifico_ufla cai no modelo geral porque a UI sÃ³ exibe o painel "Artigo acadÃªmico simples" para workType === "artigo" (App.tsx).
+  // Decisão conservadora da auditoria P4: artigo_cientifico_ufla permanece no modelo geral; ele é item da Coleção Produção Acadêmica UFLA, não o Artigo acadêmico simples da UI.
   supports: (workType) => !workType || (!isCpgWork(workType as WorkTypeValue) && !isResearchProject(workType as WorkTypeValue) && workType !== "artigo"),
   async generate(input) {
     const { generateDocxBlob } = await import("./export-docx");

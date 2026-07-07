@@ -8,6 +8,7 @@ import {
   detectProgramConflict,
 } from "../src/academic-guardrails";
 import { emptyAcademicFields } from "../src/ufla-rules";
+import { UFLA_PPG_PROGRAMS } from "../src/ufla-ppg-programs";
 
 describe("academic guardrails - texto generico de IA", () => {
   it("'É importante ressaltar que' sozinho não dispara generic-ai-like-text", () => {
@@ -61,9 +62,33 @@ describe("academic guardrails - conflito de programa", () => {
     expect(detectProgramConflict(fields, "Comparado com a Engenharia de Controle e Automação.")).toBe(true);
   });
 
+  it("reconhece programa real da lista UFLA com contexto institucional", () => {
+    const fields = { ...emptyAcademicFields(), program: "Ciência do Solo" };
+    expect(detectProgramConflict(fields, "Texto vinculado ao Programa de Pós-Graduação em Educação Física.")).toBe(true);
+  });
+
+  it("nao trata mencao tematica comum como outro programa", () => {
+    const fields = { ...emptyAcademicFields(), program: "Educação Científica e Ambiental" };
+    expect(detectProgramConflict(fields, "A revisao discute conceitos de ciencia do solo no ensino de ciencias.")).toBe(false);
+  });
+
   it("'engenharia didática' não gera conflito", () => {
     const fields = { ...emptyAcademicFields(), program: "Educação Científica e Ambiental" };
     expect(detectProgramConflict(fields, "Abordamos a engenharia didática em sala de aula.")).toBe(false);
+  });
+
+  it("reconhece programa real de UFLA_PPG_PROGRAMS com contexto institucional", () => {
+    const source = UFLA_PPG_PROGRAMS.find((program) => program.name === "Ciência do Solo") ?? UFLA_PPG_PROGRAMS[0];
+    const target = UFLA_PPG_PROGRAMS.find((program) => program.name === "Física") ?? UFLA_PPG_PROGRAMS[1];
+    const fields = { ...emptyAcademicFields(), program: source.name };
+    expect(detectProgramConflict(fields, `Texto vinculado ao Programa de Pós-Graduação em ${target.name}.`)).toBe(true);
+  });
+
+  it("nao trata nome real de programa sem contexto institucional como conflito", () => {
+    const source = UFLA_PPG_PROGRAMS.find((program) => program.name === "Ciência do Solo") ?? UFLA_PPG_PROGRAMS[0];
+    const target = UFLA_PPG_PROGRAMS.find((program) => program.name === "Física") ?? UFLA_PPG_PROGRAMS[1];
+    const fields = { ...emptyAcademicFields(), program: source.name };
+    expect(detectProgramConflict(fields, `A pesquisa utiliza conceitos de ${target.name} no referencial.`)).toBe(false);
   });
 });
 

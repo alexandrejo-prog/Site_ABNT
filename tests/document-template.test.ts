@@ -22,7 +22,8 @@ describe("document-template", () => {
     expect(templateForWorkType("tipo_desconhecido").id).toBe("geral");
   });
 
-  it("roteia artigo_cientifico_ufla para modelo geral", () => {
+  it("mantem artigo_cientifico_ufla no modelo geral por decisao conservadora", () => {
     expect(templateForWorkType("artigo_cientifico_ufla").id).toBe("geral");
+    expect(templateForWorkType("artigo").id).toBe("artigo");
   });
 });
