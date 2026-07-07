@@ -4,6 +4,7 @@ import {
   AcademicFieldKey,
   AcademicFields,
   Confidence,
+  WorkTypeValue,
 } from "./ufla-rules";
 import {
   ImportedBlock,
@@ -17,6 +18,12 @@ import {
 import { repairHeadingFragments, repairRecordHeadingFragments } from "./heading-fragment-repair";
 import { sanitizeImportedTitle } from "./title-sanitizer";
 
+export interface WorkTypeSuggestion {
+  workType: WorkTypeValue;
+  confidence: Confidence;
+  message: string;
+}
+
 export interface ImportResult {
   text: string;
   editorText: string;
@@ -24,6 +31,7 @@ export interface ImportResult {
   confidence: Record<AcademicFieldKey, Confidence>;
   messages: string[];
   blocks: ImportedBlock[];
+  workTypeSuggestion?: WorkTypeSuggestion;
 }
 
 function isLikelyZipFile(arrayBuffer: ArrayBuffer): boolean {
@@ -49,9 +57,16 @@ function looksLikeResearchProject(text: string, fields: AcademicFields): boolean
   );
 }
 
-function withInferredWorkType(fields: AcademicFields, text: string): AcademicFields {
-  if (!looksLikeResearchProject(text, fields)) return fields;
-  return { ...fields, workType: "projeto_pesquisa" };
+// Não reclassifica o workType automaticamente. Apenas sugere quando o texto
+// parece projeto de pesquisa e o trabalho ainda não é desse tipo.
+function detectWorkTypeSuggestion(text: string, fields: AcademicFields): WorkTypeSuggestion | undefined {
+  if (fields.workType === "projeto_pesquisa") return undefined;
+  if (!looksLikeResearchProject(text, fields)) return undefined;
+  return {
+    workType: "projeto_pesquisa",
+    confidence: "media",
+    message: "O sistema detectou possível Projeto de pesquisa. Aplicar este tipo?",
+  };
 }
 
 function sanitizeFields(fields: AcademicFields): AcademicFields {
@@ -78,8 +93,9 @@ function buildImportResult(
 ): ImportResult {
   const text = repairHeadingFragments(normalized.text);
   const editorText = repairHeadingFragments(detected.editorText || text);
-  const fields = sanitizeFields(repairRecordHeadingFragments(withInferredWorkType(detected.fields, text)));
+  const fields = sanitizeFields(repairRecordHeadingFragments(detected.fields));
   const confidence = sanitizeConfidence(detected.confidence, fields);
+  const workTypeSuggestion = detectWorkTypeSuggestion(text, fields);
 
   return {
     text,
@@ -88,6 +104,7 @@ function buildImportResult(
     confidence,
     messages,
     blocks: normalized.structure.blocks,
+    workTypeSuggestion,
   };
 }
 
@@ -97,11 +114,13 @@ export function identifyAcademicFields(
   const normalized = normalizePlainAcademicText(text);
   const identified = detectAcademicFieldsFromStructure(normalized.structure);
   const repairedText = repairHeadingFragments(normalized.text);
-  const fields = sanitizeFields(repairRecordHeadingFragments(withInferredWorkType(identified.fields, repairedText)));
+  const fields = sanitizeFields(repairRecordHeadingFragments(identified.fields));
   const confidence = sanitizeConfidence(identified.confidence, fields);
+  const workTypeSuggestion = detectWorkTypeSuggestion(repairedText, fields);
   return {
     fields,
     confidence,
+    workTypeSuggestion,
   };
 }
 

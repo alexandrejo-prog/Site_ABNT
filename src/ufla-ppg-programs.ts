@@ -65,6 +65,66 @@ export function findUflaPpgProgram(value: string): UflaPpgProgram | undefined {
   return UFLA_PPG_PROGRAMS.find((program) => fold(program.name) === query || fold(program.name).includes(query) || query.includes(fold(program.name)));
 }
 
+// Retorna TODAS as correspondências oficiais. Alguns programas aparecem tanto na
+// modalidade acadêmica quanto na profissional (ex.: "Genética e Melhoramento de
+// Plantas"), por isso .find() silencioso pode escolher a entrada errada.
+// Correspondências exatas têm prioridade: um nome completo (ex.: "Educação
+// Científica e Ambiental") não deve casar como duplicata de "Educação".
+export function findUflaPpgPrograms(value: string): UflaPpgProgram[] {
+  const query = fold(value).replace(/^programa de pos-graduacao em\s+/, "").replace(/^programa de pos-graduacao\s+/, "");
+  if (!query) return [];
+  const exact = UFLA_PPG_PROGRAMS.filter((program) => fold(program.name) === query);
+  if (exact.length > 0) return exact;
+  return UFLA_PPG_PROGRAMS.filter((program) => fold(program.name).includes(query) || query.includes(fold(program.name)));
+}
+
+export interface UflaPpgProgramResolution {
+  program: UflaPpgProgram | undefined;
+  ambiguous: boolean;
+}
+
+// Resolve a entrada correta considerando o contexto do trabalho.
+// - tese: exige doctorate === true; se nenhuma entrada tem doutorado, a
+//   duplicidade é mantida como ambígua (não mascara).
+// - dissertacao: restringe a masters === true; em duplicidade, prefere a
+//   modalidade academica, mas sem mascarar ambiguidade relevante.
+// - preferredType: força modalidade quando informado.
+// Retorna program === undefined e ambiguous === true quando não há como decidir.
+export function resolveUflaPpgProgram(
+  value: string,
+  options?: { preferredType?: "academico" | "profissional"; workType?: string },
+): UflaPpgProgramResolution {
+  const matches = findUflaPpgPrograms(value);
+  if (matches.length <= 1) {
+    return { program: matches[0], ambiguous: false };
+  }
+
+  let candidates = matches;
+  const workType = options?.workType;
+
+  if (workType === "tese") {
+    const doctorates = candidates.filter((program) => program.doctorate);
+    if (doctorates.length === 0) return { program: undefined, ambiguous: true };
+    candidates = doctorates;
+  } else if (workType === "dissertacao") {
+    const masters = candidates.filter((program) => program.masters);
+    if (masters.length >= 1) candidates = masters;
+    const academic = candidates.filter((program) => program.type === "academico");
+    if (academic.length === 1) candidates = academic;
+  }
+
+  if (options?.preferredType) {
+    const filtered = candidates.filter((program) => program.type === options.preferredType);
+    if (filtered.length === 1) candidates = filtered;
+  }
+
+  if (candidates.length === 1) {
+    return { program: candidates[0], ambiguous: false };
+  }
+
+  return { program: undefined, ambiguous: true };
+}
+
 export function normalizeUflaPpgProgramName(value: string): string {
   return findUflaPpgProgram(value)?.name ?? value.trim();
 }

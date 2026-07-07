@@ -19,7 +19,7 @@ import {
 } from "./academic-guardrails";
 import { assessAbstractHeuristics, assessResumoHeuristics } from "./text-diagnostics";
 import { hasSufficientImpactIndicators } from "./impact-indicators";
-import { findUflaPpgProgram } from "./ufla-ppg-programs";
+import { findUflaPpgProgram, findUflaPpgPrograms, resolveUflaPpgProgram, type UflaPpgProgram } from "./ufla-ppg-programs";
 
 export type ValidationSeverity = "error" | "warning" | "info";
 
@@ -396,6 +396,24 @@ function addProgramCompatibilityIssues(fields: AcademicFields, issues: Validatio
   const programValue = fields.program.trim();
   if (!programValue) return;
 
+  const matches = findUflaPpgPrograms(programValue);
+  if (matches.length > 1) {
+    const resolved = resolveUflaPpgProgram(programValue, { workType: fields.workType });
+    if (resolved.ambiguous || !resolved.program) {
+      issues.push({
+        severity: "warning",
+        code: "program-ambiguous",
+        message: "O programa informado corresponde a mais de um programa da UFLA (acadêmico e profissional).",
+        what: "Há mais de um programa com esse nome na lista oficial da PRPG/UFLA.",
+        why: "Dissertação/tese exigem a definição exata da modalidade (acadêmica ou profissional) e do nível.",
+        action: "Confirme se o programa é acadêmico ou profissional antes da versão final.",
+      });
+      return;
+    }
+    applyProgramDegreeChecks(resolved.program, fields, issues);
+    return;
+  }
+
   const program = findUflaPpgProgram(programValue);
   if (!program) {
     issues.push({
@@ -409,6 +427,10 @@ function addProgramCompatibilityIssues(fields: AcademicFields, issues: Validatio
     return;
   }
 
+  applyProgramDegreeChecks(program, fields, issues);
+}
+
+function applyProgramDegreeChecks(program: UflaPpgProgram, fields: AcademicFields, issues: ValidationIssue[]): void {
   if (fields.workType === "dissertacao" && !program.masters) {
     issues.push({
       severity: "error",

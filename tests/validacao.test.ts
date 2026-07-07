@@ -189,4 +189,25 @@ describe("validação normativa", () => {
       expect.objectContaining({ code: "program-degree-incompatible" }),
     );
   });
+
+  it("gera aviso de programa ambiguo para duplicidade sem contexto de trabalho", () => {
+    const issues = validateWork(
+      baseFields({ workType: "projeto_pesquisa", program: "Genética e Melhoramento de Plantas" }),
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "warning", code: "program-ambiguous" }),
+    );
+  });
+
+  it("nao escolhe silenciosamente o programa errado para tese duplicado", () => {
+    const issues = validateWork(
+      baseFields({ workType: "tese", program: "Genética e Melhoramento de Plantas" }),
+    );
+    expect(issues).not.toContainEqual(
+      expect.objectContaining({ code: "program-degree-incompatible" }),
+    );
+    expect(issues).not.toContainEqual(
+      expect.objectContaining({ code: "program-ambiguous" }),
+    );
+  });
 });

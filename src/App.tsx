@@ -2,7 +2,7 @@ import { ChangeEvent, ClipboardEvent as ReactClipboardEvent, ReactNode, useEffec
 import { saveAs } from "file-saver";
 import { Bold, Eraser, FileCheck2, FileDown, Heading1, Heading2, Italic, Pilcrow, Quote, Upload, XCircle } from "lucide-react";
 import { importDocumentFile } from "./import-docx";
-import { ACADEMIC_FIELD_KEYS, AcademicFieldKey, type AcademicFields, CONFIDENCE_LABELS, Confidence, WORK_TYPE_LABELS, WORK_TYPES, emptyAcademicFields, emptyConfidenceMap, isCpgWork, isResearchProject, isUflaCollectionWork } from "./ufla-rules";
+import { ACADEMIC_FIELD_KEYS, AcademicFieldKey, type AcademicFields, CONFIDENCE_LABELS, Confidence, WORK_TYPE_LABELS, WORK_TYPES, emptyAcademicFields, emptyConfidenceMap, isCpgWork, isResearchProject, isUflaCollectionWork, type WorkType } from "./ufla-rules";
 import { ValidationIssue, hasBlockingErrors, validateWork, ADHERENCE_CATEGORIES } from "./validators";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
 import { UFLA_PPG_PROGRAMS } from "./ufla-ppg-programs";
@@ -77,6 +77,7 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateAnyway, setGenerateAnyway] = useState(false);
   const [importedFileName, setImportedFileName] = useState<string | null>(null);
+  const [workTypeSuggestion, setWorkTypeSuggestion] = useState<{ workType: WorkType; message: string } | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>("body");
   const [adherenceExpanded, setAdherenceExpanded] = useState(false);
   const [assistedMode, setAssistedMode] = useState(false);
@@ -152,6 +153,7 @@ export default function App() {
       mergeImportedFields(result.fields, result.confidence);
       setImportedFileName(file.name);
       setEditorMode("body");
+      setWorkTypeSuggestion(result.workTypeSuggestion ? { workType: result.workTypeSuggestion.workType as WorkType, message: result.workTypeSuggestion.message } : null);
       const newEditorText = result.editorText || result.fields.introducao || result.text;
       setEditorText(newEditorText);
       if (editorRef.current) editorRef.current.innerHTML = editorMarkupToHtml(newEditorText);
@@ -172,6 +174,7 @@ export default function App() {
     setIssues([]);
     setGenerateAnyway(false);
     setImportedFileName(null);
+    setWorkTypeSuggestion(null);
     setEditorMode("body");
     lastAppliedEditorTextRef.current = "";
     editorContentVersionRef.current += 1;
@@ -222,9 +225,8 @@ export default function App() {
 
   function runValidation(candidateFields = fields) {
     const normalizedFields = normalizeFieldsForSelectedModel(candidateFields);
-    const textToValidate = editorMode === "references" ? fields.referencias : editorText;
+    const textToValidate = editorMode === "references" ? normalizedFields.referencias : editorText;
     const nextIssues = validateWork(normalizedFields, textToValidate);
-    setFields(normalizedFields);
     setIssues(nextIssues);
     const errorCount = nextIssues.filter((issue) => issue.severity === "error").length;
     const warningCount = nextIssues.filter((issue) => issue.severity === "warning" || issue.severity === "info").length;
@@ -264,7 +266,12 @@ export default function App() {
         <div><p className="eyebrow">Ferramenta de apoio UFLA/ABNT</p><h1>Assistente de estruturação e pré-normalização UFLA/ABNT</h1></div>
         <div className="header-actions">
           <label className="upload-button"><Upload size={18} aria-hidden="true" />Importar<input type="file" accept=".docx,.txt,.md" onChange={handleImport} /></label>
-          {importedFileName && <button className="primary-action" type="button" onClick={handleRemoveImport} title={`Remover importação: ${importedFileName}`}><XCircle size={18} aria-hidden="true" />Remover importação</button>}
+           {importedFileName && <button className="primary-action" type="button" onClick={handleRemoveImport} title={`Remover importação: ${importedFileName}`}><XCircle size={18} aria-hidden="true" />Remover importação</button>}
+           {workTypeSuggestion && (
+             <button className="primary-action" type="button" onClick={() => { updateWorkType(workTypeSuggestion.workType); setWorkTypeSuggestion(null); }} title={workTypeSuggestion.message}>
+               Aplicar tipo sugerido: {WORK_TYPE_LABELS[workTypeSuggestion.workType]}
+             </button>
+           )}
           <button className="primary-action" type="button" onClick={() => runValidation()}><FileCheck2 size={18} aria-hidden="true" />Validar trabalho</button>
           <button className="primary-action strong" type="button" onClick={handleGenerateDocx} disabled={isGenerating}><FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar DOCX"}</button>
         </div>
