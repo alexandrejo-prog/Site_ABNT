@@ -11,6 +11,12 @@
 - [ ] Run npm.cmd run build
 - [ ] Run npm.cmd run verify
 
+## Governança local
+
+- Os arquivos `Regras/` e `colecao_producao_academica_ufla_modelo.md` são arquivos locais de apoio.
+- Eles estão listados em `.gitignore` para não serem versionados acidentalmente.
+- O conteúdo desses arquivos não faz parte do app versionado e não deve ser adicionado ao Git.
+
 ## Decisões técnicas recentes
 
 - Autosave local implementado via `src/draft-storage.ts` com chave `site-abnt:draft:v1`.
