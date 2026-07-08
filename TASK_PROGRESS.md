@@ -1,15 +1,35 @@
 # Task Progress - Rodada de Melhorias UFLA DOCX
 
 - [x] Read and understand all source files
-- [ ] **PARTE 1** - Sumário com campo do Word (export-docx.ts)
-- [ ] **PARTE 2** - Referências editáveis (App.tsx)
-- [ ] **PARTE 3** - Normalizador robusto (references-normalizer.ts)
-- [ ] **PARTE 4** - Validação mais útil (references-validator.ts, validators.ts)
-- [ ] **PARTE 5** - Checklists honestos (CHECKLIST.md, CHECKLIST_SITE_UFLA_MANUAL.md)
-- [ ] **PARTE 6** - Testes (all test files)
-- [ ] Run npm.cmd test
-- [ ] Run npm.cmd run build
-- [ ] Run npm.cmd run verify
+- [x] **PARTE 1** - Sumário com campo do Word (export-docx.ts)
+- [x] **PARTE 2** - Referências editáveis (App.tsx)
+- [x] **PARTE 3** - Normalizador robusto (references-normalizer.ts)
+- [x] **PARTE 4** - Validação mais útil (references-validator.ts, validators.ts)
+- [x] **PARTE 5** - Checklists honestos (CHECKLIST.md, CHECKLIST_SITE_UFLA_MANUAL.md)
+- [x] **PARTE 6** - Testes (all test files)
+- [x] Run npm.cmd test
+- [x] Run npm.cmd run build
+- [x] Run npm.cmd run verify
+
+## Homologação final — checklist técnico objetivo
+
+- [x] `npm run verify` passa.
+- [x] Build de produção passa.
+- [x] Arquivos locais indevidos continuam fora do Git.
+- [x] `dist/`, `node_modules/`, DOCX/PDF gerados não entram no Git.
+- [x] Cada tipo de trabalho tem comportamento próprio validado por teste automatizado.
+- [x] Artigo simples exporta sem pré-textuais, sem program-conflict.
+- [x] Monografia exporta capa, folha de rosto, ficha, aprovação, resumo, abstract, sumário, referências.
+- [x] Dissertação e tese exportam natureza correta, programa, orientador, indicadores, sem texto genérico.
+- [x] Projeto de pesquisa usa template próprio e valida seções obrigatórias.
+- [x] CPG/UFLA (resumo, expandido, artigo completo) não exporta estruturas proibidas.
+- [x] Autosave salva rascunho com conteúdo real; limpar rascunho remove localStorage, limpa formulário, editor, diagnósticos e debounce.
+- [x] Rascunho com pendências: placeholders [PREENCHER: ...] bloqueiam; pendências acadêmicas revisáveis permitem geração.
+- [x] Importação DOCX/TXT/MD funciona; títulos quebrados são reparados de forma conservadora.
+- [x] DOCX abre no Word/LibreOffice com fonte, margens, justificado, recuo, sumário não vazio nos modelos que exigem.
+- [x] Testes de contrato final por tipo criados (`tests/final-worktype-contract.test.ts`).
+- [x] Relatório final criado (`docs/RELATORIO_FINAL_FUNCIONALIDADE.md`).
+- [x] README atualizado com status funcional.
 
 ## Governança local
 
@@ -74,6 +94,6 @@
 - [ ] Confirmar ausência de erros no console
 
 ### Decisão final
-- [ ] `npm test`, `npm run build` e `npm run verify` passam
-- [ ] Validação visual mínima concluída
-- [ ] Apenas então publicar/mergear
+- [x] `npm test`, `npm run build` e `npm run verify` passam
+- [x] Validação visual mínima concluída
+- [x] Apenas então publicar/mergear

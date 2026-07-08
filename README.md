@@ -21,6 +21,15 @@ npm run build
 npm run verify
 ```
 
+## Status funcional
+
+- **Como rodar:** `npm install` e `npm run dev`.
+- **Como testar:** `npm test` ou `npm run verify`.
+- **Como gerar:** preencha os campos no navegador e clique em **Gerar DOCX**.
+- **Tipos suportados:** Artigo acadêmico simples, Monografia, Dissertação, Tese, Projeto de pesquisa (NBR 15287), Resumo CPG/UFLA, Resumo expandido CPG/UFLA, Artigo completo CPG/UFLA e itens da Coleção Produção Acadêmica UFLA.
+- **Aviso:** a revisão final, ficha catalográfica, paginação e PDF continuam como etapas humanas no Word/LibreOffice, conforme o fluxo institucional.
+- **Comando único de verificação:** `npm run verify`.
+
 ## Implementado nesta rodada
 
 - Importacao de `.docx`, `.txt` e `.md`.
