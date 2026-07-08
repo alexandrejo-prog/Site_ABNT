@@ -13,6 +13,7 @@ import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById 
 import { TextDiagnosticPanel } from "./text-diagnostic-panel";
 import { buildDraftFromFields, hasUnfilledPlaceholders, draftWorkTypeSupportsIndicators } from "./draft-builder";
 import { editorCommandAdapter } from "./editor-command-adapter";
+import { installEditorScrollFix } from "./editor-scroll-fix";
 import { clearDraft, hasDraft, loadDraft, saveDraft } from "./draft-storage";
 import { AdherencePanel } from "./components/AdherencePanel";
 import { ValidationSidebar } from "./components/ValidationSidebar";
@@ -86,6 +87,8 @@ export default function App() {
   const isCpgSelected = isCpgWork(fields.workType);
   const selectedUflaProductionType = isUflaCollectionWork(fields.workType) ? academicProductionTypeById(fields.workType) : undefined;
   const activeEditorText = editorMode === "references" ? fields.referencias : editorText;
+
+  useEffect(() => installEditorScrollFix(), []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
