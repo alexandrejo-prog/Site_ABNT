@@ -343,8 +343,11 @@ export default function App() {
 
   function runValidation(candidateFields = fields) {
     const normalizedFields = normalizeFieldsForSelectedModel(candidateFields);
-    const rawText = editorMode === "references" ? normalizedFields.referencias : editorText;
-    const textToValidate = editorTextForValidation(normalizedFields.workType, editorMode, normalizedFields.referencias, editorText);
+    let textToValidate = editorMode === "references" ? normalizedFields.referencias : editorText;
+    const rawText = textToValidate;
+    if (isCpgWork(normalizedFields.workType) && editorMode !== "references") {
+      textToValidate = stripCpgForbiddenSections(textToValidate);
+    }
     const nextIssues = [...validateWork(normalizedFields, textToValidate)];
     const autoFilterIssue = cpgAutoFilterIssue(normalizedFields.workType, rawText, textToValidate);
     if (autoFilterIssue) nextIssues.push(autoFilterIssue);
