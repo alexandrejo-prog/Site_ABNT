@@ -54,7 +54,9 @@ function modelConfidence(workType: AcademicFields["workType"]): boolean {
 }
 
 function hasDraftableContent(fields: AcademicFields, editorText: string): boolean {
-  return editorText.trim().length > 0 || ACADEMIC_FIELD_KEYS.some((key) => fields[key].trim().length > 0);
+  if (editorText.trim().length > 0) return true;
+  const emptyFields = emptyAcademicFields();
+  return ACADEMIC_FIELD_KEYS.some((key) => fields[key].trim() !== emptyFields[key].trim());
 }
 
 export default function App() {
