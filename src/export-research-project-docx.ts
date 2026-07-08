@@ -5,12 +5,14 @@ import {
   Packer,
   PageOrientation,
   Paragraph,
+  Table,
   TableOfContents,
   TextRun,
 } from "docx";
 import { parseEditorContent, type DocxGenerationInput, type EditorBlock, loadDefaultLogoAsset } from "./export-docx";
-import { AUTHOR_SIZE, BLACK, BODY_SIZE, ONE_AND_HALF_LINE, SINGLE_LINE, TITLE_SIZE, centered, logoParagraph, pageBreak, pageMargins, pageNumberHeader, paragraph, run, unnumberedTitle } from "./docx-shared";
+import { AUTHOR_SIZE, BLACK, BODY_SIZE, ONE_AND_HALF_LINE, SINGLE_LINE, centered, ibgeTable, logoParagraph, pageBreak, pageMargins, pageNumberHeader, paragraph, run, unnumberedTitle } from "./docx-shared";
 import { repairHeadingFragments } from "./heading-fragment-repair";
+import { normalizeUflaManualInTextCitations } from "./in-text-citation-normalizer";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { UFLA_RULES } from "./ufla-rules";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
@@ -20,8 +22,12 @@ function hasValue(value: string): boolean {
   return value.trim().length > 0;
 }
 
+function normalizeProjectBodyText(value: string): string {
+  return normalizeUflaManualInTextCitations(cleanMojibakeText(value));
+}
+
 function splitParagraphs(value: string): string[] {
-  return coreSplitParagraphs(cleanMojibakeText(value));
+  return coreSplitParagraphs(normalizeProjectBodyText(value));
 }
 
 function coverChildren(input: DocxGenerationInput): Paragraph[] {
@@ -115,17 +121,109 @@ function markupParagraph(text: string, singleLine = false, indent = UFLA_RULES.t
     alignment: AlignmentType.BOTH,
     spacing: { line: singleLine ? SINGLE_LINE : ONE_AND_HALF_LINE, after: singleLine ? 120 : UFLA_RULES.spacing.afterParagraphTwip },
     indent: { firstLine: indent },
-    children: textRunsFromMarkup(cleanMojibakeText(text || " "), BODY_SIZE, UFLA_RULES.typography.fontFamily, BLACK),
+    children: textRunsFromMarkup(normalizeProjectBodyText(text || " "), BODY_SIZE, UFLA_RULES.typography.fontFamily, BLACK),
   });
 }
 
-function blockToParagraph(block: EditorBlock, first: boolean): Paragraph[] {
+function isMarkdownTableSeparator(value: string): boolean {
+  return /^\s*\|?[\s:|-]+\|?\s*$/.test(value) && value.includes("-");
+}
+
+function splitMarkdownCells(line: string): string[] {
+  return line
+    .replace(/^\s*\|/, "")
+    .replace(/\|\s*$/, "")
+    .split("|")
+    .map((cell) => normalizeProjectBodyText(cell).trim());
+}
+
+function splitTabCells(line: string): string[] {
+  return line
+    .split("\t")
+    .map((cell) => normalizeProjectBodyText(cell).trim())
+    .filter(Boolean);
+}
+
+function paddedRows(rows: string[][]): string[][] {
+  const columnCount = Math.max(1, ...rows.map((row) => row.length));
+  return rows.map((row) => Array.from({ length: columnCount }, (_, index) => row[index] ?? ""));
+}
+
+function tableChildrenFromRows(rows: string[][]): Array<Paragraph | Table> {
+  const normalizedRows = paddedRows(rows.filter((row) => row.length >= 2));
+  if (!normalizedRows.length) return [];
+
+  const headerLabels = normalizedRows[0];
+  const bodyRows = normalizedRows.slice(1);
+  const columnWidths = Array.from({ length: headerLabels.length }, () => Math.floor(100 / headerLabels.length));
+
+  return [ibgeTable({ headerLabels, rows: bodyRows, columnWidths })];
+}
+
+function markdownTableChildren(text: string): Array<Paragraph | Table> {
+  const rows = text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !isMarkdownTableSeparator(line))
+    .map(splitMarkdownCells)
+    .filter((cells) => cells.length >= 2);
+
+  const table = tableChildrenFromRows(rows);
+  return table.length ? table : [markupParagraph(text)];
+}
+
+function tabularBlockChildren(text: string): Array<Paragraph | Table> {
+  const captionLines: string[] = [];
+  const rows: string[][] = [];
+
+  for (const line of text.split(/\n+/).map((item) => item.trim()).filter(Boolean)) {
+    if (line.includes("\t")) rows.push(splitTabCells(line));
+    else if (!rows.length) captionLines.push(line);
+  }
+
+  const children: Array<Paragraph | Table> = captionLines.map((line) => markupParagraph(line, true, 0));
+  const table = tableChildrenFromRows(rows);
+  return table.length ? [...children, ...table] : splitParagraphs(text).map((line) => markupParagraph(line));
+}
+
+function isTabularParagraph(block: EditorBlock): boolean {
+  return block.type === "paragraph" && splitTabCells(block.text).length >= 2;
+}
+
+function blockToParagraph(block: EditorBlock, first: boolean): Array<Paragraph | Table> {
   if (block.type === "heading1" || block.type === "heading2" || block.type === "heading3") return headingParagraph(block, first);
   if (block.type === "longQuote") {
-    return [new Paragraph({ alignment: AlignmentType.BOTH, spacing: { line: SINGLE_LINE, after: 120 }, indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip }, children: textRunsFromMarkup(cleanMojibakeText(block.text || " "), BODY_SIZE, UFLA_RULES.typography.fontFamily, BLACK) })];
+    return [new Paragraph({ alignment: AlignmentType.BOTH, spacing: { line: SINGLE_LINE, after: 120 }, indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip }, children: textRunsFromMarkup(normalizeProjectBodyText(block.text || " "), BODY_SIZE, UFLA_RULES.typography.fontFamily, BLACK) })];
   }
-  if (block.type === "scheduleTable") return coreSplitParagraphs(cleanMojibakeText(block.text)).map((line) => markupParagraph(line));
+  if (block.type === "markdownTable") return markdownTableChildren(block.text);
+  if (block.type === "plainScheduleTable") return tabularBlockChildren(block.text);
+  if (block.type === "scheduleTable") return tabularBlockChildren(block.text);
   return [markupParagraph(block.text)];
+}
+
+function bodyChildrenFromBlocks(blocks: EditorBlock[]): Array<Paragraph | Table> {
+  const children: Array<Paragraph | Table> = [];
+
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index];
+
+    if (isTabularParagraph(block)) {
+      const rows: string[][] = [];
+      let cursor = index;
+      while (cursor < blocks.length && isTabularParagraph(blocks[cursor])) {
+        rows.push(splitTabCells(blocks[cursor].text));
+        cursor += 1;
+      }
+      children.push(...tableChildrenFromRows(rows));
+      index = cursor - 1;
+      continue;
+    }
+
+    children.push(...blockToParagraph(block, children.length === 0));
+  }
+
+  return children;
 }
 
 function referenceRunToTextRun(referenceRun: ReferenceRun): TextRun {
@@ -158,7 +256,7 @@ function createProjectDocument(input: DocxGenerationInput): Document {
     ...blocks.filter((block) => block.type === "reference").map((block) => block.text),
   ];
   const textualChildren = [
-    ...bodyBlocks.flatMap((block, index) => blockToParagraph(block, index === 0)),
+    ...bodyChildrenFromBlocks(bodyBlocks),
     ...referenceParagraphs(references),
   ];
 
