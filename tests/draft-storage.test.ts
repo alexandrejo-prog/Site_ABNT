@@ -45,6 +45,14 @@ describe("draft-storage", () => {
     expect(loadDraft(storage)).toBeNull();
   });
 
+  it("remove rascunho legado para evitar metadados antigos restaurados", () => {
+    const storage = createStorage();
+    storage.setItem("site-abnt:draft:v1", JSON.stringify({ ...SAMPLE_DRAFT, fields: { title: "Título antigo" } }));
+
+    expect(loadDraft(storage)).toBeNull();
+    expect(storage.getItem("site-abnt:draft:v1")).toBeNull();
+  });
+
   it("nao quebra sem localStorage", () => {
     expect(() => {
       saveDraft(SAMPLE_DRAFT, undefined as unknown as Storage);
