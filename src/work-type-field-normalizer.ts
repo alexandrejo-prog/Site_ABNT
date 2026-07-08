@@ -17,10 +17,13 @@ function hasText(value: string): boolean {
 }
 
 function isGenericOrMismatchedNature(value: string, workType: AcademicFields["workType"]): boolean {
-  const text = fold(value);
+  const text = fold(value).replace(/^natureza do trabalho:\s*/, "");
   if (!text) return true;
 
-  if (text.includes("requisito academico") || text.includes("dados revisados pelo usuario")) return true;
+  if (text.includes("requisito academico") || text.includes("requisitos academicos")) return true;
+  if (text.includes("requisitos academicos aplicaveis")) return true;
+  if (text.includes("dados revisados pelo usuario")) return true;
+  if (text.includes("trabalho academico apresentado a universidade federal de lavras")) return true;
   if (text.includes("colecao producao academica") || text.includes("suporte inicial no sistema")) return true;
   if (text.includes("trabalho apresentado a universidade federal de lavras como requisito")) return true;
 
