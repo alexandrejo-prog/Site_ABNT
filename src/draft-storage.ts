@@ -8,6 +8,12 @@ export interface DraftPayload {
 
 const DRAFT_KEY = "site-abnt:draft:v1";
 
+function logDraftStorageError(action: string, error: unknown): void {
+  if (import.meta.env.DEV) {
+    console.error(`Falha ao ${action} rascunho local do Site_ABNT.`, error);
+  }
+}
+
 function isValidDraft(value: unknown): value is DraftPayload {
   if (!value || typeof value !== "object") return false;
   const payload = value as Record<string, unknown>;
@@ -22,8 +28,8 @@ function isValidDraft(value: unknown): value is DraftPayload {
 export function saveDraft(payload: DraftPayload, storage: Storage = globalThis.localStorage): void {
   try {
     storage.setItem(DRAFT_KEY, JSON.stringify(payload));
-  } catch {
-    // Ignora falhas de quota/permissão.
+  } catch (error) {
+    logDraftStorageError("salvar", error);
   }
 }
 
@@ -34,7 +40,8 @@ export function loadDraft(storage: Storage = globalThis.localStorage): DraftPayl
     const parsed = JSON.parse(raw) as unknown;
     if (!isValidDraft(parsed)) return null;
     return parsed;
-  } catch {
+  } catch (error) {
+    logDraftStorageError("carregar", error);
     return null;
   }
 }
@@ -42,8 +49,8 @@ export function loadDraft(storage: Storage = globalThis.localStorage): DraftPayl
 export function clearDraft(storage: Storage = globalThis.localStorage): void {
   try {
     storage.removeItem(DRAFT_KEY);
-  } catch {
-    // Ignora falhas de permissão.
+  } catch (error) {
+    logDraftStorageError("remover", error);
   }
 }
 
