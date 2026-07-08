@@ -4,6 +4,7 @@ import {
   isResearchProject,
   isUflaCollectionWork,
 } from "./ufla-rules";
+import { normalizeWorkType } from "./work-type-resolver";
 
 export interface WorkTypeRequirements {
   requiresInstitutionalMetadata: boolean;
@@ -14,23 +15,24 @@ export interface WorkTypeRequirements {
   requiresCatalogCard: boolean;
 }
 
-export function getWorkTypeRequirements(workType: WorkTypeValue): WorkTypeRequirements {
-  const simpleArticle = workType === "artigo";
-  const cpgWork = isCpgWork(workType);
-  const graduateWork = workType === "dissertacao" || workType === "tese";
+export function getWorkTypeRequirements(workType: WorkTypeValue | string): WorkTypeRequirements {
+  const normalizedWorkType = normalizeWorkType(workType);
+  const simpleArticle = normalizedWorkType === "artigo";
+  const cpgWork = isCpgWork(normalizedWorkType);
+  const graduateWork = normalizedWorkType === "dissertacao" || normalizedWorkType === "tese";
   const fullAcademicWork =
-    workType === "monografia" ||
+    normalizedWorkType === "monografia" ||
     graduateWork ||
-    isResearchProject(workType) ||
-    isUflaCollectionWork(workType) ||
-    workType === "outro";
+    isResearchProject(normalizedWorkType) ||
+    isUflaCollectionWork(normalizedWorkType) ||
+    normalizedWorkType === "outro";
 
   return {
     requiresInstitutionalMetadata: !simpleArticle && !cpgWork && fullAcademicWork,
-    requiresProgramMetadata: graduateWork || isResearchProject(workType),
+    requiresProgramMetadata: graduateWork || isResearchProject(normalizedWorkType),
     requiresImpactIndicators: graduateWork,
     requiresCoverAndFrontMatter: !simpleArticle && !cpgWork && fullAcademicWork,
     requiresTableOfContents: !simpleArticle && !cpgWork && fullAcademicWork,
-    requiresCatalogCard: workType === "monografia" || graduateWork,
+    requiresCatalogCard: normalizedWorkType === "monografia" || graduateWork,
   };
 }
