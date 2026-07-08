@@ -1432,6 +1432,11 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
 export async function loadDefaultLogoAsset(): Promise<DocxLogoAsset | undefined> {
   if (typeof fetch !== "function") return undefined;
 
+  // Em ambiente Node/Vitest não há documento nem base URL para resolver o caminho
+  // relativo /assets/ufla-logo.jpeg; o fetch lançaria Invalid URL apenas para poluir
+  // o stderr. O navegador mantém o carregamento real; fora dele usamos fallback silencioso.
+  if (typeof window === "undefined" || import.meta.env.MODE === "test") return undefined;
+
   try {
     const response = await fetch(DEFAULT_UFLA_LOGO_PATH);
     if (!response.ok) return undefined;

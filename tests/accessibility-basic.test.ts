@@ -7,6 +7,12 @@ const stylesSource = readFileSync(new URL("../src/styles.css", import.meta.url),
 const combined = `${appSource}\n${sidebarSource}`;
 
 describe("Acessibilidade básica da interface", () => {
+  it("possui exatamente um skip-link na interface", () => {
+    const matches = appSource.match(/className="skip-link"/g);
+    expect(matches).not.toBeNull();
+    expect(matches!.length).toBe(1);
+  });
+
   it("possui rótulo acessível no botão de importação", () => {
     expect(appSource).toContain('type="file"');
     expect(appSource).toContain('accept=".docx,.txt,.md"');

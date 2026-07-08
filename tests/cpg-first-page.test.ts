@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { generateCpgDocxBlob } from "../src/export-cpg-docx";
 import { emptyAcademicFields, type AcademicFields } from "../src/ufla-rules";
 import { stripCpgForbiddenSections } from "../src/cpg-content-filter";
+import { assertSectionOrder } from "./test-utils/ooxml";
 
 function readUInt16(buffer: Buffer, offset: number): number {
   return buffer.readUInt16LE(offset);
@@ -156,8 +157,7 @@ describe("CPG first page layout", () => {
     expect(text).toContain("2 CRONOGRAMA");
     expect(text).toContain("Cronograma textual permitido.");
     expect(text).toContain("3 CONSIDERAÇÕES FINAIS");
-    expect(text).not.toContain("5 CRONOGRAMA");
-    expect(text).not.toContain("6 CONSIDERAÇÕES FINAIS");
+    assertSectionOrder(documentXml, ["1 INTRODUÇÃO", "2 CRONOGRAMA", "3 CONSIDERAÇÕES FINAIS"]);
   });
 
   it("sanitizer does not remove ordinary mentions of indicators inside a paragraph", () => {

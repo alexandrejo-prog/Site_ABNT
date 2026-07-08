@@ -390,7 +390,6 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <a className="skip-link" href="#workspace">Pular para o conteúdo</a>
       <header className="app-header">
         <div><p className="eyebrow">Ferramenta de apoio UFLA/ABNT</p><h1>Assistente de estruturação e pré-normalização UFLA/ABNT</h1></div>
         <div className="header-actions">
