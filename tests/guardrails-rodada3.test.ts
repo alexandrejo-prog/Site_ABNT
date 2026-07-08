@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AcademicFields, emptyAcademicFields } from "../src/ufla-rules";
-import { buildDraftFromFields, buildCpgDraft, buildImpactIndicatorsText, hasUnfilledPlaceholders, isDraftPlaceholder } from "../src/draft-builder";
+import { buildDraftFromFields, buildCpgDraft, buildImpactIndicatorsText, hasUnfilledPlaceholders } from "../src/draft-builder";
 import { detectPlaceholderText } from "../src/academic-guardrails";
 
 function baseFields(overrides: Partial<AcademicFields> = {}): AcademicFields {

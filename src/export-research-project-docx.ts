@@ -8,7 +8,7 @@ import {
   TableOfContents,
   TextRun,
 } from "docx";
-import { parseEditorContent, type DocxGenerationInput, type DocxLogoAsset, type EditorBlock, loadDefaultLogoAsset } from "./export-docx";
+import { parseEditorContent, type DocxGenerationInput, type EditorBlock, loadDefaultLogoAsset } from "./export-docx";
 import { AUTHOR_SIZE, BLACK, BODY_SIZE, ONE_AND_HALF_LINE, SINGLE_LINE, TITLE_SIZE, centered, logoParagraph, pageBreak, pageMargins, pageNumberHeader, paragraph, run, unnumberedTitle } from "./docx-shared";
 import { repairHeadingFragments } from "./heading-fragment-repair";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";

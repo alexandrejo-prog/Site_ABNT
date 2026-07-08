@@ -108,13 +108,13 @@ function addPlaceholderIssues(fields: AcademicFields, editorText: string, issues
     ["dedicatoria", fields.dedicatoria, "Dedicatória"],
   ];
 
-  for (const [key, value, label] of criticalTargets) {
+  for (const [_key, value, label] of criticalTargets) {
     if (hasValue(value) && detectPlaceholderText(value)) {
       issues.push({ severity: "error", code: "placeholder-detected", message: "Há marcador de preenchimento no documento.", what: `O campo ${label} contém placeholder ou instrução não substituída.`, why: "O DOCX final não pode conter campos genéricos ou instruções de preenchimento.", action: "Substitua o trecho por informação real antes da versão final." });
       break;
     }
   }
-  for (const [key, value, label] of auxiliaryTargets) {
+  for (const [_key, value, label] of auxiliaryTargets) {
     if (hasValue(value) && detectPlaceholderText(value)) {
       issues.push({ severity: "warning", code: "placeholder-detected", message: "Há marcador de preenchimento no documento.", what: `O campo ${label} contém placeholder ou instrução não substituída.`, why: "O DOCX final não pode conter campos genéricos ou instruções de preenchimento.", action: "Substitua o trecho por informação real antes da versão final." });
       break;
@@ -163,7 +163,7 @@ function addNaturalPlaceholderIssues(fields: AcademicFields, editorText: string,
     ["Conclusão", fields.conclusao],
     ["Texto principal", editorText],
   ];
-  for (const [label, value] of targets) {
+  for (const [_label, value] of targets) {
     if (hasValue(value) && detectNaturalPlaceholder(value)) {
       issues.push({
         severity: "error",

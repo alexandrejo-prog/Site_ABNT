@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  WORK_TYPES,
-  WORK_TYPE_LABELS,
-  isResearchProject,
   emptyAcademicFields,
   ACADEMIC_FIELD_KEYS,
-  AcademicFields,
 } from "../src/ufla-rules";
 import { validateWork, hasBlockingErrors } from "../src/validators";
 import { generateResearchProjectDocxBlob } from "../src/export-research-project-docx";

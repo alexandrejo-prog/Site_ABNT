@@ -1,6 +1,5 @@
 import {
   AlignmentType,
-  BorderStyle,
   Document,
   HeadingLevel,
   Header,
@@ -13,10 +12,9 @@ import {
   Table,
   TableOfContents,
   TextRun,
-  WidthType,
 } from "docx";
 import type { IParagraphOptions, IStylesOptions } from "docx";
-import { pageMargins, ibgeTable } from "./docx-shared";
+import { pageMargins, ibgeTable, BODY_SIZE, SINGLE_LINE, ONE_AND_HALF_LINE, BLACK, AUTHOR_SIZE as COVER_AUTHOR_SIZE, TITLE_SIZE as COVER_TITLE_SIZE } from "./docx-shared";
 import { AcademicFields, UFLA_RULES } from "./ufla-rules";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { consolidateImpactIndicators } from "./impact-indicators";
@@ -58,13 +56,7 @@ interface ScheduleRow {
 
 export const DEFAULT_UFLA_LOGO_PATH = "/assets/ufla-logo.jpeg";
 
-const BODY_SIZE = UFLA_RULES.typography.bodyFontSizePt * 2;
 const LONG_QUOTE_SIZE = UFLA_RULES.typography.longQuoteFontSizePt * 2;
-const COVER_AUTHOR_SIZE = UFLA_RULES.typography.coverAuthorFontSizePt * 2;
-const COVER_TITLE_SIZE = UFLA_RULES.typography.coverTitleFontSizePt * 2;
-const ONE_AND_HALF_LINE = UFLA_RULES.spacing.bodyLineTwip;
-const SINGLE_LINE = UFLA_RULES.spacing.singleLineTwip;
-const BLACK = "000000";
 const REFERENCE_FONT = "Times New Roman";
 const REFERENCE_SIZE = 12 * 2;
 const UFLA_LOGO_WIDTH_PX = 265;
@@ -430,22 +422,6 @@ function scheduleCaptionParagraph(text: string): Paragraph {
         text,
         font: UFLA_RULES.typography.fontFamily,
         size: BODY_SIZE,
-        color: BLACK,
-      }),
-    ],
-  });
-}
-
-function tableTextParagraph(text: string, bold = false): Paragraph {
-  return new Paragraph({
-    alignment: AlignmentType.LEFT,
-    spacing: { line: SINGLE_LINE, after: 0 },
-    children: [
-      new TextRun({
-        text,
-        bold,
-        font: UFLA_RULES.typography.fontFamily,
-        size: 20,
         color: BLACK,
       }),
     ],
@@ -1145,7 +1121,10 @@ export async function loadDefaultLogoAsset(): Promise<DocxLogoAsset | undefined>
       width: UFLA_LOGO_WIDTH_PX,
       height: UFLA_LOGO_HEIGHT_PX,
     };
-  } catch {
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.error("Falha ao carregar o logo padrão da UFLA.", error);
+    }
     return undefined;
   }
 }

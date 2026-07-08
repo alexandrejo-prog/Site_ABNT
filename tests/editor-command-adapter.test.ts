@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createEditorCommandAdapter, editorCommandAdapter } from "../src/editor-command-adapter";
+import { createEditorCommandAdapter } from "../src/editor-command-adapter";
 
 describe("editor-command-adapter", () => {
   it("retorna false quando document.execCommand nao existe", () => {

@@ -83,6 +83,7 @@ export default function App() {
   const [adherenceExpanded, setAdherenceExpanded] = useState(false);
   const [assistedMode, setAssistedMode] = useState(false);
   const [draftStatus, setDraftStatus] = useState<"idle" | "saved" | "restored" | "cleared" | "error">("idle");
+  const [confirmReplaceDraft, setConfirmReplaceDraft] = useState(false);
   const [hasStoredDraft, setHasStoredDraft] = useState(() => typeof window !== "undefined" && hasDraft(window.localStorage));
   const editorRef = useRef<HTMLDivElement>(null);
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -104,7 +105,7 @@ export default function App() {
     if (isEmpty) return;
     if (fields.author || fields.title || editorText) return;
     try {
-      setFields((current) => ({ ...current, ...(draft.fields as Partial<AcademicFields>) }));
+      setFields((current) => ({ ...current, ...(draft.fields as Partial<AcademicFields>) }) as AcademicFields);
       if (draft.editorText) setEditorText(draft.editorText);
       if (draft.workType) setEditorMode(draft.workType as EditorMode);
       setHasStoredDraft(true);
@@ -290,9 +291,13 @@ export default function App() {
   }
 
   function handleBuildDraft() {
+    if (editorText.trim() && !confirmReplaceDraft) {
+      setConfirmReplaceDraft(true);
+      setStatus("Clique em 'Montar rascunho a partir dos campos' novamente para confirmar a substituição do texto do editor.");
+      return;
+    }
+    setConfirmReplaceDraft(false);
     const draft = buildDraftFromFields(fields);
-    const current = editorText.trim();
-    if (current && !window.confirm("O editor já contém texto. Substituir pelo rascunho estruturado?")) return;
     setEditorText(draft);
     lastAppliedEditorTextRef.current = draft;
     if (editorRef.current) editorRef.current.innerHTML = editorMarkupToHtml(draft);
@@ -362,6 +367,7 @@ export default function App() {
 
       <p className="global-draft-notice" role="note">O sistema gera um rascunho técnico editável. A submissão final exige revisão humana no Word ou LibreOffice.</p>
 
+      <a href="#workspace" className="skip-link">Pular para o conteúdo</a>
       <main id="workspace" className="workspace">
         <section className="metadata-pane" aria-label="Campos acadêmicos">
           <div className="assisted-panel">
@@ -370,7 +376,10 @@ export default function App() {
               <label className="assisted-toggle"><input type="checkbox" checked={assistedMode} onChange={(event) => setAssistedMode(event.target.checked)} /><span>Mostrar campos guiados</span></label>
             </div>
             <p className="assisted-note">Preencha os campos abaixo e use <strong>Montar rascunho</strong> para gerar a estrutura no editor. Campos vazios viram marcadores [PREENCHER: ...]; o sistema não inventa conteúdo.</p>
-            <button className="primary-action" type="button" onClick={handleBuildDraft}><FileCheck2 size={18} aria-hidden="true" />Montar rascunho a partir dos campos</button>
+            <div>
+              <button className="primary-action" type="button" onClick={handleBuildDraft}><FileCheck2 size={18} aria-hidden="true" />{confirmReplaceDraft ? "Confirmar substituição" : "Montar rascunho a partir dos campos"}</button>
+              {confirmReplaceDraft && <button className="secondary-action" type="button" onClick={() => setConfirmReplaceDraft(false)}>Cancelar</button>}
+            </div>
           </div>
           <div className="field-group"><label htmlFor="work-type">Tipo de trabalho</label><select id="work-type" value={fields.workType} onChange={(event) => updateWorkType(event.target.value as typeof fields.workType)}><option value="">Selecione</option>{WORK_TYPES.map((type) => <option key={type} value={type}>{WORK_TYPE_LABELS[type]}</option>)}</select></div>
           {fields.workType === "artigo" && <div className="mode-panel"><h2>Artigo acadêmico simples</h2><p>Modelo sem capa, folha de rosto, ficha catalográfica, folha de aprovação, indicadores de impacto e sumário.</p></div>}

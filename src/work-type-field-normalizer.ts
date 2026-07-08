@@ -1,5 +1,4 @@
 import { isUflaCollectionWork, type AcademicFields } from "./ufla-rules";
-import { academicProductionTypeById } from "./academic-production-types";
 import { findUflaPpgProgram, formatUflaPpgProgram } from "./ufla-ppg-programs";
 import { normalizeWorkType } from "./work-type-resolver";
 
@@ -186,7 +185,6 @@ export function normalizeFieldsForSelectedModel(fields: AcademicFields): Academi
 
   if (isUflaCollectionWork(normalizedFields.workType)) {
     const sanitized = sanitizeAdvisorFields(normalizedFields);
-    const productionType = academicProductionTypeById(normalizedFields.workType);
     if (!hasText(sanitized.workNature) || isGenericOrMismatchedNature(sanitized.workNature, sanitized.workType)) {
       return {
         ...sanitized,

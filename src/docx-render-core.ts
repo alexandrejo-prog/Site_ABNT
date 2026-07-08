@@ -1,7 +1,6 @@
 import {
   AlignmentType,
   IParagraphOptions,
-  PageBreak,
   Paragraph,
   TextRun,
 } from "docx";
@@ -197,7 +196,7 @@ export function detectCaption(text: string): CaptionInfo | null {
 
 export function captionParagraph(
   text: string,
-  kind: CaptionKind = "illustration",
+  _kind: CaptionKind = "illustration",
 ): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.CENTER,

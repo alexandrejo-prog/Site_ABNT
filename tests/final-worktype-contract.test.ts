@@ -1,11 +1,10 @@
-import { readFileSync } from "node:fs";
 import { inflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { generateArticleDocxBlob } from "../src/export-article-docx";
 import { generateCpgDocxBlob } from "../src/export-cpg-docx";
 import { generateDocxBlob } from "../src/export-docx";
 import { generateResearchProjectDocxBlob } from "../src/export-research-project-docx";
-import { CPG_RULES, UFLA_RULES, emptyAcademicFields, type AcademicFields } from "../src/ufla-rules";
+import { CPG_RULES, emptyAcademicFields, type AcademicFields } from "../src/ufla-rules";
 import { templateForWorkType } from "../src/document-template";
 import { validateWork } from "../src/validators";
 import { repairHeadingFragments } from "../src/heading-fragment-repair";
@@ -44,26 +43,6 @@ function extractFileFromZip(buffer: Buffer, fileName: string): string {
   throw new Error(`Arquivo nao encontrado no DOCX: ${fileName}.`);
 }
 
-function paragraphsIn(documentXml: string): string[] {
-  return documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? [];
-}
-
-function paragraphXmlContaining(documentXml: string, text: string): string {
-  const paragraph = paragraphsIn(documentXml).find((item) => item.includes(text));
-  expect(paragraph).toBeTruthy();
-  return paragraph ?? "";
-}
-
-function paragraphText(paragraphXml: string): string {
-  return [...paragraphXml.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)]
-    .map((match) => match[1])
-    .join("");
-}
-
-function documentText(documentXml: string): string {
-  return paragraphsIn(documentXml).map(paragraphText).join("\n");
-}
-
 async function generatedXml(
   editorText = "# 1 Introducao\nTexto comum.",
   documentFields: AcademicFields = baseFields,
@@ -94,10 +73,6 @@ async function generatedProjectXml(
 ) {
   const blob = await generateResearchProjectDocxBlob({ fields: documentFields, editorText });
   return extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
-}
-
-function hasPositiveBold(xml: string): boolean {
-  return /<w:b\s*\/?>|<w:b\b(?=[^>]*w:val="(?:1|true|on)")/.test(xml);
 }
 
 function expectNoGraduateOnlyElements(documentXml: string): void {

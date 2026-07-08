@@ -11,7 +11,6 @@ import {
 } from "./ufla-rules";
 import {
   ACADEMIC_PRODUCTION_TYPES,
-  type UflaAcademicProductionTypeId,
 } from "./academic-production-types";
 import {
   DocxStructure,
@@ -772,15 +771,6 @@ function blockTextTrimmed(block: ImportedBlock): string {
   return blockText(block).trim();
 }
 
-function joinBlocks(blocks: ImportedBlock[], start: number, end?: number): string {
-  const slice = end !== undefined ? blocks.slice(start, end) : blocks.slice(start);
-  return slice
-    .map((block) => blockText(block).trim())
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-}
-
 function isLikelyCpgAuthor(text: string): boolean {
   const normalized = normalizeForDetection(text);
   const upper = text.toUpperCase();
@@ -820,27 +810,6 @@ function isEmailLine(text: string): boolean {
   return /^[^\s]+@[^\s]+$/.test(text.trim());
 }
 
-function cleanLabeledValue(text: string, label: string): string {
-  const normalized = normalizeForDetection(text);
-  const labelNormalized = normalizeForDetection(label);
-  if (normalized.startsWith(`${labelNormalized}:`) || normalized.startsWith(`${labelNormalized}.`)) {
-    return cleanValue(text.slice(text.indexOf(":") >= 0 ? text.indexOf(":") + 1 : text.indexOf(".") + 1));
-  }
-  return text;
-}
-
-function collectCpgSection(blocks: ImportedBlock[], startIndex: number, stopPattern: RegExp): string {
-  if (startIndex < 0) return "";
-  const collected: string[] = [];
-  for (let index = startIndex + 1; index < blocks.length; index += 1) {
-    const text = blockTextTrimmed(blocks[index]);
-    if (!text) continue;
-    if (stopPattern.test(text)) break;
-    collected.push(text);
-  }
-  return joinLines(collected);
-}
-
 function detectCpgAcademicFieldsFromStructure(structure: DocxStructure): FieldDetectionResult {
   const blocks = structure.blocks.filter((block) => block.type !== "pageBreak");
   if (!blocks.length) {
@@ -855,7 +824,6 @@ function detectCpgAcademicFieldsFromStructure(structure: DocxStructure): FieldDe
   const fields = emptyAcademicFields();
   const confidence = emptyConfidenceMap();
   const messages: string[] = [];
-  const allTexts = blocks.map((block) => blockTextTrimmed(block)).filter(Boolean);
 
   let cursor = 0;
 
@@ -949,7 +917,6 @@ function detectCpgAcademicFieldsFromStructure(structure: DocxStructure): FieldDe
   fields.abstractText = joinLines(abstractTexts);
   if (fields.abstractText) confidence.abstractText = "alta";
 
-  const keywordTexts: string[] = [];
   while (cursor < blocks.length) {
     const text = blockTextTrimmed(blocks[cursor]);
     if (!text) { cursor += 1; continue; }
@@ -986,7 +953,6 @@ function detectCpgAcademicFieldsFromStructure(structure: DocxStructure): FieldDe
   fields.resumo = joinLines(resumoTexts);
   if (fields.resumo) confidence.resumo = "alta";
 
-  const palavrasTexts: string[] = [];
   while (cursor < blocks.length) {
     const text = blockTextTrimmed(blocks[cursor]);
     if (!text) { cursor += 1; continue; }

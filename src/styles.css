@@ -722,3 +722,80 @@ button:focus-visible,
     min-height: 420px;
   }
 }
+
+.error-boundary {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  gap: 12px;
+}
+
+.error-boundary h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.error-boundary p {
+  max-width: 480px;
+  color: #4b5563;
+}
+
+.error-boundary-detail {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.error-boundary button {
+  margin-top: 8px;
+}
+
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: #000;
+  color: #fff;
+  padding: 8px 16px;
+  z-index: 100;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+.confirm-replace-notice {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff4e5;
+  border: 1px solid #f0c987;
+  color: #7a4f01;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.confirm-replace-notice button {
+  margin: 0;
+}
+
+.secondary-action {
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: #374151;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adherence-chevron {
+    transition: none;
+  }
+}
