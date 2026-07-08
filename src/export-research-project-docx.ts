@@ -13,7 +13,7 @@ import { parseEditorContent, type DocxGenerationInput, type EditorBlock, loadDef
 import { AUTHOR_SIZE, BLACK, BODY_SIZE, ONE_AND_HALF_LINE, SINGLE_LINE, TITLE_SIZE, centered, ibgeTable, logoParagraph, pageBreak, pageMargins, pageNumberHeader, paragraph, run, unnumberedTitle } from "./docx-shared";
 import { repairHeadingFragments } from "./heading-fragment-repair";
 import { normalizeUflaManualInTextCitations } from "./in-text-citation-normalizer";
-import { normalizeKeywordSentence, normalizeResearchProjectEditorText } from "./research-project-cleaner";
+import { isResearchProjectProvisionalText, normalizeKeywordSentence, normalizeResearchProjectEditorText } from "./research-project-cleaner";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { UFLA_RULES } from "./ufla-rules";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
@@ -44,6 +44,7 @@ function coverChildren(input: DocxGenerationInput): Paragraph[] {
 }
 
 function titlePageChildren(fields: DocxGenerationInput["fields"]): Paragraph[] {
+  const advisor = cleanMojibakeText(fields.advisor).trim();
   return [
     pageBreak(),
     centered(cleanMojibakeText(fields.author || "Autor"), false, BODY_SIZE, 0, 520),
@@ -54,7 +55,7 @@ function titlePageChildren(fields: DocxGenerationInput["fields"]): Paragraph[] {
       spacing: { line: SINGLE_LINE, after: 180 },
       children: [run(cleanMojibakeText(fields.workNature || "Projeto de pesquisa apresentado à Universidade Federal de Lavras."))],
     }),
-    ...(fields.advisor ? [paragraph(`Orientador: ${cleanMojibakeText(fields.advisor)}`)] : []),
+    ...(advisor && !isResearchProjectProvisionalText(advisor) ? [paragraph(`Orientador: ${advisor}`)] : []),
     centered(cleanMojibakeText((fields.location || "LAVRAS - MG").toUpperCase()), false, BODY_SIZE, 1800, 120),
     centered(cleanMojibakeText(fields.year || new Date().getFullYear().toString()), false, BODY_SIZE, 0, 0),
   ];
