@@ -13,6 +13,7 @@ import { parseEditorContent, type DocxGenerationInput, type EditorBlock, loadDef
 import { AUTHOR_SIZE, BLACK, BODY_SIZE, ONE_AND_HALF_LINE, SINGLE_LINE, TITLE_SIZE, centered, ibgeTable, logoParagraph, pageBreak, pageMargins, pageNumberHeader, paragraph, run, unnumberedTitle } from "./docx-shared";
 import { repairHeadingFragments } from "./heading-fragment-repair";
 import { normalizeUflaManualInTextCitations } from "./in-text-citation-normalizer";
+import { normalizeKeywordSentence, normalizeResearchProjectEditorText } from "./research-project-cleaner";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { UFLA_RULES } from "./ufla-rules";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
@@ -60,15 +61,17 @@ function titlePageChildren(fields: DocxGenerationInput["fields"]): Paragraph[] {
 }
 
 function preTextualChildren(fields: DocxGenerationInput["fields"]): Array<Paragraph | TableOfContents> {
+  const palavrasChave = normalizeKeywordSentence(fields.palavrasChave);
+  const keywords = normalizeKeywordSentence(fields.keywords);
   return [
     pageBreak(),
     unnumberedTitle("Resumo"),
     ...coreSplitParagraphs(cleanMojibakeText(fields.resumo)).map((line) => paragraph(line)),
-    ...(fields.palavrasChave ? [paragraph(cleanMojibakeText(`Palavras-chave: ${fields.palavrasChave}`))] : []),
+    ...(palavrasChave ? [paragraph(`Palavras-chave: ${palavrasChave}`)] : []),
     pageBreak(),
     unnumberedTitle("Abstract"),
     ...coreSplitParagraphs(cleanMojibakeText(fields.abstractText)).map((line) => paragraph(line)),
-    ...(fields.keywords ? [paragraph(cleanMojibakeText(`Keywords: ${fields.keywords}`))] : []),
+    ...(keywords ? [paragraph(`Keywords: ${keywords}`)] : []),
     pageBreak(),
     unnumberedTitle("Sumário"),
     new TableOfContents("", {
@@ -81,28 +84,30 @@ function preTextualChildren(fields: DocxGenerationInput["fields"]): Array<Paragr
 }
 
 function projectEditorText(input: DocxGenerationInput): string {
-  if (input.editorText.trim()) return repairHeadingFragments(input.editorText);
+  if (input.editorText.trim()) return repairHeadingFragments(normalizeResearchProjectEditorText(input.editorText));
 
   const sections: Array<[string, string]> = [
     ["TEMA", input.fields.tema],
-    ["DELIMITACAO DO TEMA", input.fields.delimitacaoTema],
+    ["DELIMITAÇÃO DO TEMA", input.fields.delimitacaoTema],
     ["PROBLEMA DE PESQUISA", input.fields.problemaPesquisa],
-    ["HIPOTESE", input.fields.hipotese],
+    ["HIPÓTESE", input.fields.hipotese],
     ["OBJETIVO GERAL", input.fields.objetivoGeral],
-    ["OBJETIVOS ESPECIFICOS", input.fields.objetivosEspecificos],
+    ["OBJETIVOS ESPECÍFICOS", input.fields.objetivosEspecificos],
     ["JUSTIFICATIVA", input.fields.justificativa],
-    ["REFERENCIAL TEORICO", input.fields.referencialTeorico],
+    ["REFERENCIAL TEÓRICO", input.fields.referencialTeorico],
     ["METODOLOGIA", input.fields.metodologia],
     ["CRONOGRAMA", input.fields.cronograma],
-    ["RECURSOS/ORCAMENTO", input.fields.recursosOrcamento],
+    ["RECURSOS/ORÇAMENTO", input.fields.recursosOrcamento],
     ["RESULTADOS ESPERADOS", input.fields.resultadosEsperados],
   ];
 
   return repairHeadingFragments(
-    sections
-      .filter(([, value]) => hasValue(value))
-      .flatMap(([title, value]) => [`# ${title}`, coreSplitParagraphs(cleanMojibakeText(value)).join("\n")])
-      .join("\n\n"),
+    normalizeResearchProjectEditorText(
+      sections
+        .filter(([, value]) => hasValue(value))
+        .flatMap(([title, value]) => [`# ${title}`, coreSplitParagraphs(cleanMojibakeText(value)).join("\n")])
+        .join("\n\n"),
+    ),
   );
 }
 
