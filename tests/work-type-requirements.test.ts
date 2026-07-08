@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { emptyAcademicFields, type AcademicFields } from "../src/ufla-rules";
 import { validateWork } from "../src/validators";
+import { templateForWorkType } from "../src/document-template";
+import { normalizeWorkType } from "../src/work-type-resolver";
 import { getWorkTypeRequirements } from "../src/work-type-requirements";
 
 function articleFields(overrides: Partial<AcademicFields> = {}): AcademicFields {
@@ -17,6 +19,13 @@ function articleFields(overrides: Partial<AcademicFields> = {}): AcademicFields 
 }
 
 describe("work-type requirements", () => {
+  it("normaliza ids, rotulos e aliases antes de decidir template", () => {
+    expect(normalizeWorkType("Artigo acadêmico simples")).toBe("artigo");
+    expect(normalizeWorkType("artigo simples")).toBe("artigo");
+    expect(normalizeWorkType("Projeto de pesquisa (NBR 15287:2025)")).toBe("projeto_pesquisa");
+    expect(templateForWorkType("Artigo acadêmico simples").id).toBe("artigo");
+  });
+
   it("marca artigo simples sem metadados institucionais, impacto ou pre-textuais", () => {
     expect(getWorkTypeRequirements("artigo")).toEqual({
       requiresInstitutionalMetadata: false,
@@ -26,6 +35,7 @@ describe("work-type requirements", () => {
       requiresTableOfContents: false,
       requiresCatalogCard: false,
     });
+    expect(getWorkTypeRequirements("Artigo acadêmico simples")).toEqual(getWorkTypeRequirements("artigo"));
   });
 
   it("mantem requisitos institucionais para dissertacao e tese", () => {
