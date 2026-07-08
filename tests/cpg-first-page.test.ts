@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { inflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { generateCpgDocxBlob } from "../src/export-cpg-docx";
@@ -88,7 +87,7 @@ const cpgFields: AcademicFields = {
   palavrasChave: "cafe; qualidade",
   abstractText: "Abstract text.",
   keywords: "coffee; quality",
-  referencias: "SILVA, M. Qualidade do cafe. Lavras: UFLA, 2024.",
+  referencias: "UNIVERSIDADE FEDERAL DE LAVRAS. Manual de normalização e estrutura de trabalhos acadêmicos. Lavras: UFLA, 2024.",
 };
 
 async function generatedCpgXml(fields: AcademicFields = cpgFields, editorText = "# Introducao\nTexto comum."): Promise<string> {
@@ -124,14 +123,14 @@ describe("CPG first page layout", () => {
     expect(hasPositiveBold(affiliation)).toBe(false);
   });
 
-  it("keeps resumo before abstract in CPG templates", async () => {
+  it("keeps resumo before abstract in CPG templates and final period in keywords", async () => {
     const documentXml = await generatedCpgXml();
     const text = documentText(documentXml);
 
     expect(text.indexOf("Resumo. Resumo do trabalho.")).toBeGreaterThan(-1);
-    expect(text.indexOf("Palavras-chave: cafe; qualidade")).toBeGreaterThan(text.indexOf("Resumo. Resumo do trabalho."));
-    expect(text.indexOf("Abstract. Abstract text.")).toBeGreaterThan(text.indexOf("Palavras-chave: cafe; qualidade"));
-    expect(text.indexOf("Keywords: coffee; quality")).toBeGreaterThan(text.indexOf("Abstract. Abstract text."));
+    expect(text.indexOf("Palavras-chave: cafe; qualidade.")).toBeGreaterThan(text.indexOf("Resumo. Resumo do trabalho."));
+    expect(text.indexOf("Abstract. Abstract text.")).toBeGreaterThan(text.indexOf("Palavras-chave: cafe; qualidade."));
+    expect(text.indexOf("Keywords: coffee; quality.")).toBeGreaterThan(text.indexOf("Abstract. Abstract text."));
   });
 
   it("does not include full-work pretextual sections in CPG export", async () => {
@@ -143,19 +142,22 @@ describe("CPG first page layout", () => {
     expect(text).not.toContain("Trabalho apresentado");
   });
 
-  it("removes forbidden CPG sections and keeps following allowed sections", async () => {
+  it("removes forbidden CPG sections, keeps following allowed sections and renumbers", async () => {
     const documentXml = await generatedCpgXml(
       cpgFields,
-      "# 1 INTRODUÇÃO\nTexto permitido.\n# 4 INDICADORES DE IMPACTO\nImpacto social: conteúdo fora do modelo CPG.\n# 5 CRONOGRAMA\nCronograma textual permitido.",
+      "# 1 INTRODUÇÃO\nTexto permitido.\n# 4 INDICADORES DE IMPACTO\nImpacto social: conteúdo fora do modelo CPG.\n# 5 CRONOGRAMA\nCronograma textual permitido.\n# 6 CONSIDERAÇÕES FINAIS\nTexto final.",
     );
     const text = documentText(documentXml);
 
-    expect(text).toContain("INTRODUÇÃO");
+    expect(text).toContain("1 INTRODUÇÃO");
     expect(text).toContain("Texto permitido.");
     expect(text).not.toContain("INDICADORES DE IMPACTO");
     expect(text).not.toContain("Impacto social: conteúdo fora do modelo CPG.");
-    expect(text).toContain("CRONOGRAMA");
+    expect(text).toContain("2 CRONOGRAMA");
     expect(text).toContain("Cronograma textual permitido.");
+    expect(text).toContain("3 CONSIDERAÇÕES FINAIS");
+    expect(text).not.toContain("5 CRONOGRAMA");
+    expect(text).not.toContain("6 CONSIDERAÇÕES FINAIS");
   });
 
   it("sanitizer does not remove ordinary mentions of indicators inside a paragraph", () => {
@@ -177,18 +179,13 @@ describe("CPG first page layout", () => {
     expect(text).not.toContain("\ufffe");
   });
 
-  it("uses REFERÊNCIAS as the default CPG reference title", async () => {
+  it("uses REFERÊNCIAS as the default CPG reference title and normalizes UFLA manual", async () => {
     const documentXml = await generatedCpgXml();
     const text = documentText(documentXml);
 
     expect(text).toContain("REFERÊNCIAS");
     expect(text).not.toContain("Referencias");
-  });
-
-  it("protege decisao tecnica documentada de manter caminho proprio de referencias CPG", () => {
-    const source = readFileSync(new URL("../src/export-cpg-docx.ts", import.meta.url), "utf8");
-
-    expect(source).toContain("CPG keeps this local path");
-    expect(source).not.toMatch(/from "\.\/references-normalizer"/);
+    expect(text).toContain("6. ed. rev., atual. e ampl. Lavras: UFLA, 2025.");
+    expect(text).not.toContain("Lavras: UFLA, 2024.");
   });
 });
