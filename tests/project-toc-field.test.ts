@@ -89,4 +89,39 @@ describe("campo de sumario em projeto", () => {
     expect(xml).toContain("UNIVERSIDADE FEDERAL DE LAVRAS, 2025, p. 6-8");
     expect(xml).not.toContain("UNIVERSIDADE FEDERAL DE LAVRAS, 2024, p. 6-8");
   });
+
+  it("não exporta TITLE/Toc/placeholder e corrige títulos do projeto", async () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "projeto_pesquisa" as const,
+      title: "Projeto",
+      author: "Maria Silva",
+      advisor: "nome do orientador",
+      resumo: "Resumo do projeto.",
+      palavrasChave: "PGD; saúde do trabalhador; educação ambiental crítica",
+      abstractText: "Project abstract.",
+      keywords: "PGD; worker health; critical environmental education",
+      referencias: "SILVA, M. Projeto. Lavras: UFLA, 2024.",
+    };
+
+    const xml = await documentXml(
+      await generateResearchProjectDocxBlob({
+        fields,
+        editorText: [
+          "TITLE 1 INTRODUÇÃO Toc234433198",
+          "Texto.",
+          "TITLE 1 REFERENCIAL TERICO",
+          "Texto.",
+        ].join("\n"),
+      }),
+    );
+
+    expect(xml).toContain("INTRODUÇÃO");
+    expect(xml).toContain("REFERENCIAL TEÓRICO");
+    expect(xml).toContain("Palavras-chave: PGD. saúde do trabalhador. educação ambiental crítica.");
+    expect(xml).not.toContain("TITLE 1");
+    expect(xml).not.toContain("Toc234433198");
+    expect(xml).not.toContain("REFERENCIAL TERICO");
+    expect(xml).not.toContain("nome do orientador");
+  });
 });
