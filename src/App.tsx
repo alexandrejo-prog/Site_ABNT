@@ -372,7 +372,7 @@ export default function App() {
         </div>
       </header>
 
-      <p className="global-draft-notice" role="note">O sistema gera um rascunho técnico editável. A submissão final exige revisão humana no Word ou LibreOffice.</p>
+      <p className="global-draft-notice" role="note">O DOCX é rascunho técnico. Sumário, ficha catalográfica, paginação final e PDF devem ser conferidos no Word/LibreOffice.</p>
 
       <a href="#workspace" className="skip-link">Pular para o conteúdo</a>
       <main id="workspace" className="workspace">

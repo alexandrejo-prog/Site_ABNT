@@ -250,7 +250,8 @@ describe("PF3 - campos guiados não poluem a tela (teste estático)", () => {
   const source = `${appSource}\n${sidebarSource}`;
   it("App contém o título correto e aviso de rascunho editável", () => {
     expect(source).toContain("Assistente de estruturação e pré-normalização UFLA/ABNT");
-    expect(source).toContain("O sistema gera um rascunho técnico editável");
+    expect(source).toContain("O DOCX é rascunho técnico");
+    expect(source).toContain("devem ser conferidos no Word/LibreOffice");
   });
   it("assistedMode controla exibição dos campos guiados", () => {
     expect(source).toMatch(/assistedMode && ASSISTED_FIELD_KEYS\.includes\(key\)/);

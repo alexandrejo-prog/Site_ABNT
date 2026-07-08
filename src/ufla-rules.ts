@@ -194,6 +194,12 @@ export const CPG_RULES = {
 
 // Regras extraídas do Manual de normalização da UFLA e mantidas aqui como
 // fonte única para evitar números mágicos no gerador DOCX e nos testes.
+
+// Referência canônica do Manual de Normalização da UFLA (6. ed., 2025), usada
+// como fixture/base de comparação nos testes de referências.
+export const UFLA_MANUAL_REFERENCE =
+  "UNIVERSIDADE FEDERAL DE LAVRAS. Manual de normalização e estrutura de trabalhos acadêmicos: TCCs, monografias, dissertações e teses. 6. ed. rev., atual. e ampl. Lavras: UFLA, 2025.";
+
 export const UFLA_RULES = {
   source:
     "Manual de normalização e estrutura de trabalhos acadêmicos da UFLA, 6. ed.",

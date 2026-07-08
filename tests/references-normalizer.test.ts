@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeReference, type NormalizedReference } from "../src/references-normalizer";
+import { UFLA_MANUAL_REFERENCE } from "../src/ufla-rules";
 
 function boldRunFor(reference: NormalizedReference, text: string) {
   return reference.runs.find((run) => run.text === text && run.bold);
@@ -120,5 +121,20 @@ describe("references normalizer", () => {
     expect(normalized.text).toContain("DOI: 10.1234/exemplo");
     expect(normalized.text).toContain("https://exemplo.test/artigo");
     expect(normalized.text).toContain("Acesso em: 10 jan. 2026");
+  });
+
+  it("referencia canonica do Manual UFLA esta na 6. ed. rev., atual. e ampl. (2025)", () => {
+    expect(UFLA_MANUAL_REFERENCE).toContain("Manual de normalização e estrutura de trabalhos acadêmicos");
+    expect(UFLA_MANUAL_REFERENCE).toContain("6. ed. rev., atual. e ampl.");
+    expect(UFLA_MANUAL_REFERENCE).toContain("Lavras: UFLA, 2025.");
+  });
+
+  it("normaliza a referencia do Manual UFLA com destaque de titulo", () => {
+    const normalized = normalizeReference(UFLA_MANUAL_REFERENCE);
+    expect(normalized.text).toContain("UNIVERSIDADE FEDERAL DE LAVRAS");
+    expect(normalized.text).toContain("Lavras: UFLA, 2025.");
+    expect(normalized.detectedHighlight).toBeTruthy();
+    const highlightRun = normalized.runs.find((run) => run.text === normalized.detectedHighlight);
+    expect(highlightRun?.bold).toBe(true);
   });
 });

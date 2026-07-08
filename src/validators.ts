@@ -95,6 +95,7 @@ function addPlaceholderIssues(fields: AcademicFields, editorText: string, issues
     ["resumo", fields.resumo, "Resumo"],
     ["abstractText", fields.abstractText, "Abstract"],
     ["indicadoresImpacto", fields.indicadoresImpacto, "Indicadores de impacto"],
+    ["impactIndicators", fields.impactIndicators, "Impact indicators"],
   ];
   if (isAdvisorRequired(fields.workType)) criticalTargets.push(["advisor", fields.advisor, "Orientador"]);
 

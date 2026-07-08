@@ -82,11 +82,45 @@ describe("Indicadores de impacto - sem texto genérico", () => {
     expect(issues).toContainEqual(expect.objectContaining({ severity: "error", code: "impact-indicators-missing" }));
   });
 
-  it("DOCX não contém texto instrucional genérico de indicadores quando vazio", async () => {
+  it("DOCX não contém placeholder nem página de indicadores quando vazio (omissão)", async () => {
     const documentXml = await generatedXml(baseFields({ indicadoresImpacto: "" }));
     expect(documentXml).not.toContain("Esta pesquisa apresenta impacto social");
     expect(documentXml).not.toContain("This research has social and institutional impact");
-    expect(documentXml).toContain("[PREENCHER: indicadores de impacto]");
+    expect(documentXml).not.toContain("[PREENCHER: indicadores de impacto]");
+    expect(documentXml).not.toContain("[PREENCHER: impact indicators]");
+    expect(documentXml).not.toContain("INDICADORES DE IMPACTO");
+    expect(documentXml).not.toContain("IMPACT INDICATORS");
+  });
+
+  it("tese com indicadores em português e impactIndicators vazio não gera placeholder", async () => {
+    const documentXml = await generatedXml(
+      baseFields({
+        workType: "tese",
+        program: "Ciência do Solo",
+        advisor: "Prof. Dr. João Souza",
+        indicadoresImpacto: "Impacto social: beneficia a comunidade.",
+        impactIndicators: "",
+      }),
+    );
+    expect(documentXml).not.toContain("[PREENCHER");
+    // Página PT existe (indicadores preenchidos); página EN ausente (tradução vazia).
+    expect(documentXml).toContain("INDICADORES DE IMPACTO");
+    expect(documentXml).not.toContain("IMPACT INDICATORS");
+  });
+
+  it("indicadores separados viram parágrafo único (não lista de linhas)", async () => {
+    const documentXml = await generatedXml(
+      baseFields({
+        workType: "tese",
+        program: "Ciência do Solo",
+        advisor: "Prof. Dr. João Souza",
+        impactoSocial: "Beneficia a agricultura familiar.",
+        impactoCientifico: "Avança o conhecimento em solos tropicais.",
+        impactIndicators: "Social impact text.",
+      }),
+    );
+    expect(documentXml).toContain("Impacto social: Beneficia a agricultura familiar.; Impacto científico: Avança o conhecimento em solos tropicais.");
+    expect(documentXml).not.toContain("[PREENCHER");
   });
 
   it("DOCX não contém defaultImpactIndicators quando vazio", async () => {

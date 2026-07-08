@@ -362,6 +362,8 @@ describe("DOCX export", () => {
       dedicatoria: "A minha familia.",
       agradecimentos: "Agradeco a todos.",
       epigrafe: "Uma frase breve.",
+      indicadoresImpacto: "Impacto social informado.",
+      impactIndicators: "Social impact text.",
     });
 
     const visualTitles = [

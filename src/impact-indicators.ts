@@ -94,7 +94,8 @@ export function consolidateImpactIndicators(fields: AcademicFields): string {
     .filter((entry) => entry.value.length > 0);
 
   if (filled.length === 0) return "";
-  return filled.map((entry) => `${entry.label}: ${entry.value}`).join("\n");
+  // Texto corrido em parágrafo único (terceira pessoa), conforme Manual de Normalização UFLA.
+  return filled.map((entry) => `${entry.label}: ${entry.value}`).join("; ");
 }
 
 // Considera suficiente quando há ao menos dois campos específicos de impacto

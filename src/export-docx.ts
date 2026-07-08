@@ -10,8 +10,11 @@ import {
   PageOrientation,
   Paragraph,
   Table,
+  TableCell,
   TableOfContents,
+  TableRow,
   TextRun,
+  WidthType,
 } from "docx";
 import type { IParagraphOptions, IStylesOptions } from "docx";
 import { pageMargins, ibgeTable, BODY_SIZE, SINGLE_LINE, ONE_AND_HALF_LINE, BLACK, AUTHOR_SIZE as COVER_AUTHOR_SIZE, TITLE_SIZE as COVER_TITLE_SIZE } from "./docx-shared";
@@ -28,6 +31,7 @@ export type EditorBlockType =
   | "heading3"
   | "longQuote"
   | "scheduleTable"
+  | "markdownTable"
   | "reference";
 
 export interface EditorBlock {
@@ -181,6 +185,21 @@ function shouldStartScheduleTable(value: string): boolean {
   return /^Quadro\s+\d+\s+-\s+Cronograma/i.test(value.trim());
 }
 
+function looksLikeMarkdownTableRow(value: string): boolean {
+  const normalized = value.trim();
+  if (!normalized.includes("|")) return false;
+  const cells = normalized.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|");
+  return cells.filter((cell) => cell.trim().length > 0).length >= 2;
+}
+
+function isMarkdownTableSeparator(value: string): boolean {
+  return /^\s*\|?[\s:|-]+\|?\s*$/.test(value) && value.includes("-");
+}
+
+function shouldStartMarkdownTable(value: string): boolean {
+  return looksLikeMarkdownTableRow(value) && !shouldStartScheduleTable(value);
+}
+
 export function parseEditorContent(editorText: string): EditorBlock[] {
   const lines = editorText
     .split(/\r?\n/)
@@ -190,6 +209,22 @@ export function parseEditorContent(editorText: string): EditorBlock[] {
 
   for (let index = 0; index < lines.length; index += 1) {
     const trimmed = lines[index];
+
+    if (shouldStartMarkdownTable(trimmed)) {
+      const tableLines = [trimmed];
+      let cursor = index + 1;
+
+      while (cursor < lines.length) {
+        const nextLine = lines[cursor];
+        if (!looksLikeMarkdownTableRow(nextLine) && !isMarkdownTableSeparator(nextLine)) break;
+        tableLines.push(nextLine);
+        cursor += 1;
+      }
+
+      blocks.push({ type: "markdownTable", text: tableLines.join("\n") });
+      index = cursor - 1;
+      continue;
+    }
 
     if (shouldStartScheduleTable(trimmed)) {
       const tableLines = [trimmed];
@@ -475,6 +510,61 @@ function scheduleRowsFromBlock(text: string): { caption: string; rows: ScheduleR
   return { caption, rows, source };
 }
 
+function markdownTableBlock(text: string): Array<Paragraph | Table> {
+  const rawLines = text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const rows = rawLines
+    .filter((line) => !isMarkdownTableSeparator(line))
+    .map((line) =>
+      line
+        .replace(/^\s*\|/, "")
+        .replace(/\|\s*$/, "")
+        .split("|")
+        .map((cell) => cell.trim()),
+    )
+    .filter((cells) => cells.length >= 2);
+
+  if (!rows.length) return [simpleParagraph(text)];
+
+  const columnCount = rows.reduce((max, cells) => Math.max(max, cells.length), 0);
+
+  const tableRows = rows.map((cells, rowIndex) => {
+    const tableCells = Array.from({ length: columnCount }, (_, columnIndex) => {
+      const cellText = cells[columnIndex] ?? "";
+      return new TableCell({
+        margins: { top: 40, bottom: 40, left: 80, right: 80 },
+        children: [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { line: SINGLE_LINE, after: 0 },
+            children: [
+              new TextRun({
+                text: cellText,
+                bold: rowIndex === 0,
+                font: UFLA_RULES.typography.fontFamily,
+                size: BODY_SIZE,
+                color: BLACK,
+              }),
+            ],
+          }),
+        ],
+      });
+    });
+
+    return new TableRow({ children: tableCells });
+  });
+
+  return [
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      columnWidths: Array.from({ length: columnCount }, () => Math.floor(100 / columnCount)),
+      rows: tableRows,
+    }),
+  ];
+}
+
 function scheduleTableBlock(text: string): Array<Paragraph | Table> {
   const { caption, rows, source } = scheduleRowsFromBlock(text);
   const ibge = ibgeTable({
@@ -572,6 +662,10 @@ function blockToParagraph(
 
   if (block.type === "scheduleTable") {
     return scheduleTableBlock(block.text);
+  }
+
+  if (block.type === "markdownTable") {
+    return markdownTableBlock(block.text);
   }
 
   const cleanedText = cleanMojibakeText(block.text);
@@ -738,10 +832,14 @@ function buildSummary(
   const entries = collectSummaryEntries(bodyBlocks, references, fields);
   if (!entries.length) return [];
 
+  // Tese/dissertação usam exclusivamente o campo TOC atualizável do Word/LibreOffice.
+  // A lista estática sem paginação não é aceitável para esses tipos (Manual de Normalização UFLA).
+  const isGraduateThesis = fields.workType === "dissertacao" || fields.workType === "tese";
+
   return [
     pageBreak(),
     unnumberedTitle("Sumário"),
-    ...entries.map(summaryEntryParagraph),
+    ...(isGraduateThesis ? [] : entries.map(summaryEntryParagraph)),
     new TableOfContents("", {
       headingStyleRange: "1-3",
       hyperlink: true,
@@ -753,6 +851,13 @@ function buildSummary(
 
 function hasText(value: string): boolean {
   return value.trim().length > 0;
+}
+
+export function ensureTrailingPeriod(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (trimmed.endsWith(".")) return trimmed;
+  return `${trimmed.replace(/[;\s]+$/, "")}.`;
 }
 
 function hasApprovalPage(fields: AcademicFields): boolean {
@@ -847,8 +952,12 @@ function coverChildren(fields: AcademicFields, logo?: DocxLogoAsset): Paragraph[
 
 function buildTitlePageSupplementalLines(fields: AcademicFields, nature: string): string[] {
   const normalizedNature = normalizeForDetection(nature);
+  const isGraduateThesis = fields.workType === "dissertacao" || fields.workType === "tese";
+
   return [
-    fields.course && !normalizedNature.includes("CURSO") ? cleanMojibakeText(`Curso: ${fields.course}`) : "",
+    !isGraduateThesis && fields.course && !normalizedNature.includes("CURSO")
+      ? cleanMojibakeText(`Curso: ${fields.course}`)
+      : "",
     fields.program && !normalizedNature.includes("PROGRAMA") ? cleanMojibakeText(`Programa: ${fields.program}`) : "",
     fields.advisor && !normalizedNature.includes("ORIENTADOR") ? cleanMojibakeText(`Orientador(a): ${fields.advisor}`) : "",
     fields.coadvisor && !normalizedNature.includes("COORIENTADOR")
@@ -977,10 +1086,11 @@ function optionalUntitledRightPage(content: string, italics = false): Paragraph[
 }
 
 function preTextualChildren(fields: AcademicFields): Paragraph[] {
-  const impactRequired = fields.workType === "dissertacao" || fields.workType === "tese";
   const consolidated = consolidateImpactIndicators(fields);
-  const indicadores = consolidated || (impactRequired ? "[PREENCHER: indicadores de impacto]" : "");
-  const impactIndicators = fields.impactIndicators || (impactRequired ? "[PREENCHER: impact indicators]" : "");
+  // O bloco é omitido por completo quando vazio. Nunca se exporta placeholder.
+  const indicadores = consolidated;
+  // "Impact indicators" só existe se houver tradução real em inglês.
+  const impactIndicators = cleanMojibakeText(fields.impactIndicators?.trim() || "");
 
   return [
     pageBreak(),
@@ -996,14 +1106,16 @@ function preTextualChildren(fields: AcademicFields): Paragraph[] {
     unnumberedTitle("Resumo"),
     simpleParagraph(cleanMojibakeText(fields.resumo || " ")),
     ...(fields.palavrasChave
-      ? [simpleParagraph(cleanMojibakeText(`Palavras-chave: ${fields.palavrasChave}`))]
+      ? [simpleParagraph(cleanMojibakeText(`Palavras-chave: ${ensureTrailingPeriod(fields.palavrasChave)}`))]
       : []),
     pageBreak(),
     unnumberedTitle("Abstract"),
     simpleParagraph(cleanMojibakeText(fields.abstractText || " ")),
-    ...(fields.keywords ? [simpleParagraph(cleanMojibakeText(`Keywords: ${fields.keywords}`))] : []),
+    ...(fields.keywords
+      ? [simpleParagraph(cleanMojibakeText(`Keywords: ${ensureTrailingPeriod(fields.keywords)}`))]
+      : []),
     ...optionalPage("Indicadores de impacto", cleanMojibakeText(indicadores)),
-    ...optionalPage("Impact indicators", cleanMojibakeText(impactIndicators)),
+    ...optionalPage("Impact indicators", impactIndicators),
   ];
 }
 

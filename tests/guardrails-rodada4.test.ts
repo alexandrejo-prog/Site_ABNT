@@ -135,7 +135,8 @@ describe("Rodada 4 - conformidade DOCX/OpenXML", () => {
   it("App.tsx comunica rascunho editável e não promete conformidade total", () => {
     const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
     expect(source).toContain("Assistente de estruturação e pré-normalização UFLA/ABNT");
-    expect(source).toContain("O sistema gera um rascunho técnico editável");
+    expect(source).toContain("O DOCX é rascunho técnico");
+    expect(source).toContain("devem ser conferidos no Word/LibreOffice");
     expect(source).not.toContain("Normalização Acadêmica UFLA — DOCX editável");
   });
 });
