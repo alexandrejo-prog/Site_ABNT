@@ -20,9 +20,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   componentDidCatch(error: unknown, info: React.ErrorInfo): void {
-    if (import.meta.env.DEV) {
-      console.error("Erro capturado pelo ErrorBoundary do Site_ABNT.", error, info);
-    }
+    console.error("Erro capturado pelo ErrorBoundary do Site_ABNT.", error, info);
   }
 
   render(): React.ReactNode {
