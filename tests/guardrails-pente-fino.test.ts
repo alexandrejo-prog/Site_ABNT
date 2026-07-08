@@ -44,7 +44,7 @@ describe("PF1 - conflito PPGECA x Biologia", () => {
   });
 
   it("PPGECA + workNature com Engenharia de Controle e Automação gera program-conflict", () => {
-    const fields = ppgecaBase({ workNature: "Vinculado ao programa de Engenharia de Controle e Automação." });
+    const fields = ppgecaBase({ workType: "dissertacao", workNature: "Vinculado ao programa de Engenharia de Controle e Automacao." });
     expect(detectProgramConflict(fields)).toBe(true);
     expect(validateWork(fields).find((i) => i.code === "program-conflict")).toBeTruthy();
   });

@@ -103,7 +103,7 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
   });
 
-  it("conflito programa/área continua aparecendo no diagnóstico", async () => {
+  it("artigo simples nao exibe conflito programa/area no diagnostico", async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
@@ -112,7 +112,7 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "Educação Científica e Ambiental" } });
     fireEvent.change(screen.getByLabelText("Resumo"), { target: { value: "Este trabalho apresenta análise no programa de pós-graduação em Engenharia de Sistemas e Automação." } });
     fireEvent.click(getButtonByText(/Gerar DOCX/));
-    expect(screen.getByText("Há conflito entre programa/área informado e texto do documento.")).toBeInTheDocument();
+    expect(screen.queryByText("Há conflito entre programa/área informado e texto do documento.")).not.toBeInTheDocument();
   });
 
   it("rascunho gera mesmo com indicadores de impacto ausentes", async () => {
