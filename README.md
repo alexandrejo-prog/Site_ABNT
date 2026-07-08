@@ -39,6 +39,19 @@ npm run verify
 
 O status real de cobertura, limitacoes conhecidas e pontos que exigem validacao manual esta registrado em `STATUS_NORMATIVO.md`.
 
+## Fluxo recomendado
+
+1. Preencha os campos no navegador.
+2. O sistema salva um rascunho local automaticamente no `localStorage` após 800ms de inatividade. Se fechar o navegador e retornar, o conteúdo é restaurado automaticamente.
+3. Para remover o rascunho local, use o botão **Limpar rascunho** no cabeçalho.
+4. Gere o DOCX, abra no Word ou LibreOffice, atualize o sumário quando necessário e exporte o PDF para submissão.
+
+## Observações
+
+- Os dados ficam armazenados apenas no seu navegador. Nenhuma informação é enviada para servidor.
+- O DOCX gerado é um rascunho editável. A versão final exige revisão humana no Word ou LibreOffice.
+- O PDF não é gerado diretamente pelo navegador; exporte-o no editor de texto externo.
+
 ## Conferencia final
 
 - A ficha catalografica oficial, folha de aprovacao, imagens, legendas, referencias e paginacao final devem ser conferidas no DOCX gerado.

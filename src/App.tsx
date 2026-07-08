@@ -3,7 +3,8 @@ import { saveAs } from "file-saver";
 import { Bold, Eraser, FileCheck2, FileDown, Heading1, Heading2, Italic, Pilcrow, Quote, Upload, XCircle } from "lucide-react";
 import { importDocumentFile } from "./import-docx";
 import { ACADEMIC_FIELD_KEYS, AcademicFieldKey, type AcademicFields, CONFIDENCE_LABELS, Confidence, WORK_TYPE_LABELS, WORK_TYPES, emptyAcademicFields, emptyConfidenceMap, isCpgWork, isResearchProject, isUflaCollectionWork } from "./ufla-rules";
-import { ValidationIssue, hasBlockingErrors, validateWork, ADHERENCE_CATEGORIES } from "./validators";
+import { ValidationIssue, hasBlockingErrors, validateWork } from "./validators";
+import { isAbsoluteGenerationBlocker, isNonOverridableError } from "./generation-blockers";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
 import { UFLA_PPG_PROGRAMS } from "./ufla-ppg-programs";
 import { editorHtmlToMarkup, editorMarkupToHtml } from "./editor-markup";
@@ -11,6 +12,12 @@ import { templateForWorkType } from "./document-template";
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
 import { TextDiagnosticPanel } from "./text-diagnostic-panel";
 import { buildDraftFromFields, hasUnfilledPlaceholders, draftWorkTypeSupportsIndicators } from "./draft-builder";
+import { editorCommandAdapter } from "./editor-command-adapter";
+import { clearDraft, hasDraft, loadDraft, saveDraft } from "./draft-storage";
+import { AdherencePanel } from "./components/AdherencePanel";
+import { ValidationSidebar } from "./components/ValidationSidebar";
+import { DraftStatus } from "./components/DraftStatus";
+import { ToolButton } from "./components/ToolButton";
 
 const FIELD_LABELS: Record<AcademicFieldKey, string> = {
   author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho", course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador", location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave", abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão", referencias: "Referências", anexos: "Anexos", apendices: "Apêndices", dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators", imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema", problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese", objetivoGeral: "Objetivo Geral", objetivosEspecificos: "Objetivos Específicos", justificativa: "Justificativa", referencialTeorico: "Referencial Teórico",   metodologia: "Metodologia", cronograma: "Cronograma", recursosOrcamento: "Recursos/Orçamento", resultadosEsperados: "Resultados Esperados", corpusDados: "Corpus/Dados", contextoInstitucional: "Contexto Institucional", conclusaoProvisoria: "Conclusão Provisória", contribuicoesImpactos: "Contribuições/Impactos", impactoSocial: "Impacto social", impactoCientifico: "Impacto científico", impactoEducacional: "Impacto educacional", impactoAmbiental: "Impacto ambiental", impactoTecnologico: "Impacto tecnológico/econômico", publicoBeneficiado: "Público beneficiado", aderenciaOds: "Aderência a ODS/política institucional",
@@ -46,27 +53,10 @@ function modelConfidence(workType: AcademicFields["workType"]): boolean {
   return ["monografia", "dissertacao", "tese", "projeto_pesquisa"].includes(workType);
 }
 
-const NON_OVERRIDABLE_ERROR_CODES = [
-  "work-type-required",
-  "author-required",
-  "author-institutional",
-  "title-required",
-  "advisor-required",
-  "placeholder-detected",
-  "draft-placeholder-detected",
-  "natural-placeholder-detected",
-  "impact-indicators-missing",
-  "program-conflict",
-  "abstract-topic-conflict",
-  "program-degree-incompatible",
-] as const;
-
-export function isNonOverridableError(issue: ValidationIssue): boolean {
-  return NON_OVERRIDABLE_ERROR_CODES.includes(issue.code as typeof NON_OVERRIDABLE_ERROR_CODES[number]);
-}
-
-function ToolButton({ title, children, onClick }: { title: string; children: ReactNode; onClick: () => void }) {
-  return <button className="icon-button" type="button" title={title} onClick={onClick}>{children}<span className="sr-only">{title}</span></button>;
+function hasDraftableContent(fields: AcademicFields, editorText: string): boolean {
+  if (editorText.trim().length > 0) return true;
+  const emptyFields = emptyAcademicFields();
+  return ACADEMIC_FIELD_KEYS.some((key) => fields[key].trim() !== emptyFields[key].trim());
 }
 
 export default function App() {
@@ -81,7 +71,10 @@ export default function App() {
   const [editorMode, setEditorMode] = useState<EditorMode>("body");
   const [adherenceExpanded, setAdherenceExpanded] = useState(false);
   const [assistedMode, setAssistedMode] = useState(false);
+  const [draftStatus, setDraftStatus] = useState<"idle" | "saved" | "restored" | "cleared" | "error">("idle");
+  const [hasStoredDraft, setHasStoredDraft] = useState(() => typeof window !== "undefined" && hasDraft(window.localStorage));
   const editorRef = useRef<HTMLDivElement>(null);
+  const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorContentVersionRef = useRef(0);
   const lastAppliedEditorTextRef = useRef("");
   const errors = useMemo(() => issues.filter((issue) => issue.severity === "error"), [issues]);
@@ -90,6 +83,56 @@ export default function App() {
   const selectedUflaProductionType = isUflaCollectionWork(fields.workType) ? academicProductionTypeById(fields.workType) : undefined;
   const activeEditorText = editorMode === "references" ? fields.referencias : editorText;
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const draft = loadDraft(window.localStorage);
+    if (!draft) return;
+    const isEmpty = !draft.fields && !draft.editorText;
+    if (isEmpty) return;
+    if (fields.author || fields.title || editorText) return;
+    try {
+      setFields((current) => ({ ...current, ...(draft.fields as Partial<AcademicFields>) }));
+      if (draft.editorText) setEditorText(draft.editorText);
+      if (draft.workType) setEditorMode(draft.workType as EditorMode);
+      setHasStoredDraft(true);
+      setDraftStatus("restored");
+    } catch {
+      // Ignora rascunho incompatível.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current);
+    if (!hasDraftableContent(fields, editorText)) {
+      clearDraft(window.localStorage);
+      autosaveTimeoutRef.current = null;
+      setHasStoredDraft(false);
+      return;
+    }
+    const timeout = setTimeout(() => {
+      try {
+        saveDraft({
+          fields: fields as unknown as Record<string, unknown>,
+          editorText,
+          references: fields.referencias ? [fields.referencias] : [],
+          workType: fields.workType,
+          updatedAt: new Date().toISOString(),
+        }, window.localStorage);
+        autosaveTimeoutRef.current = null;
+        setHasStoredDraft(true);
+        setDraftStatus("saved");
+      } catch {
+        autosaveTimeoutRef.current = null;
+        setDraftStatus("error");
+      }
+    }, 800);
+    autosaveTimeoutRef.current = timeout;
+    return () => {
+      clearTimeout(timeout);
+      if (autosaveTimeoutRef.current === timeout) autosaveTimeoutRef.current = null;
+    };
+  }, [fields, editorText]);
   useEffect(() => {
     if (!editorRef.current) return;
     const newContent = editorMarkupToHtml(activeEditorText);
@@ -124,10 +167,12 @@ export default function App() {
   }
 
   function updateWorkType(workType: AcademicFields["workType"]) {
-    setFields((current) => normalizeFieldsForSelectedModel({ ...current, workType }));
+    const nextFields = normalizeFieldsForSelectedModel({ ...fields, workType });
+    const textToValidate = editorMode === "references" ? nextFields.referencias : editorText;
+    setFields(nextFields);
     setConfidence((current) => ({ ...current, workNature: modelConfidence(workType) ? "media" : current.workNature, program: modelConfidence(workType) ? "media" : current.program }));
     setGenerateAnyway(false);
-    setIssues((current) => current.filter((issue) => issue.code !== "work-type-required"));
+    setIssues(validateWork(nextFields, textToValidate));
   }
 
   function mergeImportedFields(importedFields: ReturnType<typeof emptyAcademicFields>, importedConfidence: Record<AcademicFieldKey, Confidence>) {
@@ -179,29 +224,49 @@ export default function App() {
     setStatus("Importação removida. Escolha outro arquivo ou preencha manualmente.");
   }
 
+  function handleClearDraft() {
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+      autosaveTimeoutRef.current = null;
+    }
+    clearDraft(window.localStorage);
+    setFields(emptyAcademicFields());
+    setConfidence(emptyConfidenceMap());
+    setEditorText("");
+    setIssues([]);
+    setGenerateAnyway(false);
+    setImportedFileName(null);
+    setEditorMode("body");
+    lastAppliedEditorTextRef.current = "";
+    if (editorRef.current) editorRef.current.innerHTML = "";
+    editorContentVersionRef.current += 1;
+    setHasStoredDraft(false);
+    setDraftStatus("cleared");
+    setStatus("Rascunho local removido e formulário limpo.");
+  }
   function applyBlockStyle(prefix: string) {
     editorRef.current?.focus();
-    document.execCommand("formatBlock", false, prefix === "# " ? "h1" : prefix === "## " ? "h2" : prefix === "> " ? "blockquote" : "p");
-    if (prefix === "[REF] ") document.execCommand("insertText", false, "[REF] ");
+    const block = prefix === "# " ? "h1" : prefix === "## " ? "h2" : prefix === "> " ? "blockquote" : "p";
+    editorCommandAdapter.formatEditorBlock(block);
+    if (prefix === "[REF] ") editorCommandAdapter.insertEditorText("[REF] ");
     setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0);
   }
 
   function wrapSelection(command: "bold" | "italic") {
     editorRef.current?.focus();
-    document.execCommand(command, false);
+    editorCommandAdapter.applyEditorCommand(command);
     setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0);
   }
 
   function clearFormatting() {
     editorRef.current?.focus();
-    document.execCommand("removeFormat", false);
-    document.execCommand("formatBlock", false, "p");
+    editorCommandAdapter.clearEditorFormatting();
     setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0);
   }
 
   function handleEditorPaste(event: ReactClipboardEvent<HTMLDivElement>) {
     event.preventDefault();
-    document.execCommand("insertText", false, event.clipboardData.getData("text/plain"));
+    editorCommandAdapter.insertEditorText(event.clipboardData.getData("text/plain"));
     setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0);
   }
 
@@ -240,11 +305,15 @@ export default function App() {
     const generationFields = normalizeFieldsForSelectedModel(fields);
     const nextIssues = runValidation(generationFields);
     const nonOverridable = nextIssues.some((issue) => issue.severity === "error" && isNonOverridableError(issue));
-    if (nonOverridable) {
+    if (nonOverridable && !generateAnyway) {
       setStatus("Há pendências críticas que impedem a geração do DOCX. Corrija os campos obrigatórios e marcadores [PREENCHER: ...] antes de gerar.");
       return;
     }
-    if (hasBlockingErrors(nextIssues) && !generateAnyway) return;
+    const absoluteBlocker = nextIssues.some((issue) => issue.severity === "error" && isAbsoluteGenerationBlocker(issue));
+    if (absoluteBlocker) {
+      setStatus("Há pendências que impedem a geração do DOCX. Corrija os marcadores [PREENCHER: ...] e campos mínimos antes de gerar.");
+      return;
+    }
     try {
       setIsGenerating(true);
       setStatus("Gerando DOCX...");
@@ -265,6 +334,7 @@ export default function App() {
         <div className="header-actions">
           <label className="upload-button"><Upload size={18} aria-hidden="true" />Importar<input type="file" accept=".docx,.txt,.md" onChange={handleImport} /></label>
           {importedFileName && <button className="primary-action" type="button" onClick={handleRemoveImport} title={`Remover importação: ${importedFileName}`}><XCircle size={18} aria-hidden="true" />Remover importação</button>}
+          <DraftStatus draftStatus={draftStatus} hasDraft={hasStoredDraft} onClearDraft={handleClearDraft} />
           <button className="primary-action" type="button" onClick={() => runValidation()}><FileCheck2 size={18} aria-hidden="true" />Validar trabalho</button>
           <button className="primary-action strong" type="button" onClick={handleGenerateDocx} disabled={isGenerating}><FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar DOCX"}</button>
         </div>
@@ -308,14 +378,22 @@ export default function App() {
         <section className="editor-pane" aria-label="Editor do texto">
           <div className="editor-toolbar-sticky">
             <div className="toolbar" aria-label="Modo de edição"><button className={`text-button ${editorMode === "body" ? "active" : ""}`} type="button" onClick={() => setEditorMode("body")}>Texto</button><button className={`text-button ${editorMode === "references" ? "active" : ""}`} type="button" onClick={() => setEditorMode("references")}>Referências</button></div>
-            <div className="toolbar" aria-label="Ferramentas do editor"><ToolButton title="Desfazer (Ctrl+Z)" onClick={() => { editorRef.current?.focus(); document.execCommand("undo", false); }}><span className="toolbar-text">Desfazer</span></ToolButton><ToolButton title="Refazer (Ctrl+Y)" onClick={() => { editorRef.current?.focus(); document.execCommand("redo", false); }}><span className="toolbar-text">Refazer</span></ToolButton><ToolButton title="Parágrafo normal" onClick={() => applyBlockStyle("")}><Pilcrow size={18} aria-hidden="true" /></ToolButton><ToolButton title="Título primário" onClick={() => applyBlockStyle("# ")}><Heading1 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Título secundário" onClick={() => applyBlockStyle("## ")}><Heading2 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Negrito" onClick={() => wrapSelection("bold")}><Bold size={18} aria-hidden="true" /></ToolButton><ToolButton title="Itálico" onClick={() => wrapSelection("italic")}><Italic size={18} aria-hidden="true" /></ToolButton><ToolButton title="Citação longa" onClick={() => applyBlockStyle("> ")}><Quote size={18} aria-hidden="true" /></ToolButton><ToolButton title="Referência" onClick={() => applyBlockStyle("[REF] ")}><FileCheck2 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Limpar formatação" onClick={clearFormatting}><Eraser size={18} aria-hidden="true" /></ToolButton></div>
+            <div className="toolbar" aria-label="Ferramentas do editor"><ToolButton title="Desfazer (Ctrl+Z)" onClick={() => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("undo"); }}><span className="toolbar-text">Desfazer</span></ToolButton><ToolButton title="Refazer (Ctrl+Y)" onClick={() => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("redo"); }}><span className="toolbar-text">Refazer</span></ToolButton><ToolButton title="Parágrafo normal" onClick={() => applyBlockStyle("")}><Pilcrow size={18} aria-hidden="true" /></ToolButton><ToolButton title="Título primário" onClick={() => applyBlockStyle("# ")}><Heading1 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Título secundário" onClick={() => applyBlockStyle("## ")}><Heading2 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Negrito" onClick={() => wrapSelection("bold")}><Bold size={18} aria-hidden="true" /></ToolButton><ToolButton title="Itálico" onClick={() => wrapSelection("italic")}><Italic size={18} aria-hidden="true" /></ToolButton><ToolButton title="Citação longa" onClick={() => applyBlockStyle("> ")}><Quote size={18} aria-hidden="true" /></ToolButton><ToolButton title="Referência" onClick={() => applyBlockStyle("[REF] ")}><FileCheck2 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Limpar formatação" onClick={clearFormatting}><Eraser size={18} aria-hidden="true" /></ToolButton></div>
             <p className="field-note editor-mode-note">{editorMode === "references" ? "Editando referências no painel central. Selecione palavras e use Negrito/Itálico como no Word." : "Editando texto principal. Selecione palavras e use Negrito/Itálico como no Word."}</p>
           </div>
-          <div ref={editorRef} className="editor rich-editor" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-label={editorMode === "references" ? "Editor de referências" : "Editor do texto principal"} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />
-          <div className="adherence-panel"><button type="button" className="adherence-header" onClick={() => setAdherenceExpanded((prev) => !prev)} aria-expanded={adherenceExpanded} aria-controls="adherence-content"><span>Painel de aderência normativa</span><span className={`adherence-chevron ${adherenceExpanded ? "open" : ""}`}>▼</span></button>{adherenceExpanded && <div className="adherence-body" id="adherence-content"><p className="adherence-disclaimer">Este painel reflete o que o sistema implementa atualmente. A conformidade final depende de revisão manual no DOCX gerado.</p><div className="adherence-grid">{ADHERENCE_CATEGORIES.map((category) => <div className="adherence-item" key={category.key}><span className="adherence-label">{category.label}</span><span className={`adherence-status adherence-${category.status}`}>{category.statusLabel}</span>{category.note && <span className="adherence-note">{category.note}</span>}</div>)}</div></div>}</div>
+           <div ref={editorRef} className="editor rich-editor" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-label={editorMode === "references" ? "Editor de referências" : "Editor do texto principal"} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />
+           <AdherencePanel expanded={adherenceExpanded} onToggle={() => setAdherenceExpanded((prev) => !prev)} />
         </section>
 
-        <aside className="validation-pane" aria-label="Validação"><div className="status-line" aria-live="polite">{status}</div><div className="post-generation-note"><strong>Após gerar o DOCX:</strong> o arquivo é um rascunho editável. Abra no Word ou LibreOffice, atualize campos dinâmicos e o sumário (tecle F9), confira paginação e exporte para PDF para submissão.<ul className="conformance-report"><li>Pontos que ainda exigem revisão manual</li><li>Alertas de referências</li><li>Alertas de metadados</li><li>Alertas de coerência textual</li></ul></div><label className="force-generate"><input type="checkbox" checked={generateAnyway} onChange={(event) => setGenerateAnyway(event.target.checked)} /><span>Gerar rascunho mesmo com pendências</span></label><TextDiagnosticPanel fields={fields} editorText={editorText} /><div className="issue-list" aria-label="Erros de validação"><h2>Erros</h2>{errors.length ? errors.map((issue) => <div className="issue error" key={issue.code} role="alert"><p className="issue-message">{issue.message}</p>{issue.what && <p className="issue-detail"><strong>O que é:</strong> {issue.what}</p>}{issue.why && <p className="issue-detail"><strong>Por que importa:</strong> {issue.why}</p>}{issue.action && <p className="issue-detail"><strong>Ação:</strong> {issue.action}</p>}</div>) : <p className="empty-state" role="status">Nenhum erro essencial.</p>}</div><div className="issue-list" aria-label="Alertas de validação"><h2>Alertas</h2>{warnings.length ? warnings.map((issue) => <div className="issue warning" key={issue.code} role="status"><p className="issue-message">{issue.message}</p>{issue.what && <p className="issue-detail"><strong>O que é:</strong> {issue.what}</p>}{issue.why && <p className="issue-detail"><strong>Por que importa:</strong> {issue.why}</p>}{issue.action && <p className="issue-detail"><strong>Ação:</strong> {issue.action}</p>}</div>) : <p className="empty-state" role="status">Nenhum alerta registrado.</p>}</div></aside>
+         <ValidationSidebar
+          status={status}
+          generateAnyway={generateAnyway}
+          onToggleGenerateAnyway={setGenerateAnyway}
+          fields={fields}
+          editorText={editorText}
+          errors={errors}
+          warnings={warnings}
+        />
       </main>
     </div>
   );

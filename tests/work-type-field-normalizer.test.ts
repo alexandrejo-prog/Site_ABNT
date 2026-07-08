@@ -77,6 +77,20 @@ describe("normalizacao de campos por modelo selecionado", () => {
     expect(fields.impactIndicators).toBe("");
   });
 
+  it("nao usa texto interno da Colecao UFLA como natureza", () => {
+    const fields = normalizeFieldsForSelectedModel({
+      ...emptyAcademicFields(),
+      workType: "software_aplicativo_ufla",
+      workNature: "",
+    });
+
+    expect(fields.workNature).toContain("Trabalho acadêmico apresentado à Universidade Federal de Lavras");
+    expect(fields.workNature).toContain("requisitos acadêmicos aplicáveis");
+    expect(fields.workNature).not.toContain("Software e aplicativos UFLA");
+    expect(fields.workNature).not.toContain("Colecao Producao Academica");
+    expect(fields.workNature).not.toContain("suporte inicial no sistema");
+  });
+
   it("normaliza natureza malformada de dissertacao com PPGECA", () => {
     const fields = normalizeFieldsForSelectedModel({
       ...emptyAcademicFields(),

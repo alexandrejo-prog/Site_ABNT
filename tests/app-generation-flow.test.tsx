@@ -66,4 +66,98 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     await user.click(getButtonByText(/Gerar DOCX/));
     await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
   });
+
+  it("placeholder natural em título impede a geração", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "grau acadêmico correspondente" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.click(getButtonByText(/Gerar DOCX/));
+    expect(saveAsMock).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/pendência|erro/i).length).toBeGreaterThan(0);
+  });
+
+  it("placeholder natural bloqueia mesmo com gerar mesmo com pendências", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "grau acadêmico correspondente" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.click(screen.getByLabelText("Gerar rascunho mesmo com pendências"));
+    fireEvent.click(getButtonByText(/Gerar DOCX/));
+    expect(saveAsMock).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/pendência|erro/i).length).toBeGreaterThan(0);
+  });
+
+  it("conflito programa/área não bloqueia rascunho com pendências", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Título de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "Educação Científica e Ambiental" } });
+    fireEvent.change(screen.getByLabelText("Resumo"), { target: { value: "Este trabalho apresenta análise no programa de pós-graduação em Engenharia de Sistemas e Automação." } });
+    fireEvent.click(screen.getByLabelText("Gerar rascunho mesmo com pendências"));
+    fireEvent.click(getButtonByText(/Gerar DOCX/));
+    await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("artigo simples nao exibe conflito programa/area no diagnostico", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Título de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "Educação Científica e Ambiental" } });
+    fireEvent.change(screen.getByLabelText("Resumo"), { target: { value: "Este trabalho apresenta análise no programa de pós-graduação em Engenharia de Sistemas e Automação." } });
+    fireEvent.click(getButtonByText(/Gerar DOCX/));
+    expect(screen.queryByText("Há conflito entre programa/área informado e texto do documento.")).not.toBeInTheDocument();
+  });
+
+  it("trocar de monografia para artigo simples remove erro de curso imediatamente", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "monografia");
+    expect(screen.getByText("Informe o curso da monografia antes de gerar o DOCX.")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
+    expect(screen.queryByText("Informe o curso da monografia antes de gerar o DOCX.")).not.toBeInTheDocument();
+  });
+  it("rascunho gera mesmo com indicadores de impacto ausentes", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "dissertacao");
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Título de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.change(screen.getByLabelText("Orientador"), { target: { value: "Orientador Teste" } });
+    fireEvent.click(screen.getByLabelText("Gerar rascunho mesmo com pendências"));
+    fireEvent.click(getButtonByText(/Gerar DOCX/));
+    await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("rascunho gera mesmo com aviso de imagem", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Título de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.change(screen.getByLabelText("Resumo"), { target: { value: "Resumo sem imagem." } });
+    fireEvent.click(screen.getByLabelText("Gerar rascunho mesmo com pendências"));
+    fireEvent.click(getButtonByText(/Gerar DOCX/));
+    await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("botão Gerar DOCX não fica disabled por pendências revisáveis", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Título de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "Educação Científica e Ambiental" } });
+    fireEvent.change(screen.getByLabelText("Resumo"), { target: { value: "Este trabalho apresenta análise no programa de pós-graduação em Engenharia de Sistemas e Automação." } });
+    const button = getButtonByText(/Gerar DOCX/);
+    expect(button.disabled).toBe(false);
+  });
 });

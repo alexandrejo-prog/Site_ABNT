@@ -1,3 +1,5 @@
+import { editorCommandAdapter } from "./editor-command-adapter";
+
 type ScrollSnapshot = {
   windowX: number;
   windowY: number;

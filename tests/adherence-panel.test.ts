@@ -48,22 +48,20 @@ describe("painel de aderência normativa", () => {
     expect(fakeFullCompliance.length).toBeLessThan(ADHERENCE_CATEGORIES.length);
   });
 
-  it("App.tsx contém painel de aderência normativa e referências associadas", () => {
+  it("App.tsx integra o componente AdherencePanel e mantém fluxo pós-geração", () => {
     const appSource = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
+    const panelSource = readFileSync(join(process.cwd(), "src", "components", "AdherencePanel.tsx"), "utf8");
+    const sidebarSource = readFileSync(join(process.cwd(), "src", "components", "ValidationSidebar.tsx"), "utf8");
 
-    expect(appSource).toContain("Painel de aderência normativa");
-    expect(appSource).toContain("adherenceExpanded");
-    expect(appSource).toContain("ADHERENCE_CATEGORIES");
-    expect(appSource).toContain("adherence-panel");
-    expect(appSource).toContain("Este painel reflete o que o sistema implementa atualmente");
-  });
+    expect(appSource).toContain("AdherencePanel");
+    expect(sidebarSource).toContain("Após gerar o DOCX:");
+    expect(sidebarSource).toContain("Abra no Word ou LibreOffice");
+    expect(sidebarSource).toContain("atualize campos dinâmicos e o sumário");
+    expect(sidebarSource).toContain("exporte para PDF para submissão");
 
-  it("App.tsx orienta corretamente o fluxo pós-geração DOCX", () => {
-    const appSource = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
-
-    expect(appSource).toContain("Após gerar o DOCX:");
-    expect(appSource).toContain("Abra no Word ou LibreOffice");
-    expect(appSource).toContain("atualize campos dinâmicos e o sumário");
-    expect(appSource).toContain("exporte para PDF para submissão");
+    expect(panelSource).toContain("Painel de aderência normativa");
+    expect(panelSource).toContain("ADHERENCE_CATEGORIES");
+    expect(panelSource).toContain("adherence-panel");
+    expect(panelSource).toContain("Este painel reflete o que o sistema implementa atualmente");
   });
 });

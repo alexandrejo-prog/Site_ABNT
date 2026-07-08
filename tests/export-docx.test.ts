@@ -8,7 +8,7 @@ import { CPG_RULES, UFLA_RULES, emptyAcademicFields, type AcademicFields } from 
 
 const fields: AcademicFields = {
   ...emptyAcademicFields(),
-  workType: "artigo",
+  workType: "outro",
   author: "Maria Silva",
   title: "Qualidade do cafe no sul de Minas",
   location: "Lavras - MG",
@@ -19,6 +19,11 @@ const fields: AcademicFields = {
   keywords: "coffee; quality",
   introducao: "Texto da introducao.",
   referencias: "SILVA, M. Qualidade do cafe. Lavras: UFLA, 2024.",
+};
+
+const articleFields: AcademicFields = {
+  ...fields,
+  workType: "artigo",
 };
 
 function readUInt16(buffer: Buffer, offset: number): number {
@@ -70,7 +75,7 @@ async function generatedXml(
 
 async function generatedArticleXml(
   editorText = "# 1 Introducao\nTexto comum.",
-  documentFields: AcademicFields = fields,
+  documentFields: AcademicFields = articleFields,
 ) {
   const blob = await generateArticleDocxBlob({ fields: documentFields, editorText });
   return extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
@@ -120,6 +125,14 @@ function fieldInstructionRuns(documentXml: string): string {
   return [...documentXml.matchAll(/<w:instrText[^>]*>([\s\S]*?)<\/w:instrText>/g)]
     .map((match) => match[1])
     .join(" ");
+}
+
+function summaryXmlBeforeToc(documentXml: string): string {
+  const summaryStart = documentXml.indexOf("SUMÁRIO");
+  expect(summaryStart).toBeGreaterThan(-1);
+  const tocStart = documentXml.indexOf("<w:instrText", summaryStart);
+  expect(tocStart).toBeGreaterThan(summaryStart);
+  return documentXml.slice(summaryStart, tocStart);
 }
 
 function expectNoHeadingStyle(paragraphXml: string): void {
@@ -202,6 +215,26 @@ describe("DOCX export", () => {
     expect(tocInstruction).toContain("\\h");
     expect(tocInstruction).toContain("\\z");
     expect(tocInstruction).toContain("\\u");
+
+    const staticSummary = summaryXmlBeforeToc(documentXml);
+    expect(staticSummary).toContain("1 INTRODUCAO");
+    expect(staticSummary).toContain("1.1 Contexto");
+    expect(staticSummary).toContain("REFERÊNCIAS");
+  });
+
+  it("remove texto interno da natureza do trabalho no DOCX geral", async () => {
+    const documentXml = await generatedXml("# 1 Introducao\nTexto comum.", {
+      ...fields,
+      workType: "software_aplicativo_ufla",
+      workNature:
+        "Software e aplicativos UFLA apresentada a Universidade Federal de Lavras conforme formato da Colecao Producao Academica UFLA, com suporte inicial no sistema.",
+    });
+
+    expect(documentXml).not.toContain("Software e aplicativos UFLA");
+    expect(documentXml).not.toContain("Colecao Producao Academica");
+    expect(documentXml).not.toContain("suporte inicial no sistema");
+    expect(documentXml).toContain("Trabalho acadêmico apresentado à Universidade Federal de Lavras");
+    expect(documentXml).toContain("requisitos acadêmicos aplicáveis");
   });
 
   it("generates simple article without graduate pre-textual structure", async () => {
@@ -217,6 +250,20 @@ describe("DOCX export", () => {
     expectNoGraduateOnlyElements(documentXml);
   });
 
+  it("generateDocxBlob respeita artigo simples sem front matter", async () => {
+    const documentXml = await generatedXml("# 1 INTRODUCAO\nTexto do artigo.\n[REF] SOUZA, J. Texto. Lavras: UFLA, 2025.", articleFields);
+
+    expect(documentXml).toContain("QUALIDADE DO CAFE NO SUL DE MINAS");
+    expect(documentXml).toContain("Maria Silva");
+    expect(documentXml).toContain("Resumo");
+    expect(documentXml).toContain("Abstract");
+    expect(documentXml).toContain("1 INTRODUCAO");
+    expect(documentXml).not.toMatch(/SUM[\s\S]{0,80}RIO/);
+    expect(documentXml).not.toContain("FICHA CATALOGR");
+    expect(documentXml).not.toContain("Aprovado em:");
+    expect(documentXml).not.toContain("Programa:");
+    expect(documentXml).not.toContain("Trabalho acad");
+  });
   it("generates CPG summary without graduate structure or page numbers and with CPG margins", async () => {
     const documentXml = await generatedCpgXml("Texto complementar.", {
       ...fields,

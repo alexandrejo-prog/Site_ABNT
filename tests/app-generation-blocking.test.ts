@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isNonOverridableError } from "../src/App";
+import { isNonOverridableError } from "../src/generation-blockers";
 import type { ValidationIssue } from "../src/validators";
 
 describe("bloqueio de geracao com erros criticos", () => {

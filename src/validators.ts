@@ -20,6 +20,7 @@ import {
 import { assessAbstractHeuristics, assessResumoHeuristics } from "./text-diagnostics";
 import { hasSufficientImpactIndicators } from "./impact-indicators";
 import { findUflaPpgProgram, findUflaPpgPrograms, resolveUflaPpgProgram, type UflaPpgProgram } from "./ufla-ppg-programs";
+import { getWorkTypeRequirements } from "./work-type-requirements";
 
 export type ValidationSeverity = "error" | "warning" | "info";
 
@@ -58,9 +59,6 @@ function hasValue(value: string | WorkTypeValue): boolean {
   return value.trim().length > 0;
 }
 
-function isSimpleArticle(fields: AcademicFields): boolean {
-  return fields.workType === "artigo";
-}
 
 function normalizeForValidation(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
@@ -181,6 +179,8 @@ function addNaturalPlaceholderIssues(fields: AcademicFields, editorText: string,
 }
 
 function addProgramConflictIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
+  if (!getWorkTypeRequirements(fields.workType).requiresInstitutionalMetadata) return;
+
   if (detectProgramConflict(fields, editorText)) {
     issues.push({
       severity: "error",
@@ -288,7 +288,7 @@ function addResumoAbstractIssues(fields: AcademicFields, issues: ValidationIssue
 }
 
 function addImpactIndicatorIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
-  if (fields.workType !== "dissertacao" && fields.workType !== "tese") return;
+  if (!getWorkTypeRequirements(fields.workType).requiresImpactIndicators) return;
   const isInstructional = hasValue(fields.indicadoresImpacto) && detectPlaceholderText(fields.indicadoresImpacto);
   const sufficient = hasSufficientImpactIndicators(fields);
   if (!sufficient && !isInstructional) issues.push({ severity: "error", code: "impact-indicators-missing", message: "Preencha os Indicadores de Impacto antes da versão final.", what: "Os indicadores de impacto estão vazios ou insuficientes.", why: "A UFLA pode exigir indicadores de impacto em dissertações e teses; texto genérico não é aceitável.", action: "Preencha ao menos dois dos campos de impacto (social, científico, educacional, ambiental, tecnológico/econômico) e o público beneficiado com informações reais do trabalho." });
@@ -393,6 +393,8 @@ function addUflaCollectionIssues(fields: AcademicFields, issues: ValidationIssue
 }
 
 function addProgramCompatibilityIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
+  if (!getWorkTypeRequirements(fields.workType).requiresProgramMetadata) return;
+
   const programValue = fields.program.trim();
   if (!programValue) return;
 
@@ -456,7 +458,8 @@ function applyProgramDegreeChecks(program: UflaPpgProgram, fields: AcademicField
 
 export function validateWork(fields: AcademicFields, editorText = ""): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const simpleArticle = isSimpleArticle(fields);
+  const requirements = getWorkTypeRequirements(fields.workType);
+  const simpleArticle = fields.workType === "artigo";
 
   if (!hasValue(fields.workType)) issues.push({ severity: "error", code: "work-type-required", message: "Selecione o tipo de trabalho.", what: "O tipo de trabalho não foi informado.", why: "O tipo define quais elementos pré-textuais e regras de formatação serão aplicados no DOCX.", action: "Escolha artigo, monografia, dissertação, tese ou outro na lista suspensa." });
 
@@ -465,7 +468,7 @@ export function validateWork(fields: AcademicFields, editorText = ""): Validatio
   if (!hasValue(fields.author)) issues.push({ severity: "error", code: "author-required", message: "Informe o autor do trabalho.", what: "O autor do trabalho não foi informado.", why: "O nome do autor aparece na capa, folha de rosto e elementos pré-textuais.", action: "Preencha o campo Autor com o nome completo do autor ou autores separados por vírgula." });
   else if (looksInstitutionalAuthor(fields.author)) issues.push({ severity: "error", code: "author-institutional", message: "O campo autor parece conter uma instituição, programa, unidade ou localidade, não um nome de pessoa. Revise a identificação automática.", what: "O campo Autor contém texto que parece institucional.", why: "A capa e a folha de rosto esperam o nome de pessoa física, não o nome da instituição.", action: "Substitua por nome(s) de pessoa(s). Se houver múltiplos autores, separe por vírgula." });
 
-  if (isAdvisorRequired(fields.workType) && !hasValue(fields.advisor)) {
+  if (requirements.requiresCoverAndFrontMatter && isAdvisorRequired(fields.workType) && !hasValue(fields.advisor)) {
     const severity = fields.workType === "monografia" ? "warning" : "error";
     issues.push({ severity, code: "advisor-required", message: "Informe o orientador para dissertação ou tese.", what: "O orientador não foi informado.", why: "Dissertações e teses exigem identificação do orientador na folha de rosto.", action: "Preencha o campo Orientador com o nome completo antes da versão final." });
   }

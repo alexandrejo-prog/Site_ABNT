@@ -27,3 +27,7 @@ tmp/
 
 .continue/
 default-config.yaml
+
+# Arquivos locais proibidos de serem versionados
+Regras/
+colecao_producao_academica_ufla_modelo.md

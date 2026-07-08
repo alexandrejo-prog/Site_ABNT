@@ -27,8 +27,8 @@ describe("editor e fluxo de importação", () => {
   it("App.tsx contém botões de Desfazer e Refazer", () => {
     expect(appSource).toContain("Desfazer");
     expect(appSource).toContain("Refazer");
-    expect(appSource).toContain('document.execCommand("undo"');
-    expect(appSource).toContain('document.execCommand("redo"');
+    expect(appSource).toContain('editorCommandAdapter.applyEditorCommand("undo")');
+    expect(appSource).toContain('editorCommandAdapter.applyEditorCommand("redo")');
   });
 
   it("App.tsx não usa dangerouslySetInnerHTML no editor", () => {

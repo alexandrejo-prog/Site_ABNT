@@ -1,4 +1,4 @@
-﻿import {
+import {
   AlignmentType,
   Document,
   HeadingLevel,
@@ -13,6 +13,7 @@ import { BLACK as SHARED_BLACK } from "./docx-shared";
 import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, hasText, detectCaption } from "./docx-render-core";
 import { parseEditorContent, type DocxGenerationInput, type EditorBlock } from "./export-docx";
 import { CPG_RULES, UFLA_RULES, cmToTwip } from "./ufla-rules";
+import { stripCpgForbiddenSections } from "./cpg-content-filter";
 
 const BLACK = SHARED_BLACK;
 const BODY_SIZE = CPG_RULES.typography.bodyFontSizePt * 2;
@@ -269,7 +270,8 @@ function cpgResumoChildren(input: DocxGenerationInput): Paragraph[] {
 }
 
 function cpgFullChildren(input: DocxGenerationInput): Paragraph[] {
-  const blocks = parseEditorContent(input.editorText);
+  const sanitizedEditorText = stripCpgForbiddenSections(input.editorText);
+  const blocks = parseEditorContent(sanitizedEditorText);
   const bodyBlocks = blocks.filter((block) => block.type !== "reference");
   const references = [
     ...splitParagraphs(input.fields.referencias),

@@ -1,6 +1,7 @@
 import { isUflaCollectionWork, type AcademicFields } from "./ufla-rules";
 import { academicProductionTypeById } from "./academic-production-types";
 import { findUflaPpgProgram, formatUflaPpgProgram } from "./ufla-ppg-programs";
+import { normalizeWorkType } from "./work-type-resolver";
 
 function fold(value: string): string {
   return value
@@ -20,6 +21,7 @@ function isGenericOrMismatchedNature(value: string, workType: AcademicFields["wo
   if (!text) return true;
 
   if (text.includes("requisito academico") || text.includes("dados revisados pelo usuario")) return true;
+  if (text.includes("colecao producao academica") || text.includes("suporte inicial no sistema")) return true;
   if (text.includes("trabalho apresentado a universidade federal de lavras como requisito")) return true;
 
   if (workType !== "projeto_pesquisa" && text.includes("projeto de pesquisa apresentado a universidade federal de lavras")) return true;
@@ -149,22 +151,26 @@ function sanitizeCpgFields(fields: AcademicFields): AcademicFields {
 }
 
 export function normalizeFieldsForSelectedModel(fields: AcademicFields): AcademicFields {
-  if (fields.workType === "artigo") return sanitizeArticleFields(fields);
+  const normalizedWorkType = normalizeWorkType(fields.workType);
+  const normalizedFields: AcademicFields =
+    fields.workType === normalizedWorkType ? fields : { ...fields, workType: normalizedWorkType };
+
+  if (normalizedFields.workType === "artigo") return sanitizeArticleFields(normalizedFields);
   if (
-    fields.workType === "resumo_cpg" ||
-    fields.workType === "resumo_expandido_cpg" ||
-    fields.workType === "artigo_completo_cpg"
+    normalizedFields.workType === "resumo_cpg" ||
+    normalizedFields.workType === "resumo_expandido_cpg" ||
+    normalizedFields.workType === "artigo_completo_cpg"
   ) {
-    return sanitizeCpgFields(fields);
+    return sanitizeCpgFields(normalizedFields);
   }
 
   if (
-    fields.workType === "projeto_pesquisa" ||
-    fields.workType === "monografia" ||
-    fields.workType === "dissertacao" ||
-    fields.workType === "tese"
+    normalizedFields.workType === "projeto_pesquisa" ||
+    normalizedFields.workType === "monografia" ||
+    normalizedFields.workType === "dissertacao" ||
+    normalizedFields.workType === "tese"
   ) {
-    const sanitized = sanitizeAdvisorFields(fields);
+    const sanitized = sanitizeAdvisorFields(normalizedFields);
     const workNature = isGenericOrMismatchedNature(sanitized.workNature, sanitized.workType)
       ? natureForSelectedModel(sanitized)
       : sanitized.workNature;
@@ -175,25 +181,25 @@ export function normalizeFieldsForSelectedModel(fields: AcademicFields): Academi
     };
   }
 
-  if (isUflaCollectionWork(fields.workType)) {
-    const sanitized = sanitizeAdvisorFields(fields);
-    const productionType = academicProductionTypeById(fields.workType);
+  if (isUflaCollectionWork(normalizedFields.workType)) {
+    const sanitized = sanitizeAdvisorFields(normalizedFields);
+    const productionType = academicProductionTypeById(normalizedFields.workType);
     if (!hasText(sanitized.workNature) || isGenericOrMismatchedNature(sanitized.workNature, sanitized.workType)) {
       return {
         ...sanitized,
-        workNature: `${productionType?.label ?? "Producao academica"} apresentada a Universidade Federal de Lavras conforme formato da Colecao Producao Academica UFLA, com suporte inicial no sistema.`,
+        workNature: "Trabalho acadêmico apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis.",
       };
     }
     return sanitized;
   }
 
-  if (!hasText(fields.workNature)) {
+  if (!hasText(normalizedFields.workNature)) {
     return {
-      ...fields,
+      ...normalizedFields,
       workNature:
         "Trabalho apresentado à Universidade Federal de Lavras como requisito acadêmico, conforme dados revisados pelo usuário.",
     };
   }
 
-  return sanitizeAdvisorFields(fields);
+  return sanitizeAdvisorFields(normalizedFields);
 }

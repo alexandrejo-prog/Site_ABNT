@@ -67,6 +67,26 @@ describe("academic guardrails - conflito de programa", () => {
     expect(detectProgramConflict(fields, "Texto vinculado ao Programa de Pós-Graduação em Educação Física.")).toBe(true);
   });
 
+  it("nao trata programa maior como conflito com programa menor de nome sobreposto", () => {
+    const fields = { ...emptyAcademicFields(), program: "Educação Científica e Ambiental" };
+    expect(
+      detectProgramConflict(
+        fields,
+        "Pesquisa vinculada ao Programa de Pós-Graduação em Educação Científica e Ambiental e à linha Educação, Cultura, Ciência e Ambiente.",
+      ),
+    ).toBe(false);
+  });
+
+  it("nao trata nome real de programa como prefixo de outro programa institucional", () => {
+    const fields = { ...emptyAcademicFields(), program: "Educação Científica e Ambiental" };
+    expect(
+      detectProgramConflict(
+        fields,
+        "O estudo situa-se no Programa de Pós-Graduação em Educação Científica e Ambiental da UFLA.",
+      ),
+    ).toBe(false);
+  });
+
   it("nao trata mencao tematica comum como outro programa", () => {
     const fields = { ...emptyAcademicFields(), program: "Educação Científica e Ambiental" };
     expect(detectProgramConflict(fields, "A revisao discute conceitos de ciencia do solo no ensino de ciencias.")).toBe(false);

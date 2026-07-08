@@ -43,7 +43,7 @@ describe("estrutura OOXML de layout e sumario", () => {
 
     const editorText = "# 1 Introducao\nTexto comum.\n## 1.1 Contexto\nTexto.\n> Citacao longa com recuo.";
     const { documentXml, stylesXml, settingsXml } = await docxParts(await generateDocxBlob({ fields, editorText }));
-    const headingParagraph = paragraphs(documentXml).find((paragraph) => paragraph.includes("1 INTRODUCAO")) ?? "";
+    const headingParagraph = paragraphs(documentXml).find((paragraph) => paragraph.includes("1 INTRODUCAO") && paragraph.includes('w:val="Heading1"')) ?? "";
 
     expect(settingsXml).toMatch(/<w:updateFields\b/);
     expect(tocInstruction(documentXml)).toContain("TOC");

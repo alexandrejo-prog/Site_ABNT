@@ -44,7 +44,7 @@ describe("PF1 - conflito PPGECA x Biologia", () => {
   });
 
   it("PPGECA + workNature com Engenharia de Controle e Automação gera program-conflict", () => {
-    const fields = ppgecaBase({ workNature: "Vinculado ao programa de Engenharia de Controle e Automação." });
+    const fields = ppgecaBase({ workType: "dissertacao", workNature: "Vinculado ao programa de Engenharia de Controle e Automacao." });
     expect(detectProgramConflict(fields)).toBe(true);
     expect(validateWork(fields).find((i) => i.code === "program-conflict")).toBeTruthy();
   });
@@ -245,7 +245,9 @@ describe("PF13 - regressão com caso real de resumo expandido", () => {
 });
 
 describe("PF3 - campos guiados não poluem a tela (teste estático)", () => {
-  const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const sidebarSource = readFileSync(new URL("../src/components/ValidationSidebar.tsx", import.meta.url), "utf8");
+  const source = `${appSource}\n${sidebarSource}`;
   it("App contém o título correto e aviso de rascunho editável", () => {
     expect(source).toContain("Assistente de estruturação e pré-normalização UFLA/ABNT");
     expect(source).toContain("O sistema gera um rascunho técnico editável");
