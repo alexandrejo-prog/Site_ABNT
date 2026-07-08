@@ -129,4 +129,19 @@ describe("normalizacao de campos por modelo selecionado", () => {
     expect(fields.workNature).toContain("Programa de Pós-Graduação em Administração");
     expect(fields.workNature).toContain("para obtenção do título de Doutor em Ciências.");
   });
+
+  it("substitui natureza generica importada com rotulo quando modelo selecionado e tese", () => {
+    const fields = normalizeFieldsForSelectedModel({
+      ...emptyAcademicFields(),
+      workType: "tese",
+      program: "Administração",
+      workNature: "Natureza do trabalho: Trabalho acadêmico apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis.",
+    });
+
+    expect(fields.workNature).toContain("Tese apresentada à Universidade Federal de Lavras");
+    expect(fields.workNature).toContain("Programa de Pós-Graduação em Administração");
+    expect(fields.workNature).toContain("para obtenção do título de Doutor em Ciências.");
+    expect(fields.workNature).not.toContain("Natureza do trabalho:");
+    expect(fields.workNature).not.toContain("Trabalho acadêmico apresentado");
+  });
 });
