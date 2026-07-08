@@ -65,8 +65,10 @@ export default function App() {
   const [editorMode, setEditorMode] = useState<EditorMode>("body");
   const [adherenceExpanded, setAdherenceExpanded] = useState(false);
   const [assistedMode, setAssistedMode] = useState(false);
-  const [draftStatus, setDraftStatus] = useState<"idle" | "saved" | "restored" | "error">("idle");
+  const [draftStatus, setDraftStatus] = useState<"idle" | "saved" | "restored" | "cleared" | "error">("idle");
+  const [hasStoredDraft, setHasStoredDraft] = useState(() => typeof window !== "undefined" && hasDraft(window.localStorage));
   const editorRef = useRef<HTMLDivElement>(null);
+  const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorContentVersionRef = useRef(0);
   const lastAppliedEditorTextRef = useRef("");
   const errors = useMemo(() => issues.filter((issue) => issue.severity === "error"), [issues]);
@@ -86,6 +88,7 @@ export default function App() {
       setFields((current) => ({ ...current, ...(draft.fields as Partial<AcademicFields>) }));
       if (draft.editorText) setEditorText(draft.editorText);
       if (draft.workType) setEditorMode(draft.workType as EditorMode);
+      setHasStoredDraft(true);
       setDraftStatus("restored");
     } catch {
       // Ignora rascunho incompatível.
@@ -94,6 +97,7 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current);
     const timeout = setTimeout(() => {
       try {
         saveDraft({
@@ -103,14 +107,20 @@ export default function App() {
           workType: fields.workType,
           updatedAt: new Date().toISOString(),
         }, window.localStorage);
+        autosaveTimeoutRef.current = null;
+        setHasStoredDraft(true);
         setDraftStatus("saved");
       } catch {
+        autosaveTimeoutRef.current = null;
         setDraftStatus("error");
       }
     }, 800);
-    return () => clearTimeout(timeout);
+    autosaveTimeoutRef.current = timeout;
+    return () => {
+      clearTimeout(timeout);
+      if (autosaveTimeoutRef.current === timeout) autosaveTimeoutRef.current = null;
+    };
   }, [fields, editorText]);
-
   useEffect(() => {
     if (!editorRef.current) return;
     const newContent = editorMarkupToHtml(activeEditorText);
@@ -201,11 +211,15 @@ export default function App() {
   }
 
   function handleClearDraft() {
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+      autosaveTimeoutRef.current = null;
+    }
     clearDraft(window.localStorage);
-    setDraftStatus("idle");
-    setStatus("Rascunho local limpo.");
+    setHasStoredDraft(false);
+    setDraftStatus("cleared");
+    setStatus("Rascunho local removido.");
   }
-
   function applyBlockStyle(prefix: string) {
     editorRef.current?.focus();
     const block = prefix === "# " ? "h1" : prefix === "## " ? "h2" : prefix === "> " ? "blockquote" : "p";
@@ -296,7 +310,7 @@ export default function App() {
         <div className="header-actions">
           <label className="upload-button"><Upload size={18} aria-hidden="true" />Importar<input type="file" accept=".docx,.txt,.md" onChange={handleImport} /></label>
           {importedFileName && <button className="primary-action" type="button" onClick={handleRemoveImport} title={`Remover importação: ${importedFileName}`}><XCircle size={18} aria-hidden="true" />Remover importação</button>}
-          <DraftStatus draftStatus={draftStatus} hasDraft={hasDraft(window.localStorage)} onClearDraft={handleClearDraft} />
+          <DraftStatus draftStatus={draftStatus} hasDraft={hasStoredDraft} onClearDraft={handleClearDraft} />
           <button className="primary-action" type="button" onClick={() => runValidation()}><FileCheck2 size={18} aria-hidden="true" />Validar trabalho</button>
           <button className="primary-action strong" type="button" onClick={handleGenerateDocx} disabled={isGenerating}><FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar DOCX"}</button>
         </div>

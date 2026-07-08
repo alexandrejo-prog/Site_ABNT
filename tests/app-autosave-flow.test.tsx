@@ -109,11 +109,32 @@ describe("fluxo de autosave e restauração (App)", () => {
     Object.defineProperty(globalThis, "localStorage", { value: originalLocalStorage, writable: true, configurable: true });
   });
 
-  it("limpa rascunho e remove botão/status", async () => {
+  it("clique em Limpar rascunho remove localStorage imediatamente", async () => {
     const storage = createStorage();
     storage.setItem("site-abnt:draft:v1", JSON.stringify({
-      fields: { title: "Título", author: "Autor", workType: "artigo" },
-      editorText: "",
+      fields: { title: "Titulo", author: "Autor", workType: "artigo" },
+      editorText: "Texto salvo.",
+      references: [],
+      workType: "artigo",
+      updatedAt: new Date().toISOString(),
+    }));
+    const originalLocalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", { value: storage, writable: true, configurable: true });
+
+    render(<App />);
+    expect(screen.getByRole("button", { name: /limpar rascunho/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /limpar rascunho/i }));
+
+    expect(storage.getItem("site-abnt:draft:v1")).toBeNull();
+
+    Object.defineProperty(globalThis, "localStorage", { value: originalLocalStorage, writable: true, configurable: true });
+  });
+
+  it("clique em Limpar rascunho atualiza UI imediatamente", async () => {
+    const storage = createStorage();
+    storage.setItem("site-abnt:draft:v1", JSON.stringify({
+      fields: { title: "Titulo", author: "Autor", workType: "artigo" },
+      editorText: "Texto salvo.",
       references: [],
       workType: "artigo",
       updatedAt: new Date().toISOString(),
@@ -124,8 +145,54 @@ describe("fluxo de autosave e restauração (App)", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /limpar rascunho/i }));
 
-    expect(storage.getItem("site-abnt:draft:v1")).toBeNull();
+    expect(screen.getByText("Rascunho local removido")).toBeInTheDocument();
+    expect(screen.queryByText("Rascunho salvo localmente")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /limpar rascunho/i })).not.toBeInTheDocument();
+
+    Object.defineProperty(globalThis, "localStorage", { value: originalLocalStorage, writable: true, configurable: true });
+  });
+
+  it("autosave nao recria rascunho sem nova edicao depois de limpar", async () => {
+    const storage = createStorage();
+    storage.setItem("site-abnt:draft:v1", JSON.stringify({
+      fields: { title: "Titulo", author: "Autor", workType: "artigo" },
+      editorText: "Texto salvo.",
+      references: [],
+      workType: "artigo",
+      updatedAt: new Date().toISOString(),
+    }));
+    const originalLocalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", { value: storage, writable: true, configurable: true });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /limpar rascunho/i }));
+    act(() => { vi.advanceTimersByTime(1000); });
+
+    expect(storage.getItem("site-abnt:draft:v1")).toBeNull();
+
+    Object.defineProperty(globalThis, "localStorage", { value: originalLocalStorage, writable: true, configurable: true });
+  });
+
+  it("nova edicao depois de limpar salva novo rascunho", async () => {
+    const storage = createStorage();
+    storage.setItem("site-abnt:draft:v1", JSON.stringify({
+      fields: { title: "Titulo", author: "Autor", workType: "artigo" },
+      editorText: "Texto salvo.",
+      references: [],
+      workType: "artigo",
+      updatedAt: new Date().toISOString(),
+    }));
+    const originalLocalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", { value: storage, writable: true, configurable: true });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /limpar rascunho/i }));
+    fireEvent.change(document.getElementById("title") as HTMLInputElement, { target: { value: "Titulo novo" } });
+    act(() => { vi.advanceTimersByTime(850); });
+
+    const raw = storage.getItem("site-abnt:draft:v1");
+    expect(raw).toBeTruthy();
+    expect(JSON.parse(raw!).fields.title).toBe("Titulo novo");
 
     Object.defineProperty(globalThis, "localStorage", { value: originalLocalStorage, writable: true, configurable: true });
   });
