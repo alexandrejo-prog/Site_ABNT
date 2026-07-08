@@ -1,16 +1,30 @@
+// @vitest-environment jsdom
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { resolve } from "node:path";
+import { cleanup, render } from "@testing-library/react";
+import { createElement } from "react";
+import { afterEach, describe, expect, it } from "vitest";
+import App from "../src/App";
 
-const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-const sidebarSource = readFileSync(new URL("../src/components/ValidationSidebar.tsx", import.meta.url), "utf8");
-const stylesSource = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+const sidebarSource = readFileSync(resolve(process.cwd(), "src/components/ValidationSidebar.tsx"), "utf8");
+const stylesSource = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 const combined = `${appSource}\n${sidebarSource}`;
 
 describe("Acessibilidade básica da interface", () => {
-  it("possui exatamente um skip-link na interface", () => {
-    const matches = appSource.match(/className="skip-link"/g);
-    expect(matches).not.toBeNull();
-    expect(matches!.length).toBe(1);
+  afterEach(() => {
+    cleanup();
+    window.localStorage.clear();
+  });
+
+  it("possui exatamente um skip-link apontando para o conteudo principal", () => {
+    const { container } = render(createElement(App));
+    const skipLinks = container.querySelectorAll(".skip-link");
+    const workspace = container.querySelector("main#workspace");
+
+    expect(skipLinks).toHaveLength(1);
+    expect(skipLinks[0]).toHaveAttribute("href", "#workspace");
+    expect(workspace).toBeInTheDocument();
   });
 
   it("possui rótulo acessível no botão de importação", () => {
@@ -20,7 +34,7 @@ describe("Acessibilidade básica da interface", () => {
   });
 
   it("painel de aderência possui atributos ARIA de expansão", () => {
-    const panelSource = readFileSync(new URL("../src/components/AdherencePanel.tsx", import.meta.url), "utf8");
+    const panelSource = readFileSync(resolve(process.cwd(), "src/components/AdherencePanel.tsx"), "utf8");
     expect(panelSource).toContain('aria-expanded={expanded}');
     expect(panelSource).toContain('aria-controls');
     expect(panelSource).toContain('id="');
