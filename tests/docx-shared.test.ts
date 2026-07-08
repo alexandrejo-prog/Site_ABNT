@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { BLACK, BODY_SIZE, ONE_AND_HALF_LINE, SINGLE_LINE, pageMargins } from "../src/docx-shared";
+import { BLACK, BODY_SIZE, ONE_AND_HALF_LINE, SINGLE_LINE, ibgeTable, pageMargins } from "../src/docx-shared";
 import { UFLA_RULES } from "../src/ufla-rules";
+
+function collectNonFiniteNumbers(value: unknown, path = "root", found: string[] = []): string[] {
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    found.push(path);
+    return found;
+  }
+
+  if (!value || typeof value !== "object") return found;
+
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    collectNonFiniteNumbers(child, `${path}.${key}`, found);
+  }
+
+  return found;
+}
 
 describe("docx-shared", () => {
   it("expõe constantes UFLA compartilhadas", () => {
@@ -19,5 +34,11 @@ describe("docx-shared", () => {
       header: UFLA_RULES.header.distanceFromTopTwip,
       footer: UFLA_RULES.footer.distanceFromBottomTwip,
     });
+  });
+
+  it("gera tabela IBGE válida mesmo sem cabeçalhos explícitos", () => {
+    const table = ibgeTable({ headerLabels: [], rows: [["A", "B"]] });
+
+    expect(collectNonFiniteNumbers(table)).toHaveLength(0);
   });
 });
