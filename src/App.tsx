@@ -10,6 +10,7 @@ import { UFLA_PPG_PROGRAMS } from "./ufla-ppg-programs";
 import { editorHtmlToMarkup, editorMarkupToHtml } from "./editor-markup";
 import { templateForWorkType } from "./document-template";
 import { buildDownloadFileName } from "./download-filename";
+import { stripCpgForbiddenSections, hasCpgForbiddenSections } from "./cpg-content-filter";
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
 import { buildDraftFromFields, hasUnfilledPlaceholders, draftWorkTypeSupportsIndicators } from "./draft-builder";
 import { editorCommandAdapter } from "./editor-command-adapter";
@@ -72,6 +73,26 @@ function academicFieldsFromDraft(payload: Record<string, unknown>): AcademicFiel
   }
   return restored;
 }
+
+function editorTextForValidation(workType: AcademicFields["workType"], editorMode: EditorMode, referencesText: string, bodyText: string): string {
+  if (editorMode === "references") return referencesText;
+  return isCpgWork(workType) ? stripCpgForbiddenSections(bodyText) : bodyText;
+}
+
+function cpgAutoFilterIssue(workType: AcademicFields["workType"], originalText: string, validationText: string): ValidationIssue | null {
+  if (!isCpgWork(workType)) return null;
+  if (!hasCpgForbiddenSections(originalText)) return null;
+  if (originalText.trim() === validationText.trim()) return null;
+  return {
+    severity: "warning",
+    code: "cpg-auto-filtered-structures",
+    message: "Seções incompatíveis com CPG/UFLA serão removidas automaticamente do DOCX.",
+    what: "O texto importado contém elementos como indicadores de impacto, sumário, ficha, folha de aprovação, apêndices ou anexos.",
+    why: "O modelo CPG/UFLA não usa esses elementos no corpo do artigo/resumo, mas o sistema consegue removê-los com segurança antes da validação e da exportação.",
+    action: "Confira o DOCX gerado e revise a numeração das seções no Word/LibreOffice antes da submissão final.",
+  };
+}
+
 export default function App() {
   const [fields, setFields] = useState(emptyAcademicFields);
   const [confidence, setConfidence] = useState(emptyConfidenceMap);
@@ -191,11 +212,14 @@ export default function App() {
 
   function updateWorkType(workType: AcademicFields["workType"]) {
     const nextFields = normalizeFieldsForSelectedModel({ ...fields, workType });
-    const textToValidate = editorMode === "references" ? nextFields.referencias : editorText;
+    const textToValidate = editorTextForValidation(workType, editorMode, nextFields.referencias, editorText);
+    const nextIssues = [...validateWork(nextFields, textToValidate)];
+    const autoFilterIssue = cpgAutoFilterIssue(workType, editorText, textToValidate);
+    if (autoFilterIssue) nextIssues.push(autoFilterIssue);
     setFields(nextFields);
     setConfidence((current) => ({ ...current, workNature: modelConfidence(workType) ? "media" : current.workNature, program: modelConfidence(workType) ? "media" : current.program }));
     setGenerateAnyway(false);
-    setIssues(validateWork(nextFields, textToValidate));
+    setIssues(nextIssues);
   }
 
   function replaceFieldsWithImportedDocument(importedFields: ReturnType<typeof emptyAcademicFields>, importedConfidence: Record<AcademicFieldKey, Confidence>) {
@@ -319,8 +343,11 @@ export default function App() {
 
   function runValidation(candidateFields = fields) {
     const normalizedFields = normalizeFieldsForSelectedModel(candidateFields);
-    const textToValidate = editorMode === "references" ? normalizedFields.referencias : editorText;
-    const nextIssues = validateWork(normalizedFields, textToValidate);
+    const rawText = editorMode === "references" ? normalizedFields.referencias : editorText;
+    const textToValidate = editorTextForValidation(normalizedFields.workType, editorMode, normalizedFields.referencias, editorText);
+    const nextIssues = [...validateWork(normalizedFields, textToValidate)];
+    const autoFilterIssue = cpgAutoFilterIssue(normalizedFields.workType, rawText, textToValidate);
+    if (autoFilterIssue) nextIssues.push(autoFilterIssue);
     setIssues(nextIssues);
     const errorCount = nextIssues.filter((issue) => issue.severity === "error").length;
     const warningCount = nextIssues.filter((issue) => issue.severity === "warning" || issue.severity === "info").length;
@@ -390,7 +417,7 @@ export default function App() {
           </div>
           <div className="field-group"><label htmlFor="work-type">Tipo de trabalho</label><select id="work-type" value={fields.workType} onChange={(event) => updateWorkType(event.target.value as typeof fields.workType)}><option value="">Selecione</option>{WORK_TYPES.map((type) => <option key={type} value={type}>{WORK_TYPE_LABELS[type]}</option>)}</select></div>
           {fields.workType === "artigo" && <div className="mode-panel"><h2>Artigo acadêmico simples</h2><p>Modelo sem capa, folha de rosto, ficha catalográfica, folha de aprovação, indicadores de impacto e sumário.</p></div>}
-          {isCpgSelected && <div className="mode-panel"><h2>Modo CPG/UFLA selecionado</h2><p>Este modelo segue template CPG/UFLA. Quando o template CPG não for específico, use a ABNT aplicável.</p><p><strong>Saída do sistema:</strong> gere o DOCX e, se precisar de PDF, exporte por um editor de texto externo.</p></div>}
+          {isCpgSelected && <div className="mode-panel"><h2>Modo CPG/UFLA selecionado</h2><p>Este modelo segue template CPG/UFLA. Seções incompatíveis importadas serão removidas automaticamente do DOCX e da validação do rascunho.</p><p><strong>Saída do sistema:</strong> gere o DOCX e, se precisar de PDF, exporte por um editor de texto externo.</p></div>}
           {isResearchProject(fields.workType) && <div className="mode-panel"><h2>Estrutura do Projeto de Pesquisa</h2><p>Campos específicos para estrutura de projeto de pesquisa conforme ABNT NBR 15287:2025.</p></div>}
           {selectedUflaProductionType && <div className="mode-panel"><h2>{selectedUflaProductionType.label}</h2><p>{ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE}</p><p><strong>Saída do sistema:</strong> DOCX editável; o PDF final deve ser exportado no Word ou LibreOffice.</p></div>}
           {ACADEMIC_FIELD_KEYS.map((key) => (visibleField(key, fields.workType) || (assistedMode && ASSISTED_FIELD_KEYS.includes(key))) ? <div className="field-group" key={key}><div className="label-row"><label htmlFor={key}>{FIELD_LABELS[key]}</label><span className={`confidence confidence-${confidence[key]}`}>{CONFIDENCE_LABELS[confidence[key]]}</span></div>{LONG_FIELDS.has(key) ? <textarea id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} rows={rowsForField(key)} /> : key === "program" && ["dissertacao", "tese", "projeto_pesquisa"].includes(fields.workType) ? <input id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} list="ufla-ppg-programs" /> : <input id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} />}{key === "referencias" && <div className="field-note"><p>Para editar com mais espaço, use o botão <strong>Referências</strong> no painel central.</p><p>Use uma referência por linha. Para destacar manualmente, selecione o trecho e clique em Negrito ou Itálico.</p></div>}</div> : null)}
