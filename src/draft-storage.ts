@@ -6,8 +6,8 @@ export interface DraftPayload {
   updatedAt: string;
 }
 
-const DRAFT_KEY = "site-abnt:draft:v2";
-const LEGACY_DRAFT_KEYS = ["site-abnt:draft:v1"];
+const DRAFT_KEY = "site-abnt:draft:v3";
+const LEGACY_DRAFT_KEYS = ["site-abnt:draft:v1", "site-abnt:draft:v2"];
 
 function logDraftStorageError(action: string, error: unknown): void {
   if (import.meta.env.DEV && import.meta.env.MODE !== "test") {

@@ -14,7 +14,7 @@ vi.mock("../src/document-template", () => ({
 
 import App from "../src/App";
 
-const DRAFT_KEY = "site-abnt:draft:v2";
+const DRAFT_KEY = "site-abnt:draft:v3";
 
 function createStorage(): Storage {
   const map = new Map<string, string>();

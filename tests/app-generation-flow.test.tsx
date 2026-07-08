@@ -3,17 +3,20 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const { generateMock, saveAsMock } = vi.hoisted(() => ({
+const { generateMock, importDocumentFileMock, saveAsMock } = vi.hoisted(() => ({
   generateMock: vi.fn(async () => new Blob(["docx"], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })),
+  importDocumentFileMock: vi.fn(),
   saveAsMock: vi.fn(),
 }));
 
 vi.mock("file-saver", () => ({ saveAs: saveAsMock }));
+vi.mock("../src/import-docx", () => ({ importDocumentFile: importDocumentFileMock }));
 vi.mock("../src/document-template", () => ({
   templateForWorkType: vi.fn(() => ({ id: "mock-template", generate: generateMock })),
 }));
 
 import App from "../src/App";
+import { emptyAcademicFields, emptyConfidenceMap } from "../src/ufla-rules";
 
 function getButtonByText(text: RegExp): HTMLButtonElement {
   const button = screen.getAllByRole("button").find((el) => text.test(el.textContent ?? ""));
@@ -21,9 +24,20 @@ function getButtonByText(text: RegExp): HTMLButtonElement {
   return button as HTMLButtonElement;
 }
 
+function getTitleInput(): HTMLInputElement {
+  const input = document.getElementById("title");
+  if (!(input instanceof HTMLInputElement)) throw new Error("Campo title nao encontrado.");
+  return input;
+}
+
+function getGenerateAnywayCheckbox(): HTMLInputElement {
+  return screen.getByRole("checkbox", { name: /Gerar rascunho/i }) as HTMLInputElement;
+}
+
 describe("fluxo real de bloqueio de geração (App)", () => {
   beforeEach(() => {
     generateMock.mockClear();
+    importDocumentFileMock.mockReset();
     saveAsMock.mockClear();
   });
 
@@ -42,7 +56,7 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     const user = userEvent.setup();
     render(<App />);
     await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "dissertacao");
-    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Título de teste" } });
+    fireEvent.change(getTitleInput(), { target: { value: "Título de teste" } });
     fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
     fireEvent.click(getButtonByText(/Gerar DOCX/));
     expect(saveAsMock).not.toHaveBeenCalled();
@@ -61,7 +75,7 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     const user = userEvent.setup();
     render(<App />);
     await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
-    await user.type(screen.getByLabelText("Título"), "Título de teste");
+    await user.type(getTitleInput(), "Título de teste");
     await user.type(screen.getByLabelText("Autor"), "Maria Silva");
     await user.click(getButtonByText(/Gerar DOCX/));
     await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
@@ -72,22 +86,59 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     render(<App />);
 
     await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "tese");
-    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Documento ideal de teste" } });
+    fireEvent.change(getTitleInput(), { target: { value: "Documento ideal de teste" } });
     fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
     fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "Administração" } });
     fireEvent.change(screen.getByLabelText("Orientador"), { target: { value: "Prof. Dr. João da Silva" } });
-    fireEvent.click(screen.getByLabelText("Gerar rascunho mesmo com pendências"));
+    fireEvent.click(getGenerateAnywayCheckbox());
     await user.click(getButtonByText(/Gerar DOCX/));
 
     await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
     expect(saveAsMock.mock.calls[0][1]).toBe("tese-documento-ideal-de-teste.docx");
   });
 
+  it("nomeia DOCX importado pelo arquivo importado, nao pelo titulo antigo", async () => {
+    const user = userEvent.setup();
+    importDocumentFileMock.mockResolvedValue({
+      text: "Texto importado.",
+      editorText: "# 1 Introducao\nTexto importado.",
+      fields: {
+        ...emptyAcademicFields(),
+        workType: "artigo",
+        title: "Titulo importado",
+        author: "Maria Silva",
+        resumo: "Resumo importado.",
+        referencias: "SILVA, M. Texto. Lavras: UFLA, 2024.",
+      },
+      confidence: emptyConfidenceMap(),
+      messages: [],
+      blocks: [],
+    });
+
+    render(<App />);
+    fireEvent.change(getTitleInput(), { target: { value: "Métricas, trabalho e saúde..." } });
+
+    const file = new File(["docx"], "documento_ideal_teste_tipos_trabalho_ufla_abnt.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    await user.upload(screen.getByLabelText("Importar"), file);
+    await screen.findByText(/Metadados anteriores foram substituídos/);
+
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "tese");
+    fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "Administração" } });
+    fireEvent.change(screen.getByLabelText("Orientador"), { target: { value: "Prof. Dr. João da Silva" } });
+    fireEvent.click(getGenerateAnywayCheckbox());
+    await user.click(getButtonByText(/Gerar DOCX/));
+
+    await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
+    expect(saveAsMock.mock.calls[0][1]).toBe("tese-documento-ideal-teste-tipos-trabalho-ufla-abnt.docx");
+  });
+
   it("placeholder natural em título impede a geração", async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
-    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "grau acadêmico correspondente" } });
+    fireEvent.change(getTitleInput(), { target: { value: "grau acadêmico correspondente" } });
     fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
     fireEvent.click(getButtonByText(/Gerar DOCX/));
     expect(saveAsMock).not.toHaveBeenCalled();
@@ -98,9 +149,9 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     const user = userEvent.setup();
     render(<App />);
     await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
-    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "grau acadêmico correspondente" } });
+    fireEvent.change(getTitleInput(), { target: { value: "grau acadêmico correspondente" } });
     fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
-    fireEvent.click(screen.getByLabelText("Gerar rascunho mesmo com pendências"));
+    fireEvent.click(getGenerateAnywayCheckbox());
     fireEvent.click(getButtonByText(/Gerar DOCX/));
     expect(saveAsMock).not.toHaveBeenCalled();
     expect(screen.getAllByText(/pendência|erro/i).length).toBeGreaterThan(0);
@@ -110,11 +161,11 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     const user = userEvent.setup();
     render(<App />);
     await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
-    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Título de teste" } });
+    fireEvent.change(getTitleInput(), { target: { value: "Título de teste" } });
     fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
     fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "Educação Científica e Ambiental" } });
     fireEvent.change(screen.getByLabelText("Resumo"), { target: { value: "Este trabalho apresenta análise no programa de pós-graduação em Engenharia de Sistemas e Automação." } });
-    fireEvent.click(screen.getByLabelText("Gerar rascunho mesmo com pendências"));
+    fireEvent.click(getGenerateAnywayCheckbox());
     fireEvent.click(getButtonByText(/Gerar DOCX/));
     await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
   });
@@ -123,7 +174,7 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     const user = userEvent.setup();
     render(<App />);
     await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
-    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Título de teste" } });
+    fireEvent.change(getTitleInput(), { target: { value: "Título de teste" } });
     fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
     fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "Educação Científica e Ambiental" } });
     fireEvent.change(screen.getByLabelText("Resumo"), { target: { value: "Este trabalho apresenta análise no programa de pós-graduação em Engenharia de Sistemas e Automação." } });
@@ -160,10 +211,10 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     const user = userEvent.setup();
     render(<App />);
     await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "dissertacao");
-    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Título de teste" } });
+    fireEvent.change(getTitleInput(), { target: { value: "Título de teste" } });
     fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
     fireEvent.change(screen.getByLabelText("Orientador"), { target: { value: "Orientador Teste" } });
-    fireEvent.click(screen.getByLabelText("Gerar rascunho mesmo com pendências"));
+    fireEvent.click(getGenerateAnywayCheckbox());
     fireEvent.click(getButtonByText(/Gerar DOCX/));
     await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
   });
@@ -172,10 +223,10 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     const user = userEvent.setup();
     render(<App />);
     await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
-    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Título de teste" } });
+    fireEvent.change(getTitleInput(), { target: { value: "Título de teste" } });
     fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
     fireEvent.change(screen.getByLabelText("Resumo"), { target: { value: "Resumo sem imagem." } });
-    fireEvent.click(screen.getByLabelText("Gerar rascunho mesmo com pendências"));
+    fireEvent.click(getGenerateAnywayCheckbox());
     fireEvent.click(getButtonByText(/Gerar DOCX/));
     await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
   });
@@ -184,7 +235,7 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     const user = userEvent.setup();
     render(<App />);
     await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
-    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Título de teste" } });
+    fireEvent.change(getTitleInput(), { target: { value: "Título de teste" } });
     fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
     fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "Educação Científica e Ambiental" } });
     fireEvent.change(screen.getByLabelText("Resumo"), { target: { value: "Este trabalho apresenta análise no programa de pós-graduação em Engenharia de Sistemas e Automação." } });

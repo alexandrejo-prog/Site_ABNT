@@ -9,6 +9,7 @@ import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
 import { UFLA_PPG_PROGRAMS } from "./ufla-ppg-programs";
 import { editorHtmlToMarkup, editorMarkupToHtml } from "./editor-markup";
 import { templateForWorkType } from "./document-template";
+import { buildDownloadFileName } from "./download-filename";
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
 import { buildDraftFromFields, hasUnfilledPlaceholders, draftWorkTypeSupportsIndicators } from "./draft-builder";
 import { editorCommandAdapter } from "./editor-command-adapter";
@@ -28,17 +29,6 @@ const ASSISTED_FIELD_KEYS: AcademicFieldKey[] = ["tema", "problemaPesquisa", "ob
 const LONG_FIELDS = new Set<AcademicFieldKey>(["workNature", "resumo", "abstractText", "introducao", "conclusao", "referencias", "anexos", "apendices", "dedicatoria", "agradecimentos", "epigrafe", "indicadoresImpacto", "impactIndicators", "imageWarnings", ...RESEARCH_PROJECT_FIELD_KEYS]);
 const EDITOR_DESCRIPTION_ID = "editor-mode-note";
 type EditorMode = "body" | "references";
-
-function slugify(value: string, fallback: string, maxLength = 90): string {
-  const normalized = value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase();
-  const slug = normalized || fallback;
-  return slug.length > maxLength ? slug.slice(0, maxLength).replace(/-+$/g, "") : slug;
-}
-
-function safeFileName(title: string, workType: AcademicFields["workType"]): string {
-  const typeLabel = workType ? WORK_TYPE_LABELS[workType] ?? workType : "trabalho-ufla";
-  return `${slugify(typeLabel, "trabalho-ufla", 42)}-${slugify(title, "sem-titulo", 96)}.docx`;
-}
 
 function rowsForField(key: AcademicFieldKey): number {
   if (key === "referencias") return 12;
@@ -70,6 +60,18 @@ function hasDraftableContent(fields: AcademicFields, editorText: string): boolea
   return ACADEMIC_FIELD_KEYS.some((key) => fields[key].trim() !== emptyFields[key].trim());
 }
 
+function draftFieldsPayload(fields: AcademicFields): Record<string, string> {
+  return Object.fromEntries(ACADEMIC_FIELD_KEYS.map((key) => [key, fields[key]]));
+}
+
+function academicFieldsFromDraft(payload: Record<string, unknown>): AcademicFields {
+  const restored = emptyAcademicFields();
+  for (const key of ACADEMIC_FIELD_KEYS) {
+    const value = payload[key];
+    if (typeof value === "string") restored[key] = value;
+  }
+  return restored;
+}
 export default function App() {
   const [fields, setFields] = useState(emptyAcademicFields);
   const [confidence, setConfidence] = useState(emptyConfidenceMap);
@@ -105,9 +107,8 @@ export default function App() {
     if (isEmpty) return;
     if (fields.author || fields.title || editorText) return;
     try {
-      setFields((current) => ({ ...current, ...(draft.fields as Partial<AcademicFields>) }) as AcademicFields);
+      setFields((current) => ({ ...current, ...academicFieldsFromDraft(draft.fields) }));
       if (draft.editorText) setEditorText(draft.editorText);
-      if (draft.workType) setEditorMode(draft.workType as EditorMode);
       setHasStoredDraft(true);
       setDraftStatus("restored");
     } catch {
@@ -127,7 +128,7 @@ export default function App() {
     const timeout = setTimeout(() => {
       try {
         saveDraft({
-          fields: fields as unknown as Record<string, unknown>,
+          fields: draftFieldsPayload(fields),
           editorText,
           references: fields.referencias ? [fields.referencias] : [],
           workType: fields.workType,
@@ -212,6 +213,12 @@ export default function App() {
     try {
       setStatus("Importando arquivo...");
       const result = await importDocumentFile(file);
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current);
+        autosaveTimeoutRef.current = null;
+      }
+      clearDraft(window.localStorage);
+      setHasStoredDraft(false);
       replaceFieldsWithImportedDocument(result.fields, result.confidence);
       setImportedFileName(file.name);
       setEditorMode("body");
@@ -342,7 +349,7 @@ export default function App() {
       setIsGenerating(true);
       setStatus("Gerando DOCX...");
       const blob = await templateForWorkType(generationFields.workType).generate({ fields: generationFields, editorText });
-      saveAs(blob, safeFileName(generationFields.title, generationFields.workType));
+      saveAs(blob, buildDownloadFileName({ workType: generationFields.workType, title: generationFields.title, importedFileName }));
       setStatus(generateAnyway ? "Documento gerado como rascunho com pendências críticas. Revise o DOCX no Word/LibreOffice antes da submissão." : "DOCX gerado como rascunho editável. Confira o arquivo no Word/LibreOffice antes da submissão.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Falha ao gerar DOCX.");

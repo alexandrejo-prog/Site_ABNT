@@ -41,18 +41,32 @@ describe("draft-storage", () => {
 
   it("ignora JSON invalido", () => {
     const storage = createStorage();
-    storage.setItem("site-abnt:draft:v1", "{invalid json");
+    storage.setItem("site-abnt:draft:v3", "{invalid json");
     expect(loadDraft(storage)).toBeNull();
   });
 
-  it("remove rascunho legado para evitar metadados antigos restaurados", () => {
+  it("remove rascunhos legados v1/v2 para evitar metadados antigos restaurados", () => {
     const storage = createStorage();
-    storage.setItem("site-abnt:draft:v1", JSON.stringify({ ...SAMPLE_DRAFT, fields: { title: "Título antigo" } }));
+    storage.setItem("site-abnt:draft:v1", JSON.stringify({ ...SAMPLE_DRAFT, fields: { title: "Metricas antigas v1" } }));
+    storage.setItem("site-abnt:draft:v2", JSON.stringify({ ...SAMPLE_DRAFT, fields: { title: "Metricas antigas v2" } }));
 
     expect(loadDraft(storage)).toBeNull();
     expect(storage.getItem("site-abnt:draft:v1")).toBeNull();
+    expect(storage.getItem("site-abnt:draft:v2")).toBeNull();
   });
 
+  it("clearDraft remove rascunhos atual e legados", () => {
+    const storage = createStorage();
+    storage.setItem("site-abnt:draft:v1", JSON.stringify(SAMPLE_DRAFT));
+    storage.setItem("site-abnt:draft:v2", JSON.stringify(SAMPLE_DRAFT));
+    saveDraft(SAMPLE_DRAFT, storage);
+
+    clearDraft(storage);
+
+    expect(storage.getItem("site-abnt:draft:v1")).toBeNull();
+    expect(storage.getItem("site-abnt:draft:v2")).toBeNull();
+    expect(storage.getItem("site-abnt:draft:v3")).toBeNull();
+  });
   it("nao quebra sem localStorage", () => {
     expect(() => {
       saveDraft(SAMPLE_DRAFT, undefined as unknown as Storage);
