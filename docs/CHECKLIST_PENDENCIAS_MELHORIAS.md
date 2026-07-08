@@ -10,6 +10,13 @@ Este checklist substitui a leitura simplista de "100% concluído" por uma visão
 - [x] Adicionar teste para tese com natureza genérica importada.
 - [x] Atualizar a UI para recalcular a natureza do trabalho quando o usuário altera `Programa` ou `Curso` após selecionar o tipo de trabalho.
 - [x] Adicionar teste de fluxo de tela para natureza de tese atualizada após alteração do programa.
+- [x] Adicionar `ErrorBoundary` no bootstrap para evitar tela branca sem feedback em erro de runtime.
+- [x] Remover `editor-undo-redo.ts`, que injetava botões Desfazer/Refazer duplicados fora do React.
+- [x] Eliminar `MutationObserver` global em `document.body` usado pela injeção de undo/redo.
+- [x] Isolar `editor-scroll-fix` no ciclo de vida do React, com instalação e cleanup.
+- [x] Corrigir `ibgeTable` para não gerar largura inválida quando `headerLabels` vier vazio.
+- [x] Adicionar logging mínimo em desenvolvimento para falhas de `draft-storage`.
+- [x] Adicionar testes de segurança runtime e tabela IBGE sem cabeçalho.
 
 ## Pendências que ainda exigem validação local obrigatória
 
@@ -32,10 +39,10 @@ Este checklist substitui a leitura simplista de "100% concluído" por uma visão
 ### Alta prioridade
 
 - [ ] Criar teste automatizado que simule importação do arquivo `documento_ideal_teste_tipos_trabalho_ufla_abnt.docx` e geração por todos os tipos principais.
-- [ ] Criar teste específico para garantir que DOCX de tese nunca contenha `Trabalho acadêmico apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis` quando houver tipo e programa suficientes.
 - [ ] Criar teste visual/manual documentado para DOCX real aberto no Word/LibreOffice.
 - [ ] Revisar o exportador geral para evitar qualquer marcador `[PREENCHER: ...]` em DOCX gerado como rascunho quando o campo puder ser omitido com segurança.
 - [ ] Separar explicitamente no diagnóstico os erros bloqueantes absolutos dos erros acadêmicos que podem gerar apenas rascunho técnico.
+- [ ] Adicionar logging mínimo em desenvolvimento para falha de carregamento da logo padrão no exportador DOCX.
 
 ### Média prioridade
 
@@ -44,6 +51,7 @@ Este checklist substitui a leitura simplista de "100% concluído" por uma visão
 - [ ] Exibir na interface aviso mais claro quando um programa não é compatível com tese.
 - [ ] Criar modo de teste/homologação com amostras internas para Artigo, Monografia, Dissertação, Tese, Projeto e CPG.
 - [ ] Melhorar o nome do arquivo gerado para incluir tipo de trabalho, por exemplo `tese-<titulo>.docx`, reduzindo confusão com cache/download antigo.
+- [ ] Habilitar gradualmente `noUnusedLocals` e `noUnusedParameters` depois de limpar código morto.
 
 ### Baixa prioridade
 
@@ -51,6 +59,7 @@ Este checklist substitui a leitura simplista de "100% concluído" por uma visão
 - [ ] Evoluir o editor baseado em `execCommand` para editor moderno, se o projeto crescer.
 - [ ] Melhorar visualmente a tela de campos longos e metadados.
 - [ ] Criar opção de limpar cache/rascunho mais visível após importação.
+- [ ] Avaliar atualização de dependências maiores em branch separada: React, Vite, Vitest e docx.
 
 ## Critério honesto de status
 
