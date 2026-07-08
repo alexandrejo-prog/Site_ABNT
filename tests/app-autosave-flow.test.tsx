@@ -14,6 +14,8 @@ vi.mock("../src/document-template", () => ({
 
 import App from "../src/App";
 
+const DRAFT_KEY = "site-abnt:draft:v2";
+
 function createStorage(): Storage {
   const map = new Map<string, string>();
   return {
@@ -56,7 +58,7 @@ describe("fluxo de autosave e restauração (App)", () => {
 
     act(() => { vi.advanceTimersByTime(850); });
 
-    const raw = storage.getItem("site-abnt:draft:v1");
+    const raw = storage.getItem(DRAFT_KEY);
     expect(raw).toBeTruthy();
     const draft = JSON.parse(raw!);
     expect(draft.fields.title).toBe("Título de teste");
@@ -68,7 +70,7 @@ describe("fluxo de autosave e restauração (App)", () => {
 
   it("restaura rascunho quando estado inicial está vazio", async () => {
     const storage = createStorage();
-    storage.setItem("site-abnt:draft:v1", JSON.stringify({
+    storage.setItem(DRAFT_KEY, JSON.stringify({
       fields: { title: "Título restaurado", author: "Autor restaurado", workType: "artigo" },
       editorText: "Texto restaurado.",
       references: [],
@@ -88,7 +90,7 @@ describe("fluxo de autosave e restauração (App)", () => {
 
   it("não restaura rascunho por cima de dados já preenchidos", async () => {
     const storage = createStorage();
-    storage.setItem("site-abnt:draft:v1", JSON.stringify({
+    storage.setItem(DRAFT_KEY, JSON.stringify({
       fields: { title: "Título antigo", author: "Autor antigo", workType: "artigo" },
       editorText: "Texto antigo.",
       references: [],
@@ -111,7 +113,7 @@ describe("fluxo de autosave e restauração (App)", () => {
 
   it("clique em Limpar rascunho remove localStorage imediatamente", async () => {
     const storage = createStorage();
-    storage.setItem("site-abnt:draft:v1", JSON.stringify({
+    storage.setItem(DRAFT_KEY, JSON.stringify({
       fields: { title: "Titulo", author: "Autor", workType: "artigo" },
       editorText: "Texto salvo.",
       references: [],
@@ -125,14 +127,14 @@ describe("fluxo de autosave e restauração (App)", () => {
     expect(screen.getByRole("button", { name: /limpar rascunho/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /limpar rascunho/i }));
 
-    expect(storage.getItem("site-abnt:draft:v1")).toBeNull();
+    expect(storage.getItem(DRAFT_KEY)).toBeNull();
 
     Object.defineProperty(globalThis, "localStorage", { value: originalLocalStorage, writable: true, configurable: true });
   });
 
   it("clique em Limpar rascunho atualiza UI imediatamente", async () => {
     const storage = createStorage();
-    storage.setItem("site-abnt:draft:v1", JSON.stringify({
+    storage.setItem(DRAFT_KEY, JSON.stringify({
       fields: { title: "Titulo", author: "Autor", workType: "artigo" },
       editorText: "Texto salvo.",
       references: [],
@@ -154,7 +156,7 @@ describe("fluxo de autosave e restauração (App)", () => {
 
   it("autosave nao recria rascunho sem nova edicao depois de limpar", async () => {
     const storage = createStorage();
-    storage.setItem("site-abnt:draft:v1", JSON.stringify({
+    storage.setItem(DRAFT_KEY, JSON.stringify({
       fields: { title: "Titulo", author: "Autor", workType: "artigo" },
       editorText: "Texto salvo.",
       references: [],
@@ -168,14 +170,14 @@ describe("fluxo de autosave e restauração (App)", () => {
     fireEvent.click(screen.getByRole("button", { name: /limpar rascunho/i }));
     act(() => { vi.advanceTimersByTime(1000); });
 
-    expect(storage.getItem("site-abnt:draft:v1")).toBeNull();
+    expect(storage.getItem(DRAFT_KEY)).toBeNull();
 
     Object.defineProperty(globalThis, "localStorage", { value: originalLocalStorage, writable: true, configurable: true });
   });
 
   it("nova edicao depois de limpar salva novo rascunho", async () => {
     const storage = createStorage();
-    storage.setItem("site-abnt:draft:v1", JSON.stringify({
+    storage.setItem(DRAFT_KEY, JSON.stringify({
       fields: { title: "Titulo", author: "Autor", workType: "artigo" },
       editorText: "Texto salvo.",
       references: [],
@@ -190,7 +192,7 @@ describe("fluxo de autosave e restauração (App)", () => {
     fireEvent.change(document.getElementById("title") as HTMLInputElement, { target: { value: "Titulo novo" } });
     act(() => { vi.advanceTimersByTime(850); });
 
-    const raw = storage.getItem("site-abnt:draft:v1");
+    const raw = storage.getItem(DRAFT_KEY);
     expect(raw).toBeTruthy();
     expect(JSON.parse(raw!).fields.title).toBe("Titulo novo");
 
@@ -199,7 +201,7 @@ describe("fluxo de autosave e restauração (App)", () => {
 
   it("exibe status de rascunho restaurado", async () => {
     const storage = createStorage();
-    storage.setItem("site-abnt:draft:v1", JSON.stringify({
+    storage.setItem(DRAFT_KEY, JSON.stringify({
       fields: { title: "Título restaurado", author: "Autor restaurado", workType: "artigo" },
       editorText: "",
       references: [],
