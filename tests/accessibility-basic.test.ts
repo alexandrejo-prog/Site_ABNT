@@ -27,6 +27,11 @@ describe("Acessibilidade básica da interface", () => {
     expect(workspace).toBeInTheDocument();
   });
 
+  it("rotula o campo de e-mail do CPG como 'E-mail dos autores'", () => {
+    expect(appSource).toContain('"E-mail dos autores"');
+    expect(appSource).toContain("courseFieldLabel");
+  });
+
   it("possui rótulo acessível no botão de importação", () => {
     expect(appSource).toContain('type="file"');
     expect(appSource).toContain('accept=".docx,.txt,.md"');

@@ -48,7 +48,7 @@ export const REVIEW_BLOCKS: ReviewBlock[] = [
   },
   {
     id: "validation",
-    title: "Validacao e aderencia",
+    title: "Validação e aderência",
     fields: [],
     defaultOpen: true,
   },

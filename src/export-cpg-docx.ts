@@ -381,7 +381,7 @@ function createCpgDocument(input: DocxGenerationInput): Document {
   return new Document({
     creator: "UFLA DOCX Academico",
     title: input.fields.title || "Trabalho CPG UFLA",
-    description: "Documento CPG/UFLA sem capa, sumario, cabecalho, rodape ou numeracao.",
+    description: "Documento CPG/UFLA sem capa, sumário, cabeçalho, rodapé ou numeração.",
     sections: [
       {
         properties: {

@@ -86,11 +86,12 @@ function keywordItems(value: string): string[] {
 }
 
 function addPlaceholderIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
+  const courseLabel = isCpgWork(fields.workType) ? "E-mail" : "Curso";
   const criticalTargets: [string, string, string][] = [
     ["title", fields.title, "Título"],
     ["author", fields.author, "Autor"],
     ["program", fields.program, "Programa"],
-    ["course", fields.course, "Curso"],
+    ["course", fields.course, courseLabel],
     ["workNature", fields.workNature, "Natureza do trabalho"],
     ["resumo", fields.resumo, "Resumo"],
     ["abstractText", fields.abstractText, "Abstract"],
@@ -339,11 +340,11 @@ function addCpgWarnings(fields: AcademicFields, editorText: string, issues: Vali
   if (fields.workType === "resumo_expandido_cpg") issues.push({ severity: "warning", code: "cpg-expanded-pages", message: "Resumo expandido CPG/UFLA deve ter de 4 a 6 páginas e conter abstract e resumo na primeira página." });
   if (fields.workType === "artigo_completo_cpg") issues.push({ severity: "warning", code: "cpg-full-pages", message: "Artigo completo CPG/UFLA deve ter de 8 a 14 páginas e conter abstract e resumo na primeira página." });
   const pages = estimatePages(fields, editorText);
-  if (fields.workType === "resumo_cpg" && pages > 1) issues.push({ severity: "warning", code: "cpg-resumo-estimated-pages", message: `Estimativa atual: ${pages} pagina(s). Para resumo CPG, ajuste o conteudo para 1 pagina.` });
+  if (fields.workType === "resumo_cpg" && pages > 1) issues.push({ severity: "warning", code: "cpg-resumo-estimated-pages",     message: `Estimativa atual: ${pages} página(s). Para resumo CPG, ajuste o conteúdo para 1 página.` });
   if (fields.workType === "resumo_expandido_cpg" && (pages < 4 || pages > 6)) issues.push({ severity: "warning", code: "cpg-expanded-estimated-pages", message: `Estimativa atual: ${pages} página(s). Para resumo expandido CPG, ajuste para 4 a 6 páginas.` });
   if (fields.workType === "artigo_completo_cpg" && (pages < 8 || pages > 14)) issues.push({ severity: "warning", code: "cpg-full-estimated-pages", message: `Estimativa atual: ${pages} página(s). Para artigo completo CPG, ajuste para 8 a 14 páginas.` });
-  if (fields.workType !== "resumo_cpg" && estimateLineCount(fields.abstractText) > 10) issues.push({ severity: "warning", code: "cpg-abstract-too-long", message: "Abstract CPG parece ultrapassar 10 linhas. Encurte ou revise a primeira pagina antes da submissao." });
-  if (fields.workType !== "resumo_cpg" && estimateLineCount(fields.resumo) > 10) issues.push({ severity: "warning", code: "cpg-resumo-too-long", message: "Resumo CPG parece ultrapassar 10 linhas. Encurte ou revise a primeira pagina antes da submissao." });
+  if (fields.workType !== "resumo_cpg" && estimateLineCount(fields.abstractText) > 10) issues.push({ severity: "warning", code: "cpg-abstract-too-long",     message: "Abstract CPG parece ultrapassar 10 linhas. Encurte ou revise a primeira página antes da submissão." });
+  if (fields.workType !== "resumo_cpg" && estimateLineCount(fields.resumo) > 10) issues.push({ severity: "warning", code: "cpg-resumo-too-long",     message: "Resumo CPG parece ultrapassar 10 linhas. Encurte ou revise a primeira página antes da submissão." });
   if (/<table\b|<\/table>|!\[[^\]]*\]\(|<img\b|\[Imagem detectada:/i.test(editorText)) issues.push({ severity: "warning", code: "cpg-complex-media-warning", message: "Modelos CPG com imagens ou tabelas complexas precisam de conferencia visual: legendas, qualidade e espacamento podem exigir ajuste manual." });
 }
 
@@ -376,7 +377,7 @@ function addUflaCollectionIssues(fields: AcademicFields, issues: ValidationIssue
     message: ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE,
     what: "O formato foi cadastrado no sistema com suporte inicial.",
     why: "Os exportadores especificos da Colecao Producao Academica UFLA ainda serao evoluidos incrementalmente.",
-    action: "Confira estrutura, campos, sumario e paginacao no DOCX final antes de exportar o PDF pelo Word ou LibreOffice.",
+    action: "Confira estrutura, campos, sumário e paginação no DOCX final antes de exportar o PDF pelo Word ou LibreOffice.",
   });
 
   for (const fieldKey of productionType.requiredFields) {

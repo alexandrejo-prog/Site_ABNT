@@ -188,4 +188,13 @@ describe("CPG first page layout", () => {
     expect(text).toContain("6. ed. rev., atual. e ampl. Lavras: UFLA, 2025.");
     expect(text).not.toContain("Lavras: UFLA, 2024.");
   });
+
+  it("gera linha de e-mail na primeira página a partir de course e não rotula como Curso", async () => {
+    const documentXml = await generatedCpgXml();
+    const text = documentText(documentXml);
+
+    expect(text).toContain("maria@ufla.br");
+    expect(text).toContain("joao@ufla.br");
+    expect(text).not.toContain("Curso:");
+  });
 });
