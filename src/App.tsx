@@ -53,6 +53,10 @@ function modelConfidence(workType: AcademicFields["workType"]): boolean {
   return ["monografia", "dissertacao", "tese", "projeto_pesquisa"].includes(workType);
 }
 
+function hasDraftableContent(fields: AcademicFields, editorText: string): boolean {
+  return editorText.trim().length > 0 || ACADEMIC_FIELD_KEYS.some((key) => fields[key].trim().length > 0);
+}
+
 export default function App() {
   const [fields, setFields] = useState(emptyAcademicFields);
   const [confidence, setConfidence] = useState(emptyConfidenceMap);
@@ -98,6 +102,12 @@ export default function App() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current);
+    if (!hasDraftableContent(fields, editorText)) {
+      clearDraft(window.localStorage);
+      autosaveTimeoutRef.current = null;
+      setHasStoredDraft(false);
+      return;
+    }
     const timeout = setTimeout(() => {
       try {
         saveDraft({
@@ -218,9 +228,19 @@ export default function App() {
       autosaveTimeoutRef.current = null;
     }
     clearDraft(window.localStorage);
+    setFields(emptyAcademicFields());
+    setConfidence(emptyConfidenceMap());
+    setEditorText("");
+    setIssues([]);
+    setGenerateAnyway(false);
+    setImportedFileName(null);
+    setEditorMode("body");
+    lastAppliedEditorTextRef.current = "";
+    if (editorRef.current) editorRef.current.innerHTML = "";
+    editorContentVersionRef.current += 1;
     setHasStoredDraft(false);
     setDraftStatus("cleared");
-    setStatus("Rascunho local removido.");
+    setStatus("Rascunho local removido e formulário limpo.");
   }
   function applyBlockStyle(prefix: string) {
     editorRef.current?.focus();
