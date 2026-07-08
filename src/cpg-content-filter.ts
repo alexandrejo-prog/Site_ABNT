@@ -1,9 +1,18 @@
 const FORBIDDEN_CPG_HEADINGS = new Map<string, string>([
+  ["CAPA", "CAPA"],
+  ["FOLHA DE ROSTO", "FOLHA DE ROSTO"],
   ["SUMARIO", "SUMÁRIO"],
   ["FICHA CATALOGRAFICA", "FICHA CATALOGRÁFICA"],
   ["FOLHA DE APROVACAO", "FOLHA DE APROVAÇÃO"],
+  ["DEDICATORIA", "DEDICATÓRIA"],
+  ["AGRADECIMENTOS", "AGRADECIMENTOS"],
+  ["EPIGRAFE", "EPÍGRAFE"],
   ["INDICADORES DE IMPACTO", "INDICADORES DE IMPACTO"],
   ["IMPACT INDICATORS", "IMPACT INDICATORS"],
+  ["APENDICE", "APÊNDICE"],
+  ["APENDICES", "APÊNDICES"],
+  ["ANEXO", "ANEXO"],
+  ["ANEXOS", "ANEXOS"],
 ]);
 
 function normalizeHeading(value: string): string {
@@ -28,6 +37,25 @@ function isLikelyHeadingLine(line: string): boolean {
   if (/^\d+(?:\.\d+)*\s+\S+/.test(withoutMarkdown)) return true;
   if (/^\[?[A-ZÁÉÍÓÚÂÊÔÃÕÇ0-9\s:.\-–—]+\]?$/.test(withoutMarkdown) && withoutMarkdown.length <= 90) return true;
   return false;
+}
+
+function isTopLevelNumberedHeading(line: string): boolean {
+  return /^\s*(?:#{1,6}\s*)?\d+\s+\S+/.test(line) && !/^\s*(?:#{1,6}\s*)?\d+\.\d+/.test(line);
+}
+
+function renumberTopLevelHeadings(text: string): string {
+  let nextNumber = 1;
+  return text
+    .split(/\r?\n/)
+    .map((line) => {
+      if (!isTopLevelNumberedHeading(line)) return line;
+      return line.replace(/^(\s*(?:#{1,6}\s*)?)\d+(\s+\S.*)$/u, (_match, prefix: string, rest: string) => {
+        const updated = `${prefix}${nextNumber}${rest}`;
+        nextNumber += 1;
+        return updated;
+      });
+    })
+    .join("\n");
 }
 
 export function cpgForbiddenHeadingLabel(line: string): string | null {
@@ -58,5 +86,9 @@ export function stripCpgForbiddenSections(editorText: string): string {
     kept.push(line);
   }
 
-  return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return renumberTopLevelHeadings(kept.join("\n").replace(/\n{3,}/g, "\n\n").trim());
+}
+
+export function hasCpgForbiddenSections(editorText: string): boolean {
+  return editorText.split(/\r?\n/).some((line) => cpgForbiddenHeadingLabel(line) !== null);
 }
