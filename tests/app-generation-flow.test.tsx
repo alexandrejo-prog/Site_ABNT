@@ -125,6 +125,21 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
     expect(screen.queryByText("Informe o curso da monografia antes de gerar o DOCX.")).not.toBeInTheDocument();
   });
+
+  it("atualiza natureza generica de tese quando o programa muda", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "tese");
+    fireEvent.change(screen.getByLabelText("Natureza do trabalho"), {
+      target: { value: "Natureza do trabalho: Trabalho acadêmico apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis." },
+    });
+    fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "Administração" } });
+
+    expect((screen.getByLabelText("Natureza do trabalho") as HTMLTextAreaElement).value).toContain("Tese apresentada à Universidade Federal de Lavras");
+    expect((screen.getByLabelText("Natureza do trabalho") as HTMLTextAreaElement).value).toContain("Programa de Pós-Graduação em Administração");
+  });
+
   it("rascunho gera mesmo com indicadores de impacto ausentes", async () => {
     const user = userEvent.setup();
     render(<App />);
