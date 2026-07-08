@@ -135,14 +135,6 @@ function buildProgramTerms(): ProgramTermGroup[] {
 // expressoes academicas comuns como "ciencia do solo".
 const PROGRAM_TERMS = buildProgramTerms();
 
-// Termos de area/tema do CONTEUDO. Usados apenas para diagnostico; NAO geram
-// conflito bloqueante contra programas institucionais.
-const TOPIC_TERMS: { terms: string[]; label: string }[] = [
-  { label: "Biologia", terms: ["biologia", "ciencias e biologia", "ciências e biologia"] },
-  { label: "Ciências", terms: ["ciencias", "ciências"] },
-  { label: "Pedagogia", terms: ["pedagogia", "pedagogico", "pedagógica", "pedagógico", "docencia", "docência", "ensino", "formação de professores", "formacao de professores"] },
-];
-
 function repairMojibakeForMatch(value: string): string {
   if (!/[ÃÂâ]/.test(value)) return value;
   try {
@@ -301,6 +293,7 @@ const GENERIC_AI_LIKE_PATTERNS: RegExp[] = [
   /contribuir significativamente/i,
   /é de suma importância/i,
   /tema de grande relevância/i,
+  /este trabalho aborda/i,
   /este trabalho busca abordar/i,
   /o presente trabalho tem como objetivo abordar/i,
 ];
@@ -311,11 +304,11 @@ export function detectGenericAiLikeText(value: string): boolean {
 }
 
 const CPG_FORBIDDEN_PATTERNS: Array<[RegExp, string]> = [
-  [/^\s*#{0,3}\s*sum[aá]rio\s*$/im, "SUMÁRIO"],
-  [/^\s*#{0,3}\s*ficha catalogr[aá]fica\s*$/im, "FICHA CATALOGRÁFICA"],
-  [/^\s*#{0,3}\s*folha de aprova[cç][aã]o\s*$/im, "FOLHA DE APROVAÇÃO"],
-  [/^\s*#{0,3}\s*indicadores de impacto\s*$/im, "INDICADORES DE IMPACTO"],
-  [/^\s*#{0,3}\s*impact indicators\s*$/im, "IMPACT INDICATORS"],
+  [/^\s*(?:#{1,3}\s*)?(?:\d+(?:\.\d+)*\s+)?(?:\[\s*)?sum[aá]rio\s*\]?\s*:?\s*$/im, "SUMÁRIO"],
+  [/^\s*(?:#{1,3}\s*)?(?:\d+(?:\.\d+)*\s+)?(?:\[\s*)?ficha catalogr[aá]fica\s*\]?\s*:?\s*$/im, "FICHA CATALOGRÁFICA"],
+  [/^\s*(?:#{1,3}\s*)?(?:\d+(?:\.\d+)*\s+)?(?:\[\s*)?folha de aprova[cç][aã]o\s*\]?\s*:?\s*$/im, "FOLHA DE APROVAÇÃO"],
+  [/^\s*(?:#{1,3}\s*)?(?:\d+(?:\.\d+)*\s+)?(?:\[\s*)?indicadores de impacto\s*\]?\s*:?\s*$/im, "INDICADORES DE IMPACTO"],
+  [/^\s*(?:#{1,3}\s*)?(?:\d+(?:\.\d+)*\s+)?(?:\[\s*)?impact indicators\s*\]?\s*:?\s*$/im, "IMPACT INDICATORS"],
 ];
 
 export function detectCpgForbiddenStructures(value: string): string[] {
