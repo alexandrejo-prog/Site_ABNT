@@ -185,15 +185,26 @@ const INSTITUTIONAL_CONTEXT = [
   "ppg-eca",
 ];
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasInstitutionalContextForExactTerm(normalized: string, context: string, term: string): boolean {
+  const pattern = new RegExp(
+    `(?:^|\\b)${escapeRegExp(normalizeTextForMatch(context))}\\s+${escapeRegExp(term)}(?=\\s*(?:$|[.,;:)\\]\\-–—]))`,
+  );
+  return pattern.test(normalized);
+}
+
 function isInstitutionalProgramMention(normalized: string, term: ProgramTermEntry, allowPlain = false): boolean {
   if (term.value === "engenharia") {
     // Só conta como programa institucional "Engenharia" quando acompanhado de
     // curso/programa/departamento ou de um complemento institucional específico.
-    if (INSTITUTIONAL_CONTEXT.some((ctx) => normalized.includes(`${ctx} engenharia`))) return true;
+    if (INSTITUTIONAL_CONTEXT.some((ctx) => hasInstitutionalContextForExactTerm(normalized, ctx, "engenharia"))) return true;
     if (/\bengenharia (de|em|elétrica|eletrica|mecanica|mecânica|civil|de producao|de produção|quimica|química|de controle e automacao|de automacao|de materiais|aeroespacial|aeroespacial)\b/.test(normalized)) return true;
     return false;
   }
-  if (INSTITUTIONAL_CONTEXT.some((ctx) => normalized.includes(`${ctx} ${term.value}`))) return true;
+  if (INSTITUTIONAL_CONTEXT.some((ctx) => hasInstitutionalContextForExactTerm(normalized, ctx, term.value))) return true;
   // Programas curtos também casam direto (ppgeca, eca, controle e automacao...).
   return allowPlain || !term.contextualOnly ? normalized.includes(term.value) : false;
 }
@@ -258,119 +269,55 @@ function tokenize(value: string): string[] {
 }
 
 function relevantTerms(value: string, stopwords: Set<string>): Set<string> {
-  return new Set(tokenize(value).filter((term) => term.length > 2 && !stopwords.has(term)));
+  return new Set(tokenize(value).filter((token) => token.length > 3 && !stopwords.has(token)));
 }
 
-const DOMAIN_INCOMPATIBLE: { domain: string[]; opposite: string[] }[] = [
-  {
-    domain: ["agriculture", "agricultural", "crop", "crops", "farming", "soil", "plant", "plants", "harvest", "yield", "agronomy"],
-    opposite: ["docencia", "docência", "estagio", "estágio", "pedagogia", "pedagogical", "ensino", "teaching", "pgd", "gerencialismo", "gestao", "gestão", "school", "classroom", "aluno", "alunos", "professor", "professores", "biologia", "biológica", "biológico", "biological", "biologic", "ciencias", "ciências", "discente", "formacao", "formação"],
-  },
-  {
-    domain: ["docencia", "docência", "estagio", "estágio", "pedagogia", "pedagogical", "ensino", "teaching", "pgd", "gerencialismo", "gestao", "gestão", "school", "classroom", "aluno", "alunos", "professor", "professores", "biologia", "biológica", "biológico", "biological", "biologic", "ciencias", "ciências", "discente", "formacao", "formação"],
-    opposite: ["agriculture", "agricultural", "crop", "crops", "farming", "soil", "plant", "plants", "harvest", "yield", "agronomy"],
-  },
-];
-
-export interface AbstractTopicConflict {
-  conflict: boolean;
-  severity: "error" | "warning";
-  sharedTerms: number;
-  incompatibleTerms: string[];
+function overlapScore(a: Set<string>, b: Set<string>): number {
+  if (!a.size || !b.size) return 0;
+  let overlap = 0;
+  for (const token of a) if (b.has(token)) overlap += 1;
+  return overlap / Math.min(a.size, b.size);
 }
 
-export function detectAbstractTopicConflict(fields: AcademicFields): AbstractTopicConflict {
-  const ptText = `${fields.title} ${fields.resumo} ${fields.workNature}`;
-  const enText = fields.abstractText;
-  if (!enText.trim() || !ptText.trim()) return { conflict: false, severity: "warning", sharedTerms: 0, incompatibleTerms: [] };
+export function detectAbstractTopicConflict(fields: AcademicFields): { conflict: boolean; severity: "warning" | "error" } {
+  const ptSource = [fields.title, fields.resumo, fields.palavrasChave, fields.tema, fields.objetivoGeral]
+    .filter(Boolean)
+    .join(" ");
+  const enSource = [fields.abstractText, fields.keywords].filter(Boolean).join(" ");
+  if (!ptSource.trim() || !enSource.trim()) return { conflict: false, severity: "warning" };
 
-  const ptTerms = relevantTerms(ptText, PT_STOPWORDS);
-  const enTerms = relevantTerms(enText, EN_STOPWORDS);
-
-  let shared = 0;
-  const sharedSet = new Set<string>();
-  for (const term of enTerms) {
-    if (ptTerms.has(term)) {
-      shared += 1;
-      sharedSet.add(term);
-    }
-  }
-
-  const ptJoined = normalizeTextForMatch(ptText);
-  const enJoined = normalizeTextForMatch(enText);
-  const incompatible: string[] = [];
-  for (const pair of DOMAIN_INCOMPATIBLE) {
-    const ptHasDomain = pair.domain.some((term) => ptJoined.includes(term));
-    const enHasOpposite = pair.opposite.some((term) => enJoined.includes(term));
-    if (ptHasDomain && enHasOpposite) {
-      incompatible.push(...pair.opposite.filter((term) => enJoined.includes(term)));
-    }
-  }
-
-  if (incompatible.length > 0 && shared <= 1) {
-    return { conflict: true, severity: "error", sharedTerms: shared, incompatibleTerms: [...new Set(incompatible)] };
-  }
-  if (incompatible.length > 0 && shared <= 3) {
-    return { conflict: true, severity: "warning", sharedTerms: shared, incompatibleTerms: [...new Set(incompatible)] };
-  }
-  return { conflict: false, severity: "warning", sharedTerms: shared, incompatibleTerms: [] };
+  const ptTerms = relevantTerms(ptSource, PT_STOPWORDS);
+  const enTerms = relevantTerms(enSource, EN_STOPWORDS);
+  const score = overlapScore(ptTerms, enTerms);
+  const hasStrongPtMarker = /\b(pgd|tae|servidor|universidade|ambiental|saude|trabalho|docente|educacao|ensino)\b/i.test(ptSource);
+  const hasAgricultureEnMarker = /\b(agriculture|soil|crop|plant|yield|coffee|cultivation|fertilizer)\b/i.test(enSource);
+  const conflict = score < 0.05 && hasStrongPtMarker && hasAgricultureEnMarker;
+  return { conflict, severity: conflict ? "error" : "warning" };
 }
 
 const GENERIC_AI_LIKE_PATTERNS: RegExp[] = [
-  /this study analyzes the transformative role of artificial intelligence in modern agriculture/i,
-  /in today's world/i,
-  /this paper aims to explore various aspects/i,
-  /it is important to highlight/i,
-  /este trabalho aborda diversos aspectos/i,
-  /a presente pesquisa busca contribuir de forma significativa/i,
-  /este artigo aborda diversos aspectos/i,
-  /este estudo aborda diversos aspectos/i,
-  /este artigo aborda diversos aspectos/i,
-  /este estudo aborda diversos aspectos/i,
-  /busca contribuir significativamente/i,
   /no mundo atual/i,
-  /neste contexto, faz-se necessário/i,
-  /faz-se necessario/i,
+  /diversos aspectos/i,
+  /contribuir significativamente/i,
+  /é de suma importância/i,
+  /tema de grande relevância/i,
+  /este trabalho busca abordar/i,
+  /o presente trabalho tem como objetivo abordar/i,
 ];
 
 export function detectGenericAiLikeText(value: string): boolean {
-  if (!value) return false;
-  return GENERIC_AI_LIKE_PATTERNS.some((pattern) => pattern.test(value));
+  const matches = GENERIC_AI_LIKE_PATTERNS.filter((pattern) => pattern.test(value));
+  return matches.length >= 2;
 }
 
-const CPG_FORBIDDEN_TERMS = [
-  "CAPA",
-  "CAPA DO TRABALHO",
-  "FOLHA DE ROSTO",
-  "FICHA CATALOGRAFICA",
-  "FICHA CATALOGRÁFICA",
-  "FOLHA DE APROVACAO",
-  "FOLHA DE APROVAÇÃO",
-  "SUMARIO",
-  "SUMÁRIO",
-  "INDICADORES DE IMPACTO",
+const CPG_FORBIDDEN_PATTERNS: Array<[RegExp, string]> = [
+  [/^\s*#{0,3}\s*sum[aá]rio\s*$/im, "SUMÁRIO"],
+  [/^\s*#{0,3}\s*ficha catalogr[aá]fica\s*$/im, "FICHA CATALOGRÁFICA"],
+  [/^\s*#{0,3}\s*folha de aprova[cç][aã]o\s*$/im, "FOLHA DE APROVAÇÃO"],
+  [/^\s*#{0,3}\s*indicadores de impacto\s*$/im, "INDICADORES DE IMPACTO"],
+  [/^\s*#{0,3}\s*impact indicators\s*$/im, "IMPACT INDICATORS"],
 ];
 
-function normalizeHeadingLine(line: string): string {
-  return normalizeTextForMatch(line)
-    .replace(/^#+\s*/, "")
-    .replace(/^\d+(?:\.\d+)*\s*/, "")
-    .replace(/^\[/, "")
-    .replace(/\]$/, "")
-    .replace(/[:\-–—]+\s*$/, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-export function detectCpgForbiddenStructures(editorText: string): string[] {
-  const normalizedLines = editorText
-    .split(/\n+/)
-    .map(normalizeHeadingLine)
-    .filter(Boolean);
-  const found: string[] = [];
-  for (const forbidden of CPG_FORBIDDEN_TERMS) {
-    const term = normalizeTextForMatch(forbidden).trim();
-    if (normalizedLines.includes(term)) found.push(forbidden);
-  }
-  return found;
+export function detectCpgForbiddenStructures(value: string): string[] {
+  return CPG_FORBIDDEN_PATTERNS.filter(([pattern]) => pattern.test(value)).map(([, label]) => label);
 }
