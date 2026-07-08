@@ -88,11 +88,26 @@ export interface IbgeTableOptions {
 
 const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
 
+function normalizeIbgeHeaders(options: IbgeTableOptions): string[] {
+  if (options.headerLabels.length) return options.headerLabels;
+  const inferredColumnCount = Math.max(1, ...options.rows.map((row) => row.length));
+  return Array.from({ length: inferredColumnCount }, (_, index) => `Coluna ${index + 1}`);
+}
+
+function normalizeColumnWidths(columnCount: number, columnWidths?: number[]): number[] {
+  if (columnWidths?.length === columnCount && columnWidths.every((width) => Number.isFinite(width) && width > 0)) {
+    return columnWidths;
+  }
+
+  return Array.from({ length: columnCount }, () => Math.floor(100 / columnCount));
+}
+
 export function ibgeTable(options: IbgeTableOptions): Table {
-  const widths = options.columnWidths ?? options.headerLabels.map(() => Math.floor(100 / options.headerLabels.length));
+  const headerLabels = normalizeIbgeHeaders(options);
+  const widths = normalizeColumnWidths(headerLabels.length, options.columnWidths);
   const headerRow = new TableRow({
     tableHeader: true,
-    children: options.headerLabels.map(
+    children: headerLabels.map(
       (label, index) =>
         new TableCell({
           width: { size: widths[index], type: WidthType.PERCENTAGE },
@@ -106,12 +121,12 @@ export function ibgeTable(options: IbgeTableOptions): Table {
   const bodyRows = options.rows.map(
     (row) =>
       new TableRow({
-        children: row.map(
-          (cell, index) =>
+        children: headerLabels.map(
+          (_label, index) =>
             new TableCell({
               width: { size: widths[index], type: WidthType.PERCENTAGE },
               margins: { top: 80, bottom: 80, left: 80, right: 80 },
-              children: [new Paragraph({ children: [new TextRun({ text: cell, font: UFLA_RULES.typography.fontFamily, size: 20, color: BLACK })] })],
+              children: [new Paragraph({ children: [new TextRun({ text: row[index] ?? "", font: UFLA_RULES.typography.fontFamily, size: 20, color: BLACK })] })],
             }),
         ),
       }),
