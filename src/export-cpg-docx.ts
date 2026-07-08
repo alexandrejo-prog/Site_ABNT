@@ -1,12 +1,17 @@
 import {
   AlignmentType,
+  BorderStyle,
   Document,
   HeadingLevel,
   Packer,
   PageOrientation,
   Paragraph,
+  Table,
+  TableCell,
+  TableRow,
   TextRun,
   VerticalAlign,
+  WidthType,
 } from "docx";
 import type { IParagraphOptions } from "docx";
 import { BLACK as SHARED_BLACK } from "./docx-shared";
@@ -14,6 +19,7 @@ import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, textRunsFrom
 import { parseEditorContent, type DocxGenerationInput, type EditorBlock } from "./export-docx";
 import { CPG_RULES, UFLA_RULES, cmToTwip } from "./ufla-rules";
 import { stripCpgForbiddenSections } from "./cpg-content-filter";
+import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 
 const BLACK = SHARED_BLACK;
 const BODY_SIZE = CPG_RULES.typography.bodyFontSizePt * 2;
@@ -28,6 +34,8 @@ const TWELVE_PT = 240;
 const ABSTRACT_INDENT = cmToTwip(CPG_RULES.typography.abstractSideIndentCm);
 const BODY_FIRST_LINE = cmToTwip(CPG_RULES.typography.paragraphFirstLineCm);
 const REFERENCE_HANGING = cmToTwip(CPG_RULES.typography.referenceHangingCm);
+
+type CpgChild = Paragraph | Table;
 
 interface RunOptions {
   bold?: boolean;
@@ -49,6 +57,17 @@ function run(text: string, options: RunOptions = {}): TextRun {
   });
 }
 
+function referenceRunToTextRun(item: ReferenceRun): TextRun {
+  return new TextRun({
+    text: cleanMojibakeText(item.text),
+    font: CPG_RULES.typography.fontFamily,
+    size: BODY_SIZE,
+    color: BLACK,
+    bold: item.bold,
+    italics: item.italics,
+  });
+}
+
 function splitParagraphs(value: string): string[] {
   return coreSplitParagraphs(cleanMojibakeText(value))
     .map((line) => line.trim())
@@ -57,6 +76,12 @@ function splitParagraphs(value: string): string[] {
 
 function stripMarkup(value: string): string {
   return cleanMojibakeText(value).replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1");
+}
+
+function ensureTerminalPeriod(value: string): string {
+  const text = cleanMojibakeText(value).trim();
+  if (!text) return text;
+  return /[.!?]$/.test(text) ? text : `${text}.`;
 }
 
 function textRunsFromMarkup(text: string, size = BODY_SIZE, font = CPG_RULES.typography.fontFamily): TextRun[] {
@@ -112,9 +137,10 @@ function emailParagraph(value: string): Paragraph[] {
   ];
 }
 
-function insetLabeledParagraph(label: string, text: string, separator: "." | ":" = "."): Paragraph[] {
+function insetLabeledParagraph(label: string, text: string, separator: "." | ":" = ".", normalizeTerminalPeriod = false): Paragraph[] {
   if (!hasText(text)) return [];
-  return splitParagraphs(text).map(
+  const normalizedText = normalizeTerminalPeriod ? ensureTerminalPeriod(text) : text;
+  return splitParagraphs(normalizedText).map(
     (line, index) =>
       new Paragraph({
         alignment: AlignmentType.BOTH,
@@ -164,7 +190,54 @@ function isCaption(text: string): "figure" | "table" | null {
   return result.kind === "table" ? "table" : "figure";
 }
 
-function blockToParagraph(block: EditorBlock, firstParagraphInSection: boolean): Paragraph[] {
+function splitTableRow(line: string): string[] {
+  const trimmed = cleanMojibakeText(line).trim();
+  if (/^\|?\s*[-:]+(?:\s*\|\s*[-:]+)+\s*\|?$/.test(trimmed)) return [];
+  if (trimmed.includes("|")) {
+    return trimmed.replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim()).filter(Boolean);
+  }
+  if (trimmed.includes("\t")) return trimmed.split("\t").map((cell) => cell.trim()).filter(Boolean);
+  if (/ {2,}/.test(trimmed)) return trimmed.split(/ {2,}/).map((cell) => cell.trim()).filter(Boolean);
+  return [trimmed];
+}
+
+function tableFromBlock(block: EditorBlock): Table {
+  const rows = block.text
+    .split(/\r?\n/)
+    .map(splitTableRow)
+    .filter((row) => row.length > 0);
+  const columnCount = Math.max(1, ...rows.map((row) => row.length));
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+      bottom: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+      left: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+      right: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+      insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+      insideVertical: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+    },
+    rows: rows.map((row, rowIndex) =>
+      new TableRow({
+        children: Array.from({ length: columnCount }, (_, cellIndex) =>
+          new TableCell({
+            width: { size: Math.floor(100 / columnCount), type: WidthType.PERCENTAGE },
+            margins: { top: 80, bottom: 80, left: 80, right: 80 },
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.LEFT,
+                spacing: { before: 0, after: 0, line: SINGLE_LINE },
+                children: [run(row[cellIndex] ?? "", { bold: rowIndex === 0 })],
+              }),
+            ],
+          }),
+        ),
+      }),
+    ),
+  });
+}
+
+function blockToParagraph(block: EditorBlock, firstParagraphInSection: boolean): CpgChild[] {
   if (block.type === "heading1") return [sectionTitle(block.text, HeadingLevel.HEADING_1)];
   if (block.type === "heading2") return [sectionTitle(block.text, HeadingLevel.HEADING_2)];
   if (block.type === "heading3") return [sectionTitle(block.text, HeadingLevel.HEADING_3)];
@@ -175,8 +248,8 @@ function blockToParagraph(block: EditorBlock, firstParagraphInSection: boolean):
       }),
     ];
   }
-  if (block.type === "scheduleTable") {
-    return splitParagraphs(block.text).map((line) => paragraph(line, { indent: { firstLine: 0 } }));
+  if (block.type === "scheduleTable" || block.type === "plainScheduleTable" || block.type === "markdownTable") {
+    return [tableFromBlock(block)];
   }
 
   const caption = isCaption(block.text);
@@ -207,7 +280,6 @@ function filterReferenceNoise(reference: string): boolean {
   return !isReferenceTitleNoise(reference);
 }
 
-// CPG keeps this local path because it derives title noise, heading wording and hanging indentation from the CPG rules. A later migration to normalizeReferences should preserve those CPG-specific decisions first.
 function referenceParagraphs(references: string[]): Paragraph[] {
   const cleanReferences = references
     .map((item) => stripMarkup(item).trim())
@@ -216,31 +288,33 @@ function referenceParagraphs(references: string[]): Paragraph[] {
   if (!cleanReferences.length) return [];
 
   const title = referenceTitleFor(references);
+  const normalizedReferences = normalizeReferences(cleanReferences)
+    .filter((reference) => reference.text.trim().length > 0)
+    .sort((a, b) => a.text.localeCompare(b.text, "pt-BR", { sensitivity: "base" }));
+
   return [
     sectionTitle(title),
-    ...cleanReferences
-      .sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }))
-      .map(
-        (reference) =>
-          new Paragraph({
-            alignment: AlignmentType.LEFT,
-            spacing: { before: SIX_PT, after: 0, line: SINGLE_LINE },
-            indent: {
-              left: REFERENCE_HANGING,
-              hanging: REFERENCE_HANGING,
-            },
-            children: textRunsFromMarkup(reference),
-          }),
-      ),
+    ...normalizedReferences.map(
+      (reference) =>
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { before: SIX_PT, after: 0, line: SINGLE_LINE },
+          indent: {
+            left: REFERENCE_HANGING,
+            hanging: REFERENCE_HANGING,
+          },
+          children: reference.runs.map(referenceRunToTextRun),
+        }),
+    ),
   ];
 }
 
-function compactFirstPage(children: Paragraph[]): Paragraph[] {
-  const firstContentIndex = children.findIndex((paragraph) => JSON.stringify(paragraph).includes("w:t"));
+function compactFirstPage(children: CpgChild[]): CpgChild[] {
+  const firstContentIndex = children.findIndex((child) => JSON.stringify(child).includes("w:t"));
   return firstContentIndex > 0 ? children.slice(firstContentIndex) : children;
 }
 
-function cpgResumoChildren(input: DocxGenerationInput): Paragraph[] {
+function cpgResumoChildren(input: DocxGenerationInput): CpgChild[] {
   return compactFirstPage([
     titleParagraph(input.fields.title),
     centered(cleanMojibakeText(input.fields.author || "Autores"), true),
@@ -250,13 +324,13 @@ function cpgResumoChildren(input: DocxGenerationInput): Paragraph[] {
       ? insetLabeledParagraph("Resumo", input.fields.resumo, ".")
       : []),
     ...(hasText(input.fields.palavrasChave)
-      ? insetLabeledParagraph("Palavras-chave", input.fields.palavrasChave, ":")
+      ? insetLabeledParagraph("Palavras-chave", input.fields.palavrasChave, ":", true)
       : []),
     ...(hasText(input.fields.abstractText)
       ? insetLabeledParagraph("Abstract", input.fields.abstractText, ".")
       : []),
     ...(hasText(input.fields.keywords)
-      ? insetLabeledParagraph("Keywords", input.fields.keywords, ":")
+      ? insetLabeledParagraph("Keywords", input.fields.keywords, ":", true)
       : []),
     ...(hasText(input.fields.agradecimentos)
       ? [
@@ -269,7 +343,7 @@ function cpgResumoChildren(input: DocxGenerationInput): Paragraph[] {
   ]);
 }
 
-function cpgFullChildren(input: DocxGenerationInput): Paragraph[] {
+function cpgFullChildren(input: DocxGenerationInput): CpgChild[] {
   const sanitizedEditorText = stripCpgForbiddenSections(input.editorText);
   const blocks = parseEditorContent(sanitizedEditorText);
   const bodyBlocks = blocks.filter((block) => block.type !== "reference");
@@ -285,9 +359,9 @@ function cpgFullChildren(input: DocxGenerationInput): Paragraph[] {
     ...affiliationParagraphs(input.fields.program),
     ...emailParagraph(input.fields.course),
     ...insetLabeledParagraph("Resumo", input.fields.resumo, "."),
-    ...insetLabeledParagraph("Palavras-chave", input.fields.palavrasChave, ":"),
+    ...insetLabeledParagraph("Palavras-chave", input.fields.palavrasChave, ":", true),
     ...insetLabeledParagraph("Abstract", input.fields.abstractText, "."),
-    ...insetLabeledParagraph("Keywords", input.fields.keywords, ":"),
+    ...insetLabeledParagraph("Keywords", input.fields.keywords, ":", true),
     ...bodyBlocks.flatMap((block) => {
       if (block.type === "heading1" || block.type === "heading2" || block.type === "heading3") {
         firstParagraphInSection = true;
