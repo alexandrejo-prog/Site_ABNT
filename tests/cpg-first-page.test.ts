@@ -3,6 +3,7 @@ import { inflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { generateCpgDocxBlob } from "../src/export-cpg-docx";
 import { emptyAcademicFields, type AcademicFields } from "../src/ufla-rules";
+import { stripCpgForbiddenSections } from "../src/cpg-content-filter";
 
 function readUInt16(buffer: Buffer, offset: number): number {
   return buffer.readUInt16LE(offset);
@@ -140,6 +141,27 @@ describe("CPG first page layout", () => {
     expect(text).not.toContain("FICHA CATALOGRÁFICA");
     expect(text).not.toContain("SUMÁRIO");
     expect(text).not.toContain("Trabalho apresentado");
+  });
+
+  it("removes forbidden CPG sections and keeps following allowed sections", async () => {
+    const documentXml = await generatedCpgXml(
+      cpgFields,
+      "# 1 INTRODUÇÃO\nTexto permitido.\n# 4 INDICADORES DE IMPACTO\nImpacto social: conteúdo fora do modelo CPG.\n# 5 CRONOGRAMA\nCronograma textual permitido.",
+    );
+    const text = documentText(documentXml);
+
+    expect(text).toContain("INTRODUÇÃO");
+    expect(text).toContain("Texto permitido.");
+    expect(text).not.toContain("INDICADORES DE IMPACTO");
+    expect(text).not.toContain("Impacto social: conteúdo fora do modelo CPG.");
+    expect(text).toContain("CRONOGRAMA");
+    expect(text).toContain("Cronograma textual permitido.");
+  });
+
+  it("sanitizer does not remove ordinary mentions of indicators inside a paragraph", () => {
+    const text = stripCpgForbiddenSections("# 1 INTRODUÇÃO\nO texto discute indicadores de impacto como tema, sem criar seção proibida.");
+
+    expect(text).toContain("indicadores de impacto como tema");
   });
 
   it("normalizes invisible hyphenation/control characters", async () => {
