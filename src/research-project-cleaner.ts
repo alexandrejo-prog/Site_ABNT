@@ -48,6 +48,15 @@ const STRUCTURAL_HEADING_LABELS = new Set([
   "REFERÊNCIAS",
 ]);
 
+const PROVISIONAL_TEXT_PATTERNS = [
+  /\bnome\s+d[ao]\s+orientador[ae]?\b/i,
+  /\bnome\s+d[ao]\s+autor[ae]?\b/i,
+  /\bt[ií]tulo\s+do\s+trabalho\b/i,
+  /\binsira\s+aqui\b/i,
+  /\bpreencha\s+aqui\b/i,
+  /\bpreencher\b/i,
+];
+
 export function stripTocArtifacts(value: string): string {
   return value.replace(/\bToc\d+\b/gi, "").replace(/\s{2,}/g, " ").trim();
 }
@@ -117,6 +126,10 @@ export function normalizeResearchProjectEditorText(value: string): string {
 
 export function hasResearchProjectTechnicalNoise(value: string): boolean {
   return /^\s*TITLE\s*[123]\s+/im.test(value) || /\bToc\d+\b/i.test(value) || /\b(SUMRIO|REFERENCIAL TERICO)\b/i.test(value);
+}
+
+export function isResearchProjectProvisionalText(value: string): boolean {
+  return PROVISIONAL_TEXT_PATTERNS.some((pattern) => pattern.test(value));
 }
 
 export function normalizeKeywordSentence(value: string): string {
