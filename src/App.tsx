@@ -372,7 +372,7 @@ export default function App() {
         </div>
       </header>
 
-      <p className="global-draft-notice" role="note">O DOCX é rascunho técnico. Sumário, ficha catalográfica, paginação final e PDF devem ser conferidos no Word/LibreOffice.</p>
+      <p className="global-draft-notice" role="note">O DOCX é rascunho técnico. Sumário, ficha catalográfica, paginação final e PDF devem ser conferidos no Word/LibreOffice. Após abrir no Word/LibreOffice, clique com o botão direito no sumário e selecione &ldquo;Atualizar campo&rdquo;.</p>
 
       <a href="#workspace" className="skip-link">Pular para o conteúdo</a>
       <main id="workspace" className="workspace">

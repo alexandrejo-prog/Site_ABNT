@@ -481,6 +481,24 @@ export function validateWork(fields: AcademicFields, editorText = ""): Validatio
 
   addResumoAbstractIssues(fields, issues);
   addImpactIndicatorIssues(fields, issues);
+
+  if (
+    requirements.requiresTableOfContents &&
+    !/^\s*#{1,3}\s+/m.test(editorText) &&
+    !hasValue(fields.referencias) &&
+    !hasValue(fields.anexos) &&
+    !hasValue(fields.apendices)
+  ) {
+    issues.push({
+      severity: "warning",
+      code: "summary-empty-headings",
+      message: "O sumário será gerado como campo a atualizar no Word/LibreOffice. Sem títulos de seção no texto, ele pode ficar vazio até a atualização.",
+      what: "Não foram detectados títulos de seção (cabeçalhos) no texto.",
+      why: "O sumário automático (TOC) do Word/LibreOffice depende de cabeçalhos numerados no corpo do texto.",
+      action: "Use títulos de seção (ex.: '# 1 Introdução') no editor; depois, abra no Word/LibreOffice e atualize o campo do sumário (botão direito > Atualizar campo).",
+    });
+  }
+
   addCpgWarnings(fields, editorText, issues);
   addResearchProjectIssues(fields, editorText, issues);
   addUflaCollectionIssues(fields, issues);

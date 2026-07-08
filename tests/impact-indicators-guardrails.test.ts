@@ -119,7 +119,11 @@ describe("Indicadores de impacto - sem texto genérico", () => {
         impactIndicators: "Social impact text.",
       }),
     );
-    expect(documentXml).toContain("Impacto social: Beneficia a agricultura familiar.; Impacto científico: Avança o conhecimento em solos tropicais.");
+    expect(documentXml).toContain("INDICADORES DE IMPACTO");
+    expect(documentXml).toContain("Beneficia a agricultura familiar.");
+    expect(documentXml).toContain("Avança o conhecimento em solos tropicais.");
+    expect(documentXml).not.toContain("Impacto social:");
+    expect(documentXml).not.toContain("Impacto científico:");
     expect(documentXml).not.toContain("[PREENCHER");
   });
 

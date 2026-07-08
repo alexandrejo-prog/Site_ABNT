@@ -166,6 +166,104 @@ describe("ensureTrailingPeriod", () => {
   });
 });
 
+describe("tese e dissertacao - indicadores, sumario, cronograma, referencias, aprovacao", () => {
+  it("indicadores de impacto pre-textuais em paragrafo unico sem rotulos", async () => {
+    const documentXml = await generatedXml(
+      "# 1 Introducao\nTexto.",
+      baseFields({
+        workType: "tese",
+        indicadoresImpacto: "",
+        impactoSocial: "Beneficia a comunidade local.",
+        impactoCientifico: "Avança a pesquisa em educacao.",
+      }),
+    );
+    expect(documentXml).toContain("INDICADORES DE IMPACTO");
+    expect(documentXml).not.toContain("Impacto social:");
+    expect(documentXml).not.toContain("Impacto científico:");
+    expect(documentXml).toContain("Beneficia a comunidade local.");
+    expect(documentXml).toContain("Avança a pesquisa em educacao.");
+    expect(documentXml).not.toContain("[PREENCHER:");
+  });
+
+  it("nao duplica a secao textual 'INDICADORES DE IMPACTO' no corpo para tese", async () => {
+    const editorText = `# 1 INTRODUCAO
+Texto introdutorio.
+
+# 4 INDICADORES DE IMPACTO
+Impacto social: beneficia a comunidade.
+Impacto cientifico: avanca a pesquisa.
+
+# 5 CONCLUSAO
+Conclusao final.`;
+    const documentXml = await generatedXml(
+      editorText,
+      baseFields({ workType: "tese", indicadoresImpacto: "Impacto social: beneficia a comunidade." }),
+    );
+    const count = (documentXml.match(/INDICADORES DE IMPACTO/g) ?? []).length;
+    expect(count).toBe(1);
+  });
+
+  it("sumario de tese e campo TOC atualizavel (nao pagina vazia enganosa)", async () => {
+    const documentXml = await generatedXml("# 1 Introducao\nTexto.\n# 2 Metodologia\nTexto.", baseFields({ workType: "tese" }));
+    const toc = tocInstruction(documentXml);
+    expect(toc).toContain("TOC");
+    expect(toc).toMatch(/\\o\s+&quot;1-3&quot;/);
+  });
+
+  it("cronograma em texto livre delimitado vira tabela DOCX", async () => {
+    const editorText = `# 1 INTRODUCAO
+Texto.
+
+# 5 CRONOGRAMA
+Etapa    Mês 1    Mês 2    Mês 3
+Importar documento    X    X
+Testar tese    X    X`;
+    const documentXml = await generatedXml(editorText, baseFields({ workType: "tese" }));
+    expect(documentXml).toContain("<w:tbl");
+    expect(documentXml).toContain("Etapa");
+    expect(documentXml).toContain("Mês 1");
+    expect(documentXml).toContain("Mês 3");
+    expect(documentXml).toContain("Importar documento");
+  });
+
+  it("cronograma 'Etapa Mes 1' em espaco simples nao sai como linha unica colada", async () => {
+    const editorText = `# 1 INTRODUCAO
+Texto.
+
+# 5 CRONOGRAMA
+Etapa Mês 1 Mês 2 Mês 3
+Importar documento X
+Testar tese X`;
+    const documentXml = await generatedXml(editorText, baseFields({ workType: "tese" }));
+    expect(documentXml).toContain("Importar documento X");
+    expect(documentXml).toContain("Testar tese X");
+    expect(documentXml).not.toContain("Importar documento XTestar tese X");
+  });
+
+  it("referencia do Manual UFLA 2024 vira 2025 no DOCX", async () => {
+    const documentXml = await generatedXml(
+      "# 1 Introducao\nTexto.",
+      baseFields({ workType: "tese", referencias: "Manual de normalização e estrutura de trabalhos acadêmicos. Lavras: UFLA, 2024." }),
+    );
+    expect(documentXml).toContain("Lavras: UFLA, 2025.");
+    expect(documentXml).toContain("6. ed. rev., atual. e ampl.");
+    expect(documentXml).not.toContain("Lavras: UFLA, 2024.");
+  });
+
+  it("folha de aprovacao de tese contem aviso de banca a preencher", async () => {
+    const documentXml = await generatedXml("# 1 Introducao\nTexto.", baseFields({ workType: "tese" }));
+    expect(documentXml).toContain("Banca examinadora a ser preenchida na versão final.");
+    expect(documentXml).toContain("Prof.(a) Dr.(a)");
+  });
+
+  it("nao exporta caractere estranho U+FFFE (TECNICO ADMINISTRATIVOS)", async () => {
+    const editorText = "# 1 Introducao\nTexto com TÉCNICO\uFFFEADMINISTRATIVOS presente.";
+    const documentXml = await generatedXml(editorText, baseFields({ workType: "tese" }));
+    expect(documentXml).not.toContain("\uFFFE");
+    expect(documentXml).toContain("TÉCNICO-ADMINISTRATIVOS");
+  });
+});
+
 describe("documento ideal de teste (importado)", () => {
   it("download-filename preserva importedFileName para tese", () => {
     // Documentação: o arquivo documento_ideal_teste_tipos_trabalho_ufla_abnt.docx

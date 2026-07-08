@@ -137,4 +137,18 @@ describe("references normalizer", () => {
     const highlightRun = normalized.runs.find((run) => run.text === normalized.detectedHighlight);
     expect(highlightRun?.bold).toBe(true);
   });
+
+  it("normaliza referencia do Manual UFLA de 2024 para 6. ed. 2025", () => {
+    const normalized = normalizeReference("Manual de normalização e estrutura de trabalhos acadêmicos. Lavras: UFLA, 2024.");
+    expect(normalized.text).toContain("Lavras: UFLA, 2025.");
+    expect(normalized.text).toContain("6. ed. rev., atual. e ampl.");
+    expect(normalized.detectedHighlight).toContain("Manual de normalização e estrutura de trabalhos acadêmicos");
+    expect(normalized.text).not.toContain("Lavras: UFLA, 2024.");
+  });
+
+  it("nao altera referencia comum que mencione UFLA e 2024", () => {
+    const normalized = normalizeReference("SILVA, M. Livro comum. Lavras: UFLA, 2024.");
+    expect(normalized.text).toContain("Lavras: UFLA, 2024.");
+    expect(normalized.text).not.toContain("6. ed. rev., atual. e ampl.");
+  });
 });

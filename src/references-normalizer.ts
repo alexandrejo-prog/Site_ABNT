@@ -1,3 +1,5 @@
+import { UFLA_MANUAL_REFERENCE } from "./ufla-rules";
+
 export type ReferenceConfidence = "alta" | "media" | "baixa";
 
 export interface ReferenceRun {
@@ -153,6 +155,33 @@ function mergeRuns(runs: ReferenceRun[]): ReferenceRun[] {
   return merged;
 }
 
+// Normaliza para a forma canônica (6. ed., 2025) qualquer referência do Manual de
+// Normalização da UFLA que venha com ano anterior (ex.: 2024) ou sem a edição.
+function normalizeUflaManualReference(text: string): NormalizedReference | null {
+  const folded = fold(text);
+  if (!folded.includes("manual de normalizacao e estrutura de trabalhos academicos")) return null;
+  if (!/lavras/.test(folded) || !/ufla/.test(folded)) return null;
+
+  const authorTail = "UNIVERSIDADE FEDERAL DE LAVRAS. ";
+  const title = "Manual de normalização e estrutura de trabalhos acadêmicos: TCCs, monografias, dissertações e teses";
+  const tail = ". 6. ed. rev., atual. e ampl. Lavras: UFLA, 2025.";
+  const runs: ReferenceRun[] = [
+    { text: authorTail },
+    { text: title, bold: true },
+    { text: tail },
+  ];
+
+  return {
+    original: text,
+    text: UFLA_MANUAL_REFERENCE,
+    runs,
+    confidence: "alta",
+    warnings: [],
+    detectedHighlight: title,
+    detectedType: "livro",
+  };
+}
+
 function detect(value: string): { highlight?: string; confidence: ReferenceConfidence; detectedType: NormalizedReference["detectedType"] } {
   if (isLegislation(value)) return { highlight: legislationTitle(value), confidence: "media", detectedType: "legislacao" };
   const parsed = splitAuthor(value);
@@ -183,6 +212,9 @@ export function normalizeReference(reference: string): NormalizedReference {
   const manual = parseManual(original);
   const text = clean(manual.runs.map((run) => run.text).join(""));
   const warnings: string[] = [];
+
+  const uflaManual = normalizeUflaManualReference(text);
+  if (uflaManual) return uflaManual;
   if (!text) return { original: reference, text, runs: [], confidence: "baixa", warnings: ["empty"], detectedType: "desconhecido" };
   if (!hasYear(text)) warnings.push("missing year");
   const detected = detect(text);

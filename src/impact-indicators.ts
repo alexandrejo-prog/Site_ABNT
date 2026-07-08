@@ -85,6 +85,7 @@ function fieldValue(fields: AcademicFields, key: AcademicFieldKey): string {
 }
 
 // Texto consolidado usando somente dados informados pelo usuário.
+// Mantido para o rascunho/preview (exibe os rótulos agrupados).
 export function consolidateImpactIndicators(fields: AcademicFields): string {
   const explicit = fieldValue(fields, "indicadoresImpacto");
   if (explicit) return explicit;
@@ -96,6 +97,68 @@ export function consolidateImpactIndicators(fields: AcademicFields): string {
   if (filled.length === 0) return "";
   // Texto corrido em parágrafo único (terceira pessoa), conforme Manual de Normalização UFLA.
   return filled.map((entry) => `${entry.label}: ${entry.value}`).join("; ");
+}
+
+const IMPACT_LABEL_PREFIX =
+  /^\s*(impacto social|impacto científico|impacto educacional|impacto ambiental|impacto tecnológico\/econômico|público beneficiado|aderência a ods\/política institucional)\s*:\s*/i;
+
+// Remove os rótulos ("Impacto social:", "Impacto científico:", etc.) de um texto
+// já consolidado, transformando-o em texto corrido sem lista de rótulos.
+export function stripImpactLabels(text: string): string {
+  return text
+    .split(";")
+    .map((segment) => segment.replace(IMPACT_LABEL_PREFIX, "").trim())
+    .filter(Boolean)
+    .join("; ");
+}
+
+function ensureImpactPeriod(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (/[.;]$/.test(trimmed)) return trimmed;
+  return `${trimmed}.`;
+}
+
+function impactClauseConnector(key: AcademicFieldKey): string {
+  switch (key) {
+    case "impactoSocial":
+      return "O trabalho contribui socialmente ao";
+    case "impactoCientifico":
+      return "apresenta impacto científico ao";
+    case "impactoEducacional":
+      return "favorece a formação educacional ao";
+    case "impactoAmbiental":
+      return "reduz impactos ambientais relacionados a";
+    case "impactoTecnologico":
+      return "contribui tecnológica e economicamente para";
+    case "publicoBeneficiado":
+      return "beneficia";
+    case "aderenciaOds":
+      return "adere aos objetivos institucionais relacionados a";
+    default:
+      return "";
+  }
+}
+
+// Texto de indicadores de impacto em parágrafo único, em terceira pessoa, sem
+// rótulos e sem lista/tópicos. Usado no bloco pré-textual do DOCX (Manual UFLA).
+export function buildFlowingImpactText(fields: AcademicFields): string {
+  const explicit = fieldValue(fields, "indicadoresImpacto").trim();
+  if (explicit) return stripImpactLabels(explicit);
+
+  const filled = IMPACT_FIELD_ENTRIES
+    .map((entry) => ({ key: entry.key, value: fieldValue(fields, entry.key) }))
+    .filter((entry) => entry.value.length > 0);
+
+  if (filled.length === 0) return "";
+
+  const clauses = filled.map((entry) => {
+    const connector = impactClauseConnector(entry.key);
+    const value = entry.value.trim();
+    return connector ? `${connector} ${value}` : value;
+  });
+
+  return ensureImpactPeriod(clauses.join(" "));
 }
 
 // Considera suficiente quando há ao menos dois campos específicos de impacto

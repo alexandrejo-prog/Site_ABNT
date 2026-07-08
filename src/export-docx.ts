@@ -20,7 +20,7 @@ import type { IParagraphOptions, IStylesOptions } from "docx";
 import { pageMargins, ibgeTable, BODY_SIZE, SINGLE_LINE, ONE_AND_HALF_LINE, BLACK, AUTHOR_SIZE as COVER_AUTHOR_SIZE, TITLE_SIZE as COVER_TITLE_SIZE } from "./docx-shared";
 import { AcademicFields, UFLA_RULES } from "./ufla-rules";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
-import { consolidateImpactIndicators } from "./impact-indicators";
+import { buildFlowingImpactText } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
 import { captionParagraph, cleanMojibakeText, detectCaption } from "./docx-render-core";
 
@@ -32,6 +32,7 @@ export type EditorBlockType =
   | "longQuote"
   | "scheduleTable"
   | "markdownTable"
+  | "plainScheduleTable"
   | "reference";
 
 export interface EditorBlock {
@@ -200,6 +201,24 @@ function shouldStartMarkdownTable(value: string): boolean {
   return looksLikeMarkdownTableRow(value) && !shouldStartScheduleTable(value);
 }
 
+function splitScheduleColumns(line: string): string[] {
+  if (line.includes("\t")) return line.split("\t").map((cell) => cell.trim()).filter(Boolean);
+  if (/ {2,}/.test(line)) return line.split(/ {2,}/).map((cell) => cell.trim()).filter(Boolean);
+  return [line.trim()];
+}
+
+function isPlainScheduleHeader(value: string): boolean {
+  const cells = splitScheduleColumns(value.trim());
+  if (cells.length < 2) return false;
+  const first = cells[0].toLocaleLowerCase("pt-BR");
+  const hasMonth = cells.some((cell) => /\bm[eê]s\b/i.test(cell));
+  return /^etapa\b/i.test(first) && hasMonth;
+}
+
+function shouldStartPlainScheduleTable(value: string): boolean {
+  return isPlainScheduleHeader(value);
+}
+
 export function parseEditorContent(editorText: string): EditorBlock[] {
   const lines = editorText
     .split(/\r?\n/)
@@ -239,6 +258,23 @@ export function parseEditorContent(editorText: string): EditorBlock[] {
       }
 
       blocks.push({ type: "scheduleTable", text: tableLines.join("\n") });
+      index = cursor - 1;
+      continue;
+    }
+
+    if (shouldStartPlainScheduleTable(trimmed)) {
+      const tableLines: string[] = [trimmed];
+      let cursor = index + 1;
+
+      while (cursor < lines.length) {
+        const nextLine = lines[cursor];
+        if (!nextLine.trim()) break;
+        if (/^Fonte:/i.test(nextLine)) break;
+        tableLines.push(nextLine);
+        cursor += 1;
+      }
+
+      blocks.push({ type: "plainScheduleTable", text: tableLines.join("\n") });
       index = cursor - 1;
       continue;
     }
@@ -288,7 +324,7 @@ function plainRun(text: string, size = BODY_SIZE): TextRun {
 
 function referenceRunToTextRun(run: ReferenceRun): TextRun {
   return new TextRun({
-    text: run.text,
+    text: cleanMojibakeText(run.text),
     bold: run.bold,
     italics: run.italics,
     font: REFERENCE_FONT,
@@ -565,6 +601,65 @@ function markdownTableBlock(text: string): Array<Paragraph | Table> {
   ];
 }
 
+function plainScheduleTableBlock(text: string): Array<Paragraph | Table> {
+  const rawLines = text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!rawLines.length) return [simpleParagraph(text)];
+
+  const headerCells = splitScheduleColumns(rawLines[0]);
+  const columnCount = Math.max(headerCells.length, 1);
+
+  const tableRows = rawLines.map((line, rowIndex) => {
+    const cells = splitScheduleColumns(line);
+    const padded = Array.from({ length: columnCount }, (_, columnIndex) => cells[columnIndex] ?? "");
+    const tableCells = padded.map((cellText) => {
+      const cleaned = cleanMojibakeText(cellText);
+      return new TableCell({
+        margins: { top: 40, bottom: 40, left: 80, right: 80 },
+        children: [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { line: SINGLE_LINE, after: 0 },
+            children: [
+              new TextRun({
+                text: cleaned,
+                bold: rowIndex === 0,
+                font: UFLA_RULES.typography.fontFamily,
+                size: BODY_SIZE,
+                color: BLACK,
+              }),
+            ],
+          }),
+        ],
+      });
+    });
+
+    return new TableRow({ children: tableCells });
+  });
+
+  return [
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 120, after: 120, line: SINGLE_LINE },
+      children: [
+        new TextRun({ text: "Quadro - Cronograma de execução da pesquisa", font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK }),
+      ],
+    }),
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      columnWidths: Array.from({ length: columnCount }, () => Math.floor(100 / columnCount)),
+      rows: tableRows,
+    }),
+    new Paragraph({
+      alignment: AlignmentType.LEFT,
+      spacing: { before: 120, after: 120, line: SINGLE_LINE },
+      children: [new TextRun({ text: "Fonte: elaborado pelo autor.", font: UFLA_RULES.typography.fontFamily, size: 20, color: BLACK })],
+    }),
+  ];
+}
+
 function scheduleTableBlock(text: string): Array<Paragraph | Table> {
   const { caption, rows, source } = scheduleRowsFromBlock(text);
   const ibge = ibgeTable({
@@ -664,6 +759,10 @@ function blockToParagraph(
     return scheduleTableBlock(block.text);
   }
 
+  if (block.type === "plainScheduleTable") {
+    return plainScheduleTableBlock(block.text);
+  }
+
   if (block.type === "markdownTable") {
     return markdownTableBlock(block.text);
   }
@@ -674,7 +773,7 @@ function blockToParagraph(
     return [captionParagraph(cleanedText, caption.kind)];
   }
 
-  return [textParagraph(block.text)];
+  return [textParagraph(cleanedText)];
 }
 
 function splitParagraphs(value: string): string[] {
@@ -811,6 +910,37 @@ function fieldSectionBlocks(fields: AcademicFields, bodyBlocks: EditorBlock[]): 
   }
 
   return nextBlocks;
+}
+
+function isImpactIndicatorsHeading(block: EditorBlock): boolean {
+  if (block.type !== "heading1" && block.type !== "heading2") return false;
+  return normalizeForDetection(block.text).includes("INDICADORES DE IMPACTO");
+}
+
+// Tese/dissertação já geram os indicadores como bloco pré-textual (parágrafo único).
+// Para não duplicar em lista no corpo textual, removemos a seção "INDICADORES DE IMPACTO"
+// importada/escrita no editor quando o bloco pré-textual é gerado.
+function removeDuplicateIndicatorsSection(blocks: EditorBlock[], fields: AcademicFields): EditorBlock[] {
+  const isGraduateThesis = fields.workType === "dissertacao" || fields.workType === "tese";
+  const hasPreTextualIndicators =
+    isGraduateThesis || hasText(fields.indicadoresImpacto) || hasText(fields.impactoSocial) || hasText(fields.impactoCientifico);
+  if (!hasPreTextualIndicators) return blocks;
+
+  const result: EditorBlock[] = [];
+  let skipping = false;
+  for (const block of blocks) {
+    if (isImpactIndicatorsHeading(block)) {
+      skipping = true;
+      continue;
+    }
+    if (skipping) {
+      const isNextHeading = block.type === "heading1" || block.type === "heading2";
+      if (isNextHeading) skipping = false;
+      else continue;
+    }
+    result.push(block);
+  }
+  return result;
 }
 
 function appendixTitle(fields: AcademicFields): string {
@@ -1038,6 +1168,31 @@ function approvalPageChildren(fields: AcademicFields): Paragraph[] {
       ]
     : [];
 
+  // Rascunho técnico: não finge aprovação final. Linhas editáveis para a banca.
+  const bancaLines: Paragraph[] = [
+    new Paragraph({ spacing: { before: 360, after: 240, line: SINGLE_LINE } }),
+    centeredParagraph("Banca examinadora a ser preenchida na versão final.", true, BODY_SIZE, {
+      after: 360,
+      line: SINGLE_LINE,
+    }),
+    centeredParagraph("Prof.(a) Dr.(a) ______________________________", false, BODY_SIZE, {
+      after: 0,
+      line: SINGLE_LINE,
+    }),
+    centeredParagraph("Instituição: ________________________________", false, BODY_SIZE, {
+      after: 240,
+      line: SINGLE_LINE,
+    }),
+    centeredParagraph("Prof.(a) Dr.(a) ______________________________", false, BODY_SIZE, {
+      after: 0,
+      line: SINGLE_LINE,
+    }),
+    centeredParagraph("Instituição: ________________________________", false, BODY_SIZE, {
+      after: 0,
+      line: SINGLE_LINE,
+    }),
+  ];
+
   return [
     pageBreak(),
     centeredParagraph(cleanMojibakeText((fields.author || "AUTOR").toUpperCase()), true, BODY_SIZE, {
@@ -1055,6 +1210,7 @@ function approvalPageChildren(fields: AcademicFields): Paragraph[] {
       spacing: { before: 480, after: 240, line: SINGLE_LINE },
     }),
     ...orientationLines,
+    ...bancaLines,
   ];
 }
 
@@ -1086,7 +1242,8 @@ function optionalUntitledRightPage(content: string, italics = false): Paragraph[
 }
 
 function preTextualChildren(fields: AcademicFields): Paragraph[] {
-  const consolidated = consolidateImpactIndicators(fields);
+  // Bloco pré-textual em parágrafo único, em terceira pessoa, sem rótulos nem lista.
+  const consolidated = buildFlowingImpactText(fields);
   // O bloco é omitido por completo quando vazio. Nunca se exporta placeholder.
   const indicadores = consolidated;
   // "Impact indicators" só existe se houver tradução real em inglês.
@@ -1122,9 +1279,12 @@ function preTextualChildren(fields: AcademicFields): Paragraph[] {
 export function createDocxDocument(input: DocxGenerationInput): Document {
   const { fields } = input;
   const parsedBlocks = parseEditorContent(input.editorText);
-  const bodyBlocks = fieldSectionBlocks(
+  const bodyBlocks = removeDuplicateIndicatorsSection(
+    fieldSectionBlocks(
+      fields,
+      parsedBlocks.filter((block) => block.type !== "reference"),
+    ),
     fields,
-    parsedBlocks.filter((block) => block.type !== "reference"),
   );
   const editorReferences = parsedBlocks
     .filter((block) => block.type === "reference")
