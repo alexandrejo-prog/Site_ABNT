@@ -115,6 +115,16 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     expect(screen.queryByText("Há conflito entre programa/área informado e texto do documento.")).not.toBeInTheDocument();
   });
 
+  it("trocar de monografia para artigo simples remove erro de curso imediatamente", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "monografia");
+    expect(screen.getByText("Informe o curso da monografia antes de gerar o DOCX.")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
+    expect(screen.queryByText("Informe o curso da monografia antes de gerar o DOCX.")).not.toBeInTheDocument();
+  });
   it("rascunho gera mesmo com indicadores de impacto ausentes", async () => {
     const user = userEvent.setup();
     render(<App />);

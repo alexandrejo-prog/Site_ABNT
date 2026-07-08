@@ -155,10 +155,12 @@ export default function App() {
   }
 
   function updateWorkType(workType: AcademicFields["workType"]) {
-    setFields((current) => normalizeFieldsForSelectedModel({ ...current, workType }));
+    const nextFields = normalizeFieldsForSelectedModel({ ...fields, workType });
+    const textToValidate = editorMode === "references" ? nextFields.referencias : editorText;
+    setFields(nextFields);
     setConfidence((current) => ({ ...current, workNature: modelConfidence(workType) ? "media" : current.workNature, program: modelConfidence(workType) ? "media" : current.program }));
     setGenerateAnyway(false);
-    setIssues((current) => current.filter((issue) => issue.code !== "work-type-required"));
+    setIssues(validateWork(nextFields, textToValidate));
   }
 
   function mergeImportedFields(importedFields: ReturnType<typeof emptyAcademicFields>, importedConfidence: Record<AcademicFieldKey, Confidence>) {

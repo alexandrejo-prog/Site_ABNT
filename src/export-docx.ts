@@ -1151,6 +1151,11 @@ export async function loadDefaultLogoAsset(): Promise<DocxLogoAsset | undefined>
 }
 
 export async function generateDocxBlob(input: DocxGenerationInput): Promise<Blob> {
+  if (input.fields.workType === "artigo") {
+    const { generateArticleDocxBlob } = await import("./export-article-docx");
+    return generateArticleDocxBlob(input);
+  }
+
   const logo = input.logo ?? (await loadDefaultLogoAsset());
   return Packer.toBlob(createDocxDocument({ ...input, logo }));
 }
