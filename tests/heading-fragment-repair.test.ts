@@ -65,6 +65,13 @@ describe("reparo de titulos quebrados", () => {
     expect(repairHeadingFragments(input)).not.toContain("Resultados\nesperados");
   });
 
+  it("une metodologia de teste quebrada no arquivo-base", () => {
+    const input = "# 3 METODOLOGIA\nDE TESTE\nTexto.";
+
+    expect(repairHeadingFragments(input)).toContain("# 3 METODOLOGIA DE TESTE");
+    expect(repairHeadingFragments(input)).not.toContain("METODOLOGIA\nDE TESTE");
+  });
+
   it("une material e metodos quebrado preservando nivel de titulo", () => {
     const input = "## Material e\nmetodos\nTexto.";
 
