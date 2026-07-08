@@ -67,6 +67,22 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
   });
 
+  it("nomeia DOCX pelo tipo selecionado e título atual", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "tese");
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Documento ideal de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "Administração" } });
+    fireEvent.change(screen.getByLabelText("Orientador"), { target: { value: "Prof. Dr. João da Silva" } });
+    fireEvent.click(screen.getByLabelText("Gerar rascunho mesmo com pendências"));
+    await user.click(getButtonByText(/Gerar DOCX/));
+
+    await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
+    expect(saveAsMock.mock.calls[0][1]).toBe("tese-documento-ideal-de-teste.docx");
+  });
+
   it("placeholder natural em título impede a geração", async () => {
     const user = userEvent.setup();
     render(<App />);
