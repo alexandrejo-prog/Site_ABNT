@@ -72,6 +72,26 @@ describe("reparo de titulos quebrados", () => {
     expect(repairHeadingFragments(input)).not.toContain("METODOLOGIA\nDE TESTE");
   });
 
+  it("une titulo numerado com fragmento curto em caixa alta", () => {
+    const input = "# 2 REFERENCIAL TEÓRICO\nDA PESQUISA\nTexto.";
+
+    expect(repairHeadingFragments(input)).toContain("# 2 REFERENCIAL TEÓRICO DA PESQUISA");
+    expect(repairHeadingFragments(input)).not.toContain("REFERENCIAL TEÓRICO\nDA PESQUISA");
+  });
+
+  it("une titulo numerado com fragmento iniciado por preposicao", () => {
+    const input = "# 4 RESULTADOS\nE DISCUSSÃO\nTexto.";
+
+    expect(repairHeadingFragments(input)).toContain("# 4 RESULTADOS E DISCUSSÃO");
+    expect(repairHeadingFragments(input)).not.toContain("RESULTADOS\nE DISCUSSÃO");
+  });
+
+  it("nao une titulo com paragrafo comum na linha seguinte", () => {
+    const input = "# 1 INTRODUÇÃO\nEste trabalho apresenta a pesquisa desenvolvida no curso.";
+
+    expect(repairHeadingFragments(input)).toBe(input);
+  });
+
   it("une material e metodos quebrado preservando nivel de titulo", () => {
     const input = "## Material e\nmetodos\nTexto.";
 
