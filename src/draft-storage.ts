@@ -9,7 +9,7 @@ export interface DraftPayload {
 const DRAFT_KEY = "site-abnt:draft:v1";
 
 function logDraftStorageError(action: string, error: unknown): void {
-  if (import.meta.env.DEV) {
+  if (import.meta.env.DEV && import.meta.env.MODE !== "test") {
     console.error(`Falha ao ${action} rascunho local do Site_ABNT.`, error);
   }
 }
