@@ -20,7 +20,7 @@ import { DraftStatus } from "./components/DraftStatus";
 import { ToolButton } from "./components/ToolButton";
 
 const FIELD_LABELS: Record<AcademicFieldKey, string> = {
-  author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho", course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador", location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave", abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão", referencias: "Referências", anexos: "Anexos", apendices: "Apêndices", dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators", imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema", problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese", objetivoGeral: "Objetivo Geral", objetivosEspecificos: "Objetivos Específicos", justificativa: "Justificativa", referencialTeorico: "Referencial Teórico",   metodologia: "Metodologia", cronograma: "Cronograma", recursosOrcamento: "Recursos/Orçamento", resultadosEsperados: "Resultados Esperados", corpusDados: "Corpus/Dados", contextoInstitucional: "Contexto Institucional", conclusaoProvisoria: "Conclusão Provisória", contribuicoesImpactos: "Contribuições/Impactos", impactoSocial: "Impacto social", impactoCientifico: "Impacto científico", impactoEducacional: "Impacto educacional", impactoAmbiental: "Impacto ambiental", impactoTecnologico: "Impacto tecnológico/econômico", publicoBeneficiado: "Público beneficiado", aderenciaOds: "Aderência a ODS/política institucional",
+  author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho", course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador", location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave", abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão", referencias: "Referências", anexos: "Anexos", apendices: "Apêndices", dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators", imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema", problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese", objetivoGeral: "Objetivo Geral", objetivosEspecificos: "Objetivos Específicos", justificativa: "Justificativa", referencialTeorico: "Referencial Teórico", metodologia: "Metodologia", cronograma: "Cronograma", recursosOrcamento: "Recursos/Orçamento", resultadosEsperados: "Resultados Esperados", corpusDados: "Corpus/Dados", contextoInstitucional: "Contexto Institucional", conclusaoProvisoria: "Conclusão Provisória", contribuicoesImpactos: "Contribuições/Impactos", impactoSocial: "Impacto social", impactoCientifico: "Impacto científico", impactoEducacional: "Impacto educacional", impactoAmbiental: "Impacto ambiental", impactoTecnologico: "Impacto tecnológico/econômico", publicoBeneficiado: "Público beneficiado", aderenciaOds: "Aderência a ODS/política institucional",
 };
 
 const RESEARCH_PROJECT_FIELD_KEYS: AcademicFieldKey[] = ["tema", "delimitacaoTema", "problemaPesquisa", "hipotese", "objetivoGeral", "objetivosEspecificos", "justificativa", "referencialTeorico", "metodologia", "cronograma", "recursosOrcamento", "resultadosEsperados"];
@@ -51,6 +51,10 @@ function visibleField(key: AcademicFieldKey, workType: AcademicFields["workType"
 
 function modelConfidence(workType: AcademicFields["workType"]): boolean {
   return ["monografia", "dissertacao", "tese", "projeto_pesquisa"].includes(workType);
+}
+
+function shouldNormalizeAfterFieldChange(key: AcademicFieldKey): boolean {
+  return key === "program" || key === "course";
 }
 
 function hasDraftableContent(fields: AcademicFields, editorText: string): boolean {
@@ -146,8 +150,15 @@ export default function App() {
   }, [activeEditorText, editorMode]);
 
   function updateField(key: AcademicFieldKey, value: string) {
-    setFields((current) => ({ ...current, [key]: value }));
-    setConfidence((current) => ({ ...current, [key]: current[key] === "nao-identificado" ? "baixa" : current[key] }));
+    setFields((current) => {
+      const next = { ...current, [key]: value };
+      return shouldNormalizeAfterFieldChange(key) ? normalizeFieldsForSelectedModel(next) : next;
+    });
+    setConfidence((current) => ({
+      ...current,
+      [key]: current[key] === "nao-identificado" ? "baixa" : current[key],
+      ...(shouldNormalizeAfterFieldChange(key) && modelConfidence(fields.workType) ? { workNature: "media" as Confidence } : {}),
+    }));
   }
 
   function updateActiveEditorText(value: string) {
