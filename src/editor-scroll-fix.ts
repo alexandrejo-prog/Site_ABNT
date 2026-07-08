@@ -6,8 +6,6 @@ type ScrollSnapshot = {
   editors: Array<{ element: HTMLElement; scrollTop: number; scrollLeft: number }>;
 };
 
-type ExecCommandLike = (commandId: string, showUI?: boolean, value?: string) => boolean;
-
 let installedCleanup: EditorScrollFixCleanup | null = null;
 
 function isFormattingToolbarButton(target: EventTarget | null): boolean {
@@ -15,10 +13,6 @@ function isFormattingToolbarButton(target: EventTarget | null): boolean {
   const button = target.closest(".editor-toolbar-sticky button");
   if (!(button instanceof HTMLElement)) return false;
   return !button.classList.contains("text-button");
-}
-
-function isRichEditor(element: unknown): element is HTMLElement {
-  return element instanceof HTMLElement && element.classList.contains("rich-editor");
 }
 
 function captureScroll(): ScrollSnapshot {
@@ -47,10 +41,6 @@ export function installEditorScrollFix(): EditorScrollFixCleanup {
   if (installedCleanup) return installedCleanup;
 
   let lastSnapshot: ScrollSnapshot | null = null;
-  let formattingFromToolbar = false;
-  const originalFocus = HTMLElement.prototype.focus;
-  const rawExecCommand = document.execCommand as ExecCommandLike | undefined;
-  const originalExecCommand = typeof rawExecCommand === "function" ? rawExecCommand.bind(document) : undefined;
   const restoreTimers = new Set<ReturnType<typeof setTimeout>>();
   let disposed = false;
 
@@ -70,71 +60,22 @@ export function installEditorScrollFix(): EditorScrollFixCleanup {
     });
   }
 
-  function runPreservingScroll(callback: () => void): void {
-    const snapshot = lastSnapshot ?? captureScroll();
-    formattingFromToolbar = true;
-    try {
-      callback();
-    } finally {
-      restoreAfterFormatting(snapshot);
-      const timer = setTimeout(() => {
-        restoreTimers.delete(timer);
-        formattingFromToolbar = false;
-      }, 80);
-      restoreTimers.add(timer);
-    }
-  }
-
-  function patchedFocus(this: HTMLElement, options?: FocusOptions): void {
-    if (formattingFromToolbar && isRichEditor(this)) {
-      return originalFocus.call(this, { ...(options ?? {}), preventScroll: true });
-    }
-    return originalFocus.call(this, options);
-  }
-
-  function patchedExecCommand(commandId: string, showUI?: boolean, value?: string): boolean {
-    if (!originalExecCommand) return false;
-    if (!formattingFromToolbar) {
-      return originalExecCommand(commandId, showUI, value);
-    }
-
-    let result = false;
-    runPreservingScroll(() => {
-      result = originalExecCommand(commandId, showUI, value);
-    });
-    return result;
-  }
-
   function handleMouseDown(event: MouseEvent): void {
     if (!isFormattingToolbarButton(event.target)) return;
     lastSnapshot = captureScroll();
-    formattingFromToolbar = true;
     event.preventDefault();
   }
 
   function handleClick(event: MouseEvent): void {
     if (!isFormattingToolbarButton(event.target)) return;
     restoreAfterFormatting();
-    const timer = setTimeout(() => {
-      restoreTimers.delete(timer);
-      formattingFromToolbar = false;
-    }, 80);
-    restoreTimers.add(timer);
   }
 
-  HTMLElement.prototype.focus = patchedFocus;
-  document.execCommand = patchedExecCommand as typeof document.execCommand;
   document.addEventListener("mousedown", handleMouseDown, true);
   document.addEventListener("click", handleClick, true);
 
   installedCleanup = () => {
     disposed = true;
-    HTMLElement.prototype.focus = originalFocus;
-    if (originalExecCommand) {
-      document.execCommand = originalExecCommand as typeof document.execCommand;
-    } else {
-      delete (document as Document & { execCommand?: ExecCommandLike }).execCommand;
-    }
     document.removeEventListener("mousedown", handleMouseDown, true);
     document.removeEventListener("click", handleClick, true);
     restoreTimers.forEach((timer) => clearTimeout(timer));
