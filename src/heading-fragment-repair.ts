@@ -23,6 +23,7 @@ const HEADING_FRAGMENT_PAIRS: HeadingFragmentPair[] = [
   { currentHeadings: ["RESULTADOS"], nextFragment: "ESPERADOS" },
   { currentHeadings: ["MATERIAL E"], nextFragment: "METODOS" },
   { currentHeadings: ["RECURSOS"], nextFragment: "E ORCAMENTO" },
+  { currentHeadings: ["METODOLOGIA"], nextFragment: "DE TESTE" },
 ];
 
 function isKnownHeadingFragment(currentLine: string, nextLine: string): boolean {
