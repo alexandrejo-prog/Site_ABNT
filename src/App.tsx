@@ -1,4 +1,4 @@
-import { ChangeEvent, ClipboardEvent as ReactClipboardEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, ClipboardEvent as ReactClipboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { saveAs } from "file-saver";
 import { Bold, Eraser, FileCheck2, FileDown, Heading1, Heading2, Italic, Pilcrow, Quote, Upload, XCircle } from "lucide-react";
 import { importDocumentFile } from "./import-docx";
@@ -10,7 +10,6 @@ import { UFLA_PPG_PROGRAMS } from "./ufla-ppg-programs";
 import { editorHtmlToMarkup, editorMarkupToHtml } from "./editor-markup";
 import { templateForWorkType } from "./document-template";
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
-import { TextDiagnosticPanel } from "./text-diagnostic-panel";
 import { buildDraftFromFields, hasUnfilledPlaceholders, draftWorkTypeSupportsIndicators } from "./draft-builder";
 import { editorCommandAdapter } from "./editor-command-adapter";
 import { installEditorScrollFix } from "./editor-scroll-fix";
@@ -27,11 +26,18 @@ const FIELD_LABELS: Record<AcademicFieldKey, string> = {
 const RESEARCH_PROJECT_FIELD_KEYS: AcademicFieldKey[] = ["tema", "delimitacaoTema", "problemaPesquisa", "hipotese", "objetivoGeral", "objetivosEspecificos", "justificativa", "referencialTeorico", "metodologia", "cronograma", "recursosOrcamento", "resultadosEsperados"];
 const ASSISTED_FIELD_KEYS: AcademicFieldKey[] = ["tema", "problemaPesquisa", "objetivoGeral", "objetivosEspecificos", "justificativa", "referencialTeorico", "corpusDados", "contextoInstitucional", "metodologia", "resultadosEsperados", "conclusaoProvisoria", "contribuicoesImpactos"];
 const LONG_FIELDS = new Set<AcademicFieldKey>(["workNature", "resumo", "abstractText", "introducao", "conclusao", "referencias", "anexos", "apendices", "dedicatoria", "agradecimentos", "epigrafe", "indicadoresImpacto", "impactIndicators", "imageWarnings", ...RESEARCH_PROJECT_FIELD_KEYS]);
+const EDITOR_DESCRIPTION_ID = "editor-mode-note";
 type EditorMode = "body" | "references";
 
-function safeFileName(title: string): string {
-  const normalized = title.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase();
-  return `${normalized || "trabalho-ufla"}.docx`;
+function slugify(value: string, fallback: string, maxLength = 90): string {
+  const normalized = value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase();
+  const slug = normalized || fallback;
+  return slug.length > maxLength ? slug.slice(0, maxLength).replace(/-+$/g, "") : slug;
+}
+
+function safeFileName(title: string, workType: AcademicFields["workType"]): string {
+  const typeLabel = workType ? WORK_TYPE_LABELS[workType] ?? workType : "trabalho-ufla";
+  return `${slugify(typeLabel, "trabalho-ufla", 42)}-${slugify(title, "sem-titulo", 96)}.docx`;
 }
 
 function rowsForField(key: AcademicFieldKey): number {
@@ -140,6 +146,7 @@ export default function App() {
       if (autosaveTimeoutRef.current === timeout) autosaveTimeoutRef.current = null;
     };
   }, [fields, editorText]);
+
   useEffect(() => {
     if (!editorRef.current) return;
     const newContent = editorMarkupToHtml(activeEditorText);
@@ -189,16 +196,11 @@ export default function App() {
     setIssues(validateWork(nextFields, textToValidate));
   }
 
-  function mergeImportedFields(importedFields: ReturnType<typeof emptyAcademicFields>, importedConfidence: Record<AcademicFieldKey, Confidence>) {
-    setFields((current) => {
-      const next = { ...current };
-      if (!next.workType && importedFields.workType) next.workType = importedFields.workType;
-      for (const key of ACADEMIC_FIELD_KEYS) if (!next[key] && importedFields[key]) next[key] = importedFields[key];
-      return normalizeFieldsForSelectedModel(next);
-    });
-    setConfidence((current) => {
-      const next = { ...current };
-      for (const key of ACADEMIC_FIELD_KEYS) if (importedConfidence[key] !== "nao-identificado") next[key] = importedConfidence[key];
+  function replaceFieldsWithImportedDocument(importedFields: ReturnType<typeof emptyAcademicFields>, importedConfidence: Record<AcademicFieldKey, Confidence>) {
+    setFields(() => normalizeFieldsForSelectedModel({ ...emptyAcademicFields(), ...importedFields }));
+    setConfidence(() => {
+      const next = emptyConfidenceMap();
+      for (const key of ACADEMIC_FIELD_KEYS) next[key] = importedConfidence[key];
       return next;
     });
   }
@@ -209,15 +211,17 @@ export default function App() {
     try {
       setStatus("Importando arquivo...");
       const result = await importDocumentFile(file);
-      mergeImportedFields(result.fields, result.confidence);
+      replaceFieldsWithImportedDocument(result.fields, result.confidence);
       setImportedFileName(file.name);
       setEditorMode("body");
+      setIssues([]);
+      setGenerateAnyway(false);
       const newEditorText = result.editorText || result.fields.introducao || result.text;
       setEditorText(newEditorText);
       if (editorRef.current) editorRef.current.innerHTML = editorMarkupToHtml(newEditorText);
       lastAppliedEditorTextRef.current = newEditorText;
       editorContentVersionRef.current += 1;
-      setStatus(result.messages.length ? `Arquivo importado com ${result.messages.length} aviso(s).` : "Arquivo importado. Revise os campos antes de gerar.");
+      setStatus(result.messages.length ? `Arquivo importado com ${result.messages.length} aviso(s). Metadados anteriores foram substituídos.` : "Arquivo importado. Metadados anteriores foram substituídos; revise os campos antes de gerar.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Falha ao importar.");
     } finally {
@@ -258,6 +262,7 @@ export default function App() {
     setDraftStatus("cleared");
     setStatus("Rascunho local removido e formulário limpo.");
   }
+
   function applyBlockStyle(prefix: string) {
     editorRef.current?.focus();
     const block = prefix === "# " ? "h1" : prefix === "## " ? "h2" : prefix === "> " ? "blockquote" : "p";
@@ -332,7 +337,7 @@ export default function App() {
       setIsGenerating(true);
       setStatus("Gerando DOCX...");
       const blob = await templateForWorkType(generationFields.workType).generate({ fields: generationFields, editorText });
-      saveAs(blob, safeFileName(generationFields.title));
+      saveAs(blob, safeFileName(generationFields.title, generationFields.workType));
       setStatus(generateAnyway ? "Documento gerado como rascunho com pendências críticas. Revise o DOCX no Word/LibreOffice antes da submissão." : "DOCX gerado como rascunho editável. Confira o arquivo no Word/LibreOffice antes da submissão.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Falha ao gerar DOCX.");
@@ -343,6 +348,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#workspace">Pular para o conteúdo</a>
       <header className="app-header">
         <div><p className="eyebrow">Ferramenta de apoio UFLA/ABNT</p><h1>Assistente de estruturação e pré-normalização UFLA/ABNT</h1></div>
         <div className="header-actions">
@@ -356,7 +362,7 @@ export default function App() {
 
       <p className="global-draft-notice" role="note">O sistema gera um rascunho técnico editável. A submissão final exige revisão humana no Word ou LibreOffice.</p>
 
-      <main className="workspace">
+      <main id="workspace" className="workspace">
         <section className="metadata-pane" aria-label="Campos acadêmicos">
           <div className="assisted-panel">
             <div className="assisted-header-row">
@@ -370,15 +376,15 @@ export default function App() {
           {fields.workType === "artigo" && <div className="mode-panel"><h2>Artigo acadêmico simples</h2><p>Modelo sem capa, folha de rosto, ficha catalográfica, folha de aprovação, indicadores de impacto e sumário.</p></div>}
           {isCpgSelected && <div className="mode-panel"><h2>Modo CPG/UFLA selecionado</h2><p>Este modelo segue template CPG/UFLA. Quando o template CPG não for específico, use a ABNT aplicável.</p><p><strong>Saída do sistema:</strong> gere o DOCX e, se precisar de PDF, exporte por um editor de texto externo.</p></div>}
           {isResearchProject(fields.workType) && <div className="mode-panel"><h2>Estrutura do Projeto de Pesquisa</h2><p>Campos específicos para estrutura de projeto de pesquisa conforme ABNT NBR 15287:2025.</p></div>}
-           {selectedUflaProductionType && <div className="mode-panel"><h2>{selectedUflaProductionType.label}</h2><p>{ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE}</p><p><strong>Saída do sistema:</strong> DOCX editável; o PDF final deve ser exportado no Word ou LibreOffice.</p></div>}
-           {ACADEMIC_FIELD_KEYS.map((key) => (visibleField(key, fields.workType) || (assistedMode && ASSISTED_FIELD_KEYS.includes(key))) ? <div className="field-group" key={key}><div className="label-row"><label htmlFor={key}>{FIELD_LABELS[key]}</label><span className={`confidence confidence-${confidence[key]}`}>{CONFIDENCE_LABELS[confidence[key]]}</span></div>{LONG_FIELDS.has(key) ? <textarea id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} rows={rowsForField(key)} /> : key === "program" && ["dissertacao", "tese", "projeto_pesquisa"].includes(fields.workType) ? <input id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} list="ufla-ppg-programs" /> : <input id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} />}{key === "referencias" && <div className="field-note"><p>Para editar com mais espaço, use o botão <strong>Referências</strong> no painel central.</p><p>Use uma referência por linha. Para destacar manualmente, selecione o trecho e clique em Negrito ou Itálico.</p></div>}</div> : null)}
-           {["dissertacao", "tese", "projeto_pesquisa"].includes(fields.workType) && (
-             <datalist id="ufla-ppg-programs">
-                {UFLA_PPG_PROGRAMS.map((program) => (
-                  <option key={`${program.type}-${program.name}`} value={program.name} />
-                ))}
-             </datalist>
-           )}
+          {selectedUflaProductionType && <div className="mode-panel"><h2>{selectedUflaProductionType.label}</h2><p>{ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE}</p><p><strong>Saída do sistema:</strong> DOCX editável; o PDF final deve ser exportado no Word ou LibreOffice.</p></div>}
+          {ACADEMIC_FIELD_KEYS.map((key) => (visibleField(key, fields.workType) || (assistedMode && ASSISTED_FIELD_KEYS.includes(key))) ? <div className="field-group" key={key}><div className="label-row"><label htmlFor={key}>{FIELD_LABELS[key]}</label><span className={`confidence confidence-${confidence[key]}`}>{CONFIDENCE_LABELS[confidence[key]]}</span></div>{LONG_FIELDS.has(key) ? <textarea id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} rows={rowsForField(key)} /> : key === "program" && ["dissertacao", "tese", "projeto_pesquisa"].includes(fields.workType) ? <input id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} list="ufla-ppg-programs" /> : <input id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} />}{key === "referencias" && <div className="field-note"><p>Para editar com mais espaço, use o botão <strong>Referências</strong> no painel central.</p><p>Use uma referência por linha. Para destacar manualmente, selecione o trecho e clique em Negrito ou Itálico.</p></div>}</div> : null)}
+          {["dissertacao", "tese", "projeto_pesquisa"].includes(fields.workType) && (
+            <datalist id="ufla-ppg-programs">
+              {UFLA_PPG_PROGRAMS.map((program) => (
+                <option key={`${program.type}-${program.name}`} value={program.name} />
+              ))}
+            </datalist>
+          )}
           {draftWorkTypeSupportsIndicators(fields.workType) && (
             <div className="field-group impact-indicators-group">
               <h3>Indicadores de impacto (dissertação/tese)</h3>
@@ -393,13 +399,13 @@ export default function App() {
           <div className="editor-toolbar-sticky">
             <div className="toolbar" aria-label="Modo de edição"><button className={`text-button ${editorMode === "body" ? "active" : ""}`} type="button" onClick={() => setEditorMode("body")}>Texto</button><button className={`text-button ${editorMode === "references" ? "active" : ""}`} type="button" onClick={() => setEditorMode("references")}>Referências</button></div>
             <div className="toolbar" aria-label="Ferramentas do editor"><ToolButton title="Desfazer (Ctrl+Z)" onClick={() => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("undo"); }}><span className="toolbar-text">Desfazer</span></ToolButton><ToolButton title="Refazer (Ctrl+Y)" onClick={() => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("redo"); }}><span className="toolbar-text">Refazer</span></ToolButton><ToolButton title="Parágrafo normal" onClick={() => applyBlockStyle("")}><Pilcrow size={18} aria-hidden="true" /></ToolButton><ToolButton title="Título primário" onClick={() => applyBlockStyle("# ")}><Heading1 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Título secundário" onClick={() => applyBlockStyle("## ")}><Heading2 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Negrito" onClick={() => wrapSelection("bold")}><Bold size={18} aria-hidden="true" /></ToolButton><ToolButton title="Itálico" onClick={() => wrapSelection("italic")}><Italic size={18} aria-hidden="true" /></ToolButton><ToolButton title="Citação longa" onClick={() => applyBlockStyle("> ")}><Quote size={18} aria-hidden="true" /></ToolButton><ToolButton title="Referência" onClick={() => applyBlockStyle("[REF] ")}><FileCheck2 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Limpar formatação" onClick={clearFormatting}><Eraser size={18} aria-hidden="true" /></ToolButton></div>
-            <p className="field-note editor-mode-note">{editorMode === "references" ? "Editando referências no painel central. Selecione palavras e use Negrito/Itálico como no Word." : "Editando texto principal. Selecione palavras e use Negrito/Itálico como no Word."}</p>
+            <p id={EDITOR_DESCRIPTION_ID} className="field-note editor-mode-note">{editorMode === "references" ? "Editando referências no painel central. Selecione palavras e use Negrito/Itálico como no Word." : "Editando texto principal. Selecione palavras e use Negrito/Itálico como no Word."}</p>
           </div>
-           <div ref={editorRef} className="editor rich-editor" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-label={editorMode === "references" ? "Editor de referências" : "Editor do texto principal"} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />
-           <AdherencePanel expanded={adherenceExpanded} onToggle={() => setAdherenceExpanded((prev) => !prev)} />
+          <div ref={editorRef} className="editor rich-editor" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-describedby={EDITOR_DESCRIPTION_ID} aria-label={editorMode === "references" ? "Editor de referências" : "Editor do texto principal"} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />
+          <AdherencePanel expanded={adherenceExpanded} onToggle={() => setAdherenceExpanded((prev) => !prev)} />
         </section>
 
-         <ValidationSidebar
+        <ValidationSidebar
           status={status}
           generateAnyway={generateAnyway}
           onToggleGenerateAnyway={setGenerateAnyway}
