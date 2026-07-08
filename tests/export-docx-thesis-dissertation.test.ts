@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+﻿import { readFileSync } from "node:fs";
 import { inflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { ensureTrailingPeriod, generateDocxBlob } from "../src/export-docx";
@@ -261,6 +261,110 @@ Testar tese X`;
     const documentXml = await generatedXml(editorText, baseFields({ workType: "tese" }));
     expect(documentXml).not.toContain("\uFFFE");
     expect(documentXml).toContain("TÉCNICO-ADMINISTRATIVOS");
+  });
+
+  it("cronograma nao engole secoes seguintes", async () => {
+    const editorText = `# 1 INTRODUCAO
+Texto.
+
+# 5 CRONOGRAMA
+Etapa Mês 1 Mês 2 Mês 3
+Importar documento X
+
+# 6 CONSIDERAÇÕES FINAIS
+Texto das considerações finais.`;
+    const documentXml = await generatedXml(editorText, baseFields({ workType: "tese" }));
+    expect(documentXml).toContain("<w:tbl");
+    expect(documentXml).toContain("CRONOGRAMA");
+    expect(documentXml).toContain("Importar documento X");
+    expect(documentXml).not.toContain("# 6 CONSIDERAÇÕES FINAIS");
+    expect(documentXml).toContain("CONSIDERAÇÕES FINAIS");
+    expect(documentXml).toContain("Texto das considerações finais.");
+  });
+
+  it("renumera secoes apos remover secao 4 INDICADORES DE IMPACTO", async () => {
+    const editorText = `# 1 INTRODUCAO
+Texto.
+
+# 4 INDICADORES DE IMPACTO
+Impacto.
+
+# 5 CRONOGRAMA
+Etapa X.
+
+# 6 CONSIDERAÇÕES FINAIS
+Texto.`;
+    const documentXml = await generatedXml(
+      editorText,
+      baseFields({ workType: "tese", indicadoresImpacto: "Impacto." }),
+    );
+    expect(documentXml).not.toContain("4 INDICADORES DE IMPACTO");
+    expect(documentXml).toContain("4 CRONOGRAMA");
+    expect(documentXml).not.toContain("5 CRONOGRAMA");
+    expect(documentXml).toContain("5 CONSIDERAÇÕES FINAIS");
+    expect(documentXml).not.toContain("6 CONSIDERAÇÕES FINAIS");
+  });
+
+  it("indicadores pre-textuais sem nenhum rotulo com dois-pontos (campo consolidado)", async () => {
+    const consolidated = [
+      "Impacto social: beneficia a comunidade local.",
+      "Impacto científico: avança a pesquisa em educacao.",
+      "Impacto educacional: melhora o ensino.",
+      "Impacto ambiental: preserva o meio ambiente.",
+      "Impacto tecnológico/econômico: gera renda.",
+      "Público beneficiado: estudantes e orientadores.",
+      "Aderência a ODS/política institucional: alinhado ao plano.",
+    ].join("\n");
+    const documentXml = await generatedXml(
+      "# 1 Introducao\nTexto.",
+      baseFields({ workType: "tese", indicadoresImpacto: consolidated }),
+    );
+    expect(documentXml).toContain("INDICADORES DE IMPACTO");
+    expect(documentXml).not.toContain("Impacto científico:");
+    expect(documentXml).not.toContain("Impacto educacional:");
+    expect(documentXml).not.toContain("Impacto ambiental:");
+    expect(documentXml).not.toContain("Impacto tecnológico/econômico:");
+    expect(documentXml).not.toContain("Público beneficiado:");
+    expect(documentXml).not.toContain("Aderência a ODS/política institucional:");
+    expect(documentXml).toContain("beneficia a comunidade local.");
+    expect(documentXml).toContain("estudantes e orientadores.");
+  });
+
+    it("nao exporta caractere estranho U+2060 (TECNICO ADMINISTRATIVOS)", async () => {
+    const wordJoiner = String.fromCodePoint(0x2060);
+    const editorText = `# 1 Introducao\nTexto com TÉCNICO${wordJoiner}ADMINISTRATIVOS presente.`;
+    const documentXml = await generatedXml(editorText, baseFields({ workType: "tese" }));
+    expect(documentXml).not.toContain(wordJoiner);
+    expect(documentXml).toContain("TÉCNICO-ADMINISTRATIVOS");
+  });
+
+  it("nao duplica secao final quando editor ja tem CONSIDERAÇÕES FINAIS e campos.conclusao preenchido", async () => {
+    const editorText = `# 1 INTRODUCAO
+Texto.
+
+# 4 INDICADORES DE IMPACTO
+Impacto.
+
+# 5 CRONOGRAMA
+Etapa X.
+
+# 6 CONSIDERAÇÕES FINAIS
+Texto.`;
+    const documentXml = await generatedXml(
+      editorText,
+      baseFields({ workType: "tese", indicadoresImpacto: "Impacto.", conclusao: "Conclusao preenchida." }),
+    );
+    expect(documentXml).not.toContain("4 INDICADORES DE IMPACTO");
+    expect(documentXml).toContain("4 CRONOGRAMA");
+    expect(documentXml).toContain("5 CONSIDERAÇÕES FINAIS");
+    expect(documentXml).not.toContain("6 CONSIDERAÇÕES FINAIS");
+    expect(documentXml).not.toContain("5 CONCLUSÃO");
+    expect((documentXml.match(/CONSIDERAÇÕES FINAIS/g) ?? []).length).toBe(1);
+  });
+
+  it("sumario de tese tem campo TOC real no XML", async () => {
+    const documentXml = await generatedXml("# 1 Introducao\nTexto.\n# 2 Metodologia\nTexto.", baseFields({ workType: "tese" }));
+    expect(documentXml).toMatch(/<w:fldSimple[\s\S]*?TOC|w:instrText[\s\S]*?TOC/s);
   });
 });
 

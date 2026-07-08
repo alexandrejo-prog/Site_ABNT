@@ -99,17 +99,20 @@ export function consolidateImpactIndicators(fields: AcademicFields): string {
   return filled.map((entry) => `${entry.label}: ${entry.value}`).join("; ");
 }
 
-const IMPACT_LABEL_PREFIX =
-  /^\s*(impacto social|impacto científico|impacto educacional|impacto ambiental|impacto tecnológico\/econômico|público beneficiado|aderência a ods\/política institucional)\s*:\s*/i;
+const IMPACT_LABEL_WORD =
+  /(impacto social|impacto científico|impacto educacional|impacto ambiental|impacto tecnológico\/econômico|público beneficiado|aderência a ods\/política institucional)\s*:\s*/gi;
 
 // Remove os rótulos ("Impacto social:", "Impacto científico:", etc.) de um texto
-// já consolidado, transformando-o em texto corrido sem lista de rótulos.
+// já consolidado, transformando-o em texto corrido (parágrafo único) sem lista de
+// rótulos. Os rótulos podem aparecer no início da linha, após quebra de linha ou
+// separados por ";". O resultado é uma composição fluida, em terceira pessoa.
 export function stripImpactLabels(text: string): string {
   return text
-    .split(";")
-    .map((segment) => segment.replace(IMPACT_LABEL_PREFIX, "").trim())
-    .filter(Boolean)
-    .join("; ");
+    .replace(IMPACT_LABEL_WORD, "")
+    .replace(/\r?\n+/g, " ")
+    .replace(/\s*;\s*/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 function ensureImpactPeriod(value: string): string {

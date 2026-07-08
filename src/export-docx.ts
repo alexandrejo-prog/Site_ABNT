@@ -203,16 +203,21 @@ function shouldStartMarkdownTable(value: string): boolean {
 
 function splitScheduleColumns(line: string): string[] {
   if (line.includes("\t")) return line.split("\t").map((cell) => cell.trim()).filter(Boolean);
-  if (/ {2,}/.test(line)) return line.split(/ {2,}/).map((cell) => cell.trim()).filter(Boolean);
-  return [line.trim()];
+  // Mantém "Mês N" como uma única coluna (evita quebra em espaço simples).
+  const merged = line.replace(/\b(m[eê]s)\s+(\d+)/gi, "$1$2");
+  const splitter = / {2,}/.test(line) ? / {2,}/ : /\s+/;
+  return merged
+    .split(splitter)
+    .map((cell) => cell.replace(/\b(m[eê]s)(\d+)/gi, "$1 $2").trim())
+    .filter(Boolean);
 }
 
 function isPlainScheduleHeader(value: string): boolean {
   const cells = splitScheduleColumns(value.trim());
-  if (cells.length < 2) return false;
+  if (cells.length < 3) return false;
   const first = cells[0].toLocaleLowerCase("pt-BR");
-  const hasMonth = cells.some((cell) => /\bm[eê]s\b/i.test(cell));
-  return /^etapa\b/i.test(first) && hasMonth;
+  const monthColumns = cells.filter((cell) => /^m[eê]s\s*\d+/i.test(cell)).length;
+  return /^etapa\b/i.test(first) && monthColumns >= 2;
 }
 
 function shouldStartPlainScheduleTable(value: string): boolean {
@@ -251,10 +256,14 @@ export function parseEditorContent(editorText: string): EditorBlock[] {
 
       while (cursor < lines.length) {
         const nextLine = lines[cursor];
+        if (/^Fonte:/i.test(nextLine)) break;
+        if (/^5\.2\s+/i.test(nextLine)) break;
+        if (/^#\s+/i.test(nextLine)) break;
+        if (/^##\s+/i.test(nextLine)) break;
+        if (/^\d+(?:\.\d+)*\s+/.test(nextLine.trim())) break;
+        if (/^(REFERÊNCIAS|REFERENCIAS|APÊNDICE|APENDICE|ANEXO)\b/i.test(nextLine.trim())) break;
         tableLines.push(nextLine);
         cursor += 1;
-        if (/^Fonte:/i.test(nextLine)) break;
-        if (/^5\.2\s+/i.test(lines[cursor] ?? "")) break;
       }
 
       blocks.push({ type: "scheduleTable", text: tableLines.join("\n") });
@@ -270,6 +279,10 @@ export function parseEditorContent(editorText: string): EditorBlock[] {
         const nextLine = lines[cursor];
         if (!nextLine.trim()) break;
         if (/^Fonte:/i.test(nextLine)) break;
+        if (/^#\s+/i.test(nextLine)) break;
+        if (/^##\s+/i.test(nextLine)) break;
+        if (/^\d+(?:\.\d+)*\s+/.test(nextLine.trim())) break;
+        if (/^(REFERÊNCIAS|REFERENCIAS|APÊNDICE|APENDICE|ANEXO)\b/i.test(nextLine.trim())) break;
         tableLines.push(nextLine);
         cursor += 1;
       }
@@ -608,11 +621,17 @@ function plainScheduleTableBlock(text: string): Array<Paragraph | Table> {
     .filter(Boolean);
   if (!rawLines.length) return [simpleParagraph(text)];
 
-  const headerCells = splitScheduleColumns(rawLines[0]);
+  // Colunas múltiplas só quando o bloco usa tab ou múltiplos espaços como separador.
+  // Caso contrário (espaço simples), cada linha vira uma única célula (quadro de 1 coluna),
+  // preservando o texto corrido original (ex.: "Importar documento X").
+  const multiColumn = /[\t]| {2,}/.test(text);
+  const toCells = (line: string): string[] => (multiColumn ? splitScheduleColumns(line) : [line]);
+
+  const headerCells = toCells(rawLines[0]);
   const columnCount = Math.max(headerCells.length, 1);
 
   const tableRows = rawLines.map((line, rowIndex) => {
-    const cells = splitScheduleColumns(line);
+    const cells = toCells(line);
     const padded = Array.from({ length: columnCount }, (_, columnIndex) => cells[columnIndex] ?? "");
     const tableCells = padded.map((cellText) => {
       const cleaned = cleanMojibakeText(cellText);
@@ -903,7 +922,7 @@ function fieldSectionBlocks(fields: AcademicFields, bodyBlocks: EditorBlock[]): 
     nextBlocks.push(
       {
         type: "heading1",
-        text: usesFinalConsiderationsHeading(nextBlocks) ? "6 CONSIDERAÇÕES FINAIS" : "CONCLUSÃO",
+        text: usesFinalConsiderationsHeading(nextBlocks) ? "5 CONSIDERAÇÕES FINAIS" : "5 CONCLUSÃO",
       },
       ...splitParagraphs(fields.conclusao).map((text) => ({ type: "paragraph" as const, text })),
     );
@@ -920,16 +939,39 @@ function isImpactIndicatorsHeading(block: EditorBlock): boolean {
 // Tese/dissertação já geram os indicadores como bloco pré-textual (parágrafo único).
 // Para não duplicar em lista no corpo textual, removemos a seção "INDICADORES DE IMPACTO"
 // importada/escrita no editor quando o bloco pré-textual é gerado.
-function removeDuplicateIndicatorsSection(blocks: EditorBlock[], fields: AcademicFields): EditorBlock[] {
+function renumberBodySections(blocks: EditorBlock[], removedImpactNumber?: number): EditorBlock[] {
+  if (!removedImpactNumber) return blocks;
+
+  return blocks.map((block) => {
+    if (block.type === "heading1") {
+      const match = block.text.match(/^(\d+)\s+(.*)$/);
+      if (match && Number(match[1]) > removedImpactNumber) {
+        return { ...block, text: `${Number(match[1]) - 1} ${match[2]}` };
+      }
+    }
+    if (block.type === "heading2") {
+      const match = block.text.match(/^(\d+)\.(\d+)\s+(.*)$/);
+      if (match && Number(match[1]) > removedImpactNumber) {
+        return { ...block, text: `${Number(match[1]) - 1}.${match[2]} ${match[3]}` };
+      }
+    }
+    return block;
+  });
+}
+
+function removeDuplicateIndicatorsSection(blocks: EditorBlock[], fields: AcademicFields): { blocks: EditorBlock[]; removedImpactNumber?: number } {
   const isGraduateThesis = fields.workType === "dissertacao" || fields.workType === "tese";
   const hasPreTextualIndicators =
     isGraduateThesis || hasText(fields.indicadoresImpacto) || hasText(fields.impactoSocial) || hasText(fields.impactoCientifico);
-  if (!hasPreTextualIndicators) return blocks;
+  if (!hasPreTextualIndicators) return { blocks };
 
   const result: EditorBlock[] = [];
   let skipping = false;
+  let removedImpactNumber: number | undefined;
   for (const block of blocks) {
     if (isImpactIndicatorsHeading(block)) {
+      const match = block.text.match(/^(\d+)\s+/);
+      if (match) removedImpactNumber = Number(match[1]);
       skipping = true;
       continue;
     }
@@ -940,7 +982,7 @@ function removeDuplicateIndicatorsSection(blocks: EditorBlock[], fields: Academi
     }
     result.push(block);
   }
-  return result;
+  return { blocks: result, removedImpactNumber };
 }
 
 function appendixTitle(fields: AcademicFields): string {
@@ -1279,12 +1321,17 @@ function preTextualChildren(fields: AcademicFields): Paragraph[] {
 export function createDocxDocument(input: DocxGenerationInput): Document {
   const { fields } = input;
   const parsedBlocks = parseEditorContent(input.editorText);
-  const bodyBlocks = removeDuplicateIndicatorsSection(
+  const { blocks: dedupedBlocks, removedImpactNumber } = removeDuplicateIndicatorsSection(
     fieldSectionBlocks(
       fields,
       parsedBlocks.filter((block) => block.type !== "reference"),
     ),
     fields,
+  );
+  const isGraduateThesis = fields.workType === "dissertacao" || fields.workType === "tese";
+  const bodyBlocks = renumberBodySections(
+    dedupedBlocks,
+    isGraduateThesis ? removedImpactNumber : undefined,
   );
   const editorReferences = parsedBlocks
     .filter((block) => block.type === "reference")
