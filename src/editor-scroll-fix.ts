@@ -1,4 +1,4 @@
-import { editorCommandAdapter } from "./editor-command-adapter";
+export type EditorScrollFixCleanup = () => void;
 
 type ScrollSnapshot = {
   windowX: number;
@@ -6,7 +6,7 @@ type ScrollSnapshot = {
   editors: Array<{ element: HTMLElement; scrollTop: number; scrollLeft: number }>;
 };
 
-export type EditorScrollFixCleanup = () => void;
+type ExecCommandLike = (commandId: string, showUI?: boolean, value?: string) => boolean;
 
 let installedCleanup: EditorScrollFixCleanup | null = null;
 
@@ -49,7 +49,8 @@ export function installEditorScrollFix(): EditorScrollFixCleanup {
   let lastSnapshot: ScrollSnapshot | null = null;
   let formattingFromToolbar = false;
   const originalFocus = HTMLElement.prototype.focus;
-  const originalExecCommand = document.execCommand.bind(document);
+  const rawExecCommand = document.execCommand as ExecCommandLike | undefined;
+  const originalExecCommand = typeof rawExecCommand === "function" ? rawExecCommand.bind(document) : undefined;
   const restoreTimers = new Set<ReturnType<typeof setTimeout>>();
   let disposed = false;
 
@@ -92,6 +93,7 @@ export function installEditorScrollFix(): EditorScrollFixCleanup {
   }
 
   function patchedExecCommand(commandId: string, showUI?: boolean, value?: string): boolean {
+    if (!originalExecCommand) return false;
     if (!formattingFromToolbar) {
       return originalExecCommand(commandId, showUI, value);
     }
@@ -128,7 +130,11 @@ export function installEditorScrollFix(): EditorScrollFixCleanup {
   installedCleanup = () => {
     disposed = true;
     HTMLElement.prototype.focus = originalFocus;
-    document.execCommand = originalExecCommand as typeof document.execCommand;
+    if (originalExecCommand) {
+      document.execCommand = originalExecCommand as typeof document.execCommand;
+    } else {
+      delete (document as Document & { execCommand?: ExecCommandLike }).execCommand;
+    }
     document.removeEventListener("mousedown", handleMouseDown, true);
     document.removeEventListener("click", handleClick, true);
     restoreTimers.forEach((timer) => clearTimeout(timer));
@@ -138,5 +144,3 @@ export function installEditorScrollFix(): EditorScrollFixCleanup {
 
   return installedCleanup;
 }
-
-export { editorCommandAdapter };
