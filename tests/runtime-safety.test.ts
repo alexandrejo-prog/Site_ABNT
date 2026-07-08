@@ -25,4 +25,9 @@ describe("segurança runtime da interface", () => {
     expect(scrollFix).not.toContain("new MutationObserver");
     expect(scrollFix).not.toContain("observer.observe(document.body");
   });
+
+  it("scroll fix não faz monkeypatch global de focus ou execCommand", () => {
+    expect(scrollFix).not.toContain("HTMLElement.prototype.focus =");
+    expect(scrollFix).not.toContain("document.execCommand =");
+  });
 });
