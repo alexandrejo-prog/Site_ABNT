@@ -6,8 +6,9 @@ type ScrollSnapshot = {
   editors: Array<{ element: HTMLElement; scrollTop: number; scrollLeft: number }>;
 };
 
-let lastSnapshot: ScrollSnapshot | null = null;
-let formattingFromToolbar = false;
+export type EditorScrollFixCleanup = () => void;
+
+let installedCleanup: EditorScrollFixCleanup | null = null;
 
 function isFormattingToolbarButton(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -41,40 +42,56 @@ function restoreScroll(snapshot: ScrollSnapshot | null): void {
   }
 }
 
-function restoreAfterFormatting(snapshot = lastSnapshot): void {
-  requestAnimationFrame(() => {
-    restoreScroll(snapshot);
-    requestAnimationFrame(() => {
-      restoreScroll(snapshot);
-      setTimeout(() => restoreScroll(snapshot), 0);
-    });
-  });
-}
+export function installEditorScrollFix(): EditorScrollFixCleanup {
+  if (typeof document === "undefined") return () => undefined;
+  if (installedCleanup) return installedCleanup;
 
-function runPreservingScroll(callback: () => void): void {
-  const snapshot = lastSnapshot ?? captureScroll();
-  formattingFromToolbar = true;
-  try {
-    callback();
-  } finally {
-    restoreAfterFormatting(snapshot);
-    setTimeout(() => {
-      formattingFromToolbar = false;
-    }, 80);
-  }
-}
-
-if (typeof document !== "undefined") {
+  let lastSnapshot: ScrollSnapshot | null = null;
+  let formattingFromToolbar = false;
   const originalFocus = HTMLElement.prototype.focus;
-  HTMLElement.prototype.focus = function patchedFocus(options?: FocusOptions) {
+  const originalExecCommand = document.execCommand.bind(document);
+  const restoreTimers = new Set<ReturnType<typeof setTimeout>>();
+  let disposed = false;
+
+  function restoreAfterFormatting(snapshot = lastSnapshot): void {
+    requestAnimationFrame(() => {
+      if (disposed) return;
+      restoreScroll(snapshot);
+      requestAnimationFrame(() => {
+        if (disposed) return;
+        restoreScroll(snapshot);
+        const timer = setTimeout(() => {
+          restoreTimers.delete(timer);
+          if (!disposed) restoreScroll(snapshot);
+        }, 0);
+        restoreTimers.add(timer);
+      });
+    });
+  }
+
+  function runPreservingScroll(callback: () => void): void {
+    const snapshot = lastSnapshot ?? captureScroll();
+    formattingFromToolbar = true;
+    try {
+      callback();
+    } finally {
+      restoreAfterFormatting(snapshot);
+      const timer = setTimeout(() => {
+        restoreTimers.delete(timer);
+        formattingFromToolbar = false;
+      }, 80);
+      restoreTimers.add(timer);
+    }
+  }
+
+  function patchedFocus(this: HTMLElement, options?: FocusOptions): void {
     if (formattingFromToolbar && isRichEditor(this)) {
       return originalFocus.call(this, { ...(options ?? {}), preventScroll: true });
     }
     return originalFocus.call(this, options);
-  };
+  }
 
-  const originalExecCommand = document.execCommand.bind(document);
-  document.execCommand = ((commandId: string, showUI?: boolean, value?: string) => {
+  function patchedExecCommand(commandId: string, showUI?: boolean, value?: string): boolean {
     if (!formattingFromToolbar) {
       return originalExecCommand(commandId, showUI, value);
     }
@@ -84,28 +101,42 @@ if (typeof document !== "undefined") {
       result = originalExecCommand(commandId, showUI, value);
     });
     return result;
-  }) as typeof document.execCommand;
+  }
 
-  document.addEventListener(
-    "mousedown",
-    (event) => {
-      if (!isFormattingToolbarButton(event.target)) return;
-      lastSnapshot = captureScroll();
-      formattingFromToolbar = true;
-      event.preventDefault();
-    },
-    true,
-  );
+  function handleMouseDown(event: MouseEvent): void {
+    if (!isFormattingToolbarButton(event.target)) return;
+    lastSnapshot = captureScroll();
+    formattingFromToolbar = true;
+    event.preventDefault();
+  }
 
-  document.addEventListener(
-    "click",
-    (event) => {
-      if (!isFormattingToolbarButton(event.target)) return;
-      restoreAfterFormatting();
-      setTimeout(() => {
-        formattingFromToolbar = false;
-      }, 80);
-    },
-    true,
-  );
+  function handleClick(event: MouseEvent): void {
+    if (!isFormattingToolbarButton(event.target)) return;
+    restoreAfterFormatting();
+    const timer = setTimeout(() => {
+      restoreTimers.delete(timer);
+      formattingFromToolbar = false;
+    }, 80);
+    restoreTimers.add(timer);
+  }
+
+  HTMLElement.prototype.focus = patchedFocus;
+  document.execCommand = patchedExecCommand as typeof document.execCommand;
+  document.addEventListener("mousedown", handleMouseDown, true);
+  document.addEventListener("click", handleClick, true);
+
+  installedCleanup = () => {
+    disposed = true;
+    HTMLElement.prototype.focus = originalFocus;
+    document.execCommand = originalExecCommand as typeof document.execCommand;
+    document.removeEventListener("mousedown", handleMouseDown, true);
+    document.removeEventListener("click", handleClick, true);
+    restoreTimers.forEach((timer) => clearTimeout(timer));
+    restoreTimers.clear();
+    installedCleanup = null;
+  };
+
+  return installedCleanup;
 }
+
+export { editorCommandAdapter };
