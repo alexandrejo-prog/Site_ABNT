@@ -1,0 +1,70 @@
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 1000;
+  transform: translateY(-140%);
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: #ffffff;
+  color: #163f36;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.error-boundary {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px;
+  background: #f5f7f4;
+  color: #1f2933;
+  text-align: center;
+}
+
+.error-boundary h1 {
+  max-width: 720px;
+}
+
+.error-boundary p {
+  max-width: 720px;
+  margin: 0;
+}
+
+.error-boundary-detail {
+  border: 1px solid #f0c987;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #fff4e5;
+  color: #7a4f01;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 0.9rem;
+}
+
+.error-boundary button {
+  min-height: 40px;
+  border: 1px solid #163f36;
+  border-radius: 6px;
+  padding: 0 16px;
+  background: #163f36;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
