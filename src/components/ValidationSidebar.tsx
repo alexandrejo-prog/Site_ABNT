@@ -38,16 +38,35 @@ export function ValidationSidebar({
 
   return (
     <aside className="validation-pane" aria-label="Validação">
-      <div className="status-line" aria-live="polite">{status}</div>
+      <section className="validation-summary" aria-label="Resumo da validação">
+        <p className="section-kicker">Etapa 3</p>
+        <h2>Revisar antes de gerar</h2>
+        <div className="status-line" aria-live="polite">{status}</div>
+        <div className="validation-counters" aria-label="Contadores de revisão">
+          <div className={errors.length ? "counter-card error" : "counter-card ok"}>
+            <strong>{errors.length}</strong>
+            <span>erro(s) que impedem geração</span>
+          </div>
+          <div className={warnings.length ? "counter-card warning" : "counter-card ok"}>
+            <strong>{warnings.length}</strong>
+            <span>alerta(s) para revisar</span>
+          </div>
+          <div className={finalPendencies.length ? "counter-card warning" : "counter-card ok"}>
+            <strong>{finalPendencies.length}</strong>
+            <span>pendência(s) de versão final</span>
+          </div>
+        </div>
+      </section>
+
       <div className="post-generation-note">
         <strong>Após gerar o DOCX:</strong> {draftNotice} {tocUpdateGuidance ? TOC_UPDATE_GUIDANCE : "Abra no Word ou LibreOffice, confira paginação e exporte para PDF quando necessário."}
         <ul className="conformance-report">
-          <li>Pontos que ainda exigem revisão manual</li>
-          <li>Alertas de referências</li>
-          <li>Alertas de metadados</li>
-          <li>Alertas de coerência textual</li>
+          <li>Erros essenciais precisam ser corrigidos antes da geração.</li>
+          <li>Alertas não impedem o rascunho, mas exigem revisão humana.</li>
+          <li>Pendências de versão final permitem rascunho, mas impedem submissão final.</li>
         </ul>
       </div>
+
       {finalPendencies.length > 0 && (
         <div className="issue-list" aria-label={FINAL_VERSION_PENDENCIES_TITLE}>
           <h2>{FINAL_VERSION_PENDENCIES_TITLE}</h2>
@@ -61,6 +80,7 @@ export function ValidationSidebar({
           </div>
         </div>
       )}
+
       {projectLanguage && (
         <div className="issue-list" aria-label="Alerta de linguagem de projeto">
           <h2>Alerta de linguagem</h2>
@@ -70,13 +90,16 @@ export function ValidationSidebar({
           </div>
         </div>
       )}
+
       <label className="force-generate">
         <input type="checkbox" checked={generateAnyway} onChange={(event) => onToggleGenerateAnyway(event.target.checked)} />
-        <span>Gerar rascunho mesmo com pendências</span>
+        <span><strong>Gerar rascunho mesmo com pendências</strong><small>Use apenas para revisar no Word/LibreOffice. Não significa versão final.</small></span>
       </label>
+
       <TextDiagnosticPanel fields={fields} editorText={editorText} />
+
       <div className="issue-list" aria-label="Erros de validação">
-        <h2>Erros</h2>
+        <h2>Erros essenciais</h2>
         {errors.length ? errors.map((issue) => (
           <div className="issue error" key={issue.code} role="alert">
             <p className="issue-message">{issue.message}</p>
@@ -86,6 +109,7 @@ export function ValidationSidebar({
           </div>
         )) : <p className="empty-state" role="status">Nenhum erro essencial.</p>}
       </div>
+
       <div className="issue-list" aria-label="Alertas de validação">
         <h2>Alertas</h2>
         {warnings.length ? warnings.map((issue) => (
