@@ -48,6 +48,8 @@ const STRUCTURAL_HEADING_LABELS = new Set([
   "REFERÊNCIAS",
 ]);
 
+const SUMMARY_HEADING_LABELS = new Set(["SUMRIO", "SUMARIO", "SUMÁRIO"]);
+
 const PROVISIONAL_TEXT_PATTERNS = [
   /\bnome\s+d[ao]\s+orientador[ae]?\b/i,
   /\bnome\s+d[ao]\s+autor[ae]?\b/i,
@@ -90,6 +92,11 @@ function markdownHeadingPrefix(level: string): string {
   return "#";
 }
 
+function isImportedSummaryHeading(value: string): boolean {
+  const clean = stripTocArtifacts(value).replace(/^\d+(?:\.\d+)*\s+/, "");
+  return SUMMARY_HEADING_LABELS.has(fold(clean));
+}
+
 function isBareProjectHeading(value: string): boolean {
   const clean = stripTocArtifacts(value).replace(/^\d+(?:\.\d+)*\s+/, "");
   return STRUCTURAL_HEADING_LABELS.has(fold(clean));
@@ -99,6 +106,8 @@ function normalizeEditorLine(line: string): string {
   const cleaned = stripTocArtifacts(cleanMojibakeText(line));
   if (!cleaned) return "";
 
+  if (isImportedSummaryHeading(cleaned)) return "";
+
   const titleMatch = cleaned.match(/^TITLE\s*([123])\s+(.+)$/i);
   if (titleMatch) {
     return `${markdownHeadingPrefix(titleMatch[1])} ${normalizeResearchProjectHeading(titleMatch[2])}`;
@@ -106,7 +115,9 @@ function normalizeEditorLine(line: string): string {
 
   const markdownMatch = cleaned.match(/^(#{1,3})\s+(.+)$/);
   if (markdownMatch) {
-    return `${markdownMatch[1]} ${normalizeResearchProjectHeading(markdownMatch[2])}`;
+    const heading = normalizeResearchProjectHeading(markdownMatch[2]);
+    if (isImportedSummaryHeading(heading)) return "";
+    return `${markdownMatch[1]} ${heading}`;
   }
 
   if (isBareProjectHeading(cleaned)) {
