@@ -33,6 +33,9 @@ describe("campo de sumario em projeto", () => {
     expect(xml).toContain("1 INTRODUÇÃO");
     expect(xml).toContain("2 METODOLOGIA");
     expect(xml).toContain("REFERÊNCIAS");
+    expect(xml).toMatch(/1 INTRODUÇÃO\s+\.{8,}\s+5/);
+    expect(xml).toMatch(/2 METODOLOGIA\s+\.{8,}\s+6/);
+    expect(xml).toMatch(/REFERÊNCIAS\s+\.{8,}\s+7/);
     expect(xml).not.toContain("TOC");
     expect(xml).not.toContain("FICHA CATALOGRÁFICA");
     expect(xml).not.toContain("BANCA EXAMINADORA");
