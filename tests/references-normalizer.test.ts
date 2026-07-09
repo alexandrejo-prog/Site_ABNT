@@ -119,8 +119,33 @@ describe("references normalizer", () => {
       "SILVA, M. Artigo com DOI. Revista Aberta, Lavras, v. 1, n. 2, p. 1-9, 2024. DOI: 10.1234/exemplo. Disponivel em: https://exemplo.test/artigo. Acesso em: 10 jan. 2026.",
     );
     expect(normalized.text).toContain("DOI: 10.1234/exemplo");
-    expect(normalized.text).toContain("https://exemplo.test/artigo");
+    expect(normalized.text).toContain("Disponível em: https://exemplo.test/artigo");
     expect(normalized.text).toContain("Acesso em: 10 jan. 2026");
+  });
+
+  it("normaliza DOI com URL doi.org para DOI limpo", () => {
+    const normalized = normalizeReference(
+      "SILVA, M. Artigo com DOI. Revista Aberta, Lavras, v. 1, n. 2, p. 1-9, 2024. DOI: https://doi.org/10.1234/exemplo.",
+    );
+    expect(normalized.text).toContain("DOI: 10.1234/exemplo");
+    expect(normalized.text).not.toContain("doi.org/10.1234/exemplo");
+  });
+
+  it("normaliza URL em markdown para Disponível em", () => {
+    const normalized = normalizeReference(
+      "SILVA, M. Página institucional. Lavras: UFLA, 2024. [https://ufla.br/pagina](https://ufla.br/pagina). Acesso em: 10 jan. 2026.",
+    );
+    expect(normalized.text).toContain("Disponível em: https://ufla.br/pagina");
+    expect(normalized.text).not.toContain("[");
+    expect(normalized.text).not.toContain("](");
+  });
+
+  it("normaliza URL bruta entre sinais para Disponível em", () => {
+    const normalized = normalizeReference(
+      "UNIVERSIDADE FEDERAL DE LAVRAS. Página institucional. Lavras: UFLA, 2024. <https://ufla.br/pagina>. Acesso em: 10 jan. 2026.",
+    );
+    expect(normalized.text).toContain("Disponível em: https://ufla.br/pagina");
+    expect(normalized.text).not.toContain("<https://ufla.br/pagina>");
   });
 
   it("referencia canonica do Manual UFLA esta na 6. ed. rev., atual. e ampl. (2025)", () => {
