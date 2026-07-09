@@ -11,7 +11,6 @@ describe("bloqueio de geracao com erros criticos", () => {
     "advisor-required",
     "placeholder-detected",
     "draft-placeholder-detected",
-    "impact-indicators-missing",
     "program-conflict",
     "abstract-topic-conflict",
     "program-degree-incompatible",
@@ -26,6 +25,11 @@ describe("bloqueio de geracao com erros criticos", () => {
 
   it("nao bloqueia warning", () => {
     const issue: ValidationIssue = { severity: "warning", code: "resumo-required", message: "teste" };
+    expect(isNonOverridableError(issue)).toBe(false);
+  });
+
+  it("nao bloqueia indicadores de impacto como erro nao sobreponivel", () => {
+    const issue: ValidationIssue = { severity: "error", code: "impact-indicators-missing", message: "teste" };
     expect(isNonOverridableError(issue)).toBe(false);
   });
 
