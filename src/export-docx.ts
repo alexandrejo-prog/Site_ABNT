@@ -19,6 +19,7 @@ import {
 import type { IParagraphOptions, IStylesOptions } from "docx";
 import { pageMargins, ibgeTable, BODY_SIZE, SINGLE_LINE, ONE_AND_HALF_LINE, BLACK, AUTHOR_SIZE as COVER_AUTHOR_SIZE, TITLE_SIZE as COVER_TITLE_SIZE } from "./docx-shared";
 import { AcademicFields, UFLA_RULES } from "./ufla-rules";
+import { getWorkTypeRequirements } from "./work-type-requirements";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { buildFlowingImpactText } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
@@ -1289,19 +1290,24 @@ function optionalUntitledRightPage(content: string, italics = false): Paragraph[
 }
 
 function preTextualChildren(fields: AcademicFields): Paragraph[] {
-  // Bloco pré-textual em parágrafo único, em terceira pessoa, sem rótulos nem lista.
+  const requirements = getWorkTypeRequirements(fields.workType);
   const consolidated = buildFlowingImpactText(fields);
-  // O bloco é omitido por completo quando vazio. Nunca se exporta placeholder.
   const indicadores = consolidated;
-  // "Impact indicators" só existe se houver tradução real em inglês.
   const impactIndicators = cleanMojibakeText(fields.impactIndicators?.trim() || "");
 
-  return [
-    pageBreak(),
-    unnumberedTitle("Ficha catalográfica"),
-    simpleParagraph(
-      cleanMojibakeText("Inserir aqui a ficha catalográfica oficial gerada pela Biblioteca Universitária da UFLA. Não substitua por texto manual na versão final."),
-    ),
+  const children: Paragraph[] = [];
+
+  if (requirements.requiresCatalogCard) {
+    children.push(
+      pageBreak(),
+      unnumberedTitle("Ficha catalográfica"),
+      simpleParagraph(
+        cleanMojibakeText("Inserir aqui a ficha catalográfica oficial gerada pela Biblioteca Universitária da UFLA. Não substitua por texto manual na versão final."),
+      ),
+    );
+  }
+
+  children.push(
     ...approvalPageChildren(fields),
     ...optionalUntitledRightPage(cleanMojibakeText(fields.dedicatoria)),
     ...optionalPage("Agradecimentos", cleanMojibakeText(fields.agradecimentos)),
@@ -1320,7 +1326,9 @@ function preTextualChildren(fields: AcademicFields): Paragraph[] {
       : []),
     ...optionalPage("Indicadores de impacto", cleanMojibakeText(indicadores)),
     ...optionalPage("Impact indicators", impactIndicators),
-  ];
+  );
+
+  return children;
 }
 
 export function createDocxDocument(input: DocxGenerationInput): Document {

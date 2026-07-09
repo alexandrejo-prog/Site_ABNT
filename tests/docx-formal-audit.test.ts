@@ -196,4 +196,44 @@ Coluna1\tColuna2\tColuna3`;
       expect(paragraphTexts(xml).length).toBeLessThan(20);
     });
   });
+
+  describe("Artigo e outros tipos sem ficha", () => {
+    it("artigo nao contem ficha catalografica", async () => {
+      const fields = {
+        ...emptyAcademicFields(),
+        workType: "artigo" as const,
+        title: "Artigo de Teste",
+        author: "Maria Silva",
+        resumo: "Resumo.",
+        abstractText: "Abstract.",
+        referencias: "SILVA, M. Artigo. Lavras: UFLA, 2024.",
+      };
+
+      const blob = await templateForWorkType("artigo").generate({ fields, editorText: "Texto do artigo." });
+      const xml = await xmlFrom(blob);
+
+      expect(xml).not.toContain("FICHA CATALOGRÁFICA");
+      expect(xml).not.toContain("Inserir aqui a ficha catalográfica");
+    });
+
+    it("software_aplicativo_ufla nao contem ficha catalografica", async () => {
+      const fields = {
+        ...emptyAcademicFields(),
+        workType: "software_aplicativo_ufla" as const,
+        title: "Software de Teste",
+        author: "Maria Silva",
+        location: "Lavras - MG",
+        year: "2026",
+        resumo: "Resumo.",
+        abstractText: "Abstract.",
+        referencias: "SILVA, M. Software. Lavras: UFLA, 2024.",
+      };
+
+      const blob = await templateForWorkType("software_aplicativo_ufla").generate({ fields, editorText: "Texto do software." });
+      const xml = await xmlFrom(blob);
+
+      expect(xml).not.toContain("FICHA CATALOGRÁFICA");
+      expect(xml).not.toContain("Inserir aqui a ficha catalográfica");
+    });
+  });
 });
