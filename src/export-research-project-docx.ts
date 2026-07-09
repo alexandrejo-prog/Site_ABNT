@@ -39,10 +39,10 @@ function fold(value: string): string {
 const COMMON_PROJECT_HEADINGS: Record<string, string> = {
   INTRODUCAO: "INTRODUÇÃO",
   "CONTEXTUALIZACAO E DELIMITACAO DO TEMA": "Contextualização e delimitação do tema",
-  "PROBLEMA DE PESQUISA": "PROBLEMA DE PESQUISA",
+  "PROBLEMA DE PESQUISA": "Problema de pesquisa",
   OBJETIVOS: "OBJETIVOS",
   "OBJETIVO GERAL": "Objetivo geral",
-  "OBJETIVOS ESPECIFICOS": "OBJETIVOS ESPECÍFICOS",
+  "OBJETIVOS ESPECIFICOS": "Objetivos específicos",
   JUSTIFICATIVA: "JUSTIFICATIVA",
   "ESTRUTURA DO PROJETO": "Estrutura do projeto",
   "REFERENCIAL TEORICO": "REFERENCIAL TEÓRICO",
@@ -127,7 +127,7 @@ function addSummaryEntry(entries: SummaryEntry[], seen: Set<string>, text: strin
   const key = fold(cleaned);
   if (!cleaned || key === "SUMARIO" || seen.has(key)) return;
   seen.add(key);
-  entries.push({ text: cleaned, level });
+  entries.push({ text: level === 1 ? cleaned.toUpperCase() : cleaned, level });
 }
 
 function collectSummaryEntries(bodyBlocks: EditorBlock[], references: string[]): SummaryEntry[] {
@@ -136,7 +136,7 @@ function collectSummaryEntries(bodyBlocks: EditorBlock[], references: string[]):
 
   for (const block of bodyBlocks) {
     const level = summaryLevelForBlock(block);
-    if (level) addSummaryEntry(entries, seen, level === 1 ? block.text.toUpperCase() : block.text, level);
+    if (level) addSummaryEntry(entries, seen, block.text, level);
   }
 
   if (references.length > 0) addSummaryEntry(entries, seen, "REFERÊNCIAS", 1);
