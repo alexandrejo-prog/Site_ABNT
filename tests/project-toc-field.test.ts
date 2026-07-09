@@ -11,7 +11,7 @@ async function documentXml(blob: Blob): Promise<string> {
 }
 
 describe("campo de sumario em projeto", () => {
-  it("gera campo TOC atualizavel sem ficha catalografica", async () => {
+  it("gera sumario estatico sem pagina em branco enganosa e sem ficha catalografica", async () => {
     const fields = {
       ...emptyAcademicFields(),
       workType: "projeto_pesquisa" as const,
@@ -30,9 +30,10 @@ describe("campo de sumario em projeto", () => {
     );
 
     expect(xml).toContain("SUMÁRIO");
-    expect(xml).toContain("TOC");
     expect(xml).toContain("1 INTRODUÇÃO");
     expect(xml).toContain("2 METODOLOGIA");
+    expect(xml).toContain("REFERÊNCIAS");
+    expect(xml).not.toContain("TOC");
     expect(xml).not.toContain("FICHA CATALOGRÁFICA");
     expect(xml).not.toContain("BANCA EXAMINADORA");
   });
@@ -123,5 +124,27 @@ describe("campo de sumario em projeto", () => {
     expect(xml).not.toContain("Toc234433198");
     expect(xml).not.toContain("REFERENCIAL TERICO");
     expect(xml).not.toContain("nome do orientador");
+  });
+
+  it("aplica recuo frances nas referencias do projeto", async () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "projeto_pesquisa" as const,
+      title: "Projeto",
+      author: "Maria Silva",
+      resumo: "Resumo do projeto.",
+      abstractText: "Project abstract.",
+      referencias: "SILVA, M. Projeto de pesquisa com título longo para testar o recuo francês aplicado em segunda linha. Lavras: UFLA, 2024.",
+    };
+
+    const xml = await documentXml(
+      await generateResearchProjectDocxBlob({
+        fields,
+        editorText: "# 1 INTRODUÇÃO\nTexto.",
+      }),
+    );
+
+    expect(xml).toContain("w:left=\"720\"");
+    expect(xml).toContain("w:hanging=\"720\"");
   });
 });
