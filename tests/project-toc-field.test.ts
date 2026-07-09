@@ -10,8 +10,14 @@ async function documentXml(blob: Blob): Promise<string> {
   return xml!.async("text");
 }
 
+function tocInstruction(xml: string): string {
+  return [...xml.matchAll(/<w:instrText[^>]*>([\s\S]*?)<\/w:instrText>/g)]
+    .map((match) => match[1])
+    .join(" ");
+}
+
 describe("campo de sumario em projeto", () => {
-  it("gera sumario estatico sem pagina em branco enganosa e sem ficha catalografica", async () => {
+  it("gera sumario atualizavel sem pagina estimada, sem duplicacao e sem ficha catalografica", async () => {
     const fields = {
       ...emptyAcademicFields(),
       workType: "projeto_pesquisa" as const,
@@ -30,14 +36,14 @@ describe("campo de sumario em projeto", () => {
     );
 
     expect(xml).toContain("SUMÁRIO");
-    expect(xml).toContain("1 INTRODUÇÃO");
-    expect(xml).toContain("2 METODOLOGIA");
-    expect(xml).toContain("REFERÊNCIAS");
-    expect(xml).not.toContain('w:leader="dot"');
-    expect(xml).not.toContain("<w:tab");
-    expect(xml).not.toContain("TOC");
+    expect(tocInstruction(xml)).toContain("TOC");
+    expect(tocInstruction(xml)).toContain("1-3");
+    expect(xml).not.toMatch(/1 INTRODUÇÃO\s+\d+/);
+    expect(xml).not.toMatch(/2 METODOLOGIA\s+\d+/);
     expect(xml).not.toContain("FICHA CATALOGRÁFICA");
     expect(xml).not.toContain("BANCA EXAMINADORA");
+    const sumarioCount = (xml.match(/SUMÁRIO/g) || []).length;
+    expect(sumarioCount).toBe(1);
   });
 
   it("preserva caixa adequada por nivel de secao no projeto", async () => {
@@ -383,7 +389,7 @@ describe("campo de sumario em projeto", () => {
     expect(fallbackCount).toBe(1);
   });
 
-  it("nao exibe numeros de pagina estimados falsos nem TOC duplicado no sumario", async () => {
+  it("usa TOC atualizavel no projeto para preencher paginas reais no Word", async () => {
     const fields = {
       ...emptyAcademicFields(),
       workType: "projeto_pesquisa" as const,
@@ -411,12 +417,8 @@ describe("campo de sumario em projeto", () => {
     );
 
     expect(xml).toContain("SUMÁRIO");
-    expect(xml).toContain("1 INTRODUÇÃO");
-    expect(xml).toContain("4 RESULTADOS ESPERADOS");
-    expect(xml).toContain("REFERÊNCIAS");
-    expect(xml).not.toContain('w:leader="dot"');
-    expect(xml).not.toContain("<w:tab");
-    expect(xml).not.toContain("TOC");
+    expect(tocInstruction(xml)).toContain("TOC");
+    expect(xml).not.toMatch(/REFERÊNCIAS\s+\d+/);
     const sumarioCount = (xml.match(/SUMÁRIO/g) || []).length;
     expect(sumarioCount).toBe(1);
   });
