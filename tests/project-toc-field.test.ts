@@ -422,4 +422,39 @@ describe("campo de sumario em projeto", () => {
     const sumarioCount = (xml.match(/SUMÁRIO/g) || []).length;
     expect(sumarioCount).toBe(1);
   });
+
+  it("remove caracteres invisiveis de todos os caminhos do projeto", async () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "projeto_pesquisa" as const,
+      title: "Técnico￾Administrativos",
+      author: "Maria Silva",
+      resumo: "Estudo com histórico￾dialético relevante.",
+      abstractText: "SGP-SRT￾SEGES/MGI relevance.",
+      palavrasChave: "Técnico￾Administrativos; histórico￾dialético",
+      referencias: "SILVA, M. Técnico￾Administrativos. Lavras: UFLA, 2024.",
+    };
+
+    const xml = await documentXml(
+      await generateResearchProjectDocxBlob({
+        fields,
+        editorText: [
+          "# 1 INTRODUÇÃO",
+          "Texto com técnico￾administrativo no corpo.",
+          "# 2 METODOLOGIA",
+          "Quadro 1 - Aspectos",
+          "Técnico￾Administrativos\tAndrade (2025)\tEsta pesquisa",
+          "Procedimentos\tQuestionário e entrevistas.\tAnálise documental.",
+          "Fonte: elaborado pelo autor (2026).",
+        ].join("\n"),
+      }),
+    );
+
+    expect(xml).not.toContain("￾");
+    expect(xml).toContain("Técnico-Administrativos");
+    expect(xml).toContain("histórico-dialético");
+    expect(xml).toContain("SGP-SRT-SEGES/MGI");
+    expect(xml).toContain("técnico-administrativo");
+    expect(xml).toContain("<w:tbl>");
+  });
 });

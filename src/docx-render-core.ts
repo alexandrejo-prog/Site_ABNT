@@ -46,7 +46,7 @@ export function plainRun(
   color = "000000",
 ): TextRun {
   return new TextRun({
-    text,
+    text: cleanMojibakeText(text),
     font,
     size,
     color,
@@ -91,7 +91,7 @@ export function textRunsForSingleLine(
   color = "000000",
 ): TextRun[] {
   const runs: TextRun[] = [];
-  for (const parsed of tokenizeMarkup(text)) {
+  for (const parsed of tokenizeMarkup(cleanMojibakeText(text))) {
     runs.push(
       new TextRun({
         text: parsed.text,
@@ -155,7 +155,7 @@ export function centeredParagraph(
     spacing,
     children: [
       new TextRun({
-        text,
+        text: cleanMojibakeText(text),
         bold,
         font: "Times New Roman",
         size,
@@ -204,7 +204,7 @@ export function captionParagraph(
     indent: { left: 454, right: 454 },
     children: [
       new TextRun({
-        text,
+        text: cleanMojibakeText(text),
         bold: true,
         font: "Times New Roman",
         size: 20,

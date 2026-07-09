@@ -366,6 +366,25 @@ Texto.`;
     const documentXml = await generatedXml("# 1 Introducao\nTexto.\n# 2 Metodologia\nTexto.", baseFields({ workType: "tese" }));
     expect(documentXml).toMatch(/<w:fldSimple[\s\S]*?TOC|w:instrText[\s\S]*?TOC/s);
   });
+
+  it("remove caracteres invisiveis de todos os caminhos da tese", async () => {
+    const documentXml = await generatedXml(
+      "# 1 Introducao\nTexto com técnico￾administrativo no corpo.\n# 2 Metodologia\nTexto.",
+      baseFields({
+        workType: "tese",
+        title: "Técnico￾Administrativos",
+        resumo: "Estudo com histórico￾dialético relevante.",
+        abstractText: "SGP-SRT￾SEGES/MGI relevance.",
+        palavrasChave: "Técnico￾Administrativos; histórico￾dialético",
+        referencias: "SILVA, M. Técnico￾Administrativos. Lavras: UFLA, 2024.",
+      }),
+    );
+    expect(documentXml).not.toContain("￾");
+    expect(documentXml).toContain("Técnico-Administrativos");
+    expect(documentXml).toContain("histórico-dialético");
+    expect(documentXml).toContain("SGP-SRT-SEGES/MGI");
+    expect(documentXml).toContain("técnico-administrativo");
+  });
 });
 
 describe("documento ideal de teste (importado)", () => {
