@@ -32,12 +32,15 @@ export function ValidationSidebar({
   const finalPendencies = finalVersionPendencies(fields);
   const projectLanguage = projectLanguageWarning(fields, editorText);
   const tocUpdateGuidance = needsTocUpdateGuidance(fields.workType);
+  const draftNotice = finalPendencies.length > 0
+    ? EDITABLE_DRAFT_NOTICE
+    : "Este DOCX é um rascunho editável. Revise campos, referências, paginação e formatação no Word/LibreOffice antes da versão final.";
 
   return (
     <aside className="validation-pane" aria-label="Validação">
       <div className="status-line" aria-live="polite">{status}</div>
       <div className="post-generation-note">
-        <strong>Após gerar o DOCX:</strong> {EDITABLE_DRAFT_NOTICE} {tocUpdateGuidance ? TOC_UPDATE_GUIDANCE : "Abra no Word ou LibreOffice, confira paginação e exporte para PDF quando necessário."}
+        <strong>Após gerar o DOCX:</strong> {draftNotice} {tocUpdateGuidance ? TOC_UPDATE_GUIDANCE : "Abra no Word ou LibreOffice, confira paginação e exporte para PDF quando necessário."}
         <ul className="conformance-report">
           <li>Pontos que ainda exigem revisão manual</li>
           <li>Alertas de referências</li>
