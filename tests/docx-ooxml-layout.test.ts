@@ -32,7 +32,6 @@ describe("estrutura OOXML de layout e sumario", () => {
     expect(hasHeadingWithText(documentXml, "Heading1", "1 INTRODUÇÃO")).toBe(true);
     expect(hasHeadingWithText(documentXml, "Heading2", "1.1 Contexto")).toBe(true);
     assertSectionOrder(documentXml, ["1 INTRODUÇÃO", "1.1 Contexto"]);
-    assertSectionOrder(documentXml, ["1 INTRODUÇÃO", "1.1 Contexto"]);
     expect(documentXml).toContain("<w:pgMar");
     expect(documentXml).toContain(`w:top="${UFLA_RULES.margins.topTwip}"`);
     expect(documentXml).toContain(`w:left="${UFLA_RULES.margins.leftTwip}"`);
@@ -41,7 +40,7 @@ describe("estrutura OOXML de layout e sumario", () => {
     expect(documentXml).toContain(`w:left="${UFLA_RULES.typography.longQuoteLeftIndentTwip}"`);
   });
 
-  it("gera projeto de pesquisa com sumario estatico visivel e layout OOXML coerente", async () => {
+  it("gera projeto de pesquisa com TOC atualizavel e layout OOXML coerente", async () => {
     const fields = {
       ...emptyAcademicFields(),
       workType: "projeto_pesquisa" as const,
@@ -58,20 +57,15 @@ describe("estrutura OOXML de layout e sumario", () => {
     const { documentXml, stylesXml, settingsXml } = await loadDocxParts(await generateResearchProjectDocxBlob({ fields, editorText }));
 
     expect(settingsXml).toMatch(/<w:updateFields\b/);
-    expect(tocInstruction(documentXml)).toBe("");
+    expect(tocInstruction(documentXml)).toContain("TOC");
+    expect(tocInstruction(documentXml)).toContain("1-3");
     expect(documentXml).toMatch(/SUM[\s\S]{0,80}RIO/);
-    expect(documentXml).toContain("1 INTRODUÇÃO");
-    expect(documentXml).toContain("2 METODOLOGIA");
-    expect(documentXml).toContain("REFERÊNCIAS");
-    expect(documentXml).not.toContain('w:leader="dot"');
-    expect(documentXml).not.toContain("<w:tab/>");
     expect(hasHeadingWithText(documentXml, "Heading1", "1 INTRODUÇÃO")).toBe(true);
     expect(hasHeadingWithText(documentXml, "Heading1", "2 METODOLOGIA")).toBe(true);
     assertSectionOrder(documentXml, ["1 INTRODUÇÃO", "2 METODOLOGIA"]);
     expect(documentXml).toContain("<w:pgMar");
     expect(documentXml).toContain(`w:right="${UFLA_RULES.margins.rightTwip}"`);
     expect(`${stylesXml}\n${documentXml}`).toContain("Times New Roman");
-    expect(hasHeadingWithText(documentXml, "Heading1", "1 INTRODUÇÃO")).toBe(true);
     expect(documentXml).toContain(`w:top="${UFLA_RULES.margins.topTwip}"`);
     expect(documentXml).toContain(`w:left="${UFLA_RULES.margins.leftTwip}"`);
     expect(documentXml).toContain(`w:pgNumType w:start="5"`);
