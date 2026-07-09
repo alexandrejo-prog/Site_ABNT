@@ -200,4 +200,23 @@ describe("references normalizer", () => {
     expect(normalized.text).toContain("Lavras: UFLA, 2024.");
     expect(normalized.text).not.toContain("6. ed. rev., atual. e ampl.");
   });
+
+  it("normaliza DOI cru para forma limpa", () => {
+    const normalized = normalizeReference("SILVA, M. Artigo. Revista Aberta, Lavras, v. 1, n. 2, p. 1-9, 2024. DOI: https://doi.org/10.1234/exemplo.");
+    expect(normalized.text).toContain("DOI: 10.1234/exemplo");
+    expect(normalized.text).not.toContain("doi.org/10.1234/exemplo");
+  });
+
+  it("limpa URL em markdown para Disponivel em", () => {
+    const normalized = normalizeReference("SILVA, M. Página institucional. Lavras: UFLA, 2024. [https://ufla.br/pagina](https://ufla.br/pagina). Acesso em: 10 jan. 2026.");
+    expect(normalized.text).toContain("Disponível em: https://ufla.br/pagina");
+    expect(normalized.text).not.toContain("[");
+    expect(normalized.text).not.toContain("](");
+  });
+
+  it("preserva autor institucional em caixa alta", () => {
+    const normalized = normalizeReference("UNIVERSIDADE FEDERAL DE LAVRAS. Programa de Pós-Graduação em Educação Científica e Ambiental. Lavras: UFLA, 2026.");
+    expect(normalized.text).toContain("UNIVERSIDADE FEDERAL DE LAVRAS");
+    expect(normalized.detectedType).toBe("documento-institucional");
+  });
 });

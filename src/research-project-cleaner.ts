@@ -145,10 +145,12 @@ export function isResearchProjectProvisionalText(value: string): boolean {
 
 export function normalizeKeywordSentence(value: string): string {
   const items = value
-    .replace(/[，]/g, ";")
-    .split(/[;\.]+/)
-    .map((item) => cleanMojibakeText(item).trim())
+    .replace(/[，,]/g, ";")
+    .replace(/\n+/g, ";")
+    .split(/[;]+/)
+    .map((item) => cleanMojibakeText(item).trim().replace(/[.;]+$/u, ""))
     .filter(Boolean);
   if (!items.length) return "";
-  return `${items.join(". ")}.`;
+  const joined = items.join(". ");
+  return joined.endsWith(".") ? joined : `${joined}.`;
 }

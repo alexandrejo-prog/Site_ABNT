@@ -2,6 +2,7 @@ import { AlignmentType, BorderStyle, Header, ImageRun, PageBreak, PageNumber, Pa
 import type { IParagraphOptions } from "docx";
 import type { DocxLogoAsset } from "./export-docx";
 import { UFLA_RULES } from "./ufla-rules";
+import { cleanMojibakeText } from "./docx-render-core";
 
 export const BLACK = "000000";
 export const BODY_SIZE = UFLA_RULES.typography.bodyFontSizePt * 2;
@@ -113,7 +114,7 @@ export function ibgeTable(options: IbgeTableOptions): Table {
           width: { size: widths[index], type: WidthType.PERCENTAGE },
           shading: { fill: "EDF1F7" },
           margins: { top: 80, bottom: 80, left: 80, right: 80 },
-          children: [new Paragraph({ children: [new TextRun({ text: label, bold: true, font: UFLA_RULES.typography.fontFamily, size: 20, color: BLACK })] })],
+          children: [new Paragraph({ children: [new TextRun({ text: cleanMojibakeText(label), bold: true, font: UFLA_RULES.typography.fontFamily, size: 20, color: BLACK })] })],
         }),
     ),
   });
@@ -126,7 +127,7 @@ export function ibgeTable(options: IbgeTableOptions): Table {
             new TableCell({
               width: { size: widths[index], type: WidthType.PERCENTAGE },
               margins: { top: 80, bottom: 80, left: 80, right: 80 },
-              children: [new Paragraph({ children: [new TextRun({ text: row[index] ?? "", font: UFLA_RULES.typography.fontFamily, size: 20, color: BLACK })] })],
+              children: [new Paragraph({ children: [new TextRun({ text: cleanMojibakeText(row[index] ?? ""), font: UFLA_RULES.typography.fontFamily, size: 20, color: BLACK })] })],
             }),
         ),
       }),

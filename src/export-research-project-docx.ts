@@ -6,7 +6,9 @@ import {
   PageOrientation,
   Paragraph,
   Table,
+  Tab,
   TextRun,
+  TabStopPosition,
 } from "docx";
 import { parseEditorContent, type DocxGenerationInput, type EditorBlock, loadDefaultLogoAsset } from "./export-docx";
 import { AUTHOR_SIZE, BLACK, BODY_SIZE, ONE_AND_HALF_LINE, SINGLE_LINE, TITLE_SIZE, centered, ibgeTable, logoParagraph, pageBreak, pageMargins, pageNumberHeader, paragraph, run, unnumberedTitle } from "./docx-shared";
@@ -26,6 +28,9 @@ interface SummaryEntry {
 
 const PROJECT_TEXTUAL_START_PAGE = 5;
 const PROJECT_CHARS_PER_PAGE_ESTIMATE = 1800;
+// A paginação do sumário do Projeto de pesquisa é estimada com base em
+// contagem de caracteres e deve ser conferida no Word/LibreOffice, pois o
+// navegador não conhece a paginação final do processador de texto.
 
 function hasValue(value: string): boolean {
   return value.trim().length > 0;
@@ -142,19 +147,19 @@ function summaryLevelForBlock(block: EditorBlock): SummaryEntry["level"] | null 
   return null;
 }
 
-function summaryTextWithPage(entry: SummaryEntry): string {
-  const title = cleanMojibakeText(entry.text);
-  const dotCount = Math.max(8, 92 - title.length - (entry.level - 1) * 4);
-  return `${title} ${".".repeat(dotCount)} ${entry.pageNumber}`;
-}
-
 function summaryEntryParagraph(entry: SummaryEntry): Paragraph {
+  const title = cleanMojibakeText(entry.text);
+  const pageNumber = String(entry.pageNumber);
+
   return new Paragraph({
     alignment: AlignmentType.LEFT,
     spacing: { line: SINGLE_LINE, after: 0 },
     indent: { left: (entry.level - 1) * 360 },
+    tabStops: [{ type: "right", position: TabStopPosition.MAX, leader: "dot" }],
     children: [
-      run(summaryTextWithPage(entry), entry.level < 3),
+      new TextRun({ text: title, bold: entry.level < 3, font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK }),
+      new Tab(),
+      new TextRun({ text: pageNumber, bold: entry.level < 3, font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK }),
     ],
   });
 }
@@ -212,6 +217,8 @@ function preTextualChildren(fields: DocxGenerationInput["fields"], summaryEntrie
     ...(keywords ? [paragraph(`Keywords: ${keywords}`)] : []),
     pageBreak(),
     unnumberedTitle("Sumário"),
+    // Projeto de pesquisa usa sumário estático com paginação estimada.
+    // A paginação final deve ser conferida no Word/LibreOffice.
     ...summaryEntries.map(summaryEntryParagraph),
   ];
 }
@@ -288,15 +295,36 @@ function paddedRows(rows: string[][]): string[][] {
   return rows.map((row) => Array.from({ length: columnCount }, (_, index) => row[index] ?? ""));
 }
 
-function tableChildrenFromRows(rows: string[][]): Array<Paragraph | Table> {
+function tableChildrenFromRows(rows: string[][], caption?: string, source?: string): Array<Paragraph | Table> {
   const normalizedRows = paddedRows(rows.filter((row) => row.length >= 2));
   if (!normalizedRows.length) return [];
 
   const headerLabels = normalizedRows[0];
   const bodyRows = normalizedRows.slice(1);
   const columnWidths = Array.from({ length: headerLabels.length }, () => Math.floor(100 / headerLabels.length));
+  const table = ibgeTable({ headerLabels, rows: bodyRows, columnWidths });
 
-  return [ibgeTable({ headerLabels, rows: bodyRows, columnWidths })];
+  const children: Array<Paragraph | Table> = [];
+  if (caption) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 120, after: 120, line: SINGLE_LINE },
+        children: [new TextRun({ text: cleanMojibakeText(caption), bold: true, font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK })],
+      }),
+    );
+  }
+  children.push(table);
+  if (source) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        spacing: { before: 120, after: 120, line: SINGLE_LINE },
+        children: [new TextRun({ text: cleanMojibakeText(source), font: UFLA_RULES.typography.fontFamily, size: 20, color: BLACK })],
+      }),
+    );
+  }
+  return children;
 }
 
 function markdownTableChildren(text: string): Array<Paragraph | Table> {
@@ -315,15 +343,21 @@ function markdownTableChildren(text: string): Array<Paragraph | Table> {
 function tabularBlockChildren(text: string): Array<Paragraph | Table> {
   const captionLines: string[] = [];
   const rows: string[][] = [];
+  let explicitSource: string | undefined;
 
   for (const line of text.split(/\n+/).map((item) => item.trim()).filter(Boolean)) {
+    if (/^Fonte:/i.test(line)) {
+      explicitSource = line;
+      continue;
+    }
     if (line.includes("\t")) rows.push(splitTabCells(line));
     else if (!rows.length) captionLines.push(line);
   }
 
-  const children: Array<Paragraph | Table> = captionLines.map((line) => markupParagraph(line, true, 0));
-  const table = tableChildrenFromRows(rows);
-  return table.length ? [...children, ...table] : splitParagraphs(text).map((line) => markupParagraph(line));
+  const caption = captionLines[0];
+  const source = explicitSource ?? "Fonte: elaborado pelo autor.";
+  const children = tableChildrenFromRows(rows, caption, source);
+  return children.length ? children : splitParagraphs(text).map((line) => markupParagraph(line));
 }
 
 function isTabularParagraph(block: EditorBlock): boolean {
@@ -354,7 +388,7 @@ function bodyChildrenFromBlocks(blocks: EditorBlock[]): Array<Paragraph | Table>
         rows.push(splitTabCells(blocks[cursor].text));
         cursor += 1;
       }
-      children.push(...tableChildrenFromRows(rows));
+      children.push(...tableChildrenFromRows(rows, undefined, "Fonte: elaborado pelo autor."));
       index = cursor - 1;
       continue;
     }

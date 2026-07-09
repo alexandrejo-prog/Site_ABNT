@@ -1,4 +1,5 @@
 import { UFLA_MANUAL_REFERENCE } from "./ufla-rules";
+import { cleanMojibakeText } from "./docx-render-core";
 
 export type ReferenceConfidence = "alta" | "media" | "baixa";
 
@@ -27,7 +28,7 @@ export interface NormalizedReference {
 }
 
 function clean(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
+  return cleanMojibakeText(value).replace(/\s+/g, " ").trim();
 }
 
 function fold(value: string): string {

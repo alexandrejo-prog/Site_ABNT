@@ -62,6 +62,9 @@ describe("estrutura OOXML de layout e sumario", () => {
     expect(documentXml).toContain("1 INTRODUÇÃO");
     expect(documentXml).toContain("2 METODOLOGIA");
     expect(documentXml).toContain("REFERÊNCIAS");
+    expect(documentXml).toContain('w:val="right"');
+    expect(documentXml).toContain('w:leader="dot"');
+    expect(documentXml).toContain("<w:tab/>");
     expect(hasHeadingWithText(documentXml, "Heading1", "1 INTRODUÇÃO")).toBe(true);
     expect(hasHeadingWithText(documentXml, "Heading1", "2 METODOLOGIA")).toBe(true);
     assertSectionOrder(documentXml, ["1 INTRODUÇÃO", "2 METODOLOGIA"]);
@@ -69,5 +72,8 @@ describe("estrutura OOXML de layout e sumario", () => {
     expect(documentXml).toContain(`w:right="${UFLA_RULES.margins.rightTwip}"`);
     expect(`${stylesXml}\n${documentXml}`).toContain("Times New Roman");
     expect(hasHeadingWithText(documentXml, "Heading1", "1 INTRODUÇÃO")).toBe(true);
+    expect(documentXml).toContain(`w:top="${UFLA_RULES.margins.topTwip}"`);
+    expect(documentXml).toContain(`w:left="${UFLA_RULES.margins.leftTwip}"`);
+    expect(documentXml).toContain(`w:pgNumType w:start="5"`);
   });
 });

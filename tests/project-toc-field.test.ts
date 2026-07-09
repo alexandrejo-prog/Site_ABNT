@@ -33,9 +33,11 @@ describe("campo de sumario em projeto", () => {
     expect(xml).toContain("1 INTRODUÇÃO");
     expect(xml).toContain("2 METODOLOGIA");
     expect(xml).toContain("REFERÊNCIAS");
-    expect(xml).toMatch(/1 INTRODUÇÃO\s+\.{8,}\s+5/);
-    expect(xml).toMatch(/2 METODOLOGIA\s+\.{8,}\s+6/);
-    expect(xml).toMatch(/REFERÊNCIAS\s+\.{8,}\s+7/);
+    expect(xml).toMatch(/1 INTRODUÇÃO[\s\S]*?<w:tab\s*\/>[\s\S]*?5/);
+    expect(xml).toMatch(/2 METODOLOGIA[\s\S]*?<w:tab\s*\/>[\s\S]*?6/);
+    expect(xml).toMatch(/REFERÊNCIAS[\s\S]*?<w:tab\s*\/>[\s\S]*?7/);
+    expect(xml).toContain('w:val="right"');
+    expect(xml).toContain('w:leader="dot"');
     expect(xml).not.toContain("TOC");
     expect(xml).not.toContain("FICHA CATALOGRÁFICA");
     expect(xml).not.toContain("BANCA EXAMINADORA");
@@ -102,6 +104,30 @@ describe("campo de sumario em projeto", () => {
     expect(xml).toContain("This abstract was broken in the middle of a sentence.");
     expect(xml).not.toContain("Este resumo foi</w:t></w:r></w:p><w:p");
     expect(xml).not.toContain("This abstract was</w:t></w:r></w:p><w:p");
+  });
+
+  it("normaliza palavras-chave do projeto com separadores variados", async () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "projeto_pesquisa" as const,
+      title: "Projeto",
+      author: "Maria Silva",
+      resumo: "Resumo do projeto.",
+      abstractText: "Project abstract.",
+      palavrasChave: "PGD; saúde do trabalhador; educação ambiental crítica",
+      keywords: "worker health; critical environmental education",
+      referencias: "SILVA, M. Projeto. Lavras: UFLA, 2024.",
+    };
+
+    const xml = await documentXml(
+      await generateResearchProjectDocxBlob({
+        fields,
+        editorText: "# 1 INTRODUÇÃO\nTexto.",
+      }),
+    );
+
+    expect(xml).toContain("Palavras-chave: PGD. saúde do trabalhador. educação ambiental crítica.");
+    expect(xml).toContain("Keywords: worker health. critical environmental education.");
   });
 
   it("renderiza linhas tabuladas do projeto como quadro/tabela DOCX", async () => {
@@ -212,5 +238,59 @@ describe("campo de sumario em projeto", () => {
 
     expect(xml).toContain("w:left=\"720\"");
     expect(xml).toContain("w:hanging=\"720\"");
+  });
+
+  it("remove caracteres invisiveis e normaliza termos compostos no projeto", async () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "projeto_pesquisa" as const,
+      title: "TÉCNICO\uFFFEADMINISTRATIVOS",
+      author: "Maria Silva",
+      resumo: "Este estudo analisa o histórico\uFFFEdialético.",
+      abstractText: "Project abstract.",
+      referencias: "SILVA, M. Projeto. Lavras: UFLA, 2024.",
+    };
+
+    const xml = await documentXml(
+      await generateResearchProjectDocxBlob({
+        fields,
+        editorText: "# 1 INTRODUÇÃO\nTexto sobre servidores técnico\uFFFEadministrativo.",
+      }),
+    );
+
+    expect(xml).toContain("TÉCNICO-ADMINISTRATIVOS");
+    expect(xml).not.toContain("\uFFFE");
+    expect(xml).toContain("histórico-dialético");
+    expect(xml).toContain("técnico-administrativo");
+  });
+
+  it("renderiza quadros com caption, bordas e fonte no projeto", async () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "projeto_pesquisa" as const,
+      title: "Projeto",
+      author: "Maria Silva",
+      resumo: "Resumo do projeto.",
+      abstractText: "Project abstract.",
+      referencias: "SILVA, M. Projeto. Lavras: UFLA, 2024.",
+    };
+
+    const xml = await documentXml(
+      await generateResearchProjectDocxBlob({
+        fields,
+        editorText: [
+          "# 1 INTRODUÇÃO",
+          "Quadro 1 - Aspectos da pesquisa",
+          "Aspecto\tAndrade (2025)\tEsta pesquisa",
+          "Procedimentos\tQuestionário e entrevistas semiestruturadas com gestores.\tAnálise documental.",
+          "Fonte: elaborado pelo autor (2026).",
+        ].join("\n"),
+      }),
+    );
+
+    expect(xml).toContain("<w:tbl>");
+    expect(xml).toContain("Quadro 1 - Aspectos da pesquisa");
+    expect(xml).toContain("Fonte: elaborado pelo autor (2026).");
+    expect(xml).not.toContain("Aspecto\tAndrade");
   });
 });
