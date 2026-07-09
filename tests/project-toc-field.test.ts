@@ -77,6 +77,30 @@ describe("campo de sumario em projeto", () => {
     expect(xml).not.toContain("4.1 RESULTADOS ESPERADOS");
   });
 
+  it("une quebras suaves em resumo e abstract do projeto", async () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "projeto_pesquisa" as const,
+      title: "Projeto",
+      author: "Maria Silva",
+      resumo: "Este resumo foi\nquebrado no meio da frase.",
+      abstractText: "This abstract was\nbroken in the middle of a sentence.",
+      referencias: "SILVA, M. Projeto. Lavras: UFLA, 2024.",
+    };
+
+    const xml = await documentXml(
+      await generateResearchProjectDocxBlob({
+        fields,
+        editorText: "# 1 INTRODUÇÃO\nTexto.",
+      }),
+    );
+
+    expect(xml).toContain("Este resumo foi quebrado no meio da frase.");
+    expect(xml).toContain("This abstract was broken in the middle of a sentence.");
+    expect(xml).not.toContain("Este resumo foi</w:t></w:r></w:p><w:p");
+    expect(xml).not.toContain("This abstract was</w:t></w:r></w:p><w:p");
+  });
+
   it("renderiza linhas tabuladas do projeto como quadro/tabela DOCX", async () => {
     const fields = {
       ...emptyAcademicFields(),
