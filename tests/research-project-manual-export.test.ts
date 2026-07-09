@@ -10,6 +10,12 @@ async function xmlFrom(blob: Blob): Promise<string> {
   return xml!.async("text");
 }
 
+function tocInstruction(xml: string): string {
+  return [...xml.matchAll(/<w:instrText[^>]*>([\s\S]*?)<\/w:instrText>/g)]
+    .map((match) => match[1])
+    .join(" ");
+}
+
 describe("exportação manual de projeto de pesquisa", () => {
   it("usa campos específicos quando o editor está vazio", async () => {
     const fields = {
@@ -27,12 +33,13 @@ describe("exportação manual de projeto de pesquisa", () => {
     const xml = await xmlFrom(await generateResearchProjectDocxBlob({ fields, editorText: "" }));
 
     expect(xml).toContain("SUMÁRIO");
+    expect(tocInstruction(xml)).toContain("TOC");
+    expect(tocInstruction(xml)).toContain("1-3");
     expect(xml).toContain("PROBLEMA DE PESQUISA");
     expect(xml).toContain("Qual é o problema investigado?");
     expect(xml).toContain("OBJETIVO GERAL");
     expect(xml).toContain("METODOLOGIA");
     expect(xml).toContain("CRONOGRAMA");
     expect(xml).toContain("REFERÊNCIAS");
-    expect(xml).not.toContain("TOC");
   });
 });
