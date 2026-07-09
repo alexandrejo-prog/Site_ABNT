@@ -27,6 +27,45 @@ function hasValue(value: string): boolean {
   return value.trim().length > 0;
 }
 
+function fold(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .toUpperCase()
+    .trim();
+}
+
+const COMMON_PROJECT_HEADINGS: Record<string, string> = {
+  INTRODUCAO: "INTRODUÇÃO",
+  "CONTEXTUALIZACAO E DELIMITACAO DO TEMA": "Contextualização e delimitação do tema",
+  "PROBLEMA DE PESQUISA": "PROBLEMA DE PESQUISA",
+  OBJETIVOS: "OBJETIVOS",
+  "OBJETIVO GERAL": "Objetivo geral",
+  "OBJETIVOS ESPECIFICOS": "OBJETIVOS ESPECÍFICOS",
+  JUSTIFICATIVA: "JUSTIFICATIVA",
+  "ESTRUTURA DO PROJETO": "Estrutura do projeto",
+  "REFERENCIAL TEORICO": "REFERENCIAL TEÓRICO",
+  METODOLOGIA: "METODOLOGIA",
+  CRONOGRAMA: "CRONOGRAMA",
+  "RECURSOS/ORCAMENTO": "RECURSOS/ORÇAMENTO",
+  "RESULTADOS ESPERADOS": "RESULTADOS ESPERADOS",
+  "CONSIDERACOES FINAIS": "CONSIDERAÇÕES FINAIS",
+  CONCLUSAO: "CONCLUSÃO",
+  REFERENCIAS: "REFERÊNCIAS",
+};
+
+function normalizeProjectHeadingText(value: string): string {
+  const cleaned = cleanMojibakeText(value).replace(/\s+/g, " ").trim();
+  const match = cleaned.match(/^(\d+(?:\.\d+)*\s+)?(.+)$/);
+  if (!match) return cleaned;
+
+  const prefix = match[1] ?? "";
+  const title = match[2].trim();
+  const normalizedTitle = COMMON_PROJECT_HEADINGS[fold(title)];
+  return normalizedTitle ? `${prefix}${normalizedTitle}` : cleaned;
+}
+
 function normalizeProjectBodyText(value: string): string {
   return normalizeUflaManualInTextCitations(cleanMojibakeText(value));
 }
@@ -84,13 +123,8 @@ function summaryEntryParagraph(entry: SummaryEntry): Paragraph {
 }
 
 function addSummaryEntry(entries: SummaryEntry[], seen: Set<string>, text: string, level: SummaryEntry["level"]): void {
-  const cleaned = cleanMojibakeText(text).trim();
-  const key = cleaned
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .toUpperCase()
-    .trim();
+  const cleaned = normalizeProjectHeadingText(text);
+  const key = fold(cleaned);
   if (!cleaned || key === "SUMARIO" || seen.has(key)) return;
   seen.add(key);
   entries.push({ text: cleaned, level });
@@ -157,10 +191,11 @@ function projectEditorText(input: DocxGenerationInput): string {
 
 function headingParagraph(block: EditorBlock, first: boolean): Paragraph[] {
   const level = block.type === "heading1" ? HeadingLevel.HEADING_1 : block.type === "heading2" ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3;
+  const headingText = normalizeProjectHeadingText(block.text);
   const title = new Paragraph({
     heading: level,
     spacing: { before: first ? 0 : 240, after: 240, line: ONE_AND_HALF_LINE },
-    children: [run(block.type === "heading1" ? cleanMojibakeText(block.text.toUpperCase()) : cleanMojibakeText(block.text), block.type !== "heading3")],
+    children: [run(block.type === "heading1" ? headingText.toUpperCase() : headingText, block.type !== "heading3")],
   });
   return first || block.type !== "heading1" ? [title] : [pageBreak(), title];
 }
