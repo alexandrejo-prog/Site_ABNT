@@ -62,6 +62,13 @@ export const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
 
 export function templateForWorkType(workType: string): DocumentTemplate {
   const normalizedWorkType = normalizeWorkType(workType);
+
+  // Projeto de pesquisa é um modelo distinto (NBR 15287) e nunca deve ser
+  // exportado pelo modelo geral nem confundido com "Desenvolvimento de
+  // software e aplicativos". Garantia direta de roteamento para o exportador
+  // dedicado, independente da ordem dos templates ou de normalizações.
+  if (isResearchProject(normalizedWorkType as WorkTypeValue)) return researchProjectTemplate;
+
   return DOCUMENT_TEMPLATES.find((template) => template.supports(normalizedWorkType)) ?? generalTemplate;
 }
 

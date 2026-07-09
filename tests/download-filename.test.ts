@@ -32,4 +32,31 @@ describe("download filename", () => {
       importedFileName: "Trabalho Final.docx",
     })).toBe("artigo-academico-simples-trabalho-final.docx");
   });
+
+  it("gera nome com projeto-de-pesquisa para trabalho do tipo projeto", () => {
+    const fileName = buildDownloadFileName({
+      workType: "projeto_pesquisa",
+      title: "Estudo sobre solos",
+    });
+    expect(fileName).toMatch(/^projeto-de-pesquisa/);
+    expect(fileName.endsWith(".docx")).toBe(true);
+  });
+
+  it("nao gera nome de software para projeto de pesquisa", () => {
+    const fileName = buildDownloadFileName({
+      workType: "projeto_pesquisa",
+      title: "Estudo sobre solos",
+      importedFileName: "desenvolvimento-de-software-e-aplicativos.docx",
+    });
+    expect(fileName).toMatch(/^projeto-de-pesquisa/);
+    expect(fileName.startsWith("desenvolvimento-de-software-e-aplicativos")).toBe(false);
+  });
+
+  it("gera nome de software apenas para o tipo correspondente", () => {
+    const fileName = buildDownloadFileName({
+      workType: "software_aplicativo_ufla",
+      title: "Aplicativo de monitoramento",
+    });
+    expect(fileName).toMatch(/^desenvolvimento-de-software/);
+  });
 });
