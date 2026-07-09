@@ -423,6 +423,72 @@ describe("campo de sumario em projeto", () => {
     expect(sumarioCount).toBe(1);
   });
 
+  it("nao duplica legenda nem fonte no quadro com legenda e fonte explicitas", async () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "projeto_pesquisa" as const,
+      title: "Projeto",
+      author: "Maria Silva",
+      resumo: "Resumo do projeto.",
+      abstractText: "Project abstract.",
+      referencias: "SILVA, M. Projeto. Lavras: UFLA, 2024.",
+    };
+
+    const xml = await documentXml(
+      await generateResearchProjectDocxBlob({
+        fields,
+        editorText: [
+          "# 1 INTRODUÇÃO",
+          "Texto.",
+          "# 2 METODOLOGIA",
+          "Quadro 1 - Aspectos da pesquisa",
+          "Aspecto\tAndrade (2025)\tEsta pesquisa",
+          "Procedimentos\tQuestionário e entrevistas semiestruturadas com gestores.\tAnálise documental.",
+          "Fonte: elaborado pelo autor (2026).",
+        ].join("\n"),
+      }),
+    );
+
+    expect(xml).toContain("<w:tbl>");
+    expect((xml.match(/Quadro 1 - Aspectos da pesquisa/g) ?? []).length).toBe(1);
+    expect((xml.match(/Fonte: elaborado pelo autor \(2026\)\./g) ?? []).length).toBe(1);
+    expect(xml).not.toContain("Fonte: elaborado pelo autor.");
+    expect(xml).not.toContain("Aspecto\tAndrade");
+  });
+
+  it("renderiza markdown table como quadro com fonte unica", async () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "projeto_pesquisa" as const,
+      title: "Projeto",
+      author: "Maria Silva",
+      resumo: "Resumo do projeto.",
+      abstractText: "Project abstract.",
+      referencias: "SILVA, M. Projeto. Lavras: UFLA, 2024.",
+    };
+
+    const xml = await documentXml(
+      await generateResearchProjectDocxBlob({
+        fields,
+        editorText: [
+          "# 1 INTRODUÇÃO",
+          "Texto.",
+          "# 2 METODOLOGIA",
+          "Quadro 2 - Comparativo",
+          "| Aspecto | Este projeto |",
+          "| Procedimentos | Questionário. |",
+          "Fonte: elaborado pelo autor (2026).",
+        ].join("\n"),
+      }),
+    );
+
+    expect(xml).toContain("<w:tbl>");
+    expect((xml.match(/Quadro 2 - Comparativo/g) ?? []).length).toBe(1);
+    expect((xml.match(/Fonte: elaborado pelo autor \(2026\)\./g) ?? []).length).toBe(1);
+    expect(xml).not.toContain("Fonte: elaborado pelo autor.");
+    expect(xml).not.toContain("| Aspecto | Este projeto |");
+  });
+
   it("remove caracteres invisiveis de todos os caminhos do projeto", async () => {
     const fields = {
       ...emptyAcademicFields(),

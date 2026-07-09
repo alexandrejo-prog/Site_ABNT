@@ -235,7 +235,7 @@ function tableChildrenFromRows(rows: string[][], caption?: string, source?: stri
     children.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        spacing: { before: 120, after: 120, line: SINGLE_LINE },
+        spacing: { before: 240, after: 120, line: SINGLE_LINE },
         children: [new TextRun({ text: cleanMojibakeText(caption), bold: true, font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK })],
       }),
     );
@@ -245,7 +245,7 @@ function tableChildrenFromRows(rows: string[][], caption?: string, source?: stri
     children.push(
       new Paragraph({
         alignment: AlignmentType.LEFT,
-        spacing: { before: 120, after: 120, line: SINGLE_LINE },
+        spacing: { before: 120, after: 240, line: SINGLE_LINE },
         children: [new TextRun({ text: cleanMojibakeText(source), font: UFLA_RULES.typography.fontFamily, size: 20, color: BLACK })],
       }),
     );
