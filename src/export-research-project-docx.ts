@@ -6,6 +6,7 @@ import {
   PageOrientation,
   Paragraph,
   Table,
+  TableOfContents,
   TextRun,
 } from "docx";
 import { parseEditorContent, type DocxGenerationInput, type EditorBlock, loadDefaultLogoAsset } from "./export-docx";
@@ -17,11 +18,6 @@ import { normalizeReferences, type ReferenceRun } from "./references-normalizer"
 import { UFLA_RULES } from "./ufla-rules";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
 import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup } from "./docx-render-core";
-
-interface SummaryEntry {
-  text: string;
-  level: 1 | 2 | 3;
-}
 
 const PROJECT_TEXTUAL_START_PAGE = 5;
 
@@ -124,48 +120,16 @@ function titlePageChildren(fields: DocxGenerationInput["fields"]): Paragraph[] {
   ];
 }
 
-function summaryLevelForBlock(block: EditorBlock): SummaryEntry["level"] | null {
-  if (block.type === "heading1") return 1;
-  if (block.type === "heading2") return 2;
-  if (block.type === "heading3") return 3;
-  return null;
-}
-
-function summaryEntryParagraph(entry: SummaryEntry): Paragraph {
-  const title = cleanMojibakeText(entry.text);
-
-  return new Paragraph({
-    alignment: AlignmentType.LEFT,
-    spacing: { line: SINGLE_LINE, after: 0 },
-    indent: { left: (entry.level - 1) * 360 },
-    children: [
-      new TextRun({ text: title, bold: entry.level < 3, font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK }),
-    ],
+function projectTableOfContents(): TableOfContents {
+  return new TableOfContents("", {
+    headingStyleRange: "1-3",
+    hyperlink: true,
+    hideTabAndPageNumbersInWebView: false,
+    useAppliedParagraphOutlineLevel: true,
   });
 }
 
-function addSummaryEntry(entries: SummaryEntry[], seen: Set<string>, text: string, level: SummaryEntry["level"]): void {
-  const cleaned = normalizeProjectHeadingText(text);
-  const key = fold(cleaned);
-  if (!cleaned || key === "SUMARIO" || seen.has(key)) return;
-  seen.add(key);
-  entries.push({ text: level === 1 ? cleaned.toUpperCase() : cleaned, level });
-}
-
-function collectSummaryEntries(bodyBlocks: EditorBlock[], references: string[]): SummaryEntry[] {
-  const entries: SummaryEntry[] = [];
-  const seen = new Set<string>();
-
-  for (const block of bodyBlocks) {
-    const level = summaryLevelForBlock(block);
-    if (level) addSummaryEntry(entries, seen, block.text, level);
-  }
-
-  if (references.length > 0) addSummaryEntry(entries, seen, "REFERÊNCIAS", 1);
-  return entries;
-}
-
-function preTextualChildren(fields: DocxGenerationInput["fields"], summaryEntries: SummaryEntry[]): Paragraph[] {
+function preTextualChildren(fields: DocxGenerationInput["fields"]): Array<Paragraph | TableOfContents> {
   const palavrasChave = normalizeKeywordSentence(fields.palavrasChave);
   const keywords = normalizeKeywordSentence(fields.keywords);
   return [
@@ -179,10 +143,9 @@ function preTextualChildren(fields: DocxGenerationInput["fields"], summaryEntrie
     ...(keywords ? [paragraph(`Keywords: ${keywords}`)] : []),
     pageBreak(),
     unnumberedTitle("Sumário"),
-    // Projeto de pesquisa usa sumário estático, sem números de página
-    // estimados, para não exibir paginação falsa. A paginação final é
-    // definida no Word/LibreOffice ao atualizar os campos do documento.
-    ...summaryEntries.map(summaryEntryParagraph),
+    // O Projeto de pesquisa usa sumário atualizável para evitar paginação falsa.
+    // Abra no Word/LibreOffice e atualize os campos para preencher páginas reais.
+    projectTableOfContents(),
   ];
 }
 
@@ -408,7 +371,6 @@ function createProjectDocument(input: DocxGenerationInput): Document {
     ...splitParagraphs(input.fields.referencias),
     ...blocks.filter((block) => block.type === "reference").map((block) => block.text),
   ];
-  const summaryEntries = collectSummaryEntries(bodyBlocks, references);
   const textualChildren = [
     ...bodyChildrenFromBlocks(bodyBlocks),
     ...referenceParagraphs(references),
@@ -422,7 +384,7 @@ function createProjectDocument(input: DocxGenerationInput): Document {
     sections: [
       {
         properties: { page: { size: { orientation: PageOrientation.PORTRAIT, width: UFLA_RULES.page.widthTwip, height: UFLA_RULES.page.heightTwip }, margin: pageMargins() } },
-        children: [...coverChildren(input), ...titlePageChildren(input.fields), ...preTextualChildren(input.fields, summaryEntries)],
+        children: [...coverChildren(input), ...titlePageChildren(input.fields), ...preTextualChildren(input.fields)],
       },
       {
         properties: { page: { size: { orientation: PageOrientation.PORTRAIT, width: UFLA_RULES.page.widthTwip, height: UFLA_RULES.page.heightTwip }, margin: pageMargins(), pageNumbers: { start: PROJECT_TEXTUAL_START_PAGE } } },
