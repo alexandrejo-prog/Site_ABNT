@@ -148,7 +148,7 @@ describe("fluxo de autosave e restauração (App)", () => {
     fireEvent.click(screen.getByRole("button", { name: /limpar rascunho/i }));
 
     expect(screen.getByText("Rascunho local removido")).toBeInTheDocument();
-    expect(screen.queryByText("Rascunho salvo localmente")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Rascunho salvo/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /limpar rascunho/i })).not.toBeInTheDocument();
 
     Object.defineProperty(globalThis, "localStorage", { value: originalLocalStorage, writable: true, configurable: true });
@@ -212,7 +212,8 @@ describe("fluxo de autosave e restauração (App)", () => {
     Object.defineProperty(globalThis, "localStorage", { value: storage, writable: true, configurable: true });
 
     render(<App />);
-    expect(screen.getByText("Rascunho restaurado")).toBeInTheDocument();
+    expect(screen.getByText(/Rascunho restaurado/)).toBeInTheDocument();
+    expect(screen.getByText(/nada foi enviado ao servidor/)).toBeInTheDocument();
 
     Object.defineProperty(globalThis, "localStorage", { value: originalLocalStorage, writable: true, configurable: true });
   });
