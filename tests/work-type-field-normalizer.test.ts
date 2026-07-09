@@ -77,6 +77,26 @@ describe("normalizacao de campos por modelo selecionado", () => {
     expect(fields.impactIndicators).toBe("");
   });
 
+  it("normaliza multiplos emails no campo course quando modelo e cpg", () => {
+    const fields = normalizeFieldsForSelectedModel({
+      ...emptyAcademicFields(),
+      workType: "resumo_expandido_cpg",
+      course: "autor1@ufla.br, autor2@ufla.br autor3@ufla.br",
+    });
+
+    expect(fields.course).toBe("autor1@ufla.br; autor2@ufla.br; autor3@ufla.br");
+  });
+
+  it("nao trata curso de monografia como email", () => {
+    const fields = normalizeFieldsForSelectedModel({
+      ...emptyAcademicFields(),
+      workType: "monografia",
+      course: "Licenciatura em Física, modalidade presencial",
+    });
+
+    expect(fields.course).toBe("Licenciatura em Física, modalidade presencial");
+  });
+
   it("nao usa texto interno da Colecao UFLA como natureza", () => {
     const fields = normalizeFieldsForSelectedModel({
       ...emptyAcademicFields(),
