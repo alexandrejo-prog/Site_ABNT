@@ -26,11 +26,13 @@ describe("exportação manual de projeto de pesquisa", () => {
 
     const xml = await xmlFrom(await generateResearchProjectDocxBlob({ fields, editorText: "" }));
 
+    expect(xml).toContain("SUMÁRIO");
     expect(xml).toContain("PROBLEMA DE PESQUISA");
     expect(xml).toContain("Qual é o problema investigado?");
     expect(xml).toContain("OBJETIVO GERAL");
     expect(xml).toContain("METODOLOGIA");
     expect(xml).toContain("CRONOGRAMA");
-    expect(xml).toContain("TOC");
+    expect(xml).toContain("REFERÊNCIAS");
+    expect(xml).not.toContain("TOC");
   });
 });
