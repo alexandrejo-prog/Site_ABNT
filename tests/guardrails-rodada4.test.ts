@@ -70,8 +70,8 @@ const fields: AcademicFields = {
 };
 
 describe("Rodada 4 - conformidade DOCX/OpenXML", () => {
-  it("TOC nativo existe no XML", async () => {
-    const documentXml = await generatedXml("# 1 Introdução\nTexto comum.\n## 1.1 Contexto\nTexto.");
+  it("TOC nativo existe no XML para tese", async () => {
+    const documentXml = await generatedXml("# 1 Introdução\nTexto comum.\n## 1.1 Contexto\nTexto.", { ...fields, workType: "tese" });
     const toc = fieldInstructionRuns(documentXml);
     expect(toc).toContain("TOC");
     expect(toc).toMatch(/\\o\s+&quot;1-3&quot;/);

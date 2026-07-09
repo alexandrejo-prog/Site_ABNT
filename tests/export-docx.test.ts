@@ -127,14 +127,6 @@ function fieldInstructionRuns(documentXml: string): string {
     .join(" ");
 }
 
-function summaryXmlBeforeToc(documentXml: string): string {
-  const summaryStart = documentXml.indexOf("SUMÁRIO");
-  expect(summaryStart).toBeGreaterThan(-1);
-  const tocStart = documentXml.indexOf("<w:instrText", summaryStart);
-  expect(tocStart).toBeGreaterThan(summaryStart);
-  return documentXml.slice(summaryStart, tocStart);
-}
-
 function expectNoHeadingStyle(paragraphXml: string): void {
   expect(paragraphXml).not.toContain('w:val="Heading1"');
   expect(paragraphXml).not.toContain('w:val="Heading2"');
@@ -202,8 +194,11 @@ describe("DOCX export", () => {
     expect(calculateTextualStartPage({ ...fields, workType: "dissertacao" }, true)).toBe(8);
   });
 
-  it("keeps main fields and native updatable TOC", async () => {
-    const documentXml = await generatedXml("# 1 Introducao\nTexto comum.\n## 1.1 Contexto\nTexto.");
+  it("keeps main fields and native updatable TOC for graduate thesis", async () => {
+    const documentXml = await generatedXml(
+      "# 1 Introducao\nTexto comum.\n## 1.1 Contexto\nTexto.",
+      { ...fields, workType: "tese" },
+    );
     const tocInstruction = fieldInstructionRuns(documentXml);
 
     expect(documentXml).toContain("MARIA SILVA");
@@ -216,10 +211,7 @@ describe("DOCX export", () => {
     expect(tocInstruction).toContain("\\z");
     expect(tocInstruction).toContain("\\u");
 
-    const staticSummary = summaryXmlBeforeToc(documentXml);
-    expect(staticSummary).toContain("1 INTRODUCAO");
-    expect(staticSummary).toContain("1.1 Contexto");
-    expect(staticSummary).toContain("REFERÊNCIAS");
+    expect((documentXml.match(/w:val="TOC1"/g) ?? []).length).toBe(0);
   });
 
   it("remove texto interno da natureza do trabalho no DOCX geral", async () => {

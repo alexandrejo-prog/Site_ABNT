@@ -127,10 +127,10 @@ describe("tese e dissertacao - conformidade UFLA", () => {
     expect((documentXml.match(/w:val="TOC1"/g) ?? []).length).toBe(0);
   });
 
-  it("sumário de monografia mantém lista estática e campo TOC", async () => {
+  it("sumário de monografia mantém lista estática sem campo TOC", async () => {
     const editorText = "# 1 Introducao\nTexto.\n## 1.1 Contexto\nTexto.";
     const documentXml = await generatedXml(editorText, baseFields({ workType: "monografia", course: "Bacharelado em Biologia" }));
-    expect(tocInstruction(documentXml)).toContain("TOC");
+    expect(tocInstruction(documentXml)).toBe("");
     expect((documentXml.match(/w:val="TOC1"/g) ?? []).length).toBeGreaterThan(0);
   });
 

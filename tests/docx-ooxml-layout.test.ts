@@ -27,10 +27,11 @@ describe("estrutura OOXML de layout e sumario", () => {
     const { documentXml, stylesXml, settingsXml } = await loadDocxParts(await generateDocxBlob({ fields, editorText }));
 
     expect(settingsXml).toMatch(/<w:updateFields\b/);
-    expect(tocInstruction(documentXml)).toContain("TOC");
+    expect(tocInstruction(documentXml)).toBe("");
     expect(documentXml).toMatch(/SUM[\s\S]{0,80}RIO/);
     expect(hasHeadingWithText(documentXml, "Heading1", "1 INTRODUÇÃO")).toBe(true);
     expect(hasHeadingWithText(documentXml, "Heading2", "1.1 Contexto")).toBe(true);
+    assertSectionOrder(documentXml, ["1 INTRODUÇÃO", "1.1 Contexto"]);
     assertSectionOrder(documentXml, ["1 INTRODUÇÃO", "1.1 Contexto"]);
     expect(documentXml).toContain("<w:pgMar");
     expect(documentXml).toContain(`w:top="${UFLA_RULES.margins.topTwip}"`);

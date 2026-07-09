@@ -1004,20 +1004,25 @@ function buildSummary(
   const entries = collectSummaryEntries(bodyBlocks, references, fields);
   if (!entries.length) return [];
 
-  // Tese/dissertação usam exclusivamente o campo TOC atualizável do Word/LibreOffice.
-  // A lista estática sem paginação não é aceitável para esses tipos (Manual de Normalização UFLA).
   const isGraduateThesis = fields.workType === "dissertacao" || fields.workType === "tese";
+
+  if (isGraduateThesis) {
+    return [
+      pageBreak(),
+      unnumberedTitle("Sumário"),
+      new TableOfContents("", {
+        headingStyleRange: "1-3",
+        hyperlink: true,
+        hideTabAndPageNumbersInWebView: true,
+        useAppliedParagraphOutlineLevel: true,
+      }),
+    ];
+  }
 
   return [
     pageBreak(),
     unnumberedTitle("Sumário"),
-    ...(isGraduateThesis ? [] : entries.map(summaryEntryParagraph)),
-    new TableOfContents("", {
-      headingStyleRange: "1-3",
-      hyperlink: true,
-      hideTabAndPageNumbersInWebView: true,
-      useAppliedParagraphOutlineLevel: true,
-    }),
+    ...entries.map(summaryEntryParagraph),
   ];
 }
 
