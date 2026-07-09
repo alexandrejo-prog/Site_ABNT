@@ -21,7 +21,11 @@ import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, textRunsFrom
 interface SummaryEntry {
   text: string;
   level: 1 | 2 | 3;
+  pageNumber: number;
 }
+
+const PROJECT_TEXTUAL_START_PAGE = 5;
+const PROJECT_CHARS_PER_PAGE_ESTIMATE = 1800;
 
 function hasValue(value: string): boolean {
   return value.trim().length > 0;
@@ -92,6 +96,15 @@ function preTextualParagraphs(value: string): string[] {
     .filter(Boolean);
 }
 
+function estimatedBlockLength(block: EditorBlock): number {
+  const text = cleanMojibakeText(block.text).replace(/\s+/g, " ").trim();
+  if (!text) return 0;
+  if (block.type === "heading1" || block.type === "heading2" || block.type === "heading3") return 120;
+  if (block.type === "markdownTable" || block.type === "plainScheduleTable" || block.type === "scheduleTable") return Math.ceil(text.length * 1.4);
+  if (block.type === "longQuote") return Math.ceil(text.length * 0.85);
+  return text.length;
+}
+
 function coverChildren(input: DocxGenerationInput): Paragraph[] {
   const { fields, logo } = input;
   return [
@@ -129,35 +142,59 @@ function summaryLevelForBlock(block: EditorBlock): SummaryEntry["level"] | null 
   return null;
 }
 
+function summaryTextWithPage(entry: SummaryEntry): string {
+  const title = cleanMojibakeText(entry.text);
+  const dotCount = Math.max(8, 92 - title.length - (entry.level - 1) * 4);
+  return `${title} ${".".repeat(dotCount)} ${entry.pageNumber}`;
+}
+
 function summaryEntryParagraph(entry: SummaryEntry): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.LEFT,
     spacing: { line: SINGLE_LINE, after: 0 },
     indent: { left: (entry.level - 1) * 360 },
     children: [
-      run(cleanMojibakeText(entry.text), entry.level < 3),
+      run(summaryTextWithPage(entry), entry.level < 3),
     ],
   });
 }
 
-function addSummaryEntry(entries: SummaryEntry[], seen: Set<string>, text: string, level: SummaryEntry["level"]): void {
+function addSummaryEntry(entries: SummaryEntry[], seen: Set<string>, text: string, level: SummaryEntry["level"], pageNumber: number): void {
   const cleaned = normalizeProjectHeadingText(text);
   const key = fold(cleaned);
   if (!cleaned || key === "SUMARIO" || seen.has(key)) return;
   seen.add(key);
-  entries.push({ text: level === 1 ? cleaned.toUpperCase() : cleaned, level });
+  entries.push({ text: level === 1 ? cleaned.toUpperCase() : cleaned, level, pageNumber });
 }
 
 function collectSummaryEntries(bodyBlocks: EditorBlock[], references: string[]): SummaryEntry[] {
   const entries: SummaryEntry[] = [];
   const seen = new Set<string>();
+  let currentPage = PROJECT_TEXTUAL_START_PAGE;
+  let usedCharsOnPage = 0;
+  let hasSeenPrimaryHeading = false;
 
   for (const block of bodyBlocks) {
     const level = summaryLevelForBlock(block);
-    if (level) addSummaryEntry(entries, seen, block.text, level);
+    if (level === 1) {
+      if (hasSeenPrimaryHeading) {
+        currentPage += 1;
+        usedCharsOnPage = 0;
+      } else {
+        hasSeenPrimaryHeading = true;
+      }
+    }
+
+    if (level) addSummaryEntry(entries, seen, block.text, level, currentPage);
+
+    usedCharsOnPage += estimatedBlockLength(block);
+    while (usedCharsOnPage > PROJECT_CHARS_PER_PAGE_ESTIMATE) {
+      currentPage += 1;
+      usedCharsOnPage -= PROJECT_CHARS_PER_PAGE_ESTIMATE;
+    }
   }
 
-  if (references.length > 0) addSummaryEntry(entries, seen, "REFERÊNCIAS", 1);
+  if (references.length > 0) addSummaryEntry(entries, seen, "REFERÊNCIAS", 1, currentPage + 1);
   return entries;
 }
 
@@ -374,7 +411,7 @@ function createProjectDocument(input: DocxGenerationInput): Document {
         children: [...coverChildren(input), ...titlePageChildren(input.fields), ...preTextualChildren(input.fields, summaryEntries)],
       },
       {
-        properties: { page: { size: { orientation: PageOrientation.PORTRAIT, width: UFLA_RULES.page.widthTwip, height: UFLA_RULES.page.heightTwip }, margin: pageMargins(), pageNumbers: { start: 5 } } },
+        properties: { page: { size: { orientation: PageOrientation.PORTRAIT, width: UFLA_RULES.page.widthTwip, height: UFLA_RULES.page.heightTwip }, margin: pageMargins(), pageNumbers: { start: PROJECT_TEXTUAL_START_PAGE } } },
         headers: { default: pageNumberHeader() },
         children: textualChildren,
       },
