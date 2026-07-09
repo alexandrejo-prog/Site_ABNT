@@ -8,6 +8,8 @@ export interface DraftPayload {
 
 const DRAFT_KEY = "site-abnt:draft:v3";
 const LEGACY_DRAFT_KEYS = ["site-abnt:draft:v1", "site-abnt:draft:v2"];
+const DRAFT_TTL_DAYS = 14;
+const DRAFT_TTL_MS = DRAFT_TTL_DAYS * 24 * 60 * 60 * 1000;
 
 function logDraftStorageError(action: string, error: unknown): void {
   if (import.meta.env.DEV && import.meta.env.MODE !== "test") {
@@ -24,6 +26,12 @@ function isValidDraft(value: unknown): value is DraftPayload {
   if (typeof payload.workType !== "string" && payload.workType !== undefined) return false;
   if (typeof payload.updatedAt !== "string") return false;
   return true;
+}
+
+function isExpiredDraft(payload: DraftPayload, now = Date.now()): boolean {
+  const updatedAt = Date.parse(payload.updatedAt);
+  if (!Number.isFinite(updatedAt)) return true;
+  return now - updatedAt > DRAFT_TTL_MS;
 }
 
 function clearLegacyDrafts(storage: Storage): void {
@@ -48,6 +56,10 @@ export function loadDraft(storage: Storage = globalThis.localStorage): DraftPayl
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
     if (!isValidDraft(parsed)) return null;
+    if (isExpiredDraft(parsed)) {
+      storage.removeItem(DRAFT_KEY);
+      return null;
+    }
     return parsed;
   } catch (error) {
     logDraftStorageError("carregar", error);
@@ -66,4 +78,8 @@ export function clearDraft(storage: Storage = globalThis.localStorage): void {
 
 export function hasDraft(storage: Storage = globalThis.localStorage): boolean {
   return loadDraft(storage) !== null;
+}
+
+export function draftRetentionDays(): number {
+  return DRAFT_TTL_DAYS;
 }
