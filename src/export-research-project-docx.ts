@@ -71,7 +71,7 @@ const COMMON_PROJECT_HEADINGS: Record<string, string> = {
   REFERENCIAS: "Referências",
 };
 
-function normalizeProjectHeadingText(value: string): string {
+export function normalizeProjectHeadingText(value: string): string {
   const cleaned = cleanMojibakeText(value).replace(/\s+/g, " ").trim();
   const match = cleaned.match(/^(\d+(?:\.\d+)*\s+)?(.+)$/);
   if (!match) return cleaned;

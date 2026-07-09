@@ -264,6 +264,38 @@ describe("campo de sumario em projeto", () => {
     expect(xml).toContain("técnico-administrativo");
   });
 
+  it("normaliza titulos do sumario consistentemente com o corpo", async () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "projeto_pesquisa" as const,
+      title: "Projeto",
+      author: "Maria Silva",
+      resumo: "Resumo do projeto.",
+      abstractText: "Project abstract.",
+      referencias: "SILVA, M. Projeto. Lavras: UFLA, 2024.",
+    };
+
+    const xml = await documentXml(
+      await generateResearchProjectDocxBlob({
+        fields,
+        editorText: [
+          "# 1 INTRODUÇÃO",
+          "Texto.",
+          "# 2 REFERENCIAL TEORICO",
+          "Texto.",
+          "# 3 REFERENCIAS",
+          "Texto.",
+        ].join("\n"),
+      }),
+    );
+
+    expect(xml).toContain("1 INTRODUÇÃO");
+    expect(xml).toContain("2 REFERENCIAL TEÓRICO");
+    expect(xml).toContain("REFERÊNCIAS");
+    expect(xml).not.toContain("REFERENCIAL TEORICO");
+    expect(xml).not.toContain("REFERENCIAS");
+  });
+
   it("renderiza quadros com caption, bordas e fonte no projeto", async () => {
     const fields = {
       ...emptyAcademicFields(),
