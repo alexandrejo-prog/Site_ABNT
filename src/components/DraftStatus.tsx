@@ -1,4 +1,5 @@
 import { Eraser } from "lucide-react";
+import { draftRetentionDays } from "../draft-storage";
 
 interface DraftStatusProps {
   draftStatus: "idle" | "saved" | "restored" | "cleared" | "error";
@@ -8,11 +9,12 @@ interface DraftStatusProps {
 
 export function DraftStatus({ draftStatus, hasDraft, onClearDraft }: DraftStatusProps) {
   const canClearDraft = hasDraft || draftStatus === "saved" || draftStatus === "restored";
+  const retention = draftRetentionDays();
 
   return (
     <>
-      {canClearDraft && <button className="primary-action draft-clear-button" type="button" onClick={onClearDraft} title="Limpar rascunho local"><Eraser size={18} aria-hidden="true" />Limpar rascunho</button>}
-      <span className="draft-status" aria-live="polite" role="status">{draftStatus === "saved" ? "Rascunho salvo localmente" : draftStatus === "restored" ? "Rascunho restaurado" : draftStatus === "cleared" ? "Rascunho local removido" : draftStatus === "error" ? "Nao foi possivel acessar armazenamento local" : ""}</span>
+      {canClearDraft && <button className="primary-action draft-clear-button" type="button" onClick={onClearDraft} title={`Limpar rascunho salvo apenas neste navegador por até ${retention} dias`}><Eraser size={18} aria-hidden="true" />Limpar rascunho</button>}
+      <span className="draft-status" aria-live="polite" role="status">{draftStatus === "saved" ? `Rascunho salvo neste navegador por até ${retention} dias` : draftStatus === "restored" ? `Rascunho restaurado deste navegador; nada foi enviado ao servidor` : draftStatus === "cleared" ? "Rascunho local removido" : draftStatus === "error" ? "Nao foi possivel acessar armazenamento local" : ""}</span>
     </>
   );
 }
