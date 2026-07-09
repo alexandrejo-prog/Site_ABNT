@@ -32,4 +32,11 @@ describe("interface estática", () => {
     expect(styles).toContain(".rich-editor:focus");
     expect(styles).toContain("outline:");
   });
+
+  it("orienta atualização do sumário no Word/LibreOffice", () => {
+    expect(app).toContain("Atualizar o índice inteiro");
+    expect(app).toContain("Ctrl+A e F9");
+    expect(app).toContain("Ferramentas");
+    expect(app).toContain("Atualizar tudo");
+  });
 });
