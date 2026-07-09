@@ -33,11 +33,8 @@ describe("campo de sumario em projeto", () => {
     expect(xml).toContain("1 INTRODUÇÃO");
     expect(xml).toContain("2 METODOLOGIA");
     expect(xml).toContain("REFERÊNCIAS");
-    expect(xml).toMatch(/1 INTRODUÇÃO[\s\S]*?<w:tab\s*\/>[\s\S]*?5/);
-    expect(xml).toMatch(/2 METODOLOGIA[\s\S]*?<w:tab\s*\/>[\s\S]*?6/);
-    expect(xml).toMatch(/REFERÊNCIAS[\s\S]*?<w:tab\s*\/>[\s\S]*?7/);
-    expect(xml).toContain('w:val="right"');
-    expect(xml).toContain('w:leader="dot"');
+    expect(xml).not.toContain('w:leader="dot"');
+    expect(xml).not.toContain("<w:tab");
     expect(xml).not.toContain("TOC");
     expect(xml).not.toContain("FICHA CATALOGRÁFICA");
     expect(xml).not.toContain("BANCA EXAMINADORA");
@@ -324,5 +321,103 @@ describe("campo de sumario em projeto", () => {
     expect(xml).toContain("Quadro 1 - Aspectos da pesquisa");
     expect(xml).toContain("Fonte: elaborado pelo autor (2026).");
     expect(xml).not.toContain("Aspecto\tAndrade");
+  });
+
+  it("nao adiciona fonte automatica quando o quadro ja tem fonte explicita", async () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "projeto_pesquisa" as const,
+      title: "Projeto",
+      author: "Maria Silva",
+      resumo: "Resumo do projeto.",
+      abstractText: "Project abstract.",
+      referencias: "SILVA, M. Projeto. Lavras: UFLA, 2024.",
+    };
+
+    const xml = await documentXml(
+      await generateResearchProjectDocxBlob({
+        fields,
+        editorText: [
+          "# 1 INTRODUÇÃO",
+          "Texto.",
+          "# 2 METODOLOGIA",
+          "Quadro 1 - Aspectos da pesquisa",
+          "Aspecto\tAndrade (2025)\tEsta pesquisa",
+          "Procedimentos\tQuestionário e entrevistas semiestruturadas com gestores.\tAnálise documental.",
+          "Fonte: elaborado pelo autor (2026).",
+        ].join("\n"),
+      }),
+    );
+
+    expect(xml).toContain("<w:tbl>");
+    expect(xml).toContain("Fonte: elaborado pelo autor (2026).");
+    expect(xml).not.toContain("Fonte: elaborado pelo autor.");
+  });
+
+  it("adiciona fonte de fallback uma unica vez quando nao ha fonte explicita", async () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "projeto_pesquisa" as const,
+      title: "Projeto",
+      author: "Maria Silva",
+      resumo: "Resumo do projeto.",
+      abstractText: "Project abstract.",
+      referencias: "SILVA, M. Projeto. Lavras: UFLA, 2024.",
+    };
+
+    const xml = await documentXml(
+      await generateResearchProjectDocxBlob({
+        fields,
+        editorText: [
+          "# 1 INTRODUÇÃO",
+          "Texto.",
+          "# 2 METODOLOGIA",
+          "Quadro 1 - Aspectos da pesquisa",
+          "Aspecto\tAndrade (2025)\tEsta pesquisa",
+          "Procedimentos\tQuestionário e entrevistas semiestruturadas com gestores.\tAnálise documental.",
+        ].join("\n"),
+      }),
+    );
+
+    const fallbackCount = (xml.match(/Fonte: elaborado pelo autor\./g) || []).length;
+    expect(fallbackCount).toBe(1);
+  });
+
+  it("nao exibe numeros de pagina estimados falsos nem TOC duplicado no sumario", async () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "projeto_pesquisa" as const,
+      title: "Projeto",
+      author: "Maria Silva",
+      resumo: "Resumo do projeto.",
+      abstractText: "Project abstract.",
+      referencias: "SILVA, M. Projeto. Lavras: UFLA, 2024.",
+    };
+
+    const xml = await documentXml(
+      await generateResearchProjectDocxBlob({
+        fields,
+        editorText: [
+          "# 1 INTRODUÇÃO",
+          "Texto.",
+          "# 2 METODOLOGIA",
+          "Texto.",
+          "# 3 REFERENCIAL TEORICO",
+          "Texto.",
+          "# 4 RESULTADOS ESPERADOS",
+          "Texto.",
+        ].join("\n"),
+      }),
+    );
+
+    expect(xml).toContain("SUMÁRIO");
+    expect(xml).toContain("1 INTRODUÇÃO");
+    expect(xml).toContain("4 RESULTADOS ESPERADOS");
+    expect(xml).toContain("REFERÊNCIAS");
+    expect(xml).not.toContain('w:leader="dot"');
+    expect(xml).not.toContain("<w:tab");
+    expect(xml).not.toContain("TOC");
+    const sumarioCount = (xml.match(/SUMÁRIO/g) || []).length;
+    expect(sumarioCount).toBe(1);
   });
 });

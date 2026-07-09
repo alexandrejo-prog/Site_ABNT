@@ -6,9 +6,7 @@ import {
   PageOrientation,
   Paragraph,
   Table,
-  Tab,
   TextRun,
-  TabStopPosition,
 } from "docx";
 import { parseEditorContent, type DocxGenerationInput, type EditorBlock, loadDefaultLogoAsset } from "./export-docx";
 import { AUTHOR_SIZE, BLACK, BODY_SIZE, ONE_AND_HALF_LINE, SINGLE_LINE, TITLE_SIZE, centered, ibgeTable, logoParagraph, pageBreak, pageMargins, pageNumberHeader, paragraph, run, unnumberedTitle } from "./docx-shared";
@@ -23,14 +21,9 @@ import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, textRunsFrom
 interface SummaryEntry {
   text: string;
   level: 1 | 2 | 3;
-  pageNumber: number;
 }
 
 const PROJECT_TEXTUAL_START_PAGE = 5;
-const PROJECT_CHARS_PER_PAGE_ESTIMATE = 1800;
-// A paginação do sumário do Projeto de pesquisa é estimada com base em
-// contagem de caracteres e deve ser conferida no Word/LibreOffice, pois o
-// navegador não conhece a paginação final do processador de texto.
 
 function hasValue(value: string): boolean {
   return value.trim().length > 0;
@@ -101,15 +94,6 @@ function preTextualParagraphs(value: string): string[] {
     .filter(Boolean);
 }
 
-function estimatedBlockLength(block: EditorBlock): number {
-  const text = cleanMojibakeText(block.text).replace(/\s+/g, " ").trim();
-  if (!text) return 0;
-  if (block.type === "heading1" || block.type === "heading2" || block.type === "heading3") return 120;
-  if (block.type === "markdownTable" || block.type === "plainScheduleTable" || block.type === "scheduleTable") return Math.ceil(text.length * 1.4);
-  if (block.type === "longQuote") return Math.ceil(text.length * 0.85);
-  return text.length;
-}
-
 function coverChildren(input: DocxGenerationInput): Paragraph[] {
   const { fields, logo } = input;
   return [
@@ -149,57 +133,35 @@ function summaryLevelForBlock(block: EditorBlock): SummaryEntry["level"] | null 
 
 function summaryEntryParagraph(entry: SummaryEntry): Paragraph {
   const title = cleanMojibakeText(entry.text);
-  const pageNumber = String(entry.pageNumber);
 
   return new Paragraph({
     alignment: AlignmentType.LEFT,
     spacing: { line: SINGLE_LINE, after: 0 },
     indent: { left: (entry.level - 1) * 360 },
-    tabStops: [{ type: "right", position: TabStopPosition.MAX, leader: "dot" }],
     children: [
       new TextRun({ text: title, bold: entry.level < 3, font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK }),
-      new Tab(),
-      new TextRun({ text: pageNumber, bold: entry.level < 3, font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK }),
     ],
   });
 }
 
-function addSummaryEntry(entries: SummaryEntry[], seen: Set<string>, text: string, level: SummaryEntry["level"], pageNumber: number): void {
+function addSummaryEntry(entries: SummaryEntry[], seen: Set<string>, text: string, level: SummaryEntry["level"]): void {
   const cleaned = normalizeProjectHeadingText(text);
   const key = fold(cleaned);
   if (!cleaned || key === "SUMARIO" || seen.has(key)) return;
   seen.add(key);
-  entries.push({ text: level === 1 ? cleaned.toUpperCase() : cleaned, level, pageNumber });
+  entries.push({ text: level === 1 ? cleaned.toUpperCase() : cleaned, level });
 }
 
 function collectSummaryEntries(bodyBlocks: EditorBlock[], references: string[]): SummaryEntry[] {
   const entries: SummaryEntry[] = [];
   const seen = new Set<string>();
-  let currentPage = PROJECT_TEXTUAL_START_PAGE;
-  let usedCharsOnPage = 0;
-  let hasSeenPrimaryHeading = false;
 
   for (const block of bodyBlocks) {
     const level = summaryLevelForBlock(block);
-    if (level === 1) {
-      if (hasSeenPrimaryHeading) {
-        currentPage += 1;
-        usedCharsOnPage = 0;
-      } else {
-        hasSeenPrimaryHeading = true;
-      }
-    }
-
-    if (level) addSummaryEntry(entries, seen, block.text, level, currentPage);
-
-    usedCharsOnPage += estimatedBlockLength(block);
-    while (usedCharsOnPage > PROJECT_CHARS_PER_PAGE_ESTIMATE) {
-      currentPage += 1;
-      usedCharsOnPage -= PROJECT_CHARS_PER_PAGE_ESTIMATE;
-    }
+    if (level) addSummaryEntry(entries, seen, block.text, level);
   }
 
-  if (references.length > 0) addSummaryEntry(entries, seen, "REFERÊNCIAS", 1, currentPage + 1);
+  if (references.length > 0) addSummaryEntry(entries, seen, "REFERÊNCIAS", 1);
   return entries;
 }
 
@@ -217,8 +179,9 @@ function preTextualChildren(fields: DocxGenerationInput["fields"], summaryEntrie
     ...(keywords ? [paragraph(`Keywords: ${keywords}`)] : []),
     pageBreak(),
     unnumberedTitle("Sumário"),
-    // Projeto de pesquisa usa sumário estático com paginação estimada.
-    // A paginação final deve ser conferida no Word/LibreOffice.
+    // Projeto de pesquisa usa sumário estático, sem números de página
+    // estimados, para não exibir paginação falsa. A paginação final é
+    // definida no Word/LibreOffice ao atualizar os campos do documento.
     ...summaryEntries.map(summaryEntryParagraph),
   ];
 }
@@ -328,15 +291,25 @@ function tableChildrenFromRows(rows: string[][], caption?: string, source?: stri
 }
 
 function markdownTableChildren(text: string): Array<Paragraph | Table> {
-  const rows = text
+  const lines = text
     .split(/\n+/)
     .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => !isMarkdownTableSeparator(line))
+    .filter(Boolean);
+
+  let explicitSource: string | undefined;
+  const dataLines = lines.filter((line) => {
+    if (/^Fonte:/i.test(line)) {
+      explicitSource = line;
+      return false;
+    }
+    return !isMarkdownTableSeparator(line);
+  });
+
+  const rows = dataLines
     .map(splitMarkdownCells)
     .filter((cells) => cells.length >= 2);
 
-  const table = tableChildrenFromRows(rows);
+  const table = tableChildrenFromRows(rows, undefined, explicitSource);
   return table.length ? table : [markupParagraph(text)];
 }
 
@@ -388,7 +361,14 @@ function bodyChildrenFromBlocks(blocks: EditorBlock[]): Array<Paragraph | Table>
         rows.push(splitTabCells(blocks[cursor].text));
         cursor += 1;
       }
-      children.push(...tableChildrenFromRows(rows, undefined, "Fonte: elaborado pelo autor."));
+
+      let source: string | undefined;
+      if (cursor < blocks.length && /^Fonte:/i.test(blocks[cursor].text.trim())) {
+        source = blocks[cursor].text.trim();
+        cursor += 1;
+      }
+
+      children.push(...tableChildrenFromRows(rows, undefined, source ?? "Fonte: elaborado pelo autor."));
       index = cursor - 1;
       continue;
     }

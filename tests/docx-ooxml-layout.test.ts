@@ -63,9 +63,8 @@ describe("estrutura OOXML de layout e sumario", () => {
     expect(documentXml).toContain("1 INTRODUÇÃO");
     expect(documentXml).toContain("2 METODOLOGIA");
     expect(documentXml).toContain("REFERÊNCIAS");
-    expect(documentXml).toContain('w:val="right"');
-    expect(documentXml).toContain('w:leader="dot"');
-    expect(documentXml).toContain("<w:tab/>");
+    expect(documentXml).not.toContain('w:leader="dot"');
+    expect(documentXml).not.toContain("<w:tab/>");
     expect(hasHeadingWithText(documentXml, "Heading1", "1 INTRODUÇÃO")).toBe(true);
     expect(hasHeadingWithText(documentXml, "Heading1", "2 METODOLOGIA")).toBe(true);
     assertSectionOrder(documentXml, ["1 INTRODUÇÃO", "2 METODOLOGIA"]);
