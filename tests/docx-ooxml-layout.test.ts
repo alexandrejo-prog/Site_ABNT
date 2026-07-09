@@ -40,7 +40,7 @@ describe("estrutura OOXML de layout e sumario", () => {
     expect(documentXml).toContain(`w:left="${UFLA_RULES.typography.longQuoteLeftIndentTwip}"`);
   });
 
-  it("gera projeto de pesquisa com sumario atualizavel e layout OOXML coerente", async () => {
+  it("gera projeto de pesquisa com sumario estatico visivel e layout OOXML coerente", async () => {
     const fields = {
       ...emptyAcademicFields(),
       workType: "projeto_pesquisa" as const,
@@ -57,8 +57,11 @@ describe("estrutura OOXML de layout e sumario", () => {
     const { documentXml, stylesXml, settingsXml } = await loadDocxParts(await generateResearchProjectDocxBlob({ fields, editorText }));
 
     expect(settingsXml).toMatch(/<w:updateFields\b/);
-    expect(tocInstruction(documentXml)).toContain("TOC");
+    expect(tocInstruction(documentXml)).toBe("");
     expect(documentXml).toMatch(/SUM[\s\S]{0,80}RIO/);
+    expect(documentXml).toContain("1 INTRODUÇÃO");
+    expect(documentXml).toContain("2 METODOLOGIA");
+    expect(documentXml).toContain("REFERÊNCIAS");
     expect(hasHeadingWithText(documentXml, "Heading1", "1 INTRODUÇÃO")).toBe(true);
     expect(hasHeadingWithText(documentXml, "Heading1", "2 METODOLOGIA")).toBe(true);
     assertSectionOrder(documentXml, ["1 INTRODUÇÃO", "2 METODOLOGIA"]);
