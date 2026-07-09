@@ -6,7 +6,6 @@ import {
   PageOrientation,
   Paragraph,
   Table,
-  TableOfContents,
   TextRun,
 } from "docx";
 import { parseEditorContent, type DocxGenerationInput, type EditorBlock, loadDefaultLogoAsset } from "./export-docx";
@@ -18,6 +17,11 @@ import { normalizeReferences, type ReferenceRun } from "./references-normalizer"
 import { UFLA_RULES } from "./ufla-rules";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
 import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup } from "./docx-render-core";
+
+interface SummaryEntry {
+  text: string;
+  level: 1 | 2 | 3;
+}
 
 function hasValue(value: string): boolean {
   return value.trim().length > 0;
@@ -61,7 +65,51 @@ function titlePageChildren(fields: DocxGenerationInput["fields"]): Paragraph[] {
   ];
 }
 
-function preTextualChildren(fields: DocxGenerationInput["fields"]): Array<Paragraph | TableOfContents> {
+function summaryLevelForBlock(block: EditorBlock): SummaryEntry["level"] | null {
+  if (block.type === "heading1") return 1;
+  if (block.type === "heading2") return 2;
+  if (block.type === "heading3") return 3;
+  return null;
+}
+
+function summaryEntryParagraph(entry: SummaryEntry): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.LEFT,
+    spacing: { line: SINGLE_LINE, after: 0 },
+    indent: { left: (entry.level - 1) * 360 },
+    children: [
+      run(cleanMojibakeText(entry.text), entry.level < 3),
+    ],
+  });
+}
+
+function addSummaryEntry(entries: SummaryEntry[], seen: Set<string>, text: string, level: SummaryEntry["level"]): void {
+  const cleaned = cleanMojibakeText(text).trim();
+  const key = cleaned
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .toUpperCase()
+    .trim();
+  if (!cleaned || key === "SUMARIO" || seen.has(key)) return;
+  seen.add(key);
+  entries.push({ text: cleaned, level });
+}
+
+function collectSummaryEntries(bodyBlocks: EditorBlock[], references: string[]): SummaryEntry[] {
+  const entries: SummaryEntry[] = [];
+  const seen = new Set<string>();
+
+  for (const block of bodyBlocks) {
+    const level = summaryLevelForBlock(block);
+    if (level) addSummaryEntry(entries, seen, level === 1 ? block.text.toUpperCase() : block.text, level);
+  }
+
+  if (references.length > 0) addSummaryEntry(entries, seen, "REFERÊNCIAS", 1);
+  return entries;
+}
+
+function preTextualChildren(fields: DocxGenerationInput["fields"], summaryEntries: SummaryEntry[]): Paragraph[] {
   const palavrasChave = normalizeKeywordSentence(fields.palavrasChave);
   const keywords = normalizeKeywordSentence(fields.keywords);
   return [
@@ -75,12 +123,7 @@ function preTextualChildren(fields: DocxGenerationInput["fields"]): Array<Paragr
     ...(keywords ? [paragraph(`Keywords: ${keywords}`)] : []),
     pageBreak(),
     unnumberedTitle("Sumário"),
-    new TableOfContents("", {
-      headingStyleRange: "1-3",
-      hyperlink: true,
-      hideTabAndPageNumbersInWebView: true,
-      useAppliedParagraphOutlineLevel: true,
-    }),
+    ...summaryEntries.map(summaryEntryParagraph),
   ];
 }
 
@@ -250,7 +293,7 @@ function referenceParagraphs(references: string[]): Paragraph[] {
     new Paragraph({ heading: HeadingLevel.HEADING_1, spacing: { before: 0, after: 240, line: ONE_AND_HALF_LINE }, children: [run("REFERÊNCIAS", true)] }),
     ...normalizeReferences(references)
       .sort((a, b) => cleanMojibakeText(a.text).localeCompare(cleanMojibakeText(b.text), "pt-BR", { sensitivity: "base" }))
-      .map((reference) => new Paragraph({ alignment: AlignmentType.LEFT, spacing: { line: SINGLE_LINE, after: SINGLE_LINE }, children: reference.runs.length ? reference.runs.map(referenceRunToTextRun) : [run(cleanMojibakeText(reference.text || " "))] })),
+      .map((reference) => new Paragraph({ alignment: AlignmentType.LEFT, spacing: { line: SINGLE_LINE, after: SINGLE_LINE }, indent: { left: 720, hanging: 720 }, children: reference.runs.length ? reference.runs.map(referenceRunToTextRun) : [run(cleanMojibakeText(reference.text || " "))] })),
   ];
 }
 
@@ -261,6 +304,7 @@ function createProjectDocument(input: DocxGenerationInput): Document {
     ...splitParagraphs(input.fields.referencias),
     ...blocks.filter((block) => block.type === "reference").map((block) => block.text),
   ];
+  const summaryEntries = collectSummaryEntries(bodyBlocks, references);
   const textualChildren = [
     ...bodyChildrenFromBlocks(bodyBlocks),
     ...referenceParagraphs(references),
@@ -274,7 +318,7 @@ function createProjectDocument(input: DocxGenerationInput): Document {
     sections: [
       {
         properties: { page: { size: { orientation: PageOrientation.PORTRAIT, width: UFLA_RULES.page.widthTwip, height: UFLA_RULES.page.heightTwip }, margin: pageMargins() } },
-        children: [...coverChildren(input), ...titlePageChildren(input.fields), ...preTextualChildren(input.fields)],
+        children: [...coverChildren(input), ...titlePageChildren(input.fields), ...preTextualChildren(input.fields, summaryEntries)],
       },
       {
         properties: { page: { size: { orientation: PageOrientation.PORTRAIT, width: UFLA_RULES.page.widthTwip, height: UFLA_RULES.page.heightTwip }, margin: pageMargins(), pageNumbers: { start: 5 } } },
