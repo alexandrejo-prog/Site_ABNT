@@ -10,7 +10,6 @@ const NON_OVERRIDABLE_ERROR_CODES = [
   "placeholder-detected",
   "draft-placeholder-detected",
   "natural-placeholder-detected",
-  "impact-indicators-missing",
   "program-conflict",
   "abstract-topic-conflict",
   "program-degree-incompatible",
@@ -18,7 +17,6 @@ const NON_OVERRIDABLE_ERROR_CODES = [
 
 const ABSOLUTE_GENERATION_BLOCKER_CODES = [
   "work-type-required",
-  "placeholder-detected",
   "draft-placeholder-detected",
   "natural-placeholder-detected",
 ] as const;
