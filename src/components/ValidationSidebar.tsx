@@ -1,4 +1,12 @@
 import { AcademicFields } from "../ufla-rules";
+import {
+  EDITABLE_DRAFT_NOTICE,
+  FINAL_VERSION_PENDENCIES_TITLE,
+  TOC_UPDATE_GUIDANCE,
+  finalVersionPendencies,
+  needsTocUpdateGuidance,
+  projectLanguageWarning,
+} from "../graduate-draft-guidance";
 import { TextDiagnosticPanel } from "../text-diagnostic-panel";
 import { type ValidationIssue } from "../validators";
 
@@ -21,11 +29,15 @@ export function ValidationSidebar({
   errors,
   warnings,
 }: ValidationSidebarProps) {
+  const finalPendencies = finalVersionPendencies(fields);
+  const projectLanguage = projectLanguageWarning(fields, editorText);
+  const tocUpdateGuidance = needsTocUpdateGuidance(fields.workType);
+
   return (
     <aside className="validation-pane" aria-label="Validação">
       <div className="status-line" aria-live="polite">{status}</div>
       <div className="post-generation-note">
-        <strong>Após gerar o DOCX:</strong> o arquivo é um rascunho editável. Abra no Word ou LibreOffice, atualize campos dinâmicos e o sumário (tecle F9), confira paginação e exporte para PDF para submissão.
+        <strong>Após gerar o DOCX:</strong> {EDITABLE_DRAFT_NOTICE} {tocUpdateGuidance ? TOC_UPDATE_GUIDANCE : "Abra no Word ou LibreOffice, confira paginação e exporte para PDF quando necessário."}
         <ul className="conformance-report">
           <li>Pontos que ainda exigem revisão manual</li>
           <li>Alertas de referências</li>
@@ -33,6 +45,28 @@ export function ValidationSidebar({
           <li>Alertas de coerência textual</li>
         </ul>
       </div>
+      {finalPendencies.length > 0 && (
+        <div className="issue-list" aria-label={FINAL_VERSION_PENDENCIES_TITLE}>
+          <h2>{FINAL_VERSION_PENDENCIES_TITLE}</h2>
+          <div className="issue warning" role="status">
+            <p className="issue-message">Este arquivo ainda não deve ser tratado como pronto para submissão.</p>
+            <ul className="conformance-report">
+              {finalPendencies.map((pendency) => (
+                <li key={pendency}>{pendency}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+      {projectLanguage && (
+        <div className="issue-list" aria-label="Alerta de linguagem de projeto">
+          <h2>Alerta de linguagem</h2>
+          <div className="issue warning" role="status">
+            <p className="issue-message">{projectLanguage}</p>
+            <p className="issue-detail"><strong>Ação:</strong> Revise o texto manualmente. O sistema não altera esse conteúdo automaticamente.</p>
+          </div>
+        </div>
+      )}
       <label className="force-generate">
         <input type="checkbox" checked={generateAnyway} onChange={(event) => onToggleGenerateAnyway(event.target.checked)} />
         <span>Gerar rascunho mesmo com pendências</span>
