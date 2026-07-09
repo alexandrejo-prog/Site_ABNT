@@ -38,6 +38,45 @@ describe("campo de sumario em projeto", () => {
     expect(xml).not.toContain("BANCA EXAMINADORA");
   });
 
+  it("preserva caixa adequada por nivel de secao no projeto", async () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "projeto_pesquisa" as const,
+      title: "Projeto",
+      author: "Maria Silva",
+      resumo: "Resumo do projeto.",
+      abstractText: "Project abstract.",
+      referencias: "SILVA, M. Projeto. Lavras: UFLA, 2024.",
+    };
+
+    const xml = await documentXml(
+      await generateResearchProjectDocxBlob({
+        fields,
+        editorText: [
+          "# 1 introducao",
+          "Texto.",
+          "## 1.3 objetivos",
+          "Texto.",
+          "## 1.4 justificativa",
+          "Texto.",
+          "# 4 resultados esperados, impacto social e limitacoes",
+          "Texto.",
+          "## 4.1 resultados esperados",
+          "Texto.",
+        ].join("\n"),
+      }),
+    );
+
+    expect(xml).toContain("1 INTRODUÇÃO");
+    expect(xml).toContain("1.3 Objetivos");
+    expect(xml).toContain("1.4 Justificativa");
+    expect(xml).toContain("4 RESULTADOS ESPERADOS, IMPACTO SOCIAL E LIMITAÇÕES");
+    expect(xml).toContain("4.1 Resultados esperados");
+    expect(xml).not.toContain("1.3 OBJETIVOS");
+    expect(xml).not.toContain("1.4 JUSTIFICATIVA");
+    expect(xml).not.toContain("4.1 RESULTADOS ESPERADOS");
+  });
+
   it("renderiza linhas tabuladas do projeto como quadro/tabela DOCX", async () => {
     const fields = {
       ...emptyAcademicFields(),
