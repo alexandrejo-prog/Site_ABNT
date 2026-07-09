@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clearDraft, hasDraft, loadDraft, saveDraft, type DraftPayload } from "../src/draft-storage";
+import { clearDraft, draftRetentionDays, hasDraft, loadDraft, saveDraft, type DraftPayload } from "../src/draft-storage";
 
 const SAMPLE_DRAFT = {
   fields: { author: "Ana", title: "Trabalho" },
@@ -67,6 +67,7 @@ describe("draft-storage", () => {
     expect(storage.getItem("site-abnt:draft:v2")).toBeNull();
     expect(storage.getItem("site-abnt:draft:v3")).toBeNull();
   });
+
   it("nao quebra sem localStorage", () => {
     expect(() => {
       saveDraft(SAMPLE_DRAFT, undefined as unknown as Storage);
@@ -85,5 +86,30 @@ describe("draft-storage", () => {
     expect(loadDraft(storage)).toBeNull();
     saveDraft({ fields: {}, editorText: 123 as unknown as string, updatedAt: new Date().toISOString() } as unknown as DraftPayload, storage);
     expect(loadDraft(storage)).toBeNull();
+  });
+
+  it("remove rascunho local antigo automaticamente", () => {
+    const storage = createStorage();
+    const oldDraft = {
+      ...SAMPLE_DRAFT,
+      updatedAt: new Date(Date.now() - (draftRetentionDays() + 1) * 24 * 60 * 60 * 1000).toISOString(),
+    };
+
+    saveDraft(oldDraft, storage);
+
+    expect(loadDraft(storage)).toBeNull();
+    expect(storage.getItem("site-abnt:draft:v3")).toBeNull();
+  });
+
+  it("mantem rascunho local dentro do prazo de retencao", () => {
+    const storage = createStorage();
+    const recentDraft = {
+      ...SAMPLE_DRAFT,
+      updatedAt: new Date(Date.now() - (draftRetentionDays() - 1) * 24 * 60 * 60 * 1000).toISOString(),
+    };
+
+    saveDraft(recentDraft, storage);
+
+    expect(loadDraft(storage)).toEqual(recentDraft);
   });
 });
