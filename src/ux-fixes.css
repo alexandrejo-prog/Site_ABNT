@@ -1,3 +1,12 @@
+.workspace {
+  grid-template-columns: minmax(320px, 400px) minmax(520px, 1fr) minmax(280px, 340px);
+}
+
+.metadata-pane,
+.validation-pane {
+  font-size: 0.92rem;
+}
+
 .import-block .upload-button,
 .upload-button.import-main-action {
   min-height: 44px;
@@ -15,6 +24,8 @@
 }
 
 .import-block {
+  display: grid;
+  gap: 10px;
   margin-bottom: 14px;
   border: 1px solid #9fc8ef;
   border-radius: 10px;
@@ -29,12 +40,18 @@
   gap: 10px;
 }
 
+.import-block h2 {
+  margin: 0;
+  color: #163f36;
+  font-size: 1rem;
+}
+
 .import-block-text,
 .import-caution,
 .imported-file-summary p {
   margin: 0;
-  font-size: 0.82rem;
-  line-height: 1.35;
+  font-size: 0.84rem;
+  line-height: 1.38;
 }
 
 .import-caution {
@@ -46,11 +63,36 @@
 
 .imported-file-summary {
   display: grid;
-  gap: 4px;
+  gap: 7px;
   padding: 10px;
   border-radius: 8px;
   color: #1e3932;
   background: #dff0ea;
+}
+
+.imported-file-name,
+.import-review-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.imported-file-name span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.import-review-warning {
+  padding-top: 6px;
+  border-top: 1px solid rgba(31, 123, 105, 0.18);
+}
+
+.import-remove-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  white-space: nowrap;
 }
 
 .work-type-card {
@@ -61,6 +103,35 @@
   border-radius: 10px;
   padding: 14px;
   background: #ffffff;
+}
+
+.work-type-card label {
+  color: #163f36;
+  font-size: 0.9rem;
+}
+
+.work-type-card select {
+  min-height: 44px;
+  font-weight: 650;
+}
+
+.work-type-hint {
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  background: #f3f8f3;
+  color: #2f3d46;
+}
+
+.work-type-hint.warning {
+  background: #fff0bf;
+  color: #5d4300;
+}
+
+.work-type-hint.success {
+  background: #dff0ea;
+  color: #1e3932;
 }
 
 .section-kicker {
@@ -75,4 +146,21 @@
   color: #ffffff;
   background: rgba(255, 255, 255, 0.14);
   border-color: rgba(255, 255, 255, 0.42);
+}
+
+.validation-pane .post-generation-note {
+  border-left-width: 5px;
+}
+
+.validation-pane .force-generate {
+  width: 100%;
+  align-items: flex-start;
+  padding: 10px;
+  border: 1px solid #e0e5e1;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.rich-editor {
+  font-size: 1.02rem;
 }
