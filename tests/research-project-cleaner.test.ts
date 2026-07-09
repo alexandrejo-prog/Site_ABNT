@@ -17,8 +17,9 @@ describe("saneamento estrutural de Projeto de pesquisa", () => {
 
     expect(normalized).toContain("# INTRODUÇÃO");
     expect(normalized).toContain("# REFERENCIAL TEÓRICO");
-    expect(normalized).toContain("# SUMÁRIO");
     expect(normalized).toContain("UNIVERSIDADE FEDERAL DE LAVRAS, 2025, p. 6-8");
+    expect(normalized).not.toContain("# SUMÁRIO");
+    expect(normalized).not.toContain("SUMRIO");
     expect(normalized).not.toContain("TITLE");
     expect(normalized).not.toContain("Toc234433198");
     expect(normalized).not.toContain("REFERENCIAL TERICO");
