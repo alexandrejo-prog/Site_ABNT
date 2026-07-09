@@ -6,8 +6,8 @@ import { emptyAcademicFields } from "../src/ufla-rules";
 describe("generation blockers", () => {
   const formState = emptyAcademicFields();
 
-  it("placeholder codes are absolute blockers", () => {
-    expect(isAbsoluteGenerationBlocker({ severity: "error", code: "placeholder-detected", message: "" })).toBe(true);
+  it("somente placeholders do editor ou naturais sao bloqueadores absolutos", () => {
+    expect(isAbsoluteGenerationBlocker({ severity: "error", code: "placeholder-detected", message: "" })).toBe(false);
     expect(isAbsoluteGenerationBlocker({ severity: "error", code: "draft-placeholder-detected", message: "" })).toBe(true);
     expect(isAbsoluteGenerationBlocker({ severity: "error", code: "natural-placeholder-detected", message: "" })).toBe(true);
   });
@@ -36,6 +36,7 @@ describe("generation blockers", () => {
     const issues: ValidationIssue[] = [
       { severity: "error", code: "program-conflict", message: "conflito" },
       { severity: "error", code: "impact-indicators-missing", message: "indicadores" },
+      { severity: "error", code: "placeholder-detected", message: "placeholder de campo" },
       { severity: "warning", code: "image-caption-warning", message: "imagem" },
       { severity: "error", code: "natural-placeholder-detected", message: "placeholder" },
     ];
