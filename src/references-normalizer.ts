@@ -33,6 +33,63 @@ function fold(value: string): string {
   return value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 }
 
+function stripTrailingUrlPunctuation(value: string): string {
+  return value.replace(/[.,;:]+$/u, "").trim();
+}
+
+function hasAccessPrefix(value: string): boolean {
+  return /\bdispon[ií]vel\s+em\s*:/iu.test(value);
+}
+
+function normalizeDoi(value: string): string {
+  return value.replace(/\bDOI\s*:\s*(?:https?:\/\/(?:dx\.)?doi\.org\/)?(10\.\d{4,9}\/[^\s<>\]]+)/giu, (_match, rawDoi: string) => {
+    const doi = stripTrailingUrlPunctuation(rawDoi);
+    return `DOI: ${doi}`;
+  });
+}
+
+function normalizeMarkdownLinks(value: string): string {
+  return value.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/giu, (_match, rawLabel: string, rawUrl: string) => {
+    const label = clean(rawLabel);
+    const url = stripTrailingUrlPunctuation(rawUrl);
+    if (!label || /^https?:\/\//iu.test(label) || label === url) return `Disponível em: ${url}`;
+    return `${label}. Disponível em: ${url}`;
+  });
+}
+
+function normalizeBracketedUrls(value: string): string {
+  return value.replace(/<\s*(https?:\/\/[^>\s]+)\s*>/giu, (_match, rawUrl: string) => stripTrailingUrlPunctuation(rawUrl));
+}
+
+function ensureDisponivelEmForRawUrl(value: string): string {
+  if (hasAccessPrefix(value)) return value;
+  return value.replace(/(^|[\s.])((?:https?:\/\/|www\.)[^\s<>\]]+)/iu, (_match, prefix: string, rawUrl: string) => {
+    const url = stripTrailingUrlPunctuation(rawUrl);
+    const suffix = rawUrl.slice(url.length);
+    return `${prefix}Disponível em: ${url}${suffix}`;
+  });
+}
+
+function normalizeAccessLabels(value: string): string {
+  return value
+    .replace(/\bDisponivel\s+em\s*:/giu, "Disponível em:")
+    .replace(/\bAcesso\s+em\s*:/giu, "Acesso em:");
+}
+
+function normalizeReferenceLinks(value: string): string {
+  return clean(
+    ensureDisponivelEmForRawUrl(
+      normalizeAccessLabels(
+        normalizeBracketedUrls(
+          normalizeMarkdownLinks(
+            normalizeDoi(value),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 function isReferenceTitleNoise(value: string): boolean {
   const text = fold(value).replace(/[#*:.\-–—]/g, "").replace(/\s+/g, " ").trim();
   if (!text) return false;
@@ -186,6 +243,7 @@ function detect(value: string): { highlight?: string; confidence: ReferenceConfi
   if (isLegislation(value)) return { highlight: legislationTitle(value), confidence: "media", detectedType: "legislacao" };
   const parsed = splitAuthor(value);
   if (!parsed) {
+    if (/\bhttps?:\/\//iu.test(value)) return { confidence: "baixa", detectedType: "site" };
     if (isInstitutional(value)) return { confidence: "baixa", detectedType: "documento-institucional" };
     return { confidence: "baixa", detectedType: "livro" };
   }
@@ -210,7 +268,7 @@ function applyHighlight(text: string, highlight?: string): ReferenceRun[] {
 export function normalizeReference(reference: string): NormalizedReference {
   const original = clean(reference);
   const manual = parseManual(original);
-  const text = clean(manual.runs.map((run) => run.text).join(""));
+  const text = normalizeReferenceLinks(clean(manual.runs.map((run) => run.text).join("")));
   const warnings: string[] = [];
 
   const uflaManual = normalizeUflaManualReference(text);
@@ -220,7 +278,7 @@ export function normalizeReference(reference: string): NormalizedReference {
   const detected = detect(text);
   if (!detected.highlight && !manual.hasManual) warnings.push("review title");
   const detectedHighlight = manual.highlighted ?? detected.highlight;
-  return { original: reference, text, runs: manual.hasManual ? manual.runs : applyHighlight(text, detected.highlight), confidence: manual.hasManual ? "alta" : detected.confidence, warnings, detectedHighlight, detectedType: detected.detectedType };
+  return { original: reference, text, runs: manual.hasManual ? parseManual(normalizeReferenceLinks(original)).runs : applyHighlight(text, detected.highlight), confidence: manual.hasManual ? "alta" : detected.confidence, warnings, detectedHighlight, detectedType: detected.detectedType };
 }
 
 export function normalizeReferencesText(value: string): NormalizedReference[] {
