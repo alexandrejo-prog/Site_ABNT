@@ -80,6 +80,8 @@ SILVA, M. Projeto de pesquisa. Lavras: UFLA, 2024.
         author: "Maria Silva",
         location: "Lavras - MG",
         year: "2026",
+        resumo: "Resumo do projeto.",
+        abstractText: "Abstract do projeto.",
       };
 
       const issues = validateWork(fields, editorContent);
@@ -118,6 +120,8 @@ SILVA, M. Projeto de pesquisa. Lavras: UFLA, 2024.
         author: "Maria Silva",
         location: "Lavras - MG",
         year: "2026",
+        resumo: "Resumo do projeto.",
+        abstractText: "Abstract do projeto.",
       };
 
       const issues = validateWork(fields, editorContent);
