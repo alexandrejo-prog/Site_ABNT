@@ -18,6 +18,7 @@ export interface NormalizedReference {
   detectedType:
     | "artigo"
     | "livro"
+    | "capitulo"
     | "tese-dissertacao"
     | "documento-institucional"
     | "legislacao"
@@ -76,13 +77,19 @@ function normalizeAccessLabels(value: string): string {
     .replace(/\bAcesso\s+em\s*:/giu, "Acesso em:");
 }
 
+function normalizeAcademicSeparator(value: string): string {
+  return value.replace(/(\b(?:Tese|Dissertaç[aã]o|Monografia|Trabalho de Conclus[aã]o de Curso)\s*\([^)]+\)\s*)-\s*/giu, "$1– ");
+}
+
 function normalizeReferenceLinks(value: string): string {
   return clean(
-    ensureDisponivelEmForRawUrl(
-      normalizeAccessLabels(
-        normalizeBracketedUrls(
-          normalizeMarkdownLinks(
-            normalizeDoi(value),
+    normalizeAcademicSeparator(
+      ensureDisponivelEmForRawUrl(
+        normalizeAccessLabels(
+          normalizeBracketedUrls(
+            normalizeMarkdownLinks(
+              normalizeDoi(value),
+            ),
           ),
         ),
       ),
@@ -145,6 +152,15 @@ function splitAuthor(value: string): { author: string; remainder: string } | und
   return undefined;
 }
 
+function splitInstitutionalAuthor(value: string): { author: string; remainder: string } | undefined {
+  const indexes = sentenceIndexes(value);
+  if (!indexes.length) return undefined;
+  const author = value.slice(0, indexes[0]).trim();
+  const remainder = clean(value.slice(indexes[0] + 1));
+  if (!isInstitutional(author) || remainder.length <= 3) return undefined;
+  return { author, remainder };
+}
+
 function pubInfo(value: string): boolean {
   return /^[\p{Lu}][\p{L}\s.'-]*(?:,\s*\p{Lu}{2})?\s*:\s*.+,\s*(?:19|20)\d{2}/u.test(value);
 }
@@ -158,6 +174,17 @@ function bookTitle(remainder: string): string | undefined {
   return undefined;
 }
 
+function institutionalTitle(value: string): string | undefined {
+  const parsed = splitInstitutionalAuthor(value);
+  if (!parsed) return undefined;
+  const title = bookTitle(parsed.remainder);
+  if (title) return title;
+  const firstSentence = sentenceIndexes(parsed.remainder)[0];
+  if (firstSentence === undefined) return undefined;
+  const candidate = parsed.remainder.slice(0, firstSentence).trim();
+  return candidate.length > 3 ? candidate : undefined;
+}
+
 function articleJournal(remainder: string): string | undefined {
   for (const index of sentenceIndexes(remainder)) {
     const tail = clean(remainder.slice(index + 1));
@@ -167,6 +194,15 @@ function articleJournal(remainder: string): string | undefined {
     if (journal.length > 3 && /,\s*(?:[^,]{2,},\s*)?(?:v|n|p)\.\s*/iu.test(tail)) return journal;
   }
   return undefined;
+}
+
+function chapterBookTitle(remainder: string): string | undefined {
+  const match = remainder.match(/\bIn\s*:\s*/iu);
+  if (!match || match.index === undefined) return undefined;
+  const afterIn = clean(remainder.slice(match.index + match[0].length));
+  const parsedIn = splitAuthor(afterIn);
+  const fromParsed = parsedIn ? bookTitle(parsedIn.remainder) : undefined;
+  return fromParsed ?? bookTitle(afterIn);
 }
 
 function academicTitle(remainder: string): string | undefined {
@@ -244,14 +280,19 @@ function detect(value: string): { highlight?: string; confidence: ReferenceConfi
   const parsed = splitAuthor(value);
   if (!parsed) {
     if (/\bhttps?:\/\//iu.test(value)) return { confidence: "baixa", detectedType: "site" };
-    if (isInstitutional(value)) return { confidence: "baixa", detectedType: "documento-institucional" };
+    if (isInstitutional(value)) {
+      const highlight = institutionalTitle(value);
+      return { highlight, confidence: highlight ? "media" : "baixa", detectedType: "documento-institucional" };
+    }
     return { confidence: "baixa", detectedType: "livro" };
   }
+  const chapter = chapterBookTitle(parsed.remainder);
+  if (chapter) return { highlight: chapter, confidence: "media", detectedType: "capitulo" };
   const article = articleJournal(parsed.remainder);
   if (article) return { highlight: article, confidence: "media", detectedType: "artigo" };
   const academic = academicTitle(parsed.remainder);
   if (academic || /\b(dissertacao|tese|monografia)\b/u.test(fold(value))) return { highlight: academic, confidence: academic ? "media" : "baixa", detectedType: "tese-dissertacao" };
-  if (isInstitutional(value)) return { highlight: bookTitle(parsed.remainder), confidence: "baixa", detectedType: "documento-institucional" };
+  if (isInstitutional(value)) return { highlight: bookTitle(parsed.remainder) ?? institutionalTitle(value), confidence: "baixa", detectedType: "documento-institucional" };
   const book = bookTitle(parsed.remainder);
   if (book) return { highlight: book, confidence: "media", detectedType: "livro" };
   return { confidence: "baixa", detectedType: "desconhecido" };
