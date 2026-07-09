@@ -27,12 +27,50 @@ function renderOptions(types: WorkType[]) {
   ));
 }
 
+function selectionHint(value: WorkTypeValue): { title: string; text: string; tone: "neutral" | "warning" | "success" } {
+  if (value === "dissertacao" || value === "tese") {
+    return {
+      title: "Rascunho editável",
+      text: "Antes da versão final, revise orientador, banca, ficha catalográfica e atualize o sumário no Word ou LibreOffice.",
+      tone: "warning",
+    };
+  }
+  if (value === "monografia") {
+    return {
+      title: "Trabalho longo",
+      text: "Confira orientador, folha de aprovação, ficha catalográfica e sumário antes da entrega final.",
+      tone: "warning",
+    };
+  }
+  if (value === "projeto_pesquisa") {
+    return {
+      title: "Projeto de pesquisa",
+      text: "Este modelo não usa ficha catalográfica nem folha de aprovação. O sumário deve ser atualizado no Word ou LibreOffice.",
+      tone: "success",
+    };
+  }
+  if (value) {
+    return {
+      title: "Modelo selecionado",
+      text: "Confira se o modelo combina com o arquivo importado. O tipo escolhido define a estrutura do DOCX.",
+      tone: "neutral",
+    };
+  }
+  return {
+    title: "Selecione o modelo",
+    text: "Escolha o tipo antes de gerar. Essa decisão define capa, sumário, ficha e seções permitidas.",
+    tone: "neutral",
+  };
+}
+
 export function WorkTypeSelector({ value, onChange }: WorkTypeSelectorProps) {
+  const hint = selectionHint(value);
+
   return (
     <section className="work-type-card" aria-label="Escolha do tipo de trabalho">
       <p className="section-kicker">Etapa 2</p>
       <label htmlFor="work-type">Tipo de trabalho</label>
-      <select id="work-type" value={value} onChange={(event) => onChange(event.target.value as WorkTypeValue)}>
+      <select id="work-type" value={value} aria-describedby="work-type-help" onChange={(event) => onChange(event.target.value as WorkTypeValue)}>
         <option value="">Selecione</option>
         <optgroup label="Trabalhos acadêmicos longos">
           {renderOptions(LONG_FORM_TYPES)}
@@ -50,6 +88,9 @@ export function WorkTypeSelector({ value, onChange }: WorkTypeSelectorProps) {
           {renderOptions(OTHER_TYPES)}
         </optgroup>
       </select>
+      <div id="work-type-help" className={`work-type-hint ${hint.tone}`} role="note">
+        <strong>{hint.title}:</strong> {hint.text}
+      </div>
     </section>
   );
 }
