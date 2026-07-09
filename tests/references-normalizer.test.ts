@@ -52,6 +52,14 @@ describe("references normalizer", () => {
     );
   });
 
+  it("normaliza separador de tese/dissertacao para travessao", () => {
+    const normalized = normalizeReference(
+      "SOUSA, Jennifer Caroline de. A Biologia do Conhecer na Educação: interlocuções com a Pedagogia Libertadora. 2023. 257 p. Tese (Doutorado em Educação) - Faculdade de Educação, Universidade de São Paulo, São Paulo, 2023.",
+    );
+    expect(normalized.text).toContain("Tese (Doutorado em Educação) – Faculdade de Educação");
+    expect(normalized.text).not.toContain("Tese (Doutorado em Educação) - Faculdade de Educação");
+  });
+
   it("detecta artigo e destaca periodico com sigla pontuada", () => {
     expectDetectedBold(
       "TESSARINI JUNIOR, Geraldo; SALTORATO, Patrícia. Organização do trabalho dos servidores técnico-administrativos em uma instituição federal de ensino: uma abordagem sobre carreira, tarefas e relações interpessoais. Cadernos EBAPE.BR, Rio de Janeiro, v. 19, n. esp., p. 811-823, 2021.",
@@ -65,6 +73,14 @@ describe("references normalizer", () => {
       "TOZONI-REIS, Marília Freitas de Campos. Temas ambientais como temas geradores: contribuições para uma metodologia educativa ambiental crítica, transformadora e emancipatória. Educar em Revista, Curitiba, n. 27, p. 93-110, 2006.",
       "artigo",
       "Educar em Revista",
+    );
+  });
+
+  it("detecta capitulo e destaca titulo da obra apos In", () => {
+    expectDetectedBold(
+      "FREIRE, Paulo. Educação e mudança. In: GADOTTI, Moacir. Educação popular e transformação social. São Paulo: Cortez, 2019. p. 10-25.",
+      "capitulo",
+      "Educação popular e transformação social",
     );
   });
 
@@ -89,6 +105,14 @@ describe("references normalizer", () => {
       "BRASIL. Instrução Normativa Conjunta SGP-SRT-SEGES/MGI nº 24, de 28 de julho de 2023. Estabelece orientações a serem observadas pelos órgãos e entidades integrantes do SIPEC e do SIORG relativas à implementação e execução do Programa de Gestão e Desempenho. Brasília, DF, 2023.",
       "legislacao",
       "Instrução Normativa Conjunta SGP-SRT-SEGES/MGI nº 24, de 28 de julho de 2023",
+    );
+  });
+
+  it("detecta documento institucional e destaca titulo apos autor institucional", () => {
+    expectDetectedBold(
+      "UNIVERSIDADE FEDERAL DE LAVRAS. Programa de Pós-Graduação em Educação Científica e Ambiental. Lavras: UFLA, 2026.",
+      "documento-institucional",
+      "Programa de Pós-Graduação em Educação Científica e Ambiental",
     );
   });
 
