@@ -77,6 +77,16 @@ function undergraduateDegree(fields: AcademicFields): string {
   return "";
 }
 
+function normalizeCpgEmailLine(value: string): string {
+  const text = value.trim().replace(/\s+/g, " ");
+  if (!text) return "";
+  const separated = text.replace(/([^\s;,]+@[^\s;,]+)\s+(?=[^\s;,]+@[^\s;,]+)/giu, "$1; ");
+  const parts = separated.split(/\s*[;,]\s*/u).map((part) => part.trim()).filter(Boolean);
+  const emailPattern = /^[^\s@;]+@[^\s@;]+\.[^\s@;]+$/u;
+  if (parts.length > 1 && parts.every((part) => emailPattern.test(part))) return parts.join("; ");
+  return text;
+}
+
 // Não gera prosa falsa/placeholder quando metadados obrigatórios estão ausentes.
 // Retorna string vazia para que a validação sinalize o campo obrigatório.
 function natureForSelectedModel(fields: AcademicFields): string {
@@ -142,6 +152,7 @@ function sanitizeArticleFields(fields: AcademicFields): AcademicFields {
 function sanitizeCpgFields(fields: AcademicFields): AcademicFields {
   return {
     ...fields,
+    course: normalizeCpgEmailLine(fields.course),
     workNature: "",
     dedicatoria: "",
     epigrafe: "",
