@@ -228,4 +228,32 @@ describe("validação normativa", () => {
       }
     }
   });
+
+  it("projeto de pesquisa sem resumo bloqueia geracao", () => {
+    const issues = validateWork(baseFields({ workType: "projeto_pesquisa", resumo: "" }));
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "error", code: "resumo-required" }),
+    );
+  });
+
+  it("projeto de pesquisa sem abstract bloqueia geracao", () => {
+    const issues = validateWork(baseFields({ workType: "projeto_pesquisa", abstractText: "" }));
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "error", code: "abstract-recommended" }),
+    );
+  });
+
+  it("projeto de pesquisa sem referencias bloqueia geracao", () => {
+    const issues = validateWork(baseFields({ workType: "projeto_pesquisa", referencias: "" }), "# INTRODUÇÃO\nTexto.");
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "error", code: "research-references-required" }),
+    );
+  });
+
+  it("projeto de pesquisa alerta sobre atualizacao do sumario", () => {
+    const issues = validateWork(baseFields({ workType: "projeto_pesquisa" }), "# INTRODUÇÃO\nTexto.");
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "info", code: "research-toc-update" }),
+    );
+  });
 });

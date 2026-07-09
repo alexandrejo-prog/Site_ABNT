@@ -237,6 +237,18 @@ export default function App() {
     });
   }
 
+function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: string): boolean {
+  if (currentWorkType !== "projeto_pesquisa") return false;
+  const lower = fileName.toLowerCase();
+  return [
+    "desenvolvimento-de-software",
+    "artigo",
+    "monografia",
+    "tese",
+    "dissertacao",
+  ].some((keyword) => lower.includes(keyword));
+}
+
   async function handleImport(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -249,6 +261,7 @@ export default function App() {
       }
       clearDraft(window.localStorage);
       setHasStoredDraft(false);
+      const previousWorkType = fields.workType;
       replaceFieldsWithImportedDocument(result.fields, result.confidence);
       setImportedFileName(file.name);
       setEditorMode("body");
@@ -259,7 +272,9 @@ export default function App() {
       if (editorRef.current) editorRef.current.innerHTML = editorMarkupToHtml(newEditorText);
       lastAppliedEditorTextRef.current = newEditorText;
       editorContentVersionRef.current += 1;
-      setStatus(result.messages.length ? `Arquivo importado com ${result.messages.length} aviso(s). Metadados anteriores foram substituídos.` : "Arquivo importado. Metadados anteriores foram substituídos; revise os campos antes de gerar.");
+      const importWarnings = result.messages.length ? `Arquivo importado com ${result.messages.length} aviso(s). Metadados anteriores foram substituídos.` : "Arquivo importado. Metadados anteriores foram substituídos; revise os campos antes de gerar.";
+      const fileNameConflict = importedFileNameSuggestsOtherType(file.name, previousWorkType) ? " O tipo atual é Projeto de pesquisa. O nome do arquivo importado não será usado para alterar o modelo." : "";
+      setStatus(importWarnings + fileNameConflict);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Falha ao importar.");
     } finally {

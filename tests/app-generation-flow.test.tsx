@@ -242,4 +242,58 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     const button = getButtonByText(/Gerar DOCX/);
     expect(button.disabled).toBe(false);
   });
+
+  it("projeto de pesquisa sem resumo impede a geracao", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "projeto_pesquisa");
+    fireEvent.change(getTitleInput(), { target: { value: "Título de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "Educação Científica e Ambiental" } });
+    fireEvent.click(getButtonByText(/Gerar DOCX/));
+    expect(saveAsMock).not.toHaveBeenCalled();
+  });
+
+  it("projeto de pesquisa sem abstract impede a geracao", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "projeto_pesquisa");
+    fireEvent.change(getTitleInput(), { target: { value: "Título de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "Educação Científica e Ambiental" } });
+    fireEvent.change(screen.getByLabelText("Resumo"), { target: { value: "Resumo do trabalho." } });
+    fireEvent.click(getButtonByText(/Gerar DOCX/));
+    expect(saveAsMock).not.toHaveBeenCalled();
+  });
+
+  it("importa arquivo com nome de outro tipo quando projeto_pesquisa esta selecionado e avisa", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "projeto_pesquisa");
+    fireEvent.change(getTitleInput(), { target: { value: "Título de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+
+    importDocumentFileMock.mockResolvedValue({
+      text: "Texto importado.",
+      editorText: "# 1 Introdução\nTexto importado.",
+      fields: {
+        ...emptyAcademicFields(),
+        workType: "projeto_pesquisa",
+        title: "Título importado",
+        author: "Maria Silva",
+        resumo: "Resumo importado.",
+        abstractText: "Abstract importado.",
+        referencias: "SILVA, M. Texto. Lavras: UFLA, 2024.",
+      },
+      confidence: emptyConfidenceMap(),
+      messages: [],
+      blocks: [],
+    });
+
+    const file = new File(["docx"], "desenvolvimento-de-software-ufla.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    await user.upload(screen.getByLabelText("Importar"), file);
+    await screen.findByText(/O tipo atual é Projeto de pesquisa. O nome do arquivo importado não será usado para alterar o modelo./);
+  });
 });

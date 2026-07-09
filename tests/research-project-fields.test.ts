@@ -47,6 +47,8 @@ describe("Campos específicos de Projeto de pesquisa", () => {
         workType: "projeto_pesquisa" as const,
         title: "Título do Projeto",
         author: "Autor",
+        resumo: "Resumo do projeto.",
+        abstractText: "Abstract do projeto.",
         tema: "Tema da pesquisa",
         problemaPesquisa: "Problema investigado",
         objetivoGeral: "Objetivo geral da pesquisa",

@@ -38,6 +38,8 @@ SOUZA, J. Pesquisa aplicada. São Paulo: Editora, 2023.
       author: "Maria Silva",
       location: "Lavras - MG",
       year: "2026",
+      resumo: "Resumo do projeto.",
+      abstractText: "Abstract do projeto.",
     };
 
     const issues = validateWork(fields, normalized.text);
