@@ -1,0 +1,78 @@
+.import-block .upload-button,
+.upload-button.import-main-action {
+  min-height: 44px;
+  width: 100%;
+  justify-content: center;
+  color: #ffffff;
+  background: #1f7b69;
+  border-color: #1f7b69;
+}
+
+.import-block .upload-button:hover,
+.upload-button.import-main-action:hover {
+  background: #176554;
+  border-color: #176554;
+}
+
+.import-block {
+  margin-bottom: 14px;
+  border: 1px solid #9fc8ef;
+  border-radius: 10px;
+  padding: 14px;
+  background: #edf6ff;
+}
+
+.import-block-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.import-block-text,
+.import-caution,
+.imported-file-summary p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.import-caution {
+  padding: 9px 10px;
+  border-radius: 6px;
+  color: #5d4300;
+  background: #fff0bf;
+}
+
+.imported-file-summary {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 8px;
+  color: #1e3932;
+  background: #dff0ea;
+}
+
+.work-type-card {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  border: 1px solid #d7dfd8;
+  border-radius: 10px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.section-kicker {
+  margin: 0 0 3px;
+  color: #1f7b69;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.header-actions .primary-action:not(.strong) {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.42);
+}

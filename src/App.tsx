@@ -434,7 +434,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       <a href="#workspace" className="skip-link">Pular para o conteúdo</a>
       <main id="workspace" className="workspace">
         <section className="metadata-pane" aria-label="Campos acadêmicos">
-          <ImportBlock onImport={handleImport} onRemove={handleRemoveImport} importedFileName={importedFileName} />
+          <ImportBlock onImport={handleImport} onRemove={handleRemoveImport} importedFileName={importedFileName} workType={fields.workType} />
           <div className="work-type-section">
             <WorkTypeSelector value={fields.workType} onChange={updateWorkType} />
           </div>

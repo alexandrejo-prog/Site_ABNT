@@ -1,5 +1,6 @@
 import type { DocxGenerationInput } from "./export-docx";
 import { isCpgWork, isResearchProject, type WorkTypeValue } from "./ufla-rules";
+import { isLongFormAcademicWork } from "./graduate-draft-guidance";
 import { normalizeWorkType } from "./work-type-resolver";
 
 export interface DocumentTemplate {
@@ -15,11 +16,21 @@ export const generalTemplate: DocumentTemplate = {
   // Decisão conservadora da auditoria P4: artigo_cientifico_ufla permanece no modelo geral; ele é item da Coleção Produção Acadêmica UFLA, não o Artigo acadêmico simples da UI.
   supports: (workType) => {
     const normalizedWorkType = normalizeWorkType(workType);
-    return !normalizedWorkType || (!isCpgWork(normalizedWorkType as WorkTypeValue) && !isResearchProject(normalizedWorkType as WorkTypeValue) && normalizedWorkType !== "artigo");
+    return !normalizedWorkType || (!isCpgWork(normalizedWorkType as WorkTypeValue) && !isResearchProject(normalizedWorkType as WorkTypeValue) && !isLongFormAcademicWork(normalizedWorkType) && normalizedWorkType !== "artigo");
   },
   async generate(input) {
     const { generateDocxBlob } = await import("./export-docx");
     return generateDocxBlob(input);
+  },
+};
+
+export const graduateEditableDraftTemplate: DocumentTemplate = {
+  id: "rascunho-longo-editavel",
+  label: "Rascunho editável de monografia, dissertação e tese",
+  supports: (workType) => isLongFormAcademicWork(normalizeWorkType(workType)),
+  async generate(input) {
+    const { generateGraduateEditableDraftDocxBlob } = await import("./export-graduate-editable-draft-docx");
+    return generateGraduateEditableDraftDocxBlob(input);
   },
 };
 
@@ -57,6 +68,7 @@ export const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
   articleTemplate,
   cpgTemplate,
   researchProjectTemplate,
+  graduateEditableDraftTemplate,
   generalTemplate,
 ];
 
