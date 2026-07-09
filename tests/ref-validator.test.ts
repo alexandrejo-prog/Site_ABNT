@@ -26,9 +26,9 @@ describe("ref validator", () => {
     )).toContain("reference-legal-publisher-missing");
   });
 
-  it("alerta documento institucional sem editora ou orgao responsavel", () => {
+  it("alerta documento institucional nao normativo sem editora ou orgao responsavel", () => {
     expect(codesFor(
-      "UNIVERSIDADE FEDERAL DE LAVRAS. Conselho Universitário. Resolução CUNI nº 074, de 23 de novembro de 2017. Lavras, MG, 2017.",
+      "UNIVERSIDADE FEDERAL DE LAVRAS. Política de Saúde Mental. Lavras, MG, 2024.",
     )).toContain("reference-institutional-publisher-missing");
   });
 
