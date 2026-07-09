@@ -81,6 +81,17 @@ function splitParagraphs(value: string): string[] {
   return coreSplitParagraphs(normalizeProjectBodyText(value));
 }
 
+function preTextualParagraphs(value: string): string[] {
+  const cleaned = cleanMojibakeText(value).replace(/\r\n?/g, "\n").trim();
+  if (!cleaned) return [];
+
+  return cleaned
+    .split(/\n{2,}/)
+    .map((item) => item.split(/\n+/).map((line) => line.trim()).filter(Boolean).join(" "))
+    .map((item) => item.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
 function coverChildren(input: DocxGenerationInput): Paragraph[] {
   const { fields, logo } = input;
   return [
@@ -156,11 +167,11 @@ function preTextualChildren(fields: DocxGenerationInput["fields"], summaryEntrie
   return [
     pageBreak(),
     unnumberedTitle("Resumo"),
-    ...coreSplitParagraphs(cleanMojibakeText(fields.resumo)).map((line) => paragraph(line)),
+    ...preTextualParagraphs(fields.resumo).map((line) => paragraph(line)),
     ...(palavrasChave ? [paragraph(`Palavras-chave: ${palavrasChave}`)] : []),
     pageBreak(),
     unnumberedTitle("Abstract"),
-    ...coreSplitParagraphs(cleanMojibakeText(fields.abstractText)).map((line) => paragraph(line)),
+    ...preTextualParagraphs(fields.abstractText).map((line) => paragraph(line)),
     ...(keywords ? [paragraph(`Keywords: ${keywords}`)] : []),
     pageBreak(),
     unnumberedTitle("Sumário"),
