@@ -136,9 +136,14 @@ function sanitizeAdvisorFields(fields: AcademicFields): AcademicFields {
   };
 }
 
+function removeCourseField(fields: AcademicFields): AcademicFields {
+  return { ...fields, course: "" };
+}
+
 function sanitizeArticleFields(fields: AcademicFields): AcademicFields {
   return {
     ...fields,
+    course: "",
     title: hasText(fields.title) ? fields.title : "Artigo acadêmico sem título detectado",
     workNature: "",
     dedicatoria: "",
@@ -183,7 +188,8 @@ export function normalizeFieldsForSelectedModel(fields: AcademicFields): Academi
     normalizedFields.workType === "dissertacao" ||
     normalizedFields.workType === "tese"
   ) {
-    const sanitized = sanitizeAdvisorFields(normalizedFields);
+    const sanitizedAdvisor = sanitizeAdvisorFields(normalizedFields);
+    const sanitized = normalizedFields.workType === "monografia" ? sanitizedAdvisor : removeCourseField(sanitizedAdvisor);
     const workNature = isGenericOrMismatchedNature(sanitized.workNature, sanitized.workType)
       ? natureForSelectedModel(sanitized)
       : sanitized.workNature;
@@ -195,7 +201,7 @@ export function normalizeFieldsForSelectedModel(fields: AcademicFields): Academi
   }
 
   if (isUflaCollectionWork(normalizedFields.workType)) {
-    const sanitized = sanitizeAdvisorFields(normalizedFields);
+    const sanitized = removeCourseField(sanitizeAdvisorFields(normalizedFields));
     if (!hasText(sanitized.workNature) || isGenericOrMismatchedNature(sanitized.workNature, sanitized.workType)) {
       return {
         ...sanitized,
