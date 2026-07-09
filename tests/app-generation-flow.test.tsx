@@ -121,7 +121,7 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     const file = new File(["docx"], "documento_ideal_teste_tipos_trabalho_ufla_abnt.docx", {
       type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     });
-    await user.upload(screen.getByLabelText("Importar"), file);
+    await user.upload(screen.getByLabelText("Importar arquivo"), file);
     await screen.findByText(/Metadados anteriores foram substituídos/);
 
     await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "tese");
@@ -293,7 +293,46 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     const file = new File(["docx"], "desenvolvimento-de-software-ufla.docx", {
       type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     });
-    await user.upload(screen.getByLabelText("Importar"), file);
+    await user.upload(screen.getByLabelText("Importar arquivo"), file);
     await screen.findByText(/O tipo atual é Projeto de pesquisa. O nome do arquivo importado não será usado para alterar o modelo./);
+  });
+
+  it("mostra aviso de rascunho editável para dissertação", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "dissertacao");
+    expect(screen.getByText(/Use este modelo para rascunho editável/)).toBeInTheDocument();
+  });
+
+  it("mostra aviso de rascunho editável para tese", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "tese");
+    expect(screen.getByText(/Use este modelo para rascunho editável/)).toBeInTheDocument();
+  });
+
+  it("mensagem pós-geração orienta atualizar sumário no Word/LibreOffice quando há pendências", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "dissertacao");
+    fireEvent.change(getTitleInput(), { target: { value: "Título de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "ECA" } });
+    fireEvent.change(screen.getByLabelText("Orientador"), { target: { value: "[nome do orientador]" } });
+    fireEvent.click(getGenerateAnywayCheckbox());
+    await user.click(getButtonByText(/Gerar DOCX/));
+    await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(/Rascunho gerado. Abra no Word\/LibreOffice/)).toBeInTheDocument();
+  });
+
+  it("mensagem pós-geração menciona sumário vazio esperado quando não há pendências", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
+    fireEvent.change(getTitleInput(), { target: { value: "Título de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    await user.click(getButtonByText(/Gerar DOCX/));
+    await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(/DOCX gerado. Se o sumário aparecer vazio/)).toBeInTheDocument();
   });
 });

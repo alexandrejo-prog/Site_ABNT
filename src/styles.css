@@ -794,6 +794,104 @@ button:focus-visible,
   cursor: pointer;
 }
 
+.import-block {
+  margin-bottom: 14px;
+  padding: 12px;
+  background: #eef4fc;
+  border: 1px solid #bcd3ef;
+  border-radius: 8px;
+}
+
+.import-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.import-header h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.import-header p {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: #34495e;
+}
+
+.import-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.import-file-name {
+  font-size: 0.85rem;
+  font-weight: 750;
+  color: #1f2933;
+}
+
+.import-note {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: #34495e;
+}
+
+.import-disclaimer {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: #5d4300;
+  background: #fff0bf;
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.work-type-selector {
+  margin-bottom: 14px;
+}
+
+.work-type-label {
+  display: block;
+  margin-bottom: 6px;
+  color: #2f3d46;
+  font-size: 0.86rem;
+  font-weight: 750;
+}
+
+.work-type-select {
+  margin-bottom: 8px;
+}
+
+.work-type-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #5d4300;
+}
+
+.work-type-warning {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: #703318;
+  background: #fff0bf;
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.work-type-info {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: #1e3932;
+  background: #e7f2ee;
+  border-left: 3px solid #1f7b69;
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .adherence-chevron {
     transition: none;

@@ -1,6 +1,7 @@
 import { AcademicFields } from "../ufla-rules";
 import { TextDiagnosticPanel } from "../text-diagnostic-panel";
 import { type ValidationIssue } from "../validators";
+import { type FinalVersionPendingReport } from "../final-version-pending";
 
 interface ValidationSidebarProps {
   status: string;
@@ -10,6 +11,7 @@ interface ValidationSidebarProps {
   editorText: string;
   errors: ValidationIssue[];
   warnings: ValidationIssue[];
+  finalPending?: FinalVersionPendingReport;
 }
 
 export function ValidationSidebar({
@@ -20,12 +22,16 @@ export function ValidationSidebar({
   editorText,
   errors,
   warnings,
+  finalPending,
 }: ValidationSidebarProps) {
+  const showFinalPending =
+    !!finalPending && finalPending.hasPendingItems && (fields.workType === "dissertacao" || fields.workType === "tese");
+
   return (
     <aside className="validation-pane" aria-label="Validação">
       <div className="status-line" aria-live="polite">{status}</div>
       <div className="post-generation-note">
-        <strong>Após gerar o DOCX:</strong> o arquivo é um rascunho editável. Abra no Word ou LibreOffice, atualize campos dinâmicos e o sumário (tecle F9), confira paginação e exporte para PDF para submissão.
+        <strong>Após gerar o DOCX:</strong> o arquivo é um rascunho editável. Erros essenciais impedem a geração. Alertas não impedem. Pendências de versão final permitem rascunho, mas impedem submissão final. Abra no Word ou LibreOffice, atualize campos dinâmicos e o sumário (tecle F9), confira paginação e exporte para PDF para submissão.
         <ul className="conformance-report">
           <li>Pontos que ainda exigem revisão manual</li>
           <li>Alertas de referências</li>
@@ -33,6 +39,17 @@ export function ValidationSidebar({
           <li>Alertas de coerência textual</li>
         </ul>
       </div>
+      {showFinalPending && (
+        <div className="issue-list" aria-label="Pendencias de versao final">
+          <h2>Pendencias de versao final</h2>
+          <p className="field-note">Este DOCX e um rascunho editavel. Antes da versao final, substitua orientador, banca, ficha catalografica provisoria e atualize o sumario no Word/LibreOffice.</p>
+          <ul>
+            {finalPending.items.map((item, index) => (
+              <li key={index}><strong>{item.label}:</strong> {item.description}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <label className="force-generate">
         <input type="checkbox" checked={generateAnyway} onChange={(event) => onToggleGenerateAnyway(event.target.checked)} />
         <span>Gerar rascunho mesmo com pendências</span>

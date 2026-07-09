@@ -1,8 +1,7 @@
-import { ChangeEvent, ClipboardEvent as ReactClipboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ClipboardEvent as ReactClipboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { saveAs } from "file-saver";
-import { Bold, Eraser, FileCheck2, FileDown, Heading1, Heading2, Italic, Pilcrow, Quote, Upload, XCircle } from "lucide-react";
-import { importDocumentFile } from "./import-docx";
-import { ACADEMIC_FIELD_KEYS, AcademicFieldKey, type AcademicFields, CONFIDENCE_LABELS, Confidence, WORK_TYPE_LABELS, WORK_TYPES, emptyAcademicFields, emptyConfidenceMap, isCpgWork, isResearchProject, isUflaCollectionWork } from "./ufla-rules";
+import { Bold, Eraser, FileCheck2, FileDown, Heading1, Heading2, Italic, Pilcrow, Quote } from "lucide-react";
+import { ACADEMIC_FIELD_KEYS, AcademicFieldKey, type AcademicFields, CONFIDENCE_LABELS, Confidence, emptyAcademicFields, emptyConfidenceMap, isCpgWork, isResearchProject, isUflaCollectionWork } from "./ufla-rules";
 import { ValidationIssue, hasBlockingErrors, validateWork } from "./validators";
 import { isAbsoluteGenerationBlocker, isNonOverridableError } from "./generation-blockers";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
@@ -16,10 +15,13 @@ import { buildDraftFromFields, hasUnfilledPlaceholders, draftWorkTypeSupportsInd
 import { editorCommandAdapter } from "./editor-command-adapter";
 import { installEditorScrollFix } from "./editor-scroll-fix";
 import { clearDraft, hasDraft, loadDraft, saveDraft } from "./draft-storage";
+import { finalVersionPendingReport } from "./final-version-pending";
 import { AdherencePanel } from "./components/AdherencePanel";
 import { ValidationSidebar } from "./components/ValidationSidebar";
 import { DraftStatus } from "./components/DraftStatus";
 import { ToolButton } from "./components/ToolButton";
+import { ImportBlock } from "./components/ImportBlock";
+import { WorkTypeSelector } from "./components/WorkTypeSelector";
 
 const FIELD_LABELS: Record<AcademicFieldKey, string> = {
   author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho", course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador", location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave", abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão", referencias: "Referências", anexos: "Anexos", apendices: "Apêndices", dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators", imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema", problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese", objetivoGeral: "Objetivo Geral", objetivosEspecificos: "Objetivos Específicos", justificativa: "Justificativa", referencialTeorico: "Referencial Teórico", metodologia: "Metodologia", cronograma: "Cronograma", recursosOrcamento: "Recursos/Orçamento", resultadosEsperados: "Resultados Esperados", corpusDados: "Corpus/Dados", contextoInstitucional: "Contexto Institucional", conclusaoProvisoria: "Conclusão Provisória", contribuicoesImpactos: "Contribuições/Impactos", impactoSocial: "Impacto social", impactoCientifico: "Impacto científico", impactoEducacional: "Impacto educacional", impactoAmbiental: "Impacto ambiental", impactoTecnologico: "Impacto tecnológico/econômico", publicoBeneficiado: "Público beneficiado", aderenciaOds: "Aderência a ODS/política institucional",
@@ -123,6 +125,7 @@ export default function App() {
   const isCpgSelected = isCpgWork(fields.workType);
   const selectedUflaProductionType = isUflaCollectionWork(fields.workType) ? academicProductionTypeById(fields.workType) : undefined;
   const activeEditorText = editorMode === "references" ? fields.referencias : editorText;
+  const finalPending = useMemo(() => finalVersionPendingReport(fields, activeEditorText), [fields, activeEditorText]);
 
   useEffect(() => installEditorScrollFix(), []);
 
@@ -249,12 +252,15 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
   ].some((keyword) => lower.includes(keyword));
 }
 
-  async function handleImport(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  async function handleImport(result: {
+    fields: ReturnType<typeof emptyAcademicFields>;
+    confidence: ReturnType<typeof emptyConfidenceMap>;
+    editorText: string;
+    messages: string[];
+    fileName: string;
+  }) {
     try {
       setStatus("Importando arquivo...");
-      const result = await importDocumentFile(file);
       if (autosaveTimeoutRef.current) {
         clearTimeout(autosaveTimeoutRef.current);
         autosaveTimeoutRef.current = null;
@@ -263,22 +269,20 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       setHasStoredDraft(false);
       const previousWorkType = fields.workType;
       replaceFieldsWithImportedDocument(result.fields, result.confidence);
-      setImportedFileName(file.name);
+      setImportedFileName(result.fileName);
       setEditorMode("body");
       setIssues([]);
       setGenerateAnyway(false);
-      const newEditorText = result.editorText || result.fields.introducao || result.text;
+      const newEditorText = result.editorText || result.fields.introducao;
       setEditorText(newEditorText);
       if (editorRef.current) editorRef.current.innerHTML = editorMarkupToHtml(newEditorText);
       lastAppliedEditorTextRef.current = newEditorText;
       editorContentVersionRef.current += 1;
       const importWarnings = result.messages.length ? `Arquivo importado com ${result.messages.length} aviso(s). Metadados anteriores foram substituídos.` : "Arquivo importado. Metadados anteriores foram substituídos; revise os campos antes de gerar.";
-      const fileNameConflict = importedFileNameSuggestsOtherType(file.name, previousWorkType) ? " O tipo atual é Projeto de pesquisa. O nome do arquivo importado não será usado para alterar o modelo." : "";
+      const fileNameConflict = importedFileNameSuggestsOtherType(result.fileName, previousWorkType) ? " O tipo atual é Projeto de pesquisa. O nome do arquivo importado não será usado para alterar o modelo." : "";
       setStatus(importWarnings + fileNameConflict);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Falha ao importar.");
-    } finally {
-      event.target.value = "";
     }
   }
 
@@ -401,7 +405,12 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       setStatus("Gerando DOCX...");
       const blob = await templateForWorkType(generationFields.workType).generate({ fields: generationFields, editorText });
       saveAs(blob, buildDownloadFileName({ workType: generationFields.workType, title: generationFields.title, importedFileName }));
-      setStatus(generateAnyway ? "Documento gerado como rascunho com pendências críticas. Revise o DOCX no Word/LibreOffice antes da submissão." : "DOCX gerado como rascunho editável. Confira o arquivo no Word/LibreOffice antes da submissão.");
+      const pending = finalVersionPendingReport(generationFields, activeEditorText);
+      setStatus(
+        generateAnyway || pending.hasPendingItems
+          ? "Rascunho gerado. Abra no Word/LibreOffice, atualize o sumário e substitua campos provisórios antes da submissão."
+          : "DOCX gerado. Se o sumário aparecer vazio, atualize os campos no Word/LibreOffice. Isso é esperado.",
+      );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Falha ao gerar DOCX.");
     } finally {
@@ -414,11 +423,9 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       <header className="app-header">
         <div><p className="eyebrow">Ferramenta de apoio UFLA/ABNT</p><h1>Assistente de estruturação e pré-normalização UFLA/ABNT</h1></div>
         <div className="header-actions">
-          <label className="upload-button"><Upload size={18} aria-hidden="true" />Importar<input type="file" accept=".docx,.txt,.md" onChange={handleImport} /></label>
-          {importedFileName && <button className="primary-action" type="button" onClick={handleRemoveImport} title={`Remover importação: ${importedFileName}`}><XCircle size={18} aria-hidden="true" />Remover importação</button>}
           <DraftStatus draftStatus={draftStatus} hasDraft={hasStoredDraft} onClearDraft={handleClearDraft} />
           <button className="primary-action" type="button" onClick={() => runValidation()}><FileCheck2 size={18} aria-hidden="true" />Validar trabalho</button>
-          <button className="primary-action strong" type="button" onClick={handleGenerateDocx} disabled={isGenerating}><FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar DOCX"}</button>
+          <button className="primary-action strong" type="button" onClick={handleGenerateDocx} disabled={isGenerating}><FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar DOCX editável"}</button>
         </div>
       </header>
 
@@ -427,9 +434,13 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       <a href="#workspace" className="skip-link">Pular para o conteúdo</a>
       <main id="workspace" className="workspace">
         <section className="metadata-pane" aria-label="Campos acadêmicos">
+          <ImportBlock onImport={handleImport} onRemove={handleRemoveImport} importedFileName={importedFileName} />
+          <div className="work-type-section">
+            <WorkTypeSelector value={fields.workType} onChange={updateWorkType} />
+          </div>
           <div className="assisted-panel">
             <div className="assisted-header-row">
-              <h2>Elaborar texto acadêmico assistido</h2>
+              <h2>Preencher campos</h2>
               <label className="assisted-toggle"><input type="checkbox" checked={assistedMode} onChange={(event) => setAssistedMode(event.target.checked)} /><span>Mostrar campos guiados</span></label>
             </div>
             <p className="assisted-note">Preencha os campos abaixo e use <strong>Montar rascunho</strong> para gerar a estrutura no editor. Campos vazios viram marcadores [PREENCHER: ...]; o sistema não inventa conteúdo.</p>
@@ -438,9 +449,9 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
               {confirmReplaceDraft && <button className="secondary-action" type="button" onClick={() => setConfirmReplaceDraft(false)}>Cancelar</button>}
             </div>
           </div>
-          <div className="field-group"><label htmlFor="work-type">Tipo de trabalho</label><select id="work-type" value={fields.workType} onChange={(event) => updateWorkType(event.target.value as typeof fields.workType)}><option value="">Selecione</option>{WORK_TYPES.map((type) => <option key={type} value={type}>{WORK_TYPE_LABELS[type]}</option>)}</select></div>
           {fields.workType === "artigo" && <div className="mode-panel"><h2>Artigo acadêmico simples</h2><p>Modelo sem capa, folha de rosto, ficha catalográfica, folha de aprovação, indicadores de impacto e sumário.</p></div>}
           {isCpgSelected && <div className="mode-panel"><h2>Modo CPG/UFLA selecionado</h2><p>Este modelo segue template CPG/UFLA. Seções incompatíveis importadas serão removidas automaticamente do DOCX e da validação do rascunho.</p><p><strong>Saída do sistema:</strong> gere o DOCX e, se precisar de PDF, exporte por um editor de texto externo.</p></div>}
+          {(fields.workType === "dissertacao" || fields.workType === "tese") && <div className="mode-panel"><h2>Dissertação/Tese</h2><p>O sumário do DOCX é um campo atualizável. Após abrir no Word ou LibreOffice, atualize os campos para preencher o sumário com a paginação real. No Word: Ctrl+A e F9, depois escolha &ldquo;Atualizar o índice inteiro&rdquo;. No LibreOffice: Ferramentas &gt; Atualizar &gt; Atualizar tudo.</p></div>}
           {isResearchProject(fields.workType) && <div className="mode-panel"><h2>Estrutura do Projeto de Pesquisa</h2><p>Campos específicos para estrutura de projeto de pesquisa conforme ABNT NBR 15287:2025.</p><p className="toc-update-note">Após abrir o DOCX no Word ou LibreOffice, atualize os campos do documento para preencher o sumário com a paginação real. No Word: Ctrl+A e F9, depois escolha &ldquo;Atualizar o índice inteiro&rdquo;. No LibreOffice: Ferramentas &gt; Atualizar &gt; Atualizar tudo.</p></div>}
           {selectedUflaProductionType && <div className="mode-panel"><h2>{selectedUflaProductionType.label}</h2><p>{ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE}</p><p><strong>Saída do sistema:</strong> DOCX editável; o PDF final deve ser exportado no Word ou LibreOffice.</p></div>}
           {ACADEMIC_FIELD_KEYS.map((key) => (visibleField(key, fields.workType) || (assistedMode && ASSISTED_FIELD_KEYS.includes(key))) ? <div className="field-group" key={key}><div className="label-row"><label htmlFor={key}>{key === "course" ? courseFieldLabel(fields.workType) : FIELD_LABELS[key]}</label><span className={`confidence confidence-${confidence[key]}`}>{CONFIDENCE_LABELS[confidence[key]]}</span></div>{LONG_FIELDS.has(key) ? <textarea id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} rows={rowsForField(key)} /> : key === "program" && ["dissertacao", "tese", "projeto_pesquisa"].includes(fields.workType) ? <input id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} list="ufla-ppg-programs" /> : <input id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} />}{key === "referencias" && <div className="field-note"><p>Para editar com mais espaço, use o botão <strong>Referências</strong> no painel central.</p><p>Use uma referência por linha. Para destacar manualmente, selecione o trecho e clique em Negrito ou Itálico.</p></div>}</div> : null)}
@@ -479,6 +490,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
           editorText={editorText}
           errors={errors}
           warnings={warnings}
+          finalPending={finalPending}
         />
       </main>
     </div>
