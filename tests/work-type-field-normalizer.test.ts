@@ -97,6 +97,29 @@ describe("normalizacao de campos por modelo selecionado", () => {
     expect(fields.course).toBe("Licenciatura em Física, modalidade presencial");
   });
 
+  it("preserva curso apenas em monografia academica", () => {
+    const fields = normalizeFieldsForSelectedModel({
+      ...emptyAcademicFields(),
+      workType: "monografia",
+      course: "Licenciatura em Física",
+    });
+
+    expect(fields.course).toBe("Licenciatura em Física");
+  });
+
+  it("remove curso de artigo, projeto, dissertacao, tese e colecao ufla", () => {
+    for (const workType of ["artigo", "projeto_pesquisa", "dissertacao", "tese", "software_aplicativo_ufla"] as const) {
+      const fields = normalizeFieldsForSelectedModel({
+        ...emptyAcademicFields(),
+        workType,
+        program: "Administração",
+        course: "Bacharelado em Administração Pública",
+      });
+
+      expect(fields.course).toBe("");
+    }
+  });
+
   it("nao usa texto interno da Colecao UFLA como natureza", () => {
     const fields = normalizeFieldsForSelectedModel({
       ...emptyAcademicFields(),
