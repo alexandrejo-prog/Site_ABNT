@@ -476,7 +476,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
         <section className="editor-pane" aria-label="Editor do texto">
           <div className="editor-toolbar-sticky">
             <div className="word-ribbon-tabs" aria-label="Abas da faixa">
-              <button className="word-ribbon-tab active" type="button">Página Início</button>
+              <button className="word-ribbon-tab active" type="button">Página Inicial</button>
             </div>
             <div className="toolbar" aria-label="Modo de edição"><button className={`text-button ${editorMode === "body" ? "active" : ""}`} type="button" onClick={() => setEditorMode("body")}>Texto</button><button className={`text-button ${editorMode === "references" ? "active" : ""}`} type="button" onClick={() => setEditorMode("references")}>Referências</button></div>
             <div className="toolbar word-ribbon" aria-label="Faixa de formatação do editor">
@@ -505,7 +505,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                   <ToolButton title="Título 1" glyph="T1" onClick={() => applyBlockStyle("# ")} />
                   <ToolButton title="Título 2" glyph="T2" onClick={() => applyBlockStyle("## ")} />
                   <ToolButton title="Citação longa" glyph="❝" onClick={() => applyBlockStyle("> ")} />
-                  <ToolButton title="Referência" glyph="REF" onClick={() => applyBlockStyle("[REF] ")} />
+                  <ToolButton title="Marcar como referência bibliográfica. Marca o parágrafo como referência bibliográfica para a seção REFERÊNCIAS do DOCX." glyph="Ref. ABNT" className="tool-reference" onClick={() => applyBlockStyle("[REF] ")} />
                 </div>
                 <span className="word-tool-group-label">Estrutura</span>
               </div>
@@ -534,7 +534,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
               </div>
             </div>
             <EditorRuler onCommand={handleRichEditorInput} />
-            <p id={EDITOR_DESCRIPTION_ID} className="field-note editor-mode-note">Editor acadêmico: selecione o texto e use a faixa de formatação para aplicar títulos, negrito, alinhamento, recuos e espaçamento.</p>
+            <p id={EDITOR_DESCRIPTION_ID} className="field-note editor-mode-note">Editor acadêmico: selecione o texto e use a faixa de formatação. A régua altera recuos do parágrafo selecionado em passos de 0,25 cm.</p>
           </div>
           <div ref={editorRef} className="editor rich-editor" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-describedby={EDITOR_DESCRIPTION_ID} aria-label={editorMode === "references" ? "Editor de referências" : "Editor do texto principal"} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />
           <AdherencePanel expanded={adherenceExpanded} onToggle={() => setAdherenceExpanded((prev) => !prev)} />

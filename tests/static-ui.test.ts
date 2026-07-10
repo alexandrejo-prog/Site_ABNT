@@ -71,9 +71,9 @@ describe("interface estática", () => {
     expect(app).toContain("DOCX gerado. Se o sumário aparecer vazio, atualize os campos no Word/LibreOffice. Isso é esperado.");
   });
 
-  it("ribbon tem aba Página Início e grupos compactos", () => {
+  it("ribbon tem aba Página Inicial e grupos compactos", () => {
     expect(app).toContain("word-ribbon-tab");
-    expect(app).toContain("Página Início");
+    expect(app).toContain("Página Inicial");
     expect(app).toContain("Área de Transferência");
     expect(app).toContain("Espaçamento");
     expect(app).toContain('data-group="Fonte"');
@@ -85,10 +85,27 @@ describe("interface estática", () => {
     expect(app).toContain("FontSelector");
   });
 
-  it("régua é componente funcional e não pseudo-elemento CSS", () => {
+  it("régua é componente funcional, mostra valores e não usa pseudo-elemento CSS", () => {
     expect(app).toContain("EditorRuler");
     expect(ruler).toContain("editor-ruler-controls");
+    expect(ruler).toContain("Passo: 0,25 cm por clique");
+    expect(ruler).toContain("Primeira linha:");
+    expect(ruler).toContain("Recuo esquerdo:");
+    expect(ruler).toContain("Recuo direito:");
+    expect(ruler).toContain("formatCm(values.firstLine)");
+    expect(ruler).toContain("formatCm(values.left)");
+    expect(ruler).toContain("formatCm(values.right)");
+    expect(ruler).toContain("editor-ruler-indent-marker first-line");
+    expect(ruler).toContain("editor-ruler-indent-marker left-indent");
+    expect(ruler).toContain("editor-ruler-indent-marker right-indent");
     expect(wordToolbar).toContain(".editor-ruler-controls");
+    expect(wordToolbar).toContain(".editor-ruler-indent-marker");
     expect(uxFixes).not.toContain(".editor-toolbar-sticky::after");
+  });
+  it("botão de referência bibliográfica não usa REF isolado", () => {
+    expect(app).toContain("Marcar como referência bibliográfica");
+    expect(app).toContain("Marca o parágrafo como referência bibliográfica para a seção REFERÊNCIAS do DOCX.");
+    expect(app).toContain('glyph="Ref. ABNT"');
+    expect(app).not.toContain('glyph="REF"');
   });
 });

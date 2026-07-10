@@ -5,14 +5,14 @@
   gap: 0;
   max-width: 980px;
   width: 100%;
-  min-height: 52px;
+  min-height: 62px;
   margin: 0 auto;
-  padding: 4px 6px 2px;
+  padding: 6px 8px 3px;
   overflow-x: auto;
   overflow-y: hidden;
   border: 1px solid #c9d4df;
   border-radius: 0 4px 4px 4px;
-  background: #ffffff;
+  background: linear-gradient(#ffffff, #f6f8fb);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
@@ -23,33 +23,33 @@
 .word-ribbon-tabs {
   display: flex;
   gap: 2px;
-  padding: 6px 8px 0;
   max-width: 980px;
   width: 100%;
-  margin: 0 auto;
+  margin: 0 auto -1px;
+  padding: 6px 8px 0;
 }
 
 .word-ribbon-tab {
-  padding: 4px 12px;
+  padding: 5px 14px;
   border: 1px solid transparent;
   border-bottom: 0;
   border-radius: 4px 4px 0 0;
+  color: #596779;
   background: transparent;
   font: 11px/1.35 "Segoe UI", Arial, sans-serif;
-  color: #596779;
   cursor: pointer;
 }
 
 .word-ribbon-tab.active {
-  background: #ffffff;
   border-color: #c9d4df;
   color: #111827;
+  background: #ffffff;
   font-weight: 600;
 }
 
 .word-ribbon-tab:hover {
-  background: #eaf3ff;
   color: #111827;
+  background: #eaf3ff;
 }
 
 .word-tool-group {
@@ -58,10 +58,10 @@
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  min-height: 44px;
-  gap: 2px;
-  padding: 2px 6px;
-  border-right: 1px solid #e5e9ef;
+  min-height: 50px;
+  gap: 3px;
+  padding: 3px 7px 2px;
+  border-right: 1px solid #dfe5ed;
   background: transparent;
 }
 
@@ -80,7 +80,7 @@
   flex-wrap: nowrap;
   align-items: center;
   justify-content: center;
-  gap: 1px;
+  gap: 2px;
 }
 
 .word-tool-group-label {
@@ -88,7 +88,6 @@
   width: 100%;
   margin-top: 1px;
   padding-top: 2px;
-  border-top: 0;
   color: #596779;
   font: 500 10px/1 "Segoe UI", Arial, sans-serif;
   text-align: center;
@@ -96,13 +95,13 @@
 }
 
 .word-tool-button {
-  width: 24px;
-  min-width: 24px;
-  height: 24px;
-  min-height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 2px;
@@ -121,13 +120,12 @@
   min-width: 16px;
   min-height: 16px;
   font: 600 12px/1 "Segoe UI", Arial, sans-serif;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .word-tool-button:hover {
   border-color: #8fb8e8;
   background: #eaf3ff;
-  box-shadow: none;
 }
 
 .word-tool-button:active,
@@ -143,6 +141,17 @@
   border-color: #1f7b69;
 }
 
+.word-tool-button.tool-reference {
+  width: auto;
+  min-width: 58px;
+  padding: 0 6px;
+}
+
+.word-tool-button.tool-reference .word-tool-glyph {
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .tool-negrito .word-tool-glyph {
   font-weight: 900;
 }
@@ -153,38 +162,24 @@
   text-underline-offset: 3px;
 }
 
-.word-tool-group[data-group="Fonte"] {
-  background: linear-gradient(#fbfdff, #edf5ff);
-  box-shadow: inset 0 0 0 1px rgba(190, 214, 240, 0.64);
-}
-
-.word-tool-group[data-group="Fonte"] .word-tool-group-label {
-  color: #1f5d9c;
-  font-weight: 600;
-}
-
 .word-tool-group[data-group="Estrutura"] .word-tool-button,
 .word-tool-group[data-group="Espaçamento"] .word-tool-button {
   width: auto;
-  min-width: 28px;
-  padding: 0 4px;
-}
-
-.word-tool-group[data-group="Estrutura"] .word-tool-button[aria-label="Referência"] {
-  min-width: 34px;
+  min-width: 30px;
+  padding: 0 5px;
 }
 
 .word-tool-group[data-group="Parágrafo"] {
-  min-width: 220px;
+  min-width: 236px;
 }
 
 .word-tool-group[data-group="Parágrafo"] .word-tool-row {
-  gap: 0;
+  gap: 1px;
 }
 
 .word-tool-group[data-group="Parágrafo"] .word-tool-button {
-  min-width: 24px;
-  width: 24px;
+  width: 28px;
+  min-width: 28px;
 }
 
 .word-tool-group[data-group="Espaçamento"] .word-tool-button {
@@ -201,12 +196,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 24px;
-  padding: 0 6px;
-  border: 1px solid #d7dfd8;
+  height: 28px;
+  padding: 0 7px;
+  border: 1px solid #c9d4df;
   border-radius: 2px;
-  background: #f8fbfa;
   color: #374151;
+  background: #ffffff;
   font: 11px/1 "Segoe UI", Arial, sans-serif;
   cursor: default;
   user-select: none;
@@ -214,11 +209,12 @@
 }
 
 .word-font-selector {
-  min-width: 110px;
+  min-width: 118px;
+  justify-content: flex-start;
 }
 
 .word-font-size {
-  min-width: 28px;
+  min-width: 34px;
 }
 
 .editor-ruler {
@@ -231,6 +227,15 @@
   border-radius: 0 0 2px 2px;
   background: #f8fafc;
   box-shadow: 0 6px 12px rgba(15, 23, 42, 0.08);
+}
+
+.editor-ruler-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 6px;
+  color: #53616d;
+  font: 600 11px/1.35 "Segoe UI", Arial, sans-serif;
 }
 
 .editor-ruler-scale {
@@ -250,7 +255,7 @@
 .editor-ruler-marks {
   position: relative;
   flex: 1;
-  height: 18px;
+  height: 20px;
   background: repeating-linear-gradient(to right, #f8fafc 0, #f8fafc 8.8%, #d8e0e8 8.9%, #f8fafc 9%);
 }
 
@@ -262,11 +267,40 @@
   transform: translateX(-50%);
 }
 
+.editor-ruler-indent-marker {
+  position: absolute;
+  z-index: 1;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+}
+
+.editor-ruler-indent-marker.first-line {
+  top: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 8px solid #1f7b69;
+}
+
+.editor-ruler-indent-marker.left-indent {
+  bottom: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 8px solid #2563eb;
+}
+
+.editor-ruler-indent-marker.right-indent {
+  bottom: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 8px solid #b45309;
+}
+
 .editor-ruler-controls {
   display: flex;
-  gap: 16px;
-  padding-top: 8px;
   flex-wrap: wrap;
+  gap: 14px;
+  padding-top: 8px;
 }
 
 .editor-ruler-control-group {
@@ -276,28 +310,33 @@
 }
 
 .editor-ruler-control-label {
+  margin-right: 4px;
   color: #53616d;
   font: 11px/1.35 "Segoe UI", Arial, sans-serif;
-  margin-right: 4px;
+}
+
+.editor-ruler-control-label strong {
+  color: #111827;
+  font-weight: 700;
 }
 
 .editor-ruler-controls button {
-  width: 22px;
-  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 22px;
+  height: 22px;
   border: 1px solid #c9d4df;
   border-radius: 2px;
-  background: #ffffff;
   color: #111827;
+  background: #ffffff;
   font: 600 12px/1 "Segoe UI", Arial, sans-serif;
   cursor: pointer;
 }
 
 .editor-ruler-controls button:hover {
-  background: #eaf3ff;
   border-color: #8fb8e8;
+  background: #eaf3ff;
 }
 
 .editor-toolbar-sticky .toolbar.word-ribbon::-webkit-scrollbar {
@@ -310,11 +349,21 @@
 }
 
 @media (max-width: 1180px) {
-  .editor-toolbar-sticky .toolbar.word-ribbon {
+  .editor-toolbar-sticky .toolbar.word-ribbon,
+  .word-ribbon-tabs,
+  .editor-ruler {
     max-width: 100%;
   }
 
   .editor-ruler {
-    max-width: 100%;
+    padding-right: 58px;
+    padding-left: 58px;
+  }
+}
+
+@media (max-width: 780px) {
+  .editor-ruler {
+    padding-right: 18px;
+    padding-left: 18px;
   }
 }
