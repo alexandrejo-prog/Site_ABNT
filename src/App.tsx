@@ -23,6 +23,8 @@ import { ToolButton, FontSelector, runEditorCommand, insertEditorText, setLineSp
 import { ImportBlock } from "./components/ImportBlock";
 import { WorkTypeSelector } from "./components/WorkTypeSelector";
 import EditorRuler from "./components/EditorRuler";
+import AcademicTiptapEditor from "./components/AcademicTiptapEditor";
+import { useTiptapExperimentalEditor } from "./editor-feature-flags";
 
 const FIELD_LABELS: Record<AcademicFieldKey, string> = {
   author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho", course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador", location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave", abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão", referencias: "Referências", anexos: "Anexos", apendices: "Apêndices", dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators", imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema", problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese", objetivoGeral: "Objetivo Geral", objetivosEspecificos: "Objetivos Específicos", justificativa: "Justificativa", referencialTeorico: "Referencial Teórico", metodologia: "Metodologia", cronograma: "Cronograma", recursosOrcamento: "Recursos/Orçamento", resultadosEsperados: "Resultados Esperados", corpusDados: "Corpus/Dados", contextoInstitucional: "Contexto Institucional", conclusaoProvisoria: "Conclusão Provisória", contribuicoesImpactos: "Contribuições/Impactos", impactoSocial: "Impacto social", impactoCientifico: "Impacto científico", impactoEducacional: "Impacto educacional", impactoAmbiental: "Impacto ambiental", impactoTecnologico: "Impacto tecnológico/econômico", publicoBeneficiado: "Público beneficiado", aderenciaOds: "Aderência a ODS/política institucional",
@@ -32,6 +34,7 @@ const RESEARCH_PROJECT_FIELD_KEYS: AcademicFieldKey[] = ["tema", "delimitacaoTem
 const ASSISTED_FIELD_KEYS: AcademicFieldKey[] = ["tema", "problemaPesquisa", "objetivoGeral", "objetivosEspecificos", "justificativa", "referencialTeorico", "corpusDados", "contextoInstitucional", "metodologia", "resultadosEsperados", "conclusaoProvisoria", "contribuicoesImpactos"];
 const LONG_FIELDS = new Set<AcademicFieldKey>(["workNature", "resumo", "abstractText", "introducao", "conclusao", "referencias", "anexos", "apendices", "dedicatoria", "agradecimentos", "epigrafe", "indicadoresImpacto", "impactIndicators", "imageWarnings", ...RESEARCH_PROJECT_FIELD_KEYS]);
 const EDITOR_DESCRIPTION_ID = "editor-mode-note";
+const TIPTAP_EXPERIMENTAL_QUERY = "editor=tiptap";
 type EditorMode = "body" | "references";
 
 function rowsForField(key: AcademicFieldKey): number {
@@ -126,6 +129,11 @@ export default function App() {
   const isCpgSelected = isCpgWork(fields.workType);
   const selectedUflaProductionType = isUflaCollectionWork(fields.workType) ? academicProductionTypeById(fields.workType) : undefined;
   const activeEditorText = editorMode === "references" ? fields.referencias : editorText;
+  const isTiptapEditorEnabled = useMemo(() => useTiptapExperimentalEditor(), []);
+  const editorAriaLabel = editorMode === "references" ? "Editor de referências" : "Editor do texto principal";
+  const editorHelpText = isTiptapEditorEnabled
+    ? `Editor Tiptap experimental: edição estruturada em teste. O DOCX continua sendo gerado pelo mesmo exportador. Ativado por ?${TIPTAP_EXPERIMENTAL_QUERY}.`
+    : "Editor acadêmico: selecione o texto e use a faixa de formatação. A régua altera recuos do parágrafo selecionado em passos de 0,25 cm.";
   const finalPending = useMemo(() => finalVersionPendingReport(fields, activeEditorText), [fields, activeEditorText]);
 
   useEffect(() => installEditorScrollFix(), []);
@@ -534,11 +542,21 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
               </div>
             </div>
             <EditorRuler onCommand={handleRichEditorInput} />
-            <p id={EDITOR_DESCRIPTION_ID} className="field-note editor-mode-note">Editor acadêmico: selecione o texto e use a faixa de formatação. A régua altera recuos do parágrafo selecionado em passos de 0,25 cm.</p>
+            <p id={EDITOR_DESCRIPTION_ID} className="field-note editor-mode-note">{editorHelpText}</p>
           </div>
           <div className="editor-page-stack" aria-label="Editor de texto contínuo">
             <div className="editor-page-shell">
-              <div ref={editorRef} className="editor rich-editor" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-describedby={EDITOR_DESCRIPTION_ID} aria-label={editorMode === "references" ? "Editor de referências" : "Editor do texto principal"} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />
+              {isTiptapEditorEnabled ? (
+                <AcademicTiptapEditor
+                  value={activeEditorText}
+                  onChange={updateActiveEditorText}
+                  ariaLabel={editorAriaLabel}
+                  describedBy={EDITOR_DESCRIPTION_ID}
+                  editable={true}
+                />
+              ) : (
+                <div ref={editorRef} className="editor rich-editor" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-describedby={EDITOR_DESCRIPTION_ID} aria-label={editorAriaLabel} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />
+              )}
             </div>
           </div>
           <p className="editor-page-note">Editor em visualização contínua. A paginação final deve ser conferida no Word/LibreOffice após atualizar campos e sumário.</p>
