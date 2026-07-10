@@ -108,4 +108,13 @@ describe("interface estática", () => {
     expect(app).toContain('glyph="Ref. ABNT"');
     expect(app).not.toContain('glyph="REF"');
   });
+
+  it("editor tem paginação visual aproximada fora do contenteditable", () => {
+    expect(app).toContain('className="editor-page-stack"');
+    expect(app).toContain('className="editor-page-shell"');
+    expect(app).toContain("Paginação visual aproximada");
+    const editorMarkup = readFileSync(join(process.cwd(), "src", "editor-markup.ts"), "utf8");
+    expect(editorMarkup).not.toContain("Paginação visual aproximada");
+    expect(editorMarkup).not.toContain("editor-page-stack");
+  });
 });

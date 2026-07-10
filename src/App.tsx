@@ -536,7 +536,12 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
             <EditorRuler onCommand={handleRichEditorInput} />
             <p id={EDITOR_DESCRIPTION_ID} className="field-note editor-mode-note">Editor acadêmico: selecione o texto e use a faixa de formatação. A régua altera recuos do parágrafo selecionado em passos de 0,25 cm.</p>
           </div>
-          <div ref={editorRef} className="editor rich-editor" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-describedby={EDITOR_DESCRIPTION_ID} aria-label={editorMode === "references" ? "Editor de referências" : "Editor do texto principal"} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />
+          <div className="editor-page-stack" aria-label="Páginas visuais aproximadas do editor">
+            <div className="editor-page-shell">
+              <div ref={editorRef} className="editor rich-editor" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-describedby={EDITOR_DESCRIPTION_ID} aria-label={editorMode === "references" ? "Editor de referências" : "Editor do texto principal"} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />
+            </div>
+          </div>
+          <p className="editor-page-note">Paginação visual aproximada. A paginação final deve ser conferida no Word/LibreOffice após atualizar campos e sumário.</p>
           <AdherencePanel expanded={adherenceExpanded} onToggle={() => setAdherenceExpanded((prev) => !prev)} />
         </section>
 

@@ -367,3 +367,49 @@
     padding-left: 18px;
   }
 }
+
+.editor-page-stack {
+  position: relative;
+  max-width: 980px;
+  width: 100%;
+  margin: 0 auto 18px;
+}
+
+.editor-page-shell {
+  position: relative;
+  border-radius: 2px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+}
+
+.editor-page-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 27.4cm,
+      rgba(15, 23, 42, 0.08) 27.4cm,
+      rgba(15, 23, 42, 0.08) 27.5cm,
+      transparent 27.5cm,
+      transparent 29.7cm
+    );
+}
+
+.editor-page-shell > .rich-editor {
+  position: relative;
+  z-index: 1;
+}
+
+.editor-page-note {
+  max-width: 980px;
+  width: 100%;
+  margin: 10px auto 0;
+  color: #6b7280;
+  font: 600 11px/1.35 "Segoe UI", Arial, sans-serif;
+  text-align: center;
+}
