@@ -336,15 +336,15 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     expect(screen.getByText(/DOCX gerado. Se o sumário aparecer vazio/)).toBeInTheDocument();
   });
 
-  it("mostra indicador e botões de paginação visual sem poluir o editor", () => {
+  it("editor contínuo avisa visualização contínua sem poluir o editor", () => {
     render(<App />);
-    expect(screen.getByText(/Página 1 de 1/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Ir para a página visual anterior/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Ir para a próxima página visual/i })).toBeInTheDocument();
+    expect(screen.getByText(/Editor em visualização contínua/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Ir para a página visual anterior/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Ir para a próxima página visual/i })).not.toBeInTheDocument();
     const editor = screen.getByRole("textbox", { name: /Editor do texto principal/i });
+    expect(editor.textContent).not.toContain("Editor em visualização contínua");
     expect(editor.textContent).not.toContain("Página anterior");
     expect(editor.textContent).not.toContain("Próxima página");
-    expect(editor.textContent).not.toContain("Paginação visual aproximada");
   });
 
   it("gera DOCX sem artefatos da paginação visual", async () => {
@@ -357,6 +357,7 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
     const blob = saveAsMock.mock.calls[0][0] as Blob;
     const content = await blob.text();
+    expect(content).not.toContain("Editor em visualização contínua");
     expect(content).not.toContain("Paginação visual aproximada");
     expect(content).not.toContain("Página anterior");
     expect(content).not.toContain("Próxima página");

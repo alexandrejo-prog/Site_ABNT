@@ -109,30 +109,30 @@ describe("interface estática", () => {
     expect(app).not.toContain('glyph="REF"');
   });
 
-  it("editor tem paginação visual aproximada fora do contenteditable", () => {
+  it("editor contínuo tem aviso de visualização contínua fora do contenteditable", () => {
     expect(app).toContain('className="editor-page-stack"');
     expect(app).toContain('className="editor-page-shell"');
-    expect(app).toContain("Paginação visual aproximada");
+    expect(app).toContain("Editor em visualização contínua");
     const editorMarkup = readFileSync(join(process.cwd(), "src", "editor-markup.ts"), "utf8");
-    expect(editorMarkup).not.toContain("Paginação visual aproximada");
+    expect(editorMarkup).not.toContain("Editor em visualização contínua");
     expect(editorMarkup).not.toContain("editor-page-stack");
   });
 
-  it("paginação visual aproximada tem navegação e não corta o conteúdo", () => {
-    expect(app).toContain('className="editor-pagination-toolbar"');
-    expect(app).toContain('className="editor-page-viewport"');
-    expect(app).toContain("Página anterior");
-    expect(app).toContain("Próxima página");
-    expect(app).toContain('aria-label="Ir para a página visual anterior"');
-    expect(app).toContain('aria-label="Ir para a próxima página visual"');
-    expect(app).toContain('title="Paginação visual aproximada do editor; a paginação final depende do Word/LibreOffice."');
-    expect(app).toContain("Página {currentPage} de {totalPages}");
-    expect(wordToolbar).toContain(".editor-pagination-toolbar");
-    expect(wordToolbar).toContain(".editor-page-viewport");
-    expect(wordToolbar).toContain("overflow-y: auto");
-    expect(wordToolbar).not.toContain("overflow: hidden");
-    expect(app).toContain('disabled={currentPage <= 1}');
-    expect(app).toContain('disabled={currentPage >= totalPages}');
+  it("editor contínuo não tem navegação por página, indicador nem corte de página", () => {
+    expect(app).not.toContain("Página anterior");
+    expect(app).not.toContain("Próxima página");
+    expect(app).not.toContain("Página {currentPage} de {totalPages}");
+    expect(app).not.toContain('className="editor-pagination-toolbar"');
+    expect(app).not.toContain('className="editor-page-viewport"');
+    expect(app).not.toContain('className="editor-page-indicator"');
+    expect(app).not.toContain('disabled={currentPage <= 1}');
+    expect(app).not.toContain('disabled={currentPage >= totalPages}');
+    expect(wordToolbar).not.toContain(".editor-pagination-toolbar");
+    expect(wordToolbar).not.toContain(".editor-page-viewport");
+    expect(wordToolbar).not.toContain(".editor-page-indicator");
+    expect(wordToolbar).not.toContain("editor-page-nav-button");
+    expect(wordToolbar).not.toContain(".editor-page-shell::after");
+    expect(wordToolbar).toContain(".editor-page-shell > .rich-editor");
   });
 
   it("paginação visual não insere marcadores dentro do editorText", () => {

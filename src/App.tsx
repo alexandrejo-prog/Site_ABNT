@@ -1,4 +1,4 @@
-import { ClipboardEvent as ReactClipboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ClipboardEvent as ReactClipboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { saveAs } from "file-saver";
 import { FileCheck2, FileDown } from "lucide-react";
 import { ACADEMIC_FIELD_KEYS, AcademicFieldKey, type AcademicFields, CONFIDENCE_LABELS, Confidence, emptyAcademicFields, emptyConfidenceMap, isCpgWork, isResearchProject, isUflaCollectionWork } from "./ufla-rules";
@@ -33,10 +33,6 @@ const ASSISTED_FIELD_KEYS: AcademicFieldKey[] = ["tema", "problemaPesquisa", "ob
 const LONG_FIELDS = new Set<AcademicFieldKey>(["workNature", "resumo", "abstractText", "introducao", "conclusao", "referencias", "anexos", "apendices", "dedicatoria", "agradecimentos", "epigrafe", "indicadoresImpacto", "impactIndicators", "imageWarnings", ...RESEARCH_PROJECT_FIELD_KEYS]);
 const EDITOR_DESCRIPTION_ID = "editor-mode-note";
 type EditorMode = "body" | "references";
-
-// Altura aproximada de uma página A4 na tela (29,7 cm ≈ 1122 px em CSS).
-// Usada apenas para a paginação visual aproximada; não é a paginação real do Word.
-const VISUAL_PAGE_HEIGHT = 1122;
 
 function rowsForField(key: AcademicFieldKey): number {
   if (key === "referencias") return 12;
@@ -122,9 +118,6 @@ export default function App() {
   const [confirmReplaceDraft, setConfirmReplaceDraft] = useState(false);
   const [hasStoredDraft, setHasStoredDraft] = useState(() => typeof window !== "undefined" && hasDraft(window.localStorage));
   const editorRef = useRef<HTMLDivElement>(null);
-  const pageViewportRef = useRef<HTMLDivElement>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorContentVersionRef = useRef(0);
   const lastAppliedEditorTextRef = useRef("");
@@ -198,42 +191,6 @@ export default function App() {
       editorContentVersionRef.current += 1;
     }
   }, [activeEditorText, editorMode]);
-
-  const recomputeVisualPages = useCallback(() => {
-    const viewport = pageViewportRef.current;
-    if (!viewport) return;
-    const total = Math.max(1, Math.ceil(viewport.scrollHeight / VISUAL_PAGE_HEIGHT));
-    const current = Math.min(total, Math.floor(viewport.scrollTop / VISUAL_PAGE_HEIGHT) + 1);
-    setTotalPages(total);
-    setCurrentPage(current);
-  }, []);
-
-  useEffect(() => {
-    const raf = requestAnimationFrame(recomputeVisualPages);
-    return () => cancelAnimationFrame(raf);
-  }, [activeEditorText, editorMode, recomputeVisualPages]);
-
-  useEffect(() => {
-    const onResize = () => recomputeVisualPages();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [recomputeVisualPages]);
-
-  function handleViewportScroll() {
-    recomputeVisualPages();
-  }
-
-  function goToPrevPage() {
-    const viewport = pageViewportRef.current;
-    if (!viewport || currentPage <= 1) return;
-    viewport.scrollTo({ top: (currentPage - 2) * VISUAL_PAGE_HEIGHT, behavior: "smooth" });
-  }
-
-  function goToNextPage() {
-    const viewport = pageViewportRef.current;
-    if (!viewport || currentPage >= totalPages) return;
-    viewport.scrollTo({ top: currentPage * VISUAL_PAGE_HEIGHT, behavior: "smooth" });
-  }
 
   function updateField(key: AcademicFieldKey, value: string) {
     setFields((current) => {
@@ -579,19 +536,12 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
             <EditorRuler onCommand={handleRichEditorInput} />
             <p id={EDITOR_DESCRIPTION_ID} className="field-note editor-mode-note">Editor acadêmico: selecione o texto e use a faixa de formatação. A régua altera recuos do parágrafo selecionado em passos de 0,25 cm.</p>
           </div>
-          <div className="editor-page-stack" aria-label="Páginas visuais aproximadas do editor">
-            <div className="editor-pagination-toolbar">
-              <button type="button" className="editor-page-nav-button" onClick={goToPrevPage} disabled={currentPage <= 1} title="Ir para a página visual anterior" aria-label="Ir para a página visual anterior">Página anterior</button>
-              <span className="editor-page-indicator" title="Paginação visual aproximada do editor; a paginação final depende do Word/LibreOffice.">Página {currentPage} de {totalPages}</span>
-              <button type="button" className="editor-page-nav-button" onClick={goToNextPage} disabled={currentPage >= totalPages} title="Ir para a próxima página visual" aria-label="Ir para a próxima página visual">Próxima página</button>
-            </div>
-            <div className="editor-page-viewport" ref={pageViewportRef} onScroll={handleViewportScroll}>
-              <div className="editor-page-shell">
-                <div ref={editorRef} className="editor rich-editor" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-describedby={EDITOR_DESCRIPTION_ID} aria-label={editorMode === "references" ? "Editor de referências" : "Editor do texto principal"} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />
-              </div>
+          <div className="editor-page-stack" aria-label="Editor de texto contínuo">
+            <div className="editor-page-shell">
+              <div ref={editorRef} className="editor rich-editor" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-describedby={EDITOR_DESCRIPTION_ID} aria-label={editorMode === "references" ? "Editor de referências" : "Editor do texto principal"} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />
             </div>
           </div>
-          <p className="editor-page-note">Paginação visual aproximada. A paginação final deve ser conferida no Word/LibreOffice após atualizar campos e sumário. Use os botões Página anterior e Próxima página ou role o editor.</p>
+          <p className="editor-page-note">Editor em visualização contínua. A paginação final deve ser conferida no Word/LibreOffice após atualizar campos e sumário.</p>
           <AdherencePanel expanded={adherenceExpanded} onToggle={() => setAdherenceExpanded((prev) => !prev)} />
         </section>
 

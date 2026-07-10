@@ -8,7 +8,6 @@ import "./accessibility.css";
 import "./ux-fixes.css";
 import "./editor-enhancer.css";
 import "./word-toolbar.css";
-import "./editor-page-fix.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
