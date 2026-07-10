@@ -15,7 +15,7 @@ import {
 } from "docx";
 import type { IParagraphOptions } from "docx";
 import { BLACK as SHARED_BLACK } from "./docx-shared";
-import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, hasText, detectCaption } from "./docx-render-core";
+import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, hasText, detectCaption, tabbedTableBlock } from "./docx-render-core";
 import { parseEditorContent, type DocxGenerationInput, type EditorBlock } from "./export-docx";
 import { CPG_RULES, UFLA_RULES, cmToTwip } from "./ufla-rules";
 import { stripCpgForbiddenSections } from "./cpg-content-filter";
@@ -250,6 +250,10 @@ function blockToParagraph(block: EditorBlock, firstParagraphInSection: boolean):
   }
   if (block.type === "scheduleTable" || block.type === "plainScheduleTable" || block.type === "markdownTable") {
     return [tableFromBlock(block)];
+  }
+
+  if (block.type === "tabbedTable") {
+    return tabbedTableBlock(block.text, { font: CPG_RULES.typography.fontFamily, bodySize: BODY_SIZE });
   }
 
   const caption = isCaption(block.text);

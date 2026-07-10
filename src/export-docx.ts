@@ -17,13 +17,14 @@ import {
   WidthType,
 } from "docx";
 import type { IParagraphOptions, IStylesOptions } from "docx";
+import "./docx-toc-field-patch";
 import { pageMargins, ibgeTable, BODY_SIZE, SINGLE_LINE, ONE_AND_HALF_LINE, BLACK, AUTHOR_SIZE as COVER_AUTHOR_SIZE, TITLE_SIZE as COVER_TITLE_SIZE } from "./docx-shared";
 import { AcademicFields, UFLA_RULES } from "./ufla-rules";
 import { getWorkTypeRequirements } from "./work-type-requirements";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { buildFlowingImpactText } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
-import { captionParagraph, cleanMojibakeText, detectCaption } from "./docx-render-core";
+import { captionParagraph, cleanMojibakeText, detectCaption, tabbedTableBlock } from "./docx-render-core";
 
 export type EditorBlockType =
   | "paragraph"
@@ -34,6 +35,7 @@ export type EditorBlockType =
   | "scheduleTable"
   | "markdownTable"
   | "plainScheduleTable"
+  | "tabbedTable"
   | "reference";
 
 export interface EditorBlock {
@@ -225,6 +227,17 @@ function shouldStartPlainScheduleTable(value: string): boolean {
   return isPlainScheduleHeader(value);
 }
 
+function isMarkdownTableLine(value: string): boolean {
+  return /^\|.+\|$/.test(value.trim());
+}
+
+function shouldStartTabbedTable(value: string, lines: string[], index: number): boolean {
+  const trimmed = value.trim();
+  if (!/^(quadro|tabela)\s+\d+/i.test(trimmed)) return false;
+  const next = lines[index + 1]?.trim() ?? "";
+  return next.includes("\t") || / {2,}/.test(next) || isMarkdownTableLine(next);
+}
+
 export function parseEditorContent(editorText: string): EditorBlock[] {
   const lines = editorText
     .split(/\r?\n/)
@@ -289,6 +302,31 @@ export function parseEditorContent(editorText: string): EditorBlock[] {
       }
 
       blocks.push({ type: "plainScheduleTable", text: tableLines.join("\n") });
+      index = cursor - 1;
+      continue;
+    }
+
+    if (shouldStartTabbedTable(trimmed, lines, index)) {
+      const tableLines = [trimmed];
+      let cursor = index + 1;
+
+      while (cursor < lines.length) {
+        const nextLine = lines[cursor];
+        if (/^Fonte:/i.test(nextLine)) {
+          tableLines.push(nextLine);
+          cursor += 1;
+          break;
+        }
+        if (/^#\s+/i.test(nextLine)) break;
+        if (/^##\s+/i.test(nextLine)) break;
+        if (/^\d+(?:\.\d+)*\s+/.test(nextLine.trim())) break;
+        if (/^(REFERÊNCIAS|REFERENCIAS|APÊNDICE|APENDICE|ANEXO)\b/i.test(nextLine.trim())) break;
+        if (!nextLine.includes("\t") && !/ {2,}/.test(nextLine) && !isMarkdownTableLine(nextLine) && !isMarkdownTableSeparator(nextLine)) break;
+        tableLines.push(nextLine);
+        cursor += 1;
+      }
+
+      blocks.push({ type: "tabbedTable", text: tableLines.join("\n") });
       index = cursor - 1;
       continue;
     }
@@ -785,6 +823,10 @@ function blockToParagraph(
 
   if (block.type === "markdownTable") {
     return markdownTableBlock(block.text);
+  }
+
+  if (block.type === "tabbedTable") {
+    return tabbedTableBlock(block.text);
   }
 
   const cleanedText = cleanMojibakeText(block.text);

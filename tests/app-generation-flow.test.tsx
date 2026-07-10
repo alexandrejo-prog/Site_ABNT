@@ -121,7 +121,7 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     const file = new File(["docx"], "documento_ideal_teste_tipos_trabalho_ufla_abnt.docx", {
       type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     });
-    await user.upload(screen.getByLabelText("Importar"), file);
+    await user.upload(screen.getByLabelText("Importar arquivo"), file);
     await screen.findByText(/Metadados anteriores foram substituídos/);
 
     await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "tese");
@@ -293,7 +293,76 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     const file = new File(["docx"], "desenvolvimento-de-software-ufla.docx", {
       type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     });
-    await user.upload(screen.getByLabelText("Importar"), file);
+    await user.upload(screen.getByLabelText("Importar arquivo"), file);
     await screen.findByText(/O tipo atual é Projeto de pesquisa. O nome do arquivo importado não será usado para alterar o modelo./);
+  });
+
+  it("mostra aviso de rascunho editável para dissertação", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "dissertacao");
+    expect(screen.getByText(/Use este modelo para rascunho editável/)).toBeInTheDocument();
+  });
+
+  it("mostra aviso de rascunho editável para tese", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "tese");
+    expect(screen.getByText(/Use este modelo para rascunho editável/)).toBeInTheDocument();
+  });
+
+  it("mensagem pós-geração orienta atualizar sumário no Word/LibreOffice quando há pendências", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "dissertacao");
+    fireEvent.change(getTitleInput(), { target: { value: "Título de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "ECA" } });
+    fireEvent.change(screen.getByLabelText("Orientador"), { target: { value: "[nome do orientador]" } });
+    fireEvent.click(getGenerateAnywayCheckbox());
+    await user.click(getButtonByText(/Gerar DOCX/));
+    await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(/Rascunho gerado. Abra no Word\/LibreOffice/)).toBeInTheDocument();
+  });
+
+  it("mensagem pós-geração menciona sumário vazio esperado quando não há pendências", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
+    fireEvent.change(getTitleInput(), { target: { value: "Título de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    await user.click(getButtonByText(/Gerar DOCX/));
+    await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(/DOCX gerado. Se o sumário aparecer vazio/)).toBeInTheDocument();
+  });
+
+  it("editor contínuo avisa visualização contínua sem poluir o editor", () => {
+    render(<App />);
+    expect(screen.getByText(/Editor em visualização contínua/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Ir para a página visual anterior/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Ir para a próxima página visual/i })).not.toBeInTheDocument();
+    const editor = screen.getByRole("textbox", { name: /Editor do texto principal/i });
+    expect(editor.textContent).not.toContain("Editor em visualização contínua");
+    expect(editor.textContent).not.toContain("Página anterior");
+    expect(editor.textContent).not.toContain("Próxima página");
+  });
+
+  it("gera DOCX sem artefatos da paginação visual", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
+    fireEvent.change(getTitleInput(), { target: { value: "Título de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    await user.click(getButtonByText(/Gerar DOCX/));
+    await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
+    const blob = saveAsMock.mock.calls[0][0] as Blob;
+    const content = await blob.text();
+    expect(content).not.toContain("Editor em visualização contínua");
+    expect(content).not.toContain("Paginação visual aproximada");
+    expect(content).not.toContain("Página anterior");
+    expect(content).not.toContain("Próxima página");
+    expect(content).not.toContain("Página 1 de");
+    expect(content).not.toContain("[PAGE]");
+    expect(content).not.toContain("[QUEBRA DE PÁGINA]");
   });
 });

@@ -8,8 +8,9 @@ import App from "../src/App";
 
 const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
 const sidebarSource = readFileSync(resolve(process.cwd(), "src/components/ValidationSidebar.tsx"), "utf8");
+const importBlockSource = readFileSync(resolve(process.cwd(), "src/components/ImportBlock.tsx"), "utf8");
 const stylesSource = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
-const combined = `${appSource}\n${sidebarSource}`;
+const combined = `${appSource}\n${sidebarSource}\n${importBlockSource}`;
 
 describe("Acessibilidade básica da interface", () => {
   afterEach(() => {
@@ -33,9 +34,9 @@ describe("Acessibilidade básica da interface", () => {
   });
 
   it("possui rótulo acessível no botão de importação", () => {
-    expect(appSource).toContain('type="file"');
-    expect(appSource).toContain('accept=".docx,.txt,.md"');
-    expect(appSource).toContain("Importar");
+    expect(combined).toContain('type="file"');
+    expect(combined).toContain('accept=".docx,.txt,.md"');
+    expect(combined).toContain("Importar");
   });
 
   it("painel de aderência possui atributos ARIA de expansão", () => {

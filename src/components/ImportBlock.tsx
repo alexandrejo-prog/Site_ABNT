@@ -1,60 +1,79 @@
-import { ChangeEvent } from "react";
-import { AlertTriangle, CheckCircle2, Upload, XCircle } from "lucide-react";
-import { WORK_TYPE_LABELS, type WorkTypeValue } from "../ufla-rules";
+import { useRef, useState } from "react";
+import { Upload, XCircle } from "lucide-react";
+import { importDocumentFile } from "../import-docx";
+import { emptyAcademicFields, emptyConfidenceMap, WORK_TYPE_LABELS } from "../ufla-rules";
 
 interface ImportBlockProps {
+  onImport: (result: {
+    fields: ReturnType<typeof emptyAcademicFields>;
+    confidence: ReturnType<typeof emptyConfidenceMap>;
+    editorText: string;
+    messages: string[];
+    fileName: string;
+  }) => void;
+  onRemove: () => void;
   importedFileName: string | null;
-  workType: WorkTypeValue;
-  onImport: (event: ChangeEvent<HTMLInputElement>) => void;
-  onRemoveImport: () => void;
+  workType: string;
 }
 
-function selectedWorkTypeLabel(workType: WorkTypeValue): string {
-  return workType ? WORK_TYPE_LABELS[workType] : "Nenhum tipo selecionado";
+function selectedWorkTypeLabel(workType: string): string {
+  return workType ? WORK_TYPE_LABELS[workType as keyof typeof WORK_TYPE_LABELS] || workType : "Nenhum tipo selecionado";
 }
 
-export function ImportBlock({ importedFileName, workType, onImport, onRemoveImport }: ImportBlockProps) {
+export function ImportBlock({ onImport, onRemove, importedFileName, workType }: ImportBlockProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [status, setStatus] = useState<string | null>(null);
+
+  async function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      setStatus("Importando arquivo...");
+      const result = await importDocumentFile(file);
+      onImport({ ...result, fileName: file.name });
+      setStatus(`Arquivo importado: ${file.name}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Falha ao importar.");
+    } finally {
+      event.target.value = "";
+    }
+  }
+
   return (
-    <section className="import-block" aria-label="Importar arquivo existente">
-      <div className="import-block-header">
+    <div className="import-block">
+      <div className="import-header">
         <div>
-          <p className="section-kicker">Etapa 1</p>
           <h2>Importar arquivo existente</h2>
+          <p>Importe DOCX, TXT ou Markdown para extrair texto e metadados. Revise tudo antes de gerar.</p>
         </div>
-        {importedFileName && (
-          <button
-            className="secondary-action import-remove-action"
-            type="button"
-            onClick={onRemoveImport}
-            title={`Remover importação: ${importedFileName}`}
-          >
-            <XCircle size={18} aria-hidden="true" />
-            Remover
-          </button>
-        )}
+        <label className="upload-button primary">
+          <Upload size={18} aria-hidden="true" />
+          <span>Importar arquivo</span>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".docx,.txt,.md"
+            onChange={handleChange}
+            style={{ display: "none" }}
+          />
+        </label>
       </div>
-
-      <p className="import-block-text" id="import-help-text">
-        Importe DOCX, TXT ou Markdown para aproveitar texto e metadados. Depois confira o tipo de trabalho antes de gerar o DOCX.
-      </p>
-
-      <label className="upload-button import-main-action">
-        <Upload size={18} aria-hidden="true" />
-        Importar arquivo
-        <input aria-label="Importar" aria-describedby="import-help-text" type="file" accept=".docx,.txt,.md" onChange={onImport} />
-      </label>
-
       {importedFileName ? (
-        <div className="imported-file-summary" role="status" aria-live="polite">
-          <p className="imported-file-name"><CheckCircle2 size={16} aria-hidden="true" /><strong>Arquivo:</strong> <span>{importedFileName}</span></p>
-          <p><strong>Modelo selecionado:</strong> {selectedWorkTypeLabel(workType)}</p>
-          <p className="import-review-warning"><AlertTriangle size={16} aria-hidden="true" />O modelo selecionado define capa, ficha, folha de aprovação e sumário. Altere o tipo se o arquivo importado não corresponder ao modelo.</p>
+        <div className="import-status">
+          <span className="import-file-name">Arquivo: {importedFileName}</span>
+          <span className="import-work-type">Tipo selecionado: {selectedWorkTypeLabel(workType)}</span>
+          <p className="import-confirm">Confira se o tipo de trabalho selecionado está correto antes de gerar o DOCX.</p>
+          <button className="secondary-action" type="button" onClick={onRemove} title={`Remover importação: ${importedFileName}`}>
+            <XCircle size={18} aria-hidden="true" />
+            <span>Remover importação</span>
+          </button>
         </div>
       ) : (
-        <p className="import-caution">
-          O sistema não muda o tipo de trabalho pelo nome do arquivo. Primeiro importe; depois confirme o modelo na etapa 2.
+        <p className="import-disclaimer">
+          Importante: o tipo de trabalho não é alterado automaticamente pelo nome do arquivo. Confira se o modelo selecionado corresponde ao documento.
         </p>
       )}
-    </section>
+      {status && <p className="import-note">{status}</p>}
+    </div>
   );
 }

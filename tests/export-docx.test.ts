@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { generateArticleDocxBlob } from "../src/export-article-docx";
 import { generateCpgDocxBlob } from "../src/export-cpg-docx";
 import { calculateTextualStartPage, generateDocxBlob, parseEditorContent } from "../src/export-docx";
+import { templateForWorkType } from "../src/document-template";
 import { CPG_RULES, UFLA_RULES, emptyAcademicFields, type AcademicFields } from "../src/ufla-rules";
 
 const fields: AcademicFields = {
@@ -568,5 +569,246 @@ describe("DOCX export", () => {
     expect(documentXml).not.toContain("[nome do membro da banca]");
     expect(documentXml).not.toContain("Programa de Pós-Graduação em Programa de Pós-Graduação em");
     expect(documentXml).toContain("SUMÁRIO");
+  });
+
+  it("converte Quadro 1 tabulado em tabela DOCX com fonte separada", async () => {
+    const editorText = `Quadro 1 - Delimitacao da presente pesquisa em relacao a Andrade (2025)
+Dimensao	Andrade (2025)	Presente pesquisa
+Recorte	Implementacao do PGD	Repercussoes do PGD
+Sujeitos	TAEs em teletrabalho	TAEs com experiencia
+Fonte: elaborado pelo autor (2026).`;
+    const documentXml = await generatedXml(editorText, {
+      ...fields,
+      workType: "monografia",
+    });
+
+    expect(documentXml).toContain("Quadro 1 - Delimitacao da presente pesquisa em relacao a Andrade (2025)");
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toContain("Dimensao");
+    expect(documentXml).toContain("Andrade (2025)");
+    expect(documentXml).toContain("Presente pesquisa");
+    expect(documentXml).toContain("Fonte: elaborado pelo autor (2026).");
+    expect(documentXml).not.toContain("Dimensao\tAndrade (2025)\tPresente pesquisa");
+    expect(documentXml.indexOf("Fonte: elaborado pelo autor (2026)."))
+      .toBeGreaterThan(documentXml.indexOf("</w:tbl>"));
+  });
+
+  it("converte Quadro 2 tabulado com 2 colunas", async () => {
+    const editorText = `Quadro 2 - Eixos de analise documental
+Eixo	Descricao
+Eixo 1	Politicas de teletrabalho
+Eixo 2	Saude do servidor`;
+    const documentXml = await generatedXml(editorText, {
+      ...fields,
+      workType: "monografia",
+    });
+
+    expect(documentXml).toContain("Quadro 2 - Eixos de analise documental");
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toContain("Eixo");
+    expect(documentXml).toContain("Descricao");
+  });
+
+  it("converte Quadro 3 tabulado com 3 colunas largas", async () => {
+    const editorText = `Quadro 3 - Articulacao entre eixos analiticos, indicadores documentais e roteiro de entrevistas
+Eixo analitico	Indicadores documentais	Roteiro de entrevistas
+Gestao	Normas internas e atas	Perguntas sobre organizacao do trabalho
+Saude	Afastamentos e relatos	Perguntas sobre impactos percebidos`;
+    const documentXml = await generatedXml(editorText, {
+      ...fields,
+      workType: "monografia",
+    });
+
+    expect(documentXml).toContain("Quadro 3 - Articulacao entre eixos analiticos, indicadores documentais e roteiro de entrevistas");
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toContain("Indicadores documentais");
+    expect(documentXml).toContain("Roteiro de entrevistas");
+  });
+
+  it("converte Quadro 5 e preserva fonte abaixo da tabela", async () => {
+    const editorText = `Quadro 5 - Produtos intermediarios da pesquisa
+Produto	Finalidade
+Matriz documental	Organizar os achados
+Roteiro de entrevista	Orientar a coleta
+Fonte: elaborado pelo autor (2026).`;
+    const documentXml = await generatedXml(editorText, {
+      ...fields,
+      workType: "monografia",
+    });
+
+    const tableEnd = documentXml.indexOf("</w:tbl>");
+    const sourceIndex = documentXml.indexOf("Fonte: elaborado pelo autor (2026).");
+    expect(documentXml).toContain("Quadro 5 - Produtos intermediarios da pesquisa");
+    expect(tableEnd).toBeGreaterThan(-1);
+    expect(sourceIndex).toBeGreaterThan(tableEnd);
+  });
+
+  it("move bloco [REF] para referencias no DOCX geral", async () => {
+    const editorText = "# 1 Introducao\nTexto.\n[REF] SOUZA, J. Texto. Lavras: UFLA, 2025.\n[REF] LIMA, A. Outro texto. Lavras: UFLA, 2024.";
+    const documentXml = await generatedXml(editorText, fields);
+
+    expect(documentXml).toContain("REFER\u00caNCIAS");
+    expect(documentXml).toContain("SOUZA, J.");
+    expect(documentXml).toContain("LIMA, A.");
+  });
+});
+
+describe("sumário atualizável (campo TOC real do Word)", () => {
+  async function documentXmlFromBlob(blob: Blob): Promise<string> {
+    return extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
+  }
+
+  it("gera campo TOC real e atualizável para monografia", async () => {
+    const monografiaFields: AcademicFields = {
+      ...emptyAcademicFields(),
+      workType: "monografia",
+      author: "Maria Silva",
+      title: "Qualidade do cafe no sul de Minas",
+      course: "Ciência do Solo",
+      location: "Lavras - MG",
+      year: "2026",
+      resumo: "Resumo do trabalho.",
+      palavrasChave: "cafe; qualidade",
+      abstractText: "Abstract text.",
+      keywords: "coffee; quality",
+      advisor: "Prof. João",
+      referencias: "SILVA, M. Qualidade do cafe. Lavras: UFLA, 2024.",
+    };
+    const blob = await templateForWorkType("monografia").generate({
+      fields: monografiaFields,
+      editorText: "# 1 Introducao\nTexto comum.\n## 1.1 Contexto\nTexto.\n### 1.1.1 Detalhe\nTexto.",
+    });
+    const xml = await documentXmlFromBlob(blob);
+
+    const instructions = fieldInstructionRuns(xml);
+    expect(xml).toContain("SUMÁRIO");
+    expect(instructions).toContain("TOC");
+    expect(instructions).toContain('\\o "1-3"');
+    expect(instructions).toContain("\\h");
+    expect(instructions).toContain("\\z");
+    expect(instructions).toContain("\\u");
+    expect(xml).toMatch(/<w:fldChar w:fldCharType="begin"[^>]*w:dirty="true"/);
+    expect(xml).toContain('<w:fldChar w:fldCharType="separate"/>');
+    expect(xml).toContain('<w:fldChar w:fldCharType="end"/>');
+
+    // Não sobra sumário apenas estático: ausência de entradas estáticas TOC2/TOC3.
+    expect((xml.match(/w:val="TOC2"/g) ?? []).length).toBe(0);
+    expect((xml.match(/w:val="TOC3"/g) ?? []).length).toBe(0);
+
+    // Headings do corpo permanecem presentes para povoar o sumário.
+    expect(xml).toContain('w:val="Heading1"');
+    expect(xml).toContain('w:val="Heading2"');
+    expect(xml).toContain('w:val="Heading3"');
+  });
+
+  it("gera campo TOC real e atualizável para dissertação", async () => {
+    const blob = await generateDocxBlob({
+      fields: {
+        ...emptyAcademicFields(),
+        workType: "dissertacao",
+        author: "Maria Silva",
+        title: "T",
+        program: "Ciência do Solo",
+        advisor: "Prof. João",
+        resumo: "R",
+        abstractText: "A",
+        referencias: "SILVA, M. Livro.",
+      },
+      editorText: "# 1 Introducao\nTexto.\n## 1.1 Contexto\nTexto.",
+    });
+    const xml = await documentXmlFromBlob(blob);
+    const instructions = fieldInstructionRuns(xml);
+    expect(instructions).toContain("TOC");
+    expect(xml).toMatch(/<w:fldChar w:fldCharType="begin"[^>]*w:dirty="true"/);
+    expect(xml).toContain('w:val="Heading1"');
+    expect(xml).toContain('w:val="Heading2"');
+  });
+
+  it("gera campo TOC real e atualizável para tese", async () => {
+    const blob = await generateDocxBlob({
+      fields: {
+        ...emptyAcademicFields(),
+        workType: "tese",
+        author: "Maria Silva",
+        title: "T",
+        program: "Ciência do Solo",
+        advisor: "Prof. João",
+        resumo: "R",
+        abstractText: "A",
+        referencias: "SILVA, M. Livro.",
+      },
+      editorText: "# 1 Introducao\nTexto.\n## 1.1 Contexto\nTexto.",
+    });
+    const xml = await documentXmlFromBlob(blob);
+    const instructions = fieldInstructionRuns(xml);
+    expect(instructions).toContain("TOC");
+    expect(xml).toMatch(/<w:fldChar w:fldCharType="begin"[^>]*w:dirty="true"/);
+    expect(xml).toContain('w:val="Heading1"');
+    expect(xml).toContain('w:val="Heading2"');
+  });
+
+  it("gera campo TOC real para projeto de pesquisa quando há sumário", async () => {
+    const projetoFields: AcademicFields = {
+      ...emptyAcademicFields(),
+      workType: "projeto_pesquisa",
+      author: "Maria Silva",
+      title: "Projeto",
+      program: "Educação Científica e Ambiental",
+      location: "Lavras - MG",
+      year: "2026",
+      resumo: "Resumo.",
+      abstractText: "Abstract.",
+      palavrasChave: "p1; p2",
+      keywords: "k1; k2",
+      referencias: "SILVA, M. Projeto. Lavras: UFLA, 2024.",
+    };
+    const editorText = `# 1 INTRODUÇÃO
+Texto.
+
+# 2 PROBLEMA DE PESQUISA
+Descrição.
+
+# 3 OBJETIVO GERAL
+Objetivo.
+
+# 4 METODOLOGIA
+Metodologia.
+
+# 5 CRONOGRAMA
+Cronograma.
+
+# REFERÊNCIAS
+SILVA, M. Projeto. Lavras: UFLA, 2024.
+`;
+    const blob = await templateForWorkType("projeto_pesquisa").generate({ fields: projetoFields, editorText });
+    const xml = await documentXmlFromBlob(blob);
+    const instructions = fieldInstructionRuns(xml);
+    expect(instructions).toContain("TOC");
+    expect(xml).toMatch(/<w:fldChar w:fldCharType="begin"[^>]*w:dirty="true"/);
+    expect(xml).toContain('w:val="Heading1"');
+  });
+
+  it("artigo simples não recebe campo TOC", async () => {
+    const blob = await generateArticleDocxBlob({ fields: articleFields, editorText: "# Introducao\nTexto." });
+    const xml = await documentXmlFromBlob(blob);
+    expect(fieldInstructionRuns(xml)).not.toContain("TOC");
+    expect(xml).not.toMatch(/<w:fldChar w:fldCharType="begin"/);
+  });
+
+  it("CPG não recebe campo TOC", async () => {
+    const cpgFields: AcademicFields = {
+      ...emptyAcademicFields(),
+      workType: "resumo_cpg",
+      author: "Maria Silva",
+      title: "Resumo CPG",
+      resumo: "Resumo.",
+      abstractText: "Abstract.",
+      palavrasChave: "p",
+      keywords: "k",
+    };
+    const blob = await generateCpgDocxBlob({ fields: cpgFields, editorText: "# Introducao\nTexto." });
+    const xml = await documentXmlFromBlob(blob);
+    expect(fieldInstructionRuns(xml)).not.toContain("TOC");
+    expect(xml).not.toMatch(/<w:fldChar w:fldCharType="begin"/);
   });
 });

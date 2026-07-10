@@ -1,96 +1,90 @@
-import { WORK_TYPE_LABELS, type WorkType, type WorkTypeValue } from "../ufla-rules";
+import { useState } from "react";
+import type { WorkTypeValue, WorkType } from "../ufla-rules";
+import { WORK_TYPE_LABELS } from "../ufla-rules";
+import { isResearchProject } from "../ufla-rules";
+
+interface WorkTypeGroup {
+  label: string;
+  values: WorkTypeValue[];
+}
+
+const ACADEMIC_GROUPS: WorkTypeGroup[] = [
+  {
+    label: "Trabalhos acadêmicos longos",
+    values: ["monografia", "dissertacao", "tese"],
+  },
+  { label: "Projeto", values: ["projeto_pesquisa"] },
+  { label: "Artigos e CPG", values: ["artigo", "resumo_cpg", "resumo_expandido_cpg", "artigo_completo_cpg"] },
+  {
+    label: "Coleção Produção Acadêmica UFLA",
+    values: [
+      "artigo_cientifico_ufla",
+      "patente_ufla",
+      "revisao_sistematica_ufla",
+      "estudo_caso_ufla",
+      "software_aplicativo_ufla",
+      "cultivar_ufla",
+      "relatorio_estagio_ufla",
+      "proposta_intervencao_ufla",
+    ],
+  },
+  { label: "Outros", values: ["outro"] },
+];
 
 interface WorkTypeSelectorProps {
   value: WorkTypeValue;
-  onChange: (workType: WorkTypeValue) => void;
-}
-
-const LONG_FORM_TYPES: WorkType[] = ["monografia", "dissertacao", "tese"];
-const PROJECT_TYPES: WorkType[] = ["projeto_pesquisa"];
-const ARTICLE_AND_CPG_TYPES: WorkType[] = ["artigo", "resumo_cpg", "resumo_expandido_cpg", "artigo_completo_cpg"];
-const UFLA_PRODUCTION_TYPES: WorkType[] = [
-  "artigo_cientifico_ufla",
-  "patente_ufla",
-  "revisao_sistematica_ufla",
-  "estudo_caso_ufla",
-  "cultivar_ufla",
-  "relatorio_estagio_ufla",
-  "proposta_intervencao_ufla",
-];
-const OTHER_TYPES: WorkType[] = ["software_aplicativo_ufla", "outro"];
-
-function renderOptions(types: WorkType[]) {
-  return types.map((type) => (
-    <option key={type} value={type}>
-      {WORK_TYPE_LABELS[type]}
-    </option>
-  ));
-}
-
-function selectionHint(value: WorkTypeValue): { title: string; text: string; tone: "neutral" | "warning" | "success" } {
-  if (value === "dissertacao" || value === "tese") {
-    return {
-      title: "Rascunho editável",
-      text: "Antes da versão final, revise orientador, banca, ficha catalográfica e atualize o sumário no Word ou LibreOffice.",
-      tone: "warning",
-    };
-  }
-  if (value === "monografia") {
-    return {
-      title: "Trabalho longo",
-      text: "Confira orientador, folha de aprovação, ficha catalográfica e sumário antes da entrega final.",
-      tone: "warning",
-    };
-  }
-  if (value === "projeto_pesquisa") {
-    return {
-      title: "Projeto de pesquisa",
-      text: "Este modelo não usa ficha catalográfica nem folha de aprovação. O sumário deve ser atualizado no Word ou LibreOffice.",
-      tone: "success",
-    };
-  }
-  if (value) {
-    return {
-      title: "Modelo selecionado",
-      text: "Confira se o modelo combina com o arquivo importado. O tipo escolhido define a estrutura do DOCX.",
-      tone: "neutral",
-    };
-  }
-  return {
-    title: "Selecione o modelo",
-    text: "Escolha o tipo antes de gerar. Essa decisão define capa, sumário, ficha e seções permitidas.",
-    tone: "neutral",
-  };
+  onChange: (value: WorkTypeValue) => void;
 }
 
 export function WorkTypeSelector({ value, onChange }: WorkTypeSelectorProps) {
-  const hint = selectionHint(value);
+  const [open, setOpen] = useState(false);
 
   return (
-    <section className="work-type-card" aria-label="Escolha do tipo de trabalho">
-      <p className="section-kicker">Etapa 2</p>
-      <label htmlFor="work-type">Tipo de trabalho</label>
-      <select id="work-type" value={value} aria-describedby="work-type-help" onChange={(event) => onChange(event.target.value as WorkTypeValue)}>
-        <option value="">Selecione</option>
-        <optgroup label="Trabalhos acadêmicos longos">
-          {renderOptions(LONG_FORM_TYPES)}
-        </optgroup>
-        <optgroup label="Projeto">
-          {renderOptions(PROJECT_TYPES)}
-        </optgroup>
-        <optgroup label="Artigos e CPG">
-          {renderOptions(ARTICLE_AND_CPG_TYPES)}
-        </optgroup>
-        <optgroup label="Coleção Produção Acadêmica UFLA">
-          {renderOptions(UFLA_PRODUCTION_TYPES)}
-        </optgroup>
-        <optgroup label="Outros">
-          {renderOptions(OTHER_TYPES)}
-        </optgroup>
-      </select>
-      <div id="work-type-help" className={`work-type-hint ${hint.tone}`} role="note">
-        <strong>{hint.title}:</strong> {hint.text}
+    <div className="work-type-selector">
+      <label className="work-type-label" htmlFor="work-type">Tipo de trabalho</label>
+      <div className="work-type-select">
+        <select
+          id="work-type"
+          value={value}
+          onChange={(event) => {
+            onChange(event.target.value as WorkTypeValue);
+            setOpen(false);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
+        >
+          <option value="">Selecione</option>
+          {ACADEMIC_GROUPS.map((group) => (
+            <optgroup key={group.label} label={group.label}>
+              {group.values.map((type) => (
+                <option key={type} value={type}>
+                  {WORK_TYPE_LABELS[type as WorkType]}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
       </div>
-    </section>
+      {open && value === "" && (
+        <p className="work-type-hint">
+          Escolha o modelo que melhor descreve o trabalho. Cada tipo define os elementos pré-textuais, campos obrigatórios e regras de exportação.
+        </p>
+      )}
+      {value === "monografia" ? (
+        <p className="work-type-warning">
+          Use este modelo para rascunho editável. Confira orientador, folha de aprovação, ficha catalográfica e sumário antes da versão final.
+        </p>
+      ) : null}
+      {value === "dissertacao" || value === "tese" ? (
+        <p className="work-type-warning">
+          Use este modelo para rascunho editável. A versão final exige revisão de orientador, banca, ficha catalográfica e sumário.
+        </p>
+      ) : null}
+      {isResearchProject(value) ? (
+        <p className="work-type-info">
+          Projeto de pesquisa não recebe ficha catalográfica nem folha de aprovação. O sumário deve ser atualizado no Word/LibreOffice.
+        </p>
+      ) : null}
+    </div>
   );
 }

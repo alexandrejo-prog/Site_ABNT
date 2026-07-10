@@ -8,6 +8,8 @@ import {
   detectCaption,
   captionParagraph,
   tokenizeMarkup,
+  detectTabbedTableBlock,
+  tabbedTableBlock,
 } from "../src/docx-render-core";
 
 describe("docx-render-core", () => {
@@ -123,6 +125,38 @@ describe("docx-render-core", () => {
     it("gera paragrafo centralizado com texto", () => {
       const paragraph = captionParagraph("Figura 1 - Título");
       expect(paragraph).toBeDefined();
+    });
+  });
+
+  describe("tabbedTableBlock", () => {
+    it("converte bloco tabulado em legenda, tabela com bordas e fonte", () => {
+      const text = "Quadro 1 - Delimitação\nDimensão\tAndrade (2025)\tPresente pesquisa\nRecorte\tImplementação\tRepercussões\nFonte: elaborado pelo autor (2026).";
+      const detected = detectTabbedTableBlock(text);
+      expect(detected?.rows).toHaveLength(2);
+      expect(detected?.sourceLine).toBe("Fonte: elaborado pelo autor (2026).");
+
+      const result = tabbedTableBlock(text);
+      expect(result.length).toBe(3);
+      const xml = JSON.stringify(result);
+      expect(xml).toContain("w:tbl");
+      expect(xml).toContain("Quadro 1 - Delimitação");
+      expect(xml).toContain("Dimensão");
+      expect(xml).toContain("Andrade (2025)");
+      expect(xml).toContain("Presente pesquisa");
+      expect(xml).toContain("Fonte: elaborado pelo autor (2026).");
+    });
+
+    it("converte bloco markdown em tabela", () => {
+      const detected = detectTabbedTableBlock("Quadro 2 - Teste\n| A | B |\n|---|---|\n| C | D |");
+      expect(detected?.rows).toEqual([
+        ["A", "B"],
+        ["C", "D"],
+      ]);
+    });
+
+    it("preserva texto sem tabulação como parágrafo", () => {
+      const result = tabbedTableBlock("Texto sem tabs");
+      expect(result.length).toBe(1);
     });
   });
 });

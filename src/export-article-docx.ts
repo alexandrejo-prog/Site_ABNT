@@ -1,17 +1,18 @@
-﻿import {
+import {
   AlignmentType,
   Document,
   HeadingLevel,
   Packer,
   PageOrientation,
   Paragraph,
+  Table,
   TextRun,
 } from "docx";
 import type { IParagraphOptions } from "docx";
 import { parseEditorContent, type DocxGenerationInput, type EditorBlock } from "./export-docx";
 import { UFLA_RULES } from "./ufla-rules";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
-import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup } from "./docx-render-core";
+import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, tabbedTableBlock } from "./docx-render-core";
 
 const BLACK = "000000";
 const BODY_SIZE = 24;
@@ -23,8 +24,8 @@ interface RunOptions {
   italics?: boolean;
   size?: number;
 }
-
 type DocxHeadingLevel = (typeof HeadingLevel)[keyof typeof HeadingLevel];
+type ArticleChild = Paragraph | Table;
 
 function hasText(value: string): boolean {
   return value.trim().length > 0;
@@ -114,7 +115,7 @@ function labeledSection(label: string, value: string): Paragraph[] {
   ];
 }
 
-function blockToParagraph(block: EditorBlock): Paragraph[] {
+function blockToParagraph(block: EditorBlock): ArticleChild[] {
   if (block.type === "heading1") return [sectionTitle(block.text, HeadingLevel.HEADING_1)];
   if (block.type === "heading2") return [sectionTitle(block.text, HeadingLevel.HEADING_2)];
   if (block.type === "heading3") return [sectionTitle(block.text, HeadingLevel.HEADING_3)];
@@ -127,6 +128,7 @@ function blockToParagraph(block: EditorBlock): Paragraph[] {
     ];
   }
   if (block.type === "scheduleTable") return splitParagraphs(block.text).map((line) => paragraph(line));
+  if (block.type === "tabbedTable") return tabbedTableBlock(block.text);
   return [paragraph(block.text)];
 }
 

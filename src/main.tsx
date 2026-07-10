@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "./docx-toc-field-patch";
 import App from "./App";
 import { ErrorBoundary } from "./ErrorBoundary";
 import "./styles.css";
