@@ -219,10 +219,20 @@
 .validation-pane .force-generate {
   width: 100%;
   align-items: flex-start;
-  padding: 10px;
-  border: 1px solid #e0e5e1;
-  border-radius: 8px;
-  background: #ffffff;
+  gap: 12px;
+  padding: 14px 14px !important;
+  border: 2px solid #d89b13 !important;
+  border-radius: 10px;
+  color: #3f2a00;
+  background: #fff2bf !important;
+  box-shadow: 0 0 0 3px rgba(216, 155, 19, 0.14);
+}
+
+.validation-pane .force-generate input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: #1f7b69;
 }
 
 .validation-pane .force-generate span {
@@ -231,12 +241,222 @@
   line-height: 1.25;
 }
 
-.validation-pane .force-generate small {
-  color: #52616c;
+.validation-pane .force-generate strong {
+  font-size: 0.92rem;
+}
+
+.validation-pane .force-generate small,
+.validation-pane .force-generate::after {
+  color: #5d4300;
   font-size: 0.76rem;
-  font-weight: 500;
+  font-weight: 700;
+}
+
+.validation-pane .force-generate::after {
+  content: "Use somente para gerar rascunho de revisão. Não libera submissão final.";
+  display: block;
+  margin-left: 30px;
+}
+
+.editor-pane {
+  padding: 18px 22px 28px;
+  background: #e8ecef;
+  border-left: 1px solid #d1d8d3;
+  border-right: 1px solid #d1d8d3;
+}
+
+.editor-toolbar-sticky {
+  gap: 10px;
+  padding: 0 0 14px;
+  background: #e8ecef;
+}
+
+.editor-toolbar-sticky::after {
+  content: "3 cm   ▾   1     2     3     4     5     6     7     8     9     10   2 cm";
+  display: block;
+  width: min(100%, 920px);
+  max-width: 920px;
+  height: 26px;
+  margin: 12px auto -2px;
+  padding: 6px 82px 0;
+  border: 1px solid #c3c9cf;
+  border-bottom: 0;
+  border-radius: 2px 2px 0 0;
+  color: #53616d;
+  background: repeating-linear-gradient(to right, #f8fafc 0, #f8fafc 8.8%, #d8e0e8 8.9%, #f8fafc 9%), #f8fafc;
+  box-shadow: 0 6px 12px rgba(15, 23, 42, 0.08);
+  font-family: Arial, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: center;
+  white-space: pre;
+}
+
+.editor-toolbar-sticky .toolbar {
+  max-width: 980px;
+  width: 100%;
+  margin: 0 auto;
+  border: 1px solid #c7d2dd;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.editor-toolbar-sticky .toolbar:first-child {
+  justify-content: flex-start;
+  padding: 10px 12px;
+}
+
+.editor-toolbar-sticky .toolbar:nth-child(2) {
+  gap: 6px;
+  padding: 9px 10px;
+}
+
+.editor-toolbar-sticky .icon-button,
+.editor-toolbar-sticky .text-button {
+  min-height: 38px;
+  border-color: #b8c5c0;
+  background: #fbfcfb;
+}
+
+.editor-toolbar-sticky .icon-button:hover,
+.editor-toolbar-sticky .text-button:hover {
+  color: #163f36;
+  background: #eef7f3;
+  border-color: #1f7b69;
+}
+
+.editor-toolbar-sticky .text-button.active {
+  color: #ffffff;
+  background: #1f7b69;
+  border-color: #1f7b69;
+}
+
+.editor-toolbar-sticky .toolbar-separator,
+.editor-toolbar-sticky .academic-static-separator {
+  width: 1px;
+  min-height: 28px;
+  margin: 0 2px;
+  background: #d7dfd8;
+}
+
+.editor-toolbar-sticky .academic-extra-button {
+  min-width: 38px;
+  padding: 0 8px;
+  color: #163f36;
+  font-size: 0.82rem;
+  font-weight: 900;
+  background: #f8fbfa;
+}
+
+.editor-toolbar-sticky .academic-extra-button[title*="Espaçamento"] {
+  min-width: 48px;
+  font-size: 0.76rem;
+}
+
+.editor-mode-note {
+  max-width: 980px;
+  width: 100%;
+  margin: 0 auto;
+  border-radius: 8px;
+  color: #5d4300;
+  background: #fff1bf;
 }
 
 .rich-editor {
-  font-size: 1.02rem;
+  width: min(100%, 920px);
+  max-width: 920px;
+  min-height: 1120px;
+  margin: 0 auto;
+  padding: 70px 82px;
+  border: 1px solid #c3c9cf;
+  border-radius: 2px;
+  color: #111827;
+  background: #ffffff;
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.16);
+  font-family: "Times New Roman", Times, serif;
+  font-size: 12pt;
+  line-height: 1.5;
+}
+
+.rich-editor:focus {
+  outline: 3px solid rgba(31, 123, 105, 0.22);
+  outline-offset: 4px;
+}
+
+.rich-editor p {
+  margin: 0 0 12pt;
+  text-align: justify;
+}
+
+.rich-editor h1,
+.rich-editor h2,
+.rich-editor h3 {
+  color: #111827;
+  font-family: "Times New Roman", Times, serif;
+  line-height: 1.35;
+}
+
+.rich-editor h1 {
+  margin: 0 0 18pt;
+  font-size: 14pt;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.rich-editor h2 {
+  margin: 18pt 0 12pt;
+  font-size: 12.5pt;
+  font-weight: 700;
+}
+
+.rich-editor blockquote {
+  margin: 12pt 0 12pt 4cm;
+  padding: 0;
+  border-left: 0;
+  font-size: 10pt;
+  line-height: 1.15;
+  text-align: justify;
+}
+
+.rich-editor ul,
+.rich-editor ol {
+  margin: 0 0 12pt 1.5cm;
+  padding-left: 0.5cm;
+}
+
+.rich-editor li {
+  margin: 0 0 6pt;
+  line-height: 1.5;
+  text-align: justify;
+}
+
+@media (max-width: 1180px) {
+  .editor-pane {
+    padding: 16px;
+  }
+
+  .rich-editor {
+    width: min(100%, 860px);
+    padding: 56px 58px;
+  }
+
+  .editor-toolbar-sticky::after {
+    width: min(100%, 860px);
+    padding-left: 58px;
+    padding-right: 58px;
+  }
+}
+
+@media (max-width: 780px) {
+  .editor-toolbar-sticky::after {
+    display: none;
+  }
+
+  .rich-editor {
+    min-height: 720px;
+    padding: 32px 24px;
+    box-shadow: none;
+  }
 }

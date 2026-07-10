@@ -1,6 +1,6 @@
 import { ClipboardEvent as ReactClipboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { saveAs } from "file-saver";
-import { Bold, Eraser, FileCheck2, FileDown, Heading1, Heading2, Italic, Pilcrow, Quote } from "lucide-react";
+import { FileCheck2, FileDown } from "lucide-react";
 import { ACADEMIC_FIELD_KEYS, AcademicFieldKey, type AcademicFields, CONFIDENCE_LABELS, Confidence, emptyAcademicFields, emptyConfidenceMap, isCpgWork, isResearchProject, isUflaCollectionWork } from "./ufla-rules";
 import { ValidationIssue, hasBlockingErrors, validateWork } from "./validators";
 import { isAbsoluteGenerationBlocker, isNonOverridableError } from "./generation-blockers";
@@ -19,7 +19,7 @@ import { finalVersionPendingReport } from "./final-version-pending";
 import { AdherencePanel } from "./components/AdherencePanel";
 import { ValidationSidebar } from "./components/ValidationSidebar";
 import { DraftStatus } from "./components/DraftStatus";
-import { ToolButton } from "./components/ToolButton";
+import { ToolButton, runEditorCommand, insertEditorText, setLineSpacing } from "./components/ToolButton";
 import { ImportBlock } from "./components/ImportBlock";
 import { WorkTypeSelector } from "./components/WorkTypeSelector";
 
@@ -475,8 +475,59 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
         <section className="editor-pane" aria-label="Editor do texto">
           <div className="editor-toolbar-sticky">
             <div className="toolbar" aria-label="Modo de edição"><button className={`text-button ${editorMode === "body" ? "active" : ""}`} type="button" onClick={() => setEditorMode("body")}>Texto</button><button className={`text-button ${editorMode === "references" ? "active" : ""}`} type="button" onClick={() => setEditorMode("references")}>Referências</button></div>
-            <div className="toolbar" aria-label="Ferramentas do editor"><ToolButton title="Desfazer (Ctrl+Z)" onClick={() => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("undo"); }}><span className="toolbar-text">Desfazer</span></ToolButton><ToolButton title="Refazer (Ctrl+Y)" onClick={() => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("redo"); }}><span className="toolbar-text">Refazer</span></ToolButton><ToolButton title="Parágrafo normal" onClick={() => applyBlockStyle("")}><Pilcrow size={18} aria-hidden="true" /></ToolButton><ToolButton title="Título primário" onClick={() => applyBlockStyle("# ")}><Heading1 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Título secundário" onClick={() => applyBlockStyle("## ")}><Heading2 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Negrito" onClick={() => wrapSelection("bold")}><Bold size={18} aria-hidden="true" /></ToolButton><ToolButton title="Itálico" onClick={() => wrapSelection("italic")}><Italic size={18} aria-hidden="true" /></ToolButton><ToolButton title="Citação longa" onClick={() => applyBlockStyle("> ")}><Quote size={18} aria-hidden="true" /></ToolButton><ToolButton title="Referência" onClick={() => applyBlockStyle("[REF] ")}><FileCheck2 size={18} aria-hidden="true" /></ToolButton><ToolButton title="Limpar formatação" onClick={clearFormatting}><Eraser size={18} aria-hidden="true" /></ToolButton></div>
-            <p id={EDITOR_DESCRIPTION_ID} className="field-note editor-mode-note">{editorMode === "references" ? "Editando referências no painel central. Selecione palavras e use Negrito/Itálico como no Word." : "Editando texto principal. Selecione palavras e use Negrito/Itálico como no Word."}</p>
+            <div className="toolbar word-ribbon" aria-label="Faixa de formatação do editor">
+              <div className="word-tool-group" data-group="Área de edição" aria-label="Área de edição">
+                <div className="word-tool-row">
+                  <ToolButton title="Desfazer" glyph="↶" onClick={() => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("undo"); }} />
+                  <ToolButton title="Refazer" glyph="↷" onClick={() => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("redo"); }} />
+                  <ToolButton title="Limpar formatação" glyph="⌫" onClick={clearFormatting} />
+                </div>
+                <span className="word-tool-group-label">Área de edição</span>
+              </div>
+
+              <div className="word-tool-group" data-group="Fonte" aria-label="Fonte">
+                <div className="word-tool-row">
+                  <ToolButton title="Negrito" glyph="N" className="tool-negrito" onClick={() => wrapSelection("bold")} />
+                  <ToolButton title="Itálico" glyph="I" onClick={() => wrapSelection("italic")} />
+                  <ToolButton title="Sublinhado" glyph="S" className="tool-sublinhado" onClick={() => runEditorCommand("underline")} />
+                </div>
+                <span className="word-tool-group-label">Fonte</span>
+              </div>
+
+              <div className="word-tool-group" data-group="Estrutura" aria-label="Estrutura">
+                <div className="word-tool-row">
+                  <ToolButton title="Título 1" glyph="T1" onClick={() => applyBlockStyle("# ")} />
+                  <ToolButton title="Título 2" glyph="T2" onClick={() => applyBlockStyle("## ")} />
+                  <ToolButton title="Citação longa" glyph="❝" onClick={() => applyBlockStyle("> ")} />
+                  <ToolButton title="Referência" glyph="REF" onClick={() => applyBlockStyle("[REF] ")} />
+                </div>
+                <span className="word-tool-group-label">Estrutura</span>
+              </div>
+
+              <div className="word-tool-group" data-group="Parágrafo" aria-label="Parágrafo">
+                <div className="word-tool-row">
+                  <ToolButton title="Lista com marcadores" glyph="•" onClick={() => runEditorCommand("insertUnorderedList")} />
+                  <ToolButton title="Lista numerada" glyph="1." onClick={() => runEditorCommand("insertOrderedList")} />
+                  <ToolButton title="Inserir tabulação" glyph="⇥" onClick={() => insertEditorText("\t")} />
+                  <ToolButton title="Diminuir recuo" glyph="←" onClick={() => runEditorCommand("outdent")} />
+                  <ToolButton title="Aumentar recuo" glyph="→" onClick={() => runEditorCommand("indent")} />
+                  <ToolButton title="Alinhar à esquerda" glyph="E" onClick={() => runEditorCommand("justifyLeft")} />
+                  <ToolButton title="Centralizar" glyph="C" onClick={() => runEditorCommand("justifyCenter")} />
+                  <ToolButton title="Justificar" glyph="J" onClick={() => runEditorCommand("justifyFull")} />
+                </div>
+                <span className="word-tool-group-label">Parágrafo</span>
+              </div>
+
+              <div className="word-tool-group" data-group="Espaçamento" aria-label="Espaçamento">
+                <div className="word-tool-row">
+                  <ToolButton title="Espaçamento simples" glyph="1,0" onClick={() => setLineSpacing("1.2")} />
+                  <ToolButton title="Espaçamento 1,5" glyph="1,5" onClick={() => setLineSpacing("1.5")} />
+                  <ToolButton title="Espaçamento duplo" glyph="2,0" onClick={() => setLineSpacing("2")} />
+                </div>
+                <span className="word-tool-group-label">Espaçamento</span>
+              </div>
+            </div>
+            <p id={EDITOR_DESCRIPTION_ID} className="field-note editor-mode-note">Editor acadêmico: selecione o texto e use a faixa de formatação para aplicar títulos, negrito, alinhamento, recuos e espaçamento.</p>
           </div>
           <div ref={editorRef} className="editor rich-editor" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-describedby={EDITOR_DESCRIPTION_ID} aria-label={editorMode === "references" ? "Editor de referências" : "Editor do texto principal"} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />
           <AdherencePanel expanded={adherenceExpanded} onToggle={() => setAdherenceExpanded((prev) => !prev)} />
