@@ -1,4 +1,4 @@
-﻿import { editorMarkupToHtml } from "./editor-markup";
+import { editorMarkupToHtml } from "./editor-markup";
 
 type HtmlNode = TextHtmlNode | ElementHtmlNode;
 
@@ -82,7 +82,7 @@ function parseHtmlFragment(html: string): HtmlNode[] {
 }
 
 function normalizeInlineWhitespace(value: string): string {
-  return value.replace(/\r\n?/g, "\n").replace(/[\t ]+/g, " ");
+  return value.replace(/\r\n?/g, "\n");
 }
 
 function inlineToMarkup(node: HtmlNode): string {

@@ -496,6 +496,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
         </section>
 
         <section className="editor-pane" aria-label="Editor do texto">
+          {isTiptapEditorEnabled && <p className="tiptap-experimental-warning" role="note">Modo experimental Tiptap ativo. Use para testes; a versão estável ainda usa o editor legado.</p>}
           <div className="editor-toolbar-sticky">
             <div className="word-ribbon-tabs" aria-label="Abas da faixa">
               <button className="word-ribbon-tab active" type="button">Página Inicial</button>
