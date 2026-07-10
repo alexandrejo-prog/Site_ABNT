@@ -6,7 +6,7 @@ describe("aviso do Tiptap experimental", () => {
   const appSource = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
 
   it("exibe aviso apenas quando o Tiptap esta ativo", () => {
-    expect(appSource).toContain("Modo experimental Tiptap ativo");
+    expect(appSource).toContain("Modo Tiptap experimental.");
     expect(appSource).toContain("isTiptapEditorEnabled &&");
   });
 });

@@ -11,7 +11,7 @@ describe("Tiptap visible toggle", () => {
   });
 
   it("altera URL para ativar Tiptap ao selecionar modo", () => {
-    expect(source).toContain("editor=tiptap");
+    expect(source).toContain('searchParams.set("editor", "tiptap")');
     expect(source).toContain("window.history.pushState");
     expect(source).toContain("window.location.reload");
   });
@@ -22,7 +22,7 @@ describe("Tiptap visible toggle", () => {
   });
 
   it("mantem aviso experimental apenas no modo Tiptap", () => {
-    expect(source).toContain("Modo experimental Tiptap ativo");
+    expect(source).toContain("Modo Tiptap experimental.");
     expect(source).toContain("isTiptapEditorEnabled &&");
   });
 });

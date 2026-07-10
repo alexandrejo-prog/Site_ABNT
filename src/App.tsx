@@ -133,7 +133,7 @@ export default function App() {
   const isTiptapEditorEnabled = useMemo(() => useTiptapExperimentalEditor(), []);
   const editorAriaLabel = editorMode === "references" ? "Editor de referências" : "Editor do texto principal";
   const editorHelpText = isTiptapEditorEnabled
-    ? "Editor Tiptap experimental ativo: edição estruturada em teste. Negrito, itálico, sublinhado, títulos, listas, citação, referência ABNT e alinhamento já funcionam. Recuos, régua e espaçamento ainda estão em adaptação."
+    ? "Edição estruturada em teste. Negrito, itálico, sublinhado, títulos, listas, citação, referência ABNT e alinhamento funcionam."
     : "Editor acadêmico: selecione o texto e use a faixa de formatação. A régua altera recuos do parágrafo selecionado em passos de 0,25 cm.";
   const finalPending = useMemo(() => finalVersionPendingReport(fields, activeEditorText), [fields, activeEditorText]);
 
@@ -495,11 +495,6 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
         </section>
 
         <section className="editor-pane" aria-label="Editor do texto">
-          {isTiptapEditorEnabled && (
-            <p className="tiptap-experimental-warning" role="note">
-              Modo experimental Tiptap ativo. Use para testes. O DOCX ainda é gerado pelo mesmo exportador estável.
-            </p>
-          )}
           <div className="editor-toolbar-sticky">
             <div className="word-ribbon-tabs" aria-label="Abas da faixa">
               <button className="word-ribbon-tab active" type="button">Página Inicial</button>
@@ -529,62 +524,112 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                 <option value="tiptap">Tiptap experimental</option>
               </select>
             </div>
-            <div className="toolbar word-ribbon" aria-label="Faixa de formatação do editor">
-              <div className="word-tool-group" data-group="Área de edição" aria-label="Área de Transferência">
-                <div className="word-tool-row">
-                  <ToolButton title="Limpar formatação" glyph="⌫" onClick={() => runEditorAction("clearFormatting", clearFormatting)} />
-                  <ToolButton title="Desfazer" glyph="↶" onClick={() => runEditorAction("undo", () => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("undo"); })} />
-                  <ToolButton title="Refazer" glyph="↷" onClick={() => runEditorAction("redo", () => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("redo"); })} />
+            {isTiptapEditorEnabled ? (
+              <div className="tiptap-toolbar" aria-label="Faixa de formatação Tiptap">
+                <div className="tiptap-toolbar-group">
+                  <span className="tiptap-toolbar-label">Texto</span>
+                  <div className="tiptap-toolbar-row">
+                    <ToolButton title="Negrito" glyph="N" className="tool-negrito" onClick={() => runEditorAction("bold", () => wrapSelection("bold"))} />
+                    <ToolButton title="Itálico" glyph="I" onClick={() => runEditorAction("italic", () => wrapSelection("italic"))} />
+                    <ToolButton title="Sublinhado" glyph="S" className="tool-sublinhado" onClick={() => runEditorAction("underline", () => runEditorCommand("underline"))} />
+                    <ToolButton title="Limpar formatação" glyph="⌫" onClick={() => runEditorAction("clearFormatting", clearFormatting)} />
+                  </div>
                 </div>
-                <span className="word-tool-group-label">Área de Transferência</span>
+                <div className="tiptap-toolbar-group">
+                  <span className="tiptap-toolbar-label">Estrutura</span>
+                  <div className="tiptap-toolbar-row">
+                    <ToolButton title="Normal" glyph="¶" onClick={() => runEditorAction("paragraph", () => applyBlockStyle("p"))} />
+                    <ToolButton title="Título 1" glyph="T1" onClick={() => runEditorAction("heading1", () => applyBlockStyle("# "))} />
+                    <ToolButton title="Título 2" glyph="T2" onClick={() => runEditorAction("heading2", () => applyBlockStyle("## "))} />
+                    <ToolButton title="Citação" glyph="❝" onClick={() => runEditorAction("blockquote", () => applyBlockStyle("> "))} />
+                    <ToolButton title="Ref. ABNT" glyph="Ref" tooltip="Marca o parágrafo como referência bibliográfica para a seção REFERÊNCIAS do DOCX." onClick={() => runEditorAction("reference", () => applyBlockStyle("[REF] "))} />
+                  </div>
+                </div>
+                <div className="tiptap-toolbar-group">
+                  <span className="tiptap-toolbar-label">Listas</span>
+                  <div className="tiptap-toolbar-row">
+                    <ToolButton title="Marcadores" glyph="•" onClick={() => runEditorAction("bulletList", () => runEditorCommand("insertUnorderedList"))} />
+                    <ToolButton title="Numerada" glyph="1." onClick={() => runEditorAction("orderedList", () => runEditorCommand("insertOrderedList"))} />
+                  </div>
+                </div>
+                <div className="tiptap-toolbar-group">
+                  <span className="tiptap-toolbar-label">Alinhamento</span>
+                  <div className="tiptap-toolbar-row">
+                    <ToolButton title="Alinhar à esquerda" glyph="E" onClick={() => runEditorAction("alignLeft", () => runEditorCommand("justifyLeft"))} />
+                    <ToolButton title="Centralizar" glyph="C" onClick={() => runEditorAction("alignCenter", () => runEditorCommand("justifyCenter"))} />
+                    <ToolButton title="Justificar" glyph="J" onClick={() => runEditorAction("alignJustify", () => runEditorCommand("justifyFull"))} />
+                  </div>
+                </div>
+                <div className="tiptap-toolbar-group">
+                  <span className="tiptap-toolbar-label">Histórico</span>
+                  <div className="tiptap-toolbar-row">
+                    <ToolButton title="Desfazer" glyph="↶" onClick={() => runEditorAction("undo", () => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("undo"); })} />
+                    <ToolButton title="Refazer" glyph="↷" onClick={() => runEditorAction("redo", () => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("redo"); })} />
+                  </div>
+                </div>
               </div>
+            ) : (
+              <div className="toolbar word-ribbon" aria-label="Faixa de formatação do editor">
+                <div className="word-tool-group" data-group="Área de edição" aria-label="Área de Transferência">
+                  <div className="word-tool-row">
+                    <ToolButton title="Limpar formatação" glyph="⌫" onClick={() => runEditorAction("clearFormatting", clearFormatting)} />
+                    <ToolButton title="Desfazer" glyph="↶" onClick={() => runEditorAction("undo", () => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("undo"); })} />
+                    <ToolButton title="Refazer" glyph="↷" onClick={() => runEditorAction("redo", () => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("redo"); })} />
+                  </div>
+                  <span className="word-tool-group-label">Área de Transferência</span>
+                </div>
 
-              <div className="word-tool-group" data-group="Fonte" aria-label="Fonte">
-                <div className="word-tool-row">
-                  <FontSelector title="O DOCX final usa Times New Roman 12 conforme UFLA.">Times New Roman</FontSelector>
-                  <FontSelector title="O DOCX final usa Times New Roman 12 conforme UFLA.">12</FontSelector>
-                  <ToolButton title="Negrito" glyph="N" className="tool-negrito" onClick={() => runEditorAction("bold", () => wrapSelection("bold"))} />
-                  <ToolButton title="Itálico" glyph="I" onClick={() => runEditorAction("italic", () => wrapSelection("italic"))} />
-                  <ToolButton title="Sublinhado" glyph="S" className="tool-sublinhado" onClick={() => runEditorAction("underline", () => runEditorCommand("underline"))} />
+                <div className="word-tool-group" data-group="Fonte" aria-label="Fonte">
+                  <div className="word-tool-row">
+                    <FontSelector title="O DOCX final usa Times New Roman 12 conforme UFLA.">Times New Roman</FontSelector>
+                    <FontSelector title="O DOCX final usa Times New Roman 12 conforme UFLA.">12</FontSelector>
+                    <ToolButton title="Negrito" glyph="N" className="tool-negrito" onClick={() => runEditorAction("bold", () => wrapSelection("bold"))} />
+                    <ToolButton title="Itálico" glyph="I" onClick={() => runEditorAction("italic", () => wrapSelection("italic"))} />
+                    <ToolButton title="Sublinhado" glyph="S" className="tool-sublinhado" onClick={() => runEditorAction("underline", () => runEditorCommand("underline"))} />
+                  </div>
+                  <span className="word-tool-group-label">Fonte</span>
                 </div>
-                <span className="word-tool-group-label">Fonte</span>
-              </div>
 
-              <div className="word-tool-group" data-group="Estrutura" aria-label="Estrutura">
-                <div className="word-tool-row">
-                  <ToolButton title="Título 1" glyph="T1" onClick={() => runEditorAction("heading1", () => applyBlockStyle("# "))} />
-                  <ToolButton title="Título 2" glyph="T2" onClick={() => runEditorAction("heading2", () => applyBlockStyle("## "))} />
-                  <ToolButton title="Citação longa" glyph="❝" onClick={() => runEditorAction("blockquote", () => applyBlockStyle("> "))} />
-                  <ToolButton title="Marcar como referência bibliográfica" glyph="Ref. ABNT" className="tool-reference" tooltip="Marca o parágrafo como referência bibliográfica para a seção REFERÊNCIAS do DOCX." onClick={() => runEditorAction("reference", () => applyBlockStyle("[REF] "))} />
+                <div className="word-tool-group" data-group="Estrutura" aria-label="Estrutura">
+                  <div className="word-tool-row">
+                    <ToolButton title="Título 1" glyph="T1" onClick={() => runEditorAction("heading1", () => applyBlockStyle("# "))} />
+                    <ToolButton title="Título 2" glyph="T2" onClick={() => runEditorAction("heading2", () => applyBlockStyle("## "))} />
+                    <ToolButton title="Citação longa" glyph="❝" onClick={() => runEditorAction("blockquote", () => applyBlockStyle("> "))} />
+                    <ToolButton title="Marcar como referência bibliográfica" glyph="Ref. ABNT" className="tool-reference" tooltip="Marca o parágrafo como referência bibliográfica para a seção REFERÊNCIAS do DOCX." onClick={() => runEditorAction("reference", () => applyBlockStyle("[REF] "))} />
+                  </div>
+                  <span className="word-tool-group-label">Estrutura</span>
                 </div>
-                <span className="word-tool-group-label">Estrutura</span>
-              </div>
 
-              <div className="word-tool-group" data-group="Parágrafo" aria-label="Parágrafo">
-                <div className="word-tool-row">
-                  <ToolButton title="Lista com marcadores" glyph="•" onClick={() => runEditorAction("bulletList", () => runEditorCommand("insertUnorderedList"))} />
-                  <ToolButton title="Lista numerada" glyph="1." onClick={() => runEditorAction("orderedList", () => runEditorCommand("insertOrderedList"))} />
-                  {!isTiptapEditorEnabled && <ToolButton title="Inserir tabulação" glyph="⇥" onClick={() => insertEditorText("\t")} />}
-                  {!isTiptapEditorEnabled && <ToolButton title="Diminuir recuo" glyph="←" onClick={() => runEditorCommand("outdent")} />}
-                  {!isTiptapEditorEnabled && <ToolButton title="Aumentar recuo" glyph="→" onClick={() => runEditorCommand("indent")} />}
-                  <ToolButton title="Alinhar à esquerda" glyph="E" onClick={() => runEditorAction("alignLeft", () => runEditorCommand("justifyLeft"))} />
-                  <ToolButton title="Centralizar" glyph="C" onClick={() => runEditorAction("alignCenter", () => runEditorCommand("justifyCenter"))} />
-                  <ToolButton title="Justificar" glyph="J" onClick={() => runEditorAction("alignJustify", () => runEditorCommand("justifyFull"))} />
+                <div className="word-tool-group" data-group="Parágrafo" aria-label="Parágrafo">
+                  <div className="word-tool-row">
+                    <ToolButton title="Lista com marcadores" glyph="•" onClick={() => runEditorAction("bulletList", () => runEditorCommand("insertUnorderedList"))} />
+                    <ToolButton title="Lista numerada" glyph="1." onClick={() => runEditorAction("orderedList", () => runEditorCommand("insertOrderedList"))} />
+                    {!isTiptapEditorEnabled && <ToolButton title="Inserir tabulação" glyph="⇥" onClick={() => insertEditorText("\t")} />}
+                    {!isTiptapEditorEnabled && <ToolButton title="Diminuir recuo" glyph="←" onClick={() => runEditorCommand("outdent")} />}
+                    {!isTiptapEditorEnabled && <ToolButton title="Aumentar recuo" glyph="→" onClick={() => runEditorCommand("indent")} />}
+                    <ToolButton title="Alinhar à esquerda" glyph="E" onClick={() => runEditorAction("alignLeft", () => runEditorCommand("justifyLeft"))} />
+                    <ToolButton title="Centralizar" glyph="C" onClick={() => runEditorAction("alignCenter", () => runEditorCommand("justifyCenter"))} />
+                    <ToolButton title="Justificar" glyph="J" onClick={() => runEditorAction("alignJustify", () => runEditorCommand("justifyFull"))} />
+                  </div>
+                  <span className="word-tool-group-label">Parágrafo</span>
                 </div>
-                <span className="word-tool-group-label">Parágrafo</span>
-              </div>
 
-              <div className="word-tool-group" data-group="Espaçamento" aria-label="Espaçamento">
-                <div className="word-tool-row">
-                  {!isTiptapEditorEnabled && <ToolButton title="Espaçamento simples" glyph="1,0" onClick={() => setLineSpacing("1.2")} />}
-                  {!isTiptapEditorEnabled && <ToolButton title="Espaçamento 1,5" glyph="1,5" onClick={() => setLineSpacing("1.5")} />}
-                  {!isTiptapEditorEnabled && <ToolButton title="Espaçamento duplo" glyph="2,0" onClick={() => setLineSpacing("2")} />}
+                <div className="word-tool-group" data-group="Espaçamento" aria-label="Espaçamento">
+                  <div className="word-tool-row">
+                    {!isTiptapEditorEnabled && <ToolButton title="Espaçamento simples" glyph="1,0" onClick={() => setLineSpacing("1.2")} />}
+                    {!isTiptapEditorEnabled && <ToolButton title="Espaçamento 1,5" glyph="1,5" onClick={() => setLineSpacing("1.5")} />}
+                    {!isTiptapEditorEnabled && <ToolButton title="Espaçamento duplo" glyph="2,0" onClick={() => setLineSpacing("2")} />}
+                  </div>
+                  <span className="word-tool-group-label">Espaçamento</span>
                 </div>
-                <span className="word-tool-group-label">Espaçamento</span>
               </div>
-            </div>
+            )}
             {!isTiptapEditorEnabled && <EditorRuler onCommand={handleRichEditorInput} />}
-            {isTiptapEditorEnabled && <p className="field-note editor-mode-note">Régua ainda em adaptação para o editor Tiptap experimental.</p>}
+            {isTiptapEditorEnabled && (
+              <p className="tiptap-mode-banner" role="note">
+                Modo Tiptap experimental. Use para testar a nova edição. O DOCX continua sendo gerado pelo exportador estável.
+              </p>
+            )}
             <p id={EDITOR_DESCRIPTION_ID} className="field-note editor-mode-note">{editorHelpText}</p>
           </div>
           <div className="editor-page-stack" aria-label="Editor de texto contínuo">

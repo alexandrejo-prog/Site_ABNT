@@ -922,16 +922,87 @@ button:focus-visible,
   cursor: pointer;
 }
 
-.tiptap-experimental-warning {
+.tiptap-mode-banner {
   margin: 0;
-  padding: 8px 10px;
-  color: #5d4300;
-  background: #fff0bf;
-  border: 1px solid #f0c987;
+  padding: 6px 10px;
+  color: #374151;
+  background: #e5e7eb;
+  border: 1px solid #d1d5db;
   border-radius: 6px;
-  font-size: 0.82rem;
-  font-weight: 750;
+  font-size: 0.78rem;
+  font-weight: 600;
   text-align: center;
+}
+
+.tiptap-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.tiptap-toolbar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tiptap-toolbar-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+}
+
+.tiptap-toolbar-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  text-align: center;
+}
+
+.tiptap-toolbar .word-tool-button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #1f2933;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.1s ease, border-color 0.1s ease;
+}
+
+.tiptap-toolbar .word-tool-button:hover {
+  border-color: #d1d5db;
+  background: #ffffff;
+}
+
+.tiptap-toolbar .word-tool-button:active,
+.tiptap-toolbar .word-tool-button.is-active {
+  border-color: #9ca3af;
+  background: #e5e7eb;
+}
+
+.tiptap-toolbar .word-tool-button:focus-visible {
+  outline: 2px solid #1f7b69;
+  outline-offset: 1px;
+  border-color: #1f7b69;
+}
+
+.tiptap-toolbar .tool-reference {
+  width: auto;
+  min-width: 48px;
+  padding: 0 6px;
+}
+
+.tiptap-toolbar .tool-reference .word-tool-glyph {
+  font-size: 10px;
+  font-weight: 700;
 }
 
 @media (prefers-reduced-motion: reduce) {

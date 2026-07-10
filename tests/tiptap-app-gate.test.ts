@@ -10,7 +10,7 @@ describe("Tiptap app gate", () => {
     expect(source).toContain('lazy(() => import("./components/AcademicTiptapEditor"))');
     expect(source).toContain("Suspense");
     expect(source).toContain("useTiptapExperimentalEditor");
-    expect(source).toContain("editor=tiptap");
+    expect(source).toContain('searchParams.set("editor", "tiptap")');
     expect(source).toContain("contentEditable");
     expect(source).toContain("editorRef");
     expect(source).toContain("isTiptapEditorEnabled ?");
