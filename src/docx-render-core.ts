@@ -1,8 +1,13 @@
 import {
   AlignmentType,
+  BorderStyle,
   IParagraphOptions,
   Paragraph,
+  Table,
+  TableCell,
+  TableRow,
   TextRun,
+  WidthType,
 } from "docx";
 
 export function cleanMojibakeText(value: string): string {
@@ -212,4 +217,141 @@ export function captionParagraph(
       }),
     ],
   });
+}
+
+export interface TabbedTableBlockParts {
+  caption: string;
+  rows: string[][];
+  sourceLine?: string;
+}
+
+function isSourceLine(line: string): boolean {
+  return /^Fonte:/i.test(line.trim());
+}
+
+function isMarkdownSeparator(line: string): boolean {
+  return /^\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line.trim());
+}
+
+function markdownCells(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim())
+    .filter(Boolean);
+}
+
+function tabbedCells(line: string): string[] {
+  if (line.includes("\t")) return line.split("\t").map((cell) => cell.trim()).filter(Boolean);
+  return line.split(/ {2,}/).map((cell) => cell.trim()).filter(Boolean);
+}
+
+export function detectTabbedTableBlock(text: string): TabbedTableBlockParts | null {
+  const rawLines = text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (rawLines.length < 2) return null;
+
+  const caption = rawLines[0];
+  if (!/^(quadro|tabela)\s+\d+\s*[-:?]?/i.test(caption)) return null;
+
+  const rows: string[][] = [];
+  let sourceLine: string | undefined;
+
+  for (const line of rawLines.slice(1)) {
+    if (isSourceLine(line)) {
+      sourceLine = line;
+      continue;
+    }
+    if (isMarkdownSeparator(line)) continue;
+
+    const cells = line.includes("|") ? markdownCells(line) : tabbedCells(line);
+    if (cells.length > 1) rows.push(cells);
+  }
+
+  if (rows.length === 0) return null;
+  return { caption, rows, sourceLine };
+}
+
+export function tabbedTableBlock(
+  text: string,
+  options: {
+    captionPrefix?: string;
+    bodySize?: number;
+    captionSize?: number;
+    font?: string;
+    sourceFallback?: string;
+  } = {},
+): Array<Paragraph | Table> {
+  const { captionPrefix = "", bodySize = 24, captionSize = 20, font = "Times New Roman", sourceFallback } = options;
+  const detected = detectTabbedTableBlock(text);
+  if (!detected) return splitParagraphs(text).map((line) => simpleParagraph(line));
+
+  const columnCount = Math.max(...detected.rows.map((row) => row.length), 1);
+  const columnWidth = Math.max(1, Math.floor(100 / columnCount));
+
+  const tableRows = detected.rows.map((cells, rowIndex) => {
+    const padded = Array.from({ length: columnCount }, (_, i) => cells[i] ?? "");
+    return new TableRow({
+      children: padded.map((cellText) => new TableCell({
+        width: { size: columnWidth, type: WidthType.PERCENTAGE },
+        margins: { top: 40, bottom: 40, left: 80, right: 80 },
+        children: [
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { line: 240, after: 0 },
+            children: [
+              new TextRun({
+                text: cleanMojibakeText(cellText),
+                bold: rowIndex === 0,
+                font,
+                size: bodySize,
+                color: "000000",
+              }),
+            ],
+          }),
+        ],
+      })),
+    });
+  });
+
+  const result: Array<Paragraph | Table> = [
+    captionParagraph(captionPrefix + detected.caption),
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+        bottom: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+        left: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+        right: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+        insideVertical: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+      },
+      rows: tableRows,
+    }),
+  ];
+
+  const sourceLine = detected.sourceLine ?? sourceFallback;
+  if (sourceLine) {
+    result.push(
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        spacing: { before: 120, after: 120, line: 240 },
+        children: [
+          new TextRun({
+            text: cleanMojibakeText(sourceLine),
+            font,
+            size: captionSize,
+            color: "000000",
+          }),
+        ],
+      }),
+    );
+  }
+
+  return result;
 }

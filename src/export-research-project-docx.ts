@@ -17,7 +17,7 @@ import { isResearchProjectProvisionalText, normalizeKeywordSentence, normalizeRe
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { UFLA_RULES } from "./ufla-rules";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
-import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup } from "./docx-render-core";
+import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, tabbedTableBlock, textRunsFromMarkup } from "./docx-render-core";
 
 const PROJECT_TEXTUAL_START_PAGE = 5;
 
@@ -308,6 +308,7 @@ function blockToParagraph(block: EditorBlock, first: boolean): Array<Paragraph |
   if (block.type === "markdownTable") return markdownTableChildren(block.text);
   if (block.type === "plainScheduleTable") return tabularBlockChildren(block.text);
   if (block.type === "scheduleTable") return tabularBlockChildren(block.text);
+  if (block.type === "tabbedTable") return tabbedTableBlock(block.text, { sourceFallback: "Fonte: elaborado pelo autor." });
   return [markupParagraph(block.text)];
 }
 

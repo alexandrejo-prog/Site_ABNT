@@ -52,3 +52,11 @@ export function ToolButton({ title, glyph, onClick, className }: ToolButtonProps
     </button>
   );
 }
+
+export function FontSelector({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <span className="word-font-selector" title={title} aria-label={title}>
+      {children}
+    </span>
+  );
+}

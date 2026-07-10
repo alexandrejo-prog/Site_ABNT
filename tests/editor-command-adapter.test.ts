@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { createEditorCommandAdapter } from "../src/editor-command-adapter";
 
@@ -59,4 +60,36 @@ describe("editor-command-adapter", () => {
     expect(() => adapter.applyEditorCommand("bold")).not.toThrow();
     expect(adapter.applyEditorCommand("bold")).toBe(false);
   });
+
+  function mountEditorWithSelection(): { editor: HTMLElement; paragraph: HTMLElement } {
+    document.body.innerHTML = '<div class="rich-editor" contenteditable="true"><p>Texto selecionado</p></div>';
+    const editor = document.querySelector(".rich-editor") as HTMLElement;
+    const paragraph = editor.querySelector("p") as HTMLElement;
+    const selection = document.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(paragraph);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    editor.focus();
+    return { editor, paragraph };
+  }
+
+  it("ajusta indenta??o do bloco atual", () => {
+    const { paragraph } = mountEditorWithSelection();
+    const adapter = createEditorCommandAdapter({ document });
+
+    expect(adapter.adjustCurrentBlockIndent("firstLine", 0.5)).toBe(true);
+    expect(paragraph.style.textIndent).toBe("0.5cm");
+    expect(paragraph.dataset.firstLineIndent).toBe("0.5");
+  });
+
+  it("respeita limites de indenta??o", () => {
+    const { paragraph } = mountEditorWithSelection();
+    const adapter = createEditorCommandAdapter({ document });
+
+    expect(adapter.adjustCurrentBlockIndent("left", 5)).toBe(true);
+    expect(paragraph.style.marginLeft).toBe("4cm");
+    expect(paragraph.dataset.leftIndent).toBe("4");
+  });
+
 });

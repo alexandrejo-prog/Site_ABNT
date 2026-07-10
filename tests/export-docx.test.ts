@@ -569,4 +569,77 @@ describe("DOCX export", () => {
     expect(documentXml).not.toContain("Programa de Pós-Graduação em Programa de Pós-Graduação em");
     expect(documentXml).toContain("SUMÁRIO");
   });
+
+  it("converte Quadro 1 tabulado em tabela DOCX com fonte separada", async () => {
+    const editorText = `Quadro 1 - Delimitacao da presente pesquisa em relacao a Andrade (2025)
+Dimensao	Andrade (2025)	Presente pesquisa
+Recorte	Implementacao do PGD	Repercussoes do PGD
+Sujeitos	TAEs em teletrabalho	TAEs com experiencia
+Fonte: elaborado pelo autor (2026).`;
+    const documentXml = await generatedXml(editorText, {
+      ...fields,
+      workType: "monografia",
+    });
+
+    expect(documentXml).toContain("Quadro 1 - Delimitacao da presente pesquisa em relacao a Andrade (2025)");
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toContain("Dimensao");
+    expect(documentXml).toContain("Andrade (2025)");
+    expect(documentXml).toContain("Presente pesquisa");
+    expect(documentXml).toContain("Fonte: elaborado pelo autor (2026).");
+    expect(documentXml).not.toContain("Dimensao\tAndrade (2025)\tPresente pesquisa");
+    expect(documentXml.indexOf("Fonte: elaborado pelo autor (2026)."))
+      .toBeGreaterThan(documentXml.indexOf("</w:tbl>"));
+  });
+
+  it("converte Quadro 2 tabulado com 2 colunas", async () => {
+    const editorText = `Quadro 2 - Eixos de analise documental
+Eixo	Descricao
+Eixo 1	Politicas de teletrabalho
+Eixo 2	Saude do servidor`;
+    const documentXml = await generatedXml(editorText, {
+      ...fields,
+      workType: "monografia",
+    });
+
+    expect(documentXml).toContain("Quadro 2 - Eixos de analise documental");
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toContain("Eixo");
+    expect(documentXml).toContain("Descricao");
+  });
+
+  it("converte Quadro 3 tabulado com 3 colunas largas", async () => {
+    const editorText = `Quadro 3 - Articulacao entre eixos analiticos, indicadores documentais e roteiro de entrevistas
+Eixo analitico	Indicadores documentais	Roteiro de entrevistas
+Gestao	Normas internas e atas	Perguntas sobre organizacao do trabalho
+Saude	Afastamentos e relatos	Perguntas sobre impactos percebidos`;
+    const documentXml = await generatedXml(editorText, {
+      ...fields,
+      workType: "monografia",
+    });
+
+    expect(documentXml).toContain("Quadro 3 - Articulacao entre eixos analiticos, indicadores documentais e roteiro de entrevistas");
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toContain("Indicadores documentais");
+    expect(documentXml).toContain("Roteiro de entrevistas");
+  });
+
+  it("converte Quadro 5 e preserva fonte abaixo da tabela", async () => {
+    const editorText = `Quadro 5 - Produtos intermediarios da pesquisa
+Produto	Finalidade
+Matriz documental	Organizar os achados
+Roteiro de entrevista	Orientar a coleta
+Fonte: elaborado pelo autor (2026).`;
+    const documentXml = await generatedXml(editorText, {
+      ...fields,
+      workType: "monografia",
+    });
+
+    const tableEnd = documentXml.indexOf("</w:tbl>");
+    const sourceIndex = documentXml.indexOf("Fonte: elaborado pelo autor (2026).");
+    expect(documentXml).toContain("Quadro 5 - Produtos intermediarios da pesquisa");
+    expect(tableEnd).toBeGreaterThan(-1);
+    expect(sourceIndex).toBeGreaterThan(tableEnd);
+  });
+
 });

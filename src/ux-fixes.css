@@ -271,28 +271,6 @@
   background: #e8ecef;
 }
 
-.editor-toolbar-sticky::after {
-  content: "3 cm   ▾   1     2     3     4     5     6     7     8     9     10   2 cm";
-  display: block;
-  width: min(100%, 920px);
-  max-width: 920px;
-  height: 26px;
-  margin: 12px auto -2px;
-  padding: 6px 82px 0;
-  border: 1px solid #c3c9cf;
-  border-bottom: 0;
-  border-radius: 2px 2px 0 0;
-  color: #53616d;
-  background: repeating-linear-gradient(to right, #f8fafc 0, #f8fafc 8.8%, #d8e0e8 8.9%, #f8fafc 9%), #f8fafc;
-  box-shadow: 0 6px 12px rgba(15, 23, 42, 0.08);
-  font-family: Arial, sans-serif;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-align: center;
-  white-space: pre;
-}
-
 .editor-toolbar-sticky .toolbar {
   max-width: 980px;
   width: 100%;
@@ -441,18 +419,9 @@
     width: min(100%, 860px);
     padding: 56px 58px;
   }
-
-  .editor-toolbar-sticky::after {
-    width: min(100%, 860px);
-    padding-left: 58px;
-    padding-right: 58px;
-  }
 }
 
 @media (max-width: 780px) {
-  .editor-toolbar-sticky::after {
-    display: none;
-  }
 
   .rich-editor {
     min-height: 720px;

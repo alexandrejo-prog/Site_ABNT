@@ -9,6 +9,9 @@ describe("interface estática", () => {
   const workTypeSelector = readFileSync(join(process.cwd(), "src", "components", "WorkTypeSelector.tsx"), "utf8");
   const adherence = readFileSync(join(process.cwd(), "src", "components", "AdherencePanel.tsx"), "utf8");
   const styles = readFileSync(join(process.cwd(), "src", "styles.css"), "utf8");
+  const wordToolbar = readFileSync(join(process.cwd(), "src", "word-toolbar.css"), "utf8");
+  const uxFixes = readFileSync(join(process.cwd(), "src", "ux-fixes.css"), "utf8");
+  const ruler = readFileSync(join(process.cwd(), "src", "components", "EditorRuler.tsx"), "utf8");
   const combined = `${app}\n${sidebar}\n${adherence}`;
   const uiComponents = `${importBlock}\n${workTypeSelector}`;
 
@@ -66,5 +69,26 @@ describe("interface estática", () => {
   it("mensagem pós-geração orienta atualização no Word/LibreOffice", () => {
     expect(app).toContain("Rascunho gerado. Abra no Word/LibreOffice, atualize o sumário e substitua campos provisórios antes da submissão.");
     expect(app).toContain("DOCX gerado. Se o sumário aparecer vazio, atualize os campos no Word/LibreOffice. Isso é esperado.");
+  });
+
+  it("ribbon tem aba Página Início e grupos compactos", () => {
+    expect(app).toContain("word-ribbon-tab");
+    expect(app).toContain("Página Início");
+    expect(app).toContain("Área de Transferência");
+    expect(app).toContain("Espaçamento");
+    expect(app).toContain('data-group="Fonte"');
+    expect(app).toContain('data-group="Parágrafo"');
+  });
+
+  it("seletores de fonte são visuais e desabilitados", () => {
+    expect(app).toContain("Times New Roman");
+    expect(app).toContain("FontSelector");
+  });
+
+  it("régua é componente funcional e não pseudo-elemento CSS", () => {
+    expect(app).toContain("EditorRuler");
+    expect(ruler).toContain("editor-ruler-controls");
+    expect(wordToolbar).toContain(".editor-ruler-controls");
+    expect(uxFixes).not.toContain(".editor-toolbar-sticky::after");
   });
 });

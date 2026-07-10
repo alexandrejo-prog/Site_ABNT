@@ -19,9 +19,10 @@ import { finalVersionPendingReport } from "./final-version-pending";
 import { AdherencePanel } from "./components/AdherencePanel";
 import { ValidationSidebar } from "./components/ValidationSidebar";
 import { DraftStatus } from "./components/DraftStatus";
-import { ToolButton, runEditorCommand, insertEditorText, setLineSpacing } from "./components/ToolButton";
+import { ToolButton, FontSelector, runEditorCommand, insertEditorText, setLineSpacing } from "./components/ToolButton";
 import { ImportBlock } from "./components/ImportBlock";
 import { WorkTypeSelector } from "./components/WorkTypeSelector";
+import EditorRuler from "./components/EditorRuler";
 
 const FIELD_LABELS: Record<AcademicFieldKey, string> = {
   author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho", course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador", location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave", abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão", referencias: "Referências", anexos: "Anexos", apendices: "Apêndices", dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators", imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema", problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese", objetivoGeral: "Objetivo Geral", objetivosEspecificos: "Objetivos Específicos", justificativa: "Justificativa", referencialTeorico: "Referencial Teórico", metodologia: "Metodologia", cronograma: "Cronograma", recursosOrcamento: "Recursos/Orçamento", resultadosEsperados: "Resultados Esperados", corpusDados: "Corpus/Dados", contextoInstitucional: "Contexto Institucional", conclusaoProvisoria: "Conclusão Provisória", contribuicoesImpactos: "Contribuições/Impactos", impactoSocial: "Impacto social", impactoCientifico: "Impacto científico", impactoEducacional: "Impacto educacional", impactoAmbiental: "Impacto ambiental", impactoTecnologico: "Impacto tecnológico/econômico", publicoBeneficiado: "Público beneficiado", aderenciaOds: "Aderência a ODS/política institucional",
@@ -474,19 +475,24 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
 
         <section className="editor-pane" aria-label="Editor do texto">
           <div className="editor-toolbar-sticky">
+            <div className="word-ribbon-tabs" aria-label="Abas da faixa">
+              <button className="word-ribbon-tab active" type="button">Página Início</button>
+            </div>
             <div className="toolbar" aria-label="Modo de edição"><button className={`text-button ${editorMode === "body" ? "active" : ""}`} type="button" onClick={() => setEditorMode("body")}>Texto</button><button className={`text-button ${editorMode === "references" ? "active" : ""}`} type="button" onClick={() => setEditorMode("references")}>Referências</button></div>
             <div className="toolbar word-ribbon" aria-label="Faixa de formatação do editor">
-              <div className="word-tool-group" data-group="Área de edição" aria-label="Área de edição">
+              <div className="word-tool-group" data-group="Área de edição" aria-label="Área de Transferência">
                 <div className="word-tool-row">
+                  <ToolButton title="Limpar formatação" glyph="⌫" onClick={clearFormatting} />
                   <ToolButton title="Desfazer" glyph="↶" onClick={() => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("undo"); }} />
                   <ToolButton title="Refazer" glyph="↷" onClick={() => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("redo"); }} />
-                  <ToolButton title="Limpar formatação" glyph="⌫" onClick={clearFormatting} />
                 </div>
-                <span className="word-tool-group-label">Área de edição</span>
+                <span className="word-tool-group-label">Área de Transferência</span>
               </div>
 
               <div className="word-tool-group" data-group="Fonte" aria-label="Fonte">
                 <div className="word-tool-row">
+                  <FontSelector title="O DOCX final usa Times New Roman 12 conforme UFLA.">Times New Roman</FontSelector>
+                  <FontSelector title="O DOCX final usa Times New Roman 12 conforme UFLA.">12</FontSelector>
                   <ToolButton title="Negrito" glyph="N" className="tool-negrito" onClick={() => wrapSelection("bold")} />
                   <ToolButton title="Itálico" glyph="I" onClick={() => wrapSelection("italic")} />
                   <ToolButton title="Sublinhado" glyph="S" className="tool-sublinhado" onClick={() => runEditorCommand("underline")} />
@@ -527,6 +533,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                 <span className="word-tool-group-label">Espaçamento</span>
               </div>
             </div>
+            <EditorRuler onCommand={handleRichEditorInput} />
             <p id={EDITOR_DESCRIPTION_ID} className="field-note editor-mode-note">Editor acadêmico: selecione o texto e use a faixa de formatação para aplicar títulos, negrito, alinhamento, recuos e espaçamento.</p>
           </div>
           <div ref={editorRef} className="editor rich-editor" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-describedby={EDITOR_DESCRIPTION_ID} aria-label={editorMode === "references" ? "Editor de referências" : "Editor do texto principal"} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />

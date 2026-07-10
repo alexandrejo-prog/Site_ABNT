@@ -197,4 +197,17 @@ describe("CPG first page layout", () => {
     expect(text).toContain("joao@ufla.br");
     expect(text).not.toContain("Curso:");
   });
+
+  it("converte quadro tabulado em tabela DOCX no CPG", async () => {
+    const editorText = `Quadro 3 - Articulação entre eixos
+Eixo\tIndicador\tRoteiro
+Eixo 1\tDocumentos\tEntrevista`;
+    const documentXml = await generatedCpgXml(cpgFields, editorText);
+
+    expect(documentXml).toContain("Quadro 3 - Articulação entre eixos");
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toContain("Eixo");
+    expect(documentXml).toContain("Indicador");
+    expect(documentXml).toContain("Roteiro");
+  });
 });
