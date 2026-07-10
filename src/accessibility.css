@@ -9,10 +9,12 @@
   background: #ffffff;
   color: #163f36;
   font-weight: 700;
+  text-decoration: none;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
 
-.skip-link:focus {
+.skip-link:focus,
+.skip-link:focus-visible {
   transform: translateY(0);
 }
 

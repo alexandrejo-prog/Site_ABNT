@@ -141,6 +141,8 @@
   --ufla-blue-dark: #064B76;
   --ufla-green-dark: #006B3E;
   --ufla-interface-font: "Segoe UI", Arial, sans-serif;
+  --ufla-focus-ring: #1f7b69;
+  --ufla-focus-ring-soft: rgba(31, 123, 105, 0.32);
 }
 
 body {
@@ -318,14 +320,20 @@ textarea {
   line-height: 1.45;
 }
 
-input:focus,
-select:focus,
-textarea:focus,
-.rich-editor:focus,
+a:focus-visible,
 button:focus-visible,
-.upload-button:focus-within {
-  outline: 3px solid rgba(31, 123, 105, 0.25);
-  outline-offset: 2px;
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[role="textbox"]:focus-visible,
+.rich-editor:focus,
+.upload-button:focus-within,
+.word-tool-button:focus-visible,
+.text-button:focus-visible {
+  outline: 3px solid var(--ufla-focus-ring-soft);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 1px var(--ufla-focus-ring);
 }
 
 .confidence {
@@ -809,17 +817,22 @@ button:focus-visible,
 
 .skip-link {
   position: absolute;
-  top: -40px;
-  left: 0;
-  background: #000;
-  color: #fff;
-  padding: 8px 16px;
-  z-index: 100;
+  top: 12px;
+  left: 12px;
+  z-index: 1000;
+  transform: translateY(-160%);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #163f36;
+  background: #ffffff;
+  font-weight: 700;
   text-decoration: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
 
-.skip-link:focus {
-  top: 0;
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: translateY(0);
 }
 
 .confirm-replace-notice {
