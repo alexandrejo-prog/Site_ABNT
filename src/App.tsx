@@ -34,7 +34,6 @@ const RESEARCH_PROJECT_FIELD_KEYS: AcademicFieldKey[] = ["tema", "delimitacaoTem
 const ASSISTED_FIELD_KEYS: AcademicFieldKey[] = ["tema", "problemaPesquisa", "objetivoGeral", "objetivosEspecificos", "justificativa", "referencialTeorico", "corpusDados", "contextoInstitucional", "metodologia", "resultadosEsperados", "conclusaoProvisoria", "contribuicoesImpactos"];
 const LONG_FIELDS = new Set<AcademicFieldKey>(["workNature", "resumo", "abstractText", "introducao", "conclusao", "referencias", "anexos", "apendices", "dedicatoria", "agradecimentos", "epigrafe", "indicadoresImpacto", "impactIndicators", "imageWarnings", ...RESEARCH_PROJECT_FIELD_KEYS]);
 const EDITOR_DESCRIPTION_ID = "editor-mode-note";
-const TIPTAP_EXPERIMENTAL_QUERY = "editor=tiptap";
 type EditorMode = "body" | "references";
 const AcademicTiptapEditor = lazy(() => import("./components/AcademicTiptapEditor"));
 
@@ -134,7 +133,7 @@ export default function App() {
   const isTiptapEditorEnabled = useMemo(() => useTiptapExperimentalEditor(), []);
   const editorAriaLabel = editorMode === "references" ? "Editor de referências" : "Editor do texto principal";
   const editorHelpText = isTiptapEditorEnabled
-    ? `Editor Tiptap experimental: edição estruturada em teste. O DOCX continua sendo gerado pelo mesmo exportador. Ativado por ?${TIPTAP_EXPERIMENTAL_QUERY}.`
+    ? "Editor Tiptap experimental ativo: edição estruturada em teste. Negrito, itálico, sublinhado, títulos, listas, citação, referência ABNT e alinhamento já funcionam. Recuos, régua e espaçamento ainda estão em adaptação."
     : "Editor acadêmico: selecione o texto e use a faixa de formatação. A régua altera recuos do parágrafo selecionado em passos de 0,25 cm.";
   const finalPending = useMemo(() => finalVersionPendingReport(fields, activeEditorText), [fields, activeEditorText]);
 
@@ -496,12 +495,40 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
         </section>
 
         <section className="editor-pane" aria-label="Editor do texto">
-          {isTiptapEditorEnabled && <p className="tiptap-experimental-warning" role="note">Modo experimental Tiptap ativo. Use para testes; a versão estável ainda usa o editor legado.</p>}
+          {isTiptapEditorEnabled && (
+            <p className="tiptap-experimental-warning" role="note">
+              Modo experimental Tiptap ativo. Use para testes. O DOCX ainda é gerado pelo mesmo exportador estável.
+            </p>
+          )}
           <div className="editor-toolbar-sticky">
             <div className="word-ribbon-tabs" aria-label="Abas da faixa">
               <button className="word-ribbon-tab active" type="button">Página Inicial</button>
             </div>
-            <div className="toolbar" aria-label="Modo de edição"><button className={`text-button ${editorMode === "body" ? "active" : ""}`} type="button" onClick={() => setEditorMode("body")}>Texto</button><button className={`text-button ${editorMode === "references" ? "active" : ""}`} type="button" onClick={() => setEditorMode("references")}>Referências</button></div>
+            <div className="toolbar editor-mode-toolbar" aria-label="Modo de edição">
+              <button className={`text-button ${editorMode === "body" ? "active" : ""}`} type="button" onClick={() => setEditorMode("body")}>Texto</button>
+              <button className={`text-button ${editorMode === "references" ? "active" : ""}`} type="button" onClick={() => setEditorMode("references")}>Referências</button>
+              <span className="editor-mode-divider" aria-hidden="true" />
+              <label className="editor-selector-label" htmlFor="editor-mode-select">Editor</label>
+              <select
+                id="editor-mode-select"
+                className="editor-mode-select"
+                value={isTiptapEditorEnabled ? "tiptap" : "legacy"}
+                onChange={(event) => {
+                  const next = event.target.value === "tiptap";
+                  const url = new URL(window.location.href);
+                  if (next) {
+                    url.searchParams.set("editor", "tiptap");
+                  } else {
+                    url.searchParams.delete("editor");
+                  }
+                  window.history.pushState({}, "", url.toString());
+                  window.location.reload();
+                }}
+              >
+                <option value="legacy">Legado estável</option>
+                <option value="tiptap">Tiptap experimental</option>
+              </select>
+            </div>
             <div className="toolbar word-ribbon" aria-label="Faixa de formatação do editor">
               <div className="word-tool-group" data-group="Área de edição" aria-label="Área de Transferência">
                 <div className="word-tool-row">
@@ -537,9 +564,9 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                 <div className="word-tool-row">
                   <ToolButton title="Lista com marcadores" glyph="•" onClick={() => runEditorAction("bulletList", () => runEditorCommand("insertUnorderedList"))} />
                   <ToolButton title="Lista numerada" glyph="1." onClick={() => runEditorAction("orderedList", () => runEditorCommand("insertOrderedList"))} />
-                  <ToolButton title="Inserir tabulação" glyph="⇥" onClick={() => insertEditorText("\t")} />
-                  <ToolButton title="Diminuir recuo" glyph="←" onClick={() => runEditorCommand("outdent")} />
-                  <ToolButton title="Aumentar recuo" glyph="→" onClick={() => runEditorCommand("indent")} />
+                  {!isTiptapEditorEnabled && <ToolButton title="Inserir tabulação" glyph="⇥" onClick={() => insertEditorText("\t")} />}
+                  {!isTiptapEditorEnabled && <ToolButton title="Diminuir recuo" glyph="←" onClick={() => runEditorCommand("outdent")} />}
+                  {!isTiptapEditorEnabled && <ToolButton title="Aumentar recuo" glyph="→" onClick={() => runEditorCommand("indent")} />}
                   <ToolButton title="Alinhar à esquerda" glyph="E" onClick={() => runEditorAction("alignLeft", () => runEditorCommand("justifyLeft"))} />
                   <ToolButton title="Centralizar" glyph="C" onClick={() => runEditorAction("alignCenter", () => runEditorCommand("justifyCenter"))} />
                   <ToolButton title="Justificar" glyph="J" onClick={() => runEditorAction("alignJustify", () => runEditorCommand("justifyFull"))} />
@@ -549,14 +576,14 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
 
               <div className="word-tool-group" data-group="Espaçamento" aria-label="Espaçamento">
                 <div className="word-tool-row">
-                  <ToolButton title="Espaçamento simples" glyph="1,0" onClick={() => setLineSpacing("1.2")} />
-                  <ToolButton title="Espaçamento 1,5" glyph="1,5" onClick={() => setLineSpacing("1.5")} />
-                  <ToolButton title="Espaçamento duplo" glyph="2,0" onClick={() => setLineSpacing("2")} />
+                  {!isTiptapEditorEnabled && <ToolButton title="Espaçamento simples" glyph="1,0" onClick={() => setLineSpacing("1.2")} />}
+                  {!isTiptapEditorEnabled && <ToolButton title="Espaçamento 1,5" glyph="1,5" onClick={() => setLineSpacing("1.5")} />}
+                  {!isTiptapEditorEnabled && <ToolButton title="Espaçamento duplo" glyph="2,0" onClick={() => setLineSpacing("2")} />}
                 </div>
                 <span className="word-tool-group-label">Espaçamento</span>
               </div>
             </div>
-            <EditorRuler onCommand={handleRichEditorInput} />
+            {!isTiptapEditorEnabled && <EditorRuler onCommand={handleRichEditorInput} />}
             {isTiptapEditorEnabled && <p className="field-note editor-mode-note">Régua ainda em adaptação para o editor Tiptap experimental.</p>}
             <p id={EDITOR_DESCRIPTION_ID} className="field-note editor-mode-note">{editorHelpText}</p>
           </div>

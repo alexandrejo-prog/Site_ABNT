@@ -1,5 +1,6 @@
 .tiptap-editor-shell {
-  width: min(100%, 920px);
+  width: 100%;
+  max-width: 920px;
   margin: 0 auto;
 }
 
@@ -19,6 +20,11 @@
 .tiptap-editor .ProseMirror {
   min-height: inherit;
   outline: none;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 12pt;
+  line-height: 1.55;
+  color: #111827;
+  padding: 70px 82px;
 }
 
 .tiptap-editor .ProseMirror:focus-visible,
@@ -78,4 +84,30 @@
   margin: 0 0 6pt;
   line-height: 1.5;
   text-align: justify;
+}
+
+.tiptap-editor strong {
+  font-weight: 700;
+}
+
+.tiptap-editor em {
+  font-style: italic;
+}
+
+.tiptap-editor u {
+  text-decoration: underline;
+}
+
+.tiptap-editor a {
+  color: #1f7b69;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.tiptap-editor .is-editor-empty:first-child::before {
+  color: #9ca3af;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
 }
