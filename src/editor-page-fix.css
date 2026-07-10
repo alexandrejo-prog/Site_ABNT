@@ -1,0 +1,71 @@
+/* Correção de segurança para a tentativa de paginação visual.
+   Mantém o editor como área contínua e remove a navegação interna que prendia o foco. */
+
+.editor-page-stack {
+  max-width: 980px;
+  width: 100%;
+  margin: 0 auto 18px;
+}
+
+.editor-pagination-toolbar {
+  display: none !important;
+}
+
+.editor-page-viewport {
+  max-height: none !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  margin-top: 10px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+.editor-page-viewport:focus-within {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.editor-page-shell {
+  position: relative;
+  width: min(100%, 920px);
+  max-width: 920px;
+  margin: 0 auto;
+  border: 1px solid #c3c9cf;
+  border-radius: 2px;
+  background: #ffffff !important;
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.16) !important;
+}
+
+.editor-page-shell::after {
+  content: none !important;
+}
+
+.editor-page-shell > .rich-editor {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: none;
+  min-height: 1120px !important;
+  margin: 0 !important;
+  padding: 70px 82px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.editor-page-note {
+  max-width: 980px;
+  width: 100%;
+  margin: 10px auto 0;
+  color: #6b7280;
+  font: 600 0/1.35 "Segoe UI", Arial, sans-serif;
+  text-align: center;
+}
+
+.editor-page-note::after {
+  content: "Editor em visualização contínua. A paginação final deve ser conferida no Word/LibreOffice após atualizar campos e sumário.";
+  font-size: 11px;
+}
