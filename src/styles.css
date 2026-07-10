@@ -244,9 +244,9 @@ h1 {
 }
 
 .primary-action.strong {
-  color: #12231f;
-  background: var(--ufla-green);
-  border-color: var(--ufla-green);
+  color: var(--ufla-white);
+  background: var(--ufla-green-dark);
+  border-color: var(--ufla-green-dark);
 }
 
 .workspace {
