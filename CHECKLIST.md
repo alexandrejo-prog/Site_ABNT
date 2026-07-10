@@ -219,3 +219,15 @@
 - [x] Checklist não marca como concluído item parcial
 - [x] Testes cobrem quebra de página antes de seções primárias
 - [x] Testes cobrem referências com negrito
+
+## Acessibilidade (v2.9.0)
+
+- [x] Auditoria automatizada de acessibilidade com axe
+- [x] Teste axe do App principal
+- [x] Testes de contraste WCAG (4.5:1 texto normal, 3:1 foco/texto grande)
+- [x] Skip link para conteúdo principal (#main-content)
+- [x] Foco visível reforçado em controles interativos
+- [x] Mensagens de erro/status/aviso com role=status e role=alert
+- [x] aria-live polite em regiões dinâmicas
+- [x] Regiões nomeadas (banner, main, complementary, erros, alertas)
+- [ ] Conformidade WCAG total (revisão manual ainda recomendada)

@@ -48,6 +48,20 @@ npm run verify
 
 O status real de cobertura, limitacoes conhecidas e pontos que exigem validacao manual esta registrado em `STATUS_NORMATIVO.md`.
 
+## Acessibilidade
+
+A v2.9.0 adiciona melhorias de acessibilidade com guardrails automatizados:
+
+- Auditoria automatizada de acessibilidade com axe.
+- Teste axe do App principal.
+- Testes de contraste WCAG (tokens da interface validados contra 4.5:1 para texto normal e 3:1 para foco/texto grande).
+- Skip link para o conteudo principal (`#main-content`).
+- Foco visivel reforcado em controles interativos.
+- Mensagens de erro, status e aviso com semantica acessivel (`role="status"`, `role="alert"` e `aria-live` aplicados de forma controlada).
+- Regioes nomeadas (banner, main, complementary e regioes de erros/avisos).
+
+**Status honesto:** compatibilidade WCAG AA em evolucao, com guardrails automatizados para axe, contraste, foco e mensagens acessiveis. Revisao manual ainda recomendada antes de uso institucional amplo. O projeto nao declara conformidade WCAG total.
+
 ## Fluxo recomendado
 
 1. Preencha os campos no navegador.
