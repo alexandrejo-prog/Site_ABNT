@@ -17,6 +17,7 @@ import {
   WidthType,
 } from "docx";
 import type { IParagraphOptions, IStylesOptions } from "docx";
+import "./docx-toc-field-patch";
 import { pageMargins, ibgeTable, BODY_SIZE, SINGLE_LINE, ONE_AND_HALF_LINE, BLACK, AUTHOR_SIZE as COVER_AUTHOR_SIZE, TITLE_SIZE as COVER_TITLE_SIZE } from "./docx-shared";
 import { AcademicFields, UFLA_RULES } from "./ufla-rules";
 import { getWorkTypeRequirements } from "./work-type-requirements";

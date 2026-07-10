@@ -27,7 +27,8 @@ describe("estrutura OOXML de layout e sumario", () => {
     const { documentXml, stylesXml, settingsXml } = await loadDocxParts(await generateDocxBlob({ fields, editorText }));
 
     expect(settingsXml).toMatch(/<w:updateFields\b/);
-    expect(tocInstruction(documentXml)).toBe("");
+    expect(tocInstruction(documentXml)).toContain("TOC");
+    expect(tocInstruction(documentXml)).toContain("1-3");
     expect(documentXml).toMatch(/SUM[\s\S]{0,80}RIO/);
     expect(hasHeadingWithText(documentXml, "Heading1", "1 INTRODUÇÃO")).toBe(true);
     expect(hasHeadingWithText(documentXml, "Heading2", "1.1 Contexto")).toBe(true);

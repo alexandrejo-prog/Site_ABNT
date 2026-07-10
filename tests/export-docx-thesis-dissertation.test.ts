@@ -127,11 +127,16 @@ describe("tese e dissertacao - conformidade UFLA", () => {
     expect((documentXml.match(/w:val="TOC1"/g) ?? []).length).toBe(0);
   });
 
-  it("sumário de monografia mantém lista estática sem campo TOC", async () => {
+  it("sumário de monografia usa campo TOC atualizável (igual a tese/dissertação)", async () => {
     const editorText = "# 1 Introducao\nTexto.\n## 1.1 Contexto\nTexto.";
     const documentXml = await generatedXml(editorText, baseFields({ workType: "monografia", course: "Bacharelado em Biologia" }));
-    expect(tocInstruction(documentXml)).toBe("");
-    expect((documentXml.match(/w:val="TOC1"/g) ?? []).length).toBeGreaterThan(0);
+    const toc = tocInstruction(documentXml);
+    expect(toc).toContain("TOC");
+    expect(toc).toContain("1-3");
+    expect(documentXml).toMatch(/<w:fldChar w:fldCharType="begin"[^>]*w:dirty="true"/);
+    // Monografia não deve manter lista estática de sumário (sem entradas TOC2/TOC3).
+    expect((documentXml.match(/w:val="TOC2"/g) ?? []).length).toBe(0);
+    expect((documentXml.match(/w:val="TOC3"/g) ?? []).length).toBe(0);
   });
 
   it("cronograma em formato de tabela markdown vira tabela DOCX", async () => {
