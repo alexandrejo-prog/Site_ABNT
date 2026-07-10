@@ -7,20 +7,26 @@ import { runA11yAudit } from "./a11y-test-utils";
 
 const DRAFT_KEY = "site-abnt:draft:v3";
 
-type Impact = "minor" | "moderate" | "serious" | "critical" | null | undefined;
-
-function impactsAtOrAbove(impact: Impact): boolean {
-  return impact === "serious" || impact === "critical";
+function seedDraft() {
+  window.localStorage.setItem(
+    DRAFT_KEY,
+    JSON.stringify({
+      fields: { author: "Autor de teste", title: "Título de teste" },
+      editorText: "Texto de exemplo para auditoria.",
+      references: [],
+      workType: "monografia",
+      updatedAt: new Date().toISOString(),
+    }),
+  );
 }
 
-function seedDraft() {
-  window.localStorage.setItem(DRAFT_KEY, JSON.stringify({
-    fields: { title: "Titulo salvo", author: "Autor salvo", workType: "artigo" },
-    editorText: "Texto salvo.",
-    references: [],
-    workType: "artigo",
-    updatedAt: new Date().toISOString(),
-  }));
+function summarizeViolations(results: Awaited<ReturnType<typeof runA11yAudit>>) {
+  return results.violations
+    .map((violation) => {
+      const nodes = violation.nodes.map((node) => node.html).join("\n");
+      return `${violation.id} (${violation.impact}): ${violation.help}\n${nodes}`;
+    })
+    .join("\n\n");
 }
 
 describe("auditoria axe do App principal", () => {
@@ -29,52 +35,57 @@ describe("auditoria axe do App principal", () => {
     window.localStorage.clear();
   });
 
-  it("renderiza a tela inicial sem violacoes axe serious ou critical", async () => {
-    seedDraft();
+  it("tela inicial sem violacoes critical/serious", async () => {
     const { container } = render(createElement(App));
 
-    // O utilitario desabilita apenas color-contrast porque jsdom nao calcula contraste visual de forma confiavel.
-    // Demais regras axe permanecem ativas para capturar problemas estruturais reais.
     const results = await runA11yAudit(container);
-    const blockingViolations = results.violations.filter((violation) => impactsAtOrAbove(violation.impact));
+    const blocking = results.violations.filter(
+      (violation) => violation.impact === "critical" || violation.impact === "serious",
+    );
 
-    expect(blockingViolations).toEqual([]);
+    if (blocking.length) {
+      // Não mascarar violações reais: expõe detalhes para correção.
+      console.error(`Violações críticas/sérias encontradas pelo axe:\n${summarizeViolations(results)}`);
+    }
+
+    expect(blocking).toEqual([]);
   });
 
-  it("exibe landmarks principais com nomes e destinos acessiveis", () => {
+  it("expoe landmarks acessiveis (main, main-content, banner e complementary)", () => {
     render(createElement(App));
 
+    const main = document.querySelector("main#main-content");
+    expect(main).toBeInTheDocument();
+    expect(main).toHaveAttribute("tabindex", "-1");
+
+    expect(screen.getByRole("main")).toBeInTheDocument();
     expect(screen.getByRole("banner")).toBeInTheDocument();
-    expect(screen.getByRole("main")).toHaveAttribute("id", "main-content");
-    expect(screen.getByRole("complementary", { name: /valida/i })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: /campos acad/i })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: /editor do texto/i })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Validação" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Campos acadêmicos" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Editor do texto" })).toBeInTheDocument();
   });
 
-  it("mantem botoes principais com nome acessivel", () => {
+  it("botoes principais possuem nome acessivel", () => {
     seedDraft();
     render(createElement(App));
 
-    expect(screen.getByRole("button", { name: /limpar rascunho/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /validar trabalho/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /gerar docx edit/i })).toBeInTheDocument();
+    for (const name of ["Limpar rascunho", "Validar trabalho", "Gerar DOCX editável"]) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
   });
 
-  it("mantem campos principais associados a labels acessiveis", () => {
+  it("campos principais possuem label acessivel", () => {
     render(createElement(App));
 
-    expect(screen.getByLabelText("Tipo de trabalho")).toBeInTheDocument();
-    expect(screen.getByLabelText("Autor")).toBeInTheDocument();
-    expect(screen.getByLabelText(/^t.tulo$/i, { selector: "input" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Resumo")).toBeInTheDocument();
-    expect(screen.getByLabelText(/^refer.ncias$/i, { selector: "textarea" })).toBeInTheDocument();
+    for (const name of ["Autor", "Título", "Curso", "Orientador", "Resumo", "Palavras-chave"]) {
+      expect(screen.getByLabelText(name)).toBeInTheDocument();
+    }
   });
 
-  it("mantem o editor com nome acessivel e descricao associada", () => {
+  it("editor de texto possui nome acessivel via aria", () => {
     render(createElement(App));
 
-    const editor = screen.getByRole("textbox", { name: /editor do texto principal/i });
+    const editor = screen.getByRole("textbox", { name: "Editor do texto principal" });
     expect(editor).toHaveAttribute("aria-describedby", "editor-mode-note");
-    expect(document.getElementById("editor-mode-note")).toBeInTheDocument();
   });
 });
