@@ -1,4 +1,4 @@
-import { MouseEvent, ReactNode } from "react";
+import { type MouseEvent, type ReactNode } from "react";
 import { type EditorCommand, editorCommandAdapter, getActiveRichEditor, saveEditorSelection } from "../editor-command-adapter";
 
 interface ToolButtonProps {
