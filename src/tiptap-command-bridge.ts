@@ -1,0 +1,18 @@
+﻿export type TiptapEditorCommand =
+  | "bold"
+  | "italic"
+  | "underline"
+  | "paragraph"
+  | "heading1"
+  | "heading2"
+  | "heading3"
+  | "blockquote"
+  | "reference"
+  | "bulletList"
+  | "orderedList"
+  | "alignLeft"
+  | "alignCenter"
+  | "alignJustify"
+  | "undo"
+  | "redo"
+  | "clearFormatting";
