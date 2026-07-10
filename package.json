@@ -10,6 +10,11 @@
     "verify": "npm test -- --run && npm run build"
   },
   "dependencies": {
+    "@tiptap/extension-text-align": "^3.27.3",
+    "@tiptap/extension-underline": "^3.27.3",
+    "@tiptap/pm": "^3.27.3",
+    "@tiptap/react": "^3.27.3",
+    "@tiptap/starter-kit": "^3.27.3",
     "docx": "^8.5.0",
     "file-saver": "^2.0.5",
     "jszip": "^3.10.1",
