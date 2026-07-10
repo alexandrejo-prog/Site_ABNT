@@ -9,6 +9,10 @@ const STATIC_TOC_PARAGRAPH_PATTERN = /<w:p\b(?:(?!<\/w:p>)[\s\S])*?<w:pStyle\s+w
 const GENERIC_MONOGRAPH_NATURE = "Trabalho acadêmico apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis.";
 const MONOGRAPH_NATURE = "Monografia apresentada à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis.";
 
+function replaceEvery(value: string, search: string, replacement: string): string {
+  return value.split(search).join(replacement);
+}
+
 function dynamicTocFieldXml(): string {
   return [
     "<w:p>",
@@ -54,9 +58,7 @@ function patchMonographDraftLabels(xml: string): { xml: string; changed: boolean
 
   if (!isLikelyMonograph) return { xml, changed: false };
 
-  const patchedXml = xml
-    .replaceAll(GENERIC_MONOGRAPH_NATURE, MONOGRAPH_NATURE)
-    .replace(/(<w:t[^>]*>)Programa:/g, "$1Curso:");
+  const patchedXml = replaceEvery(xml, GENERIC_MONOGRAPH_NATURE, MONOGRAPH_NATURE).replace(/(<w:t[^>]*>)Programa:/g, "$1Curso:");
 
   return { xml: patchedXml, changed: patchedXml !== xml };
 }
