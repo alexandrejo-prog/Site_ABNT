@@ -1,3 +1,6 @@
+/* UFLA/ABNT: corpo textual comum usa espaçamento 1,5 e recuo de primeira linha de 1,25 cm.
+   Não aplicar este recuo a resumo, abstract, títulos, referências, citações longas ou listas. */
+
 .tiptap-editor-shell {
   width: 100%;
   max-width: 920px;
@@ -78,6 +81,16 @@
 .tiptap-editor p {
   margin: 0 0 10pt;
   text-align: justify;
+}
+
+.tiptap-editor[data-editor-mode="body"] .ProseMirror > p {
+  text-indent: var(--ufla-body-first-line-indent);
+}
+
+.tiptap-editor .ProseMirror blockquote p,
+.tiptap-editor .ProseMirror li p,
+.tiptap-editor .ProseMirror p[data-reference="true"] {
+  text-indent: 0;
 }
 
 .tiptap-editor ul,

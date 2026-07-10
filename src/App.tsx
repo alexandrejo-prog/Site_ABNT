@@ -649,10 +649,11 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                     describedBy={EDITOR_DESCRIPTION_ID}
                     editable={true}
                     commandSignal={tiptapCommandSignal}
+                    editorMode={editorMode}
                   />
                 </Suspense>
               ) : (
-                <div ref={editorRef} className="editor rich-editor" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-describedby={EDITOR_DESCRIPTION_ID} aria-label={editorAriaLabel} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />
+                <div ref={editorRef} className="editor rich-editor" data-editor-mode={editorMode} contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-describedby={EDITOR_DESCRIPTION_ID} aria-label={editorAriaLabel} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />
               )}
             </div>
           </div>

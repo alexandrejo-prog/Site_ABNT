@@ -17,6 +17,7 @@ export type AcademicTiptapEditorProps = {
     id: number;
     command: TiptapEditorCommand;
   } | null;
+  editorMode?: "body" | "references";
 };
 
 export default function AcademicTiptapEditor({
@@ -26,6 +27,7 @@ export default function AcademicTiptapEditor({
   describedBy,
   editable = true,
   commandSignal = null,
+  editorMode = "body",
 }: AcademicTiptapEditorProps) {
   const extensions = useMemo(
     () => [
@@ -50,6 +52,7 @@ export default function AcademicTiptapEditor({
     editorProps: {
       attributes: {
         class: "editor rich-editor tiptap-editor",
+        "data-editor-mode": editorMode,
         role: "textbox",
         "aria-multiline": "true",
         "aria-label": ariaLabel,
