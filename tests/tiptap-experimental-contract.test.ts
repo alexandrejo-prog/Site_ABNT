@@ -17,6 +17,7 @@ describe("contrato do Tiptap experimental", () => {
     expect(appSource).toContain("contentEditable");
     expect(appSource).toContain("editorRef");
     expect(appSource).toContain("AcademicTiptapEditor");
+    expect(appSource).toContain('import("./components/AcademicTiptapEditor")');
   });
 
   it("mantem editorText como fonte canonica para exportacao DOCX", () => {

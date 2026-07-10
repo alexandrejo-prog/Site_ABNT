@@ -1,4 +1,4 @@
-import { ClipboardEvent as ReactClipboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ClipboardEvent as ReactClipboardEvent, Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { saveAs } from "file-saver";
 import { FileCheck2, FileDown } from "lucide-react";
 import { ACADEMIC_FIELD_KEYS, AcademicFieldKey, type AcademicFields, CONFIDENCE_LABELS, Confidence, emptyAcademicFields, emptyConfidenceMap, isCpgWork, isResearchProject, isUflaCollectionWork } from "./ufla-rules";
@@ -23,7 +23,6 @@ import { ToolButton, FontSelector, runEditorCommand, insertEditorText, setLineSp
 import { ImportBlock } from "./components/ImportBlock";
 import { WorkTypeSelector } from "./components/WorkTypeSelector";
 import EditorRuler from "./components/EditorRuler";
-import AcademicTiptapEditor from "./components/AcademicTiptapEditor";
 import { useTiptapExperimentalEditor } from "./editor-feature-flags";
 import type { TiptapEditorCommand } from "./tiptap-command-bridge";
 
@@ -37,6 +36,7 @@ const LONG_FIELDS = new Set<AcademicFieldKey>(["workNature", "resumo", "abstract
 const EDITOR_DESCRIPTION_ID = "editor-mode-note";
 const TIPTAP_EXPERIMENTAL_QUERY = "editor=tiptap";
 type EditorMode = "body" | "references";
+const AcademicTiptapEditor = lazy(() => import("./components/AcademicTiptapEditor"));
 
 function rowsForField(key: AcademicFieldKey): number {
   if (key === "referencias") return 12;
@@ -563,14 +563,22 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
           <div className="editor-page-stack" aria-label="Editor de texto contínuo">
             <div className="editor-page-shell">
               {isTiptapEditorEnabled ? (
-                <AcademicTiptapEditor
-                  value={activeEditorText}
-                  onChange={updateActiveEditorText}
-                  ariaLabel={editorAriaLabel}
-                  describedBy={EDITOR_DESCRIPTION_ID}
-                  editable={true}
-                  commandSignal={tiptapCommandSignal}
-                />
+                <Suspense
+                  fallback={
+                    <div className="editor rich-editor tiptap-loading" role="status">
+                      Carregando editor Tiptap experimental...
+                    </div>
+                  }
+                >
+                  <AcademicTiptapEditor
+                    value={activeEditorText}
+                    onChange={updateActiveEditorText}
+                    ariaLabel={editorAriaLabel}
+                    describedBy={EDITOR_DESCRIPTION_ID}
+                    editable={true}
+                    commandSignal={tiptapCommandSignal}
+                  />
+                </Suspense>
               ) : (
                 <div ref={editorRef} className="editor rich-editor" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-describedby={EDITOR_DESCRIPTION_ID} aria-label={editorAriaLabel} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />
               )}

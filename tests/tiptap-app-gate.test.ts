@@ -7,6 +7,8 @@ describe("Tiptap app gate", () => {
 
   it("mantem editor legacy e adiciona gate experimental", () => {
     expect(source).toContain("AcademicTiptapEditor");
+    expect(source).toContain('lazy(() => import("./components/AcademicTiptapEditor"))');
+    expect(source).toContain("Suspense");
     expect(source).toContain("useTiptapExperimentalEditor");
     expect(source).toContain("editor=tiptap");
     expect(source).toContain("contentEditable");
