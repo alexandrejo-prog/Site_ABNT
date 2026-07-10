@@ -1,3 +1,5 @@
+import { installAcademicEditorEnhancer } from "./academic-editor-enhancer";
+
 export type EditorScrollFixCleanup = () => void;
 
 type ScrollSnapshot = {
@@ -43,6 +45,7 @@ export function installEditorScrollFix(): EditorScrollFixCleanup {
   let lastSnapshot: ScrollSnapshot | null = null;
   const restoreTimers = new Set<ReturnType<typeof setTimeout>>();
   let disposed = false;
+  const cleanupAcademicEditor = installAcademicEditorEnhancer();
 
   function restoreAfterFormatting(snapshot = lastSnapshot): void {
     requestAnimationFrame(() => {
@@ -80,6 +83,7 @@ export function installEditorScrollFix(): EditorScrollFixCleanup {
     document.removeEventListener("click", handleClick, true);
     restoreTimers.forEach((timer) => clearTimeout(timer));
     restoreTimers.clear();
+    cleanupAcademicEditor();
     installedCleanup = null;
   };
 
