@@ -6,6 +6,7 @@ import { EditorEnhancer } from "./components/EditorEnhancer";
 import "./styles.css";
 import "./accessibility.css";
 import "./ux-fixes.css";
+import "./editor-enhancer.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
