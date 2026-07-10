@@ -1,0 +1,154 @@
+.editor-toolbar-sticky .toolbar:nth-child(2) {
+  align-items: stretch;
+  gap: 4px;
+  padding: 8px 10px 6px;
+  border-color: #c7d7e5;
+  background: linear-gradient(#ffffff, #f2f6fb);
+}
+
+.editor-toolbar-sticky .toolbar:nth-child(2)::before {
+  content: "Página Inicial";
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  margin-right: 6px;
+  padding: 0 10px;
+  border-right: 1px solid #cfd8e3;
+  color: #24405a;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.editor-toolbar-sticky .toolbar:nth-child(2) > .icon-button:not(.academic-extra-button) {
+  min-width: 42px;
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #1f2933;
+}
+
+.editor-toolbar-sticky .toolbar:nth-child(2) > .icon-button:not(.academic-extra-button):hover,
+.editor-toolbar-sticky .toolbar:nth-child(2) > .icon-button:not(.academic-extra-button):focus-visible,
+.word-tool-button:hover,
+.word-tool-button:focus-visible {
+  border-color: #8fb7dc;
+  background: linear-gradient(#fff8d7, #f7dfa3);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
+.word-ribbon-extra {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  margin-left: 6px;
+  padding-left: 8px;
+  border-left: 1px solid #cfd8e3;
+  flex-wrap: wrap;
+}
+
+.word-tool-group {
+  display: inline-grid;
+  grid-template-rows: 1fr auto;
+  gap: 3px;
+  min-height: 58px;
+  padding: 0 7px;
+  border-right: 1px solid #d6dde5;
+}
+
+.word-tool-group:last-child {
+  border-right: 0;
+}
+
+.word-tool-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.word-tool-group-label {
+  color: #5a6571;
+  font-size: 0.64rem;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.word-tool-button {
+  min-width: 42px;
+  min-height: 42px;
+  display: inline-grid;
+  grid-template-rows: 20px 1fr;
+  place-items: center;
+  gap: 1px;
+  padding: 3px 5px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #1f2933;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.word-tool-glyph {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  min-height: 20px;
+  font-family: "Segoe UI", Arial, sans-serif;
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.word-tool-caption {
+  max-width: 54px;
+  overflow: hidden;
+  color: #334155;
+  font-size: 0.58rem;
+  line-height: 1.05;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.underline-tool .word-tool-glyph {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.align-left-tool .word-tool-glyph,
+.align-center-tool .word-tool-glyph,
+.align-justify-tool .word-tool-glyph {
+  font-size: 1rem;
+  letter-spacing: -0.08em;
+}
+
+.word-tool-button[title="Simples"],
+.word-tool-button[title="1,5"],
+.word-tool-button[title="Duplo"] {
+  min-width: 46px;
+}
+
+.word-tool-button[title="Tabulação"] .word-tool-glyph {
+  font-size: 0.74rem;
+}
+
+.editor-toolbar-sticky .toolbar-separator,
+.editor-toolbar-sticky .academic-static-separator {
+  display: none;
+}
+
+@media (max-width: 1180px) {
+  .editor-toolbar-sticky .toolbar:nth-child(2) {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+
+  .word-ribbon-extra {
+    flex-wrap: nowrap;
+  }
+}
