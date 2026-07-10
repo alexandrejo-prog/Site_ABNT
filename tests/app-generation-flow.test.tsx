@@ -335,4 +335,33 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
     expect(screen.getByText(/DOCX gerado. Se o sumário aparecer vazio/)).toBeInTheDocument();
   });
+
+  it("mostra indicador e botões de paginação visual sem poluir o editor", () => {
+    render(<App />);
+    expect(screen.getByText(/Página 1 de 1/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ir para a página visual anterior/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ir para a próxima página visual/i })).toBeInTheDocument();
+    const editor = screen.getByRole("textbox", { name: /Editor do texto principal/i });
+    expect(editor.textContent).not.toContain("Página anterior");
+    expect(editor.textContent).not.toContain("Próxima página");
+    expect(editor.textContent).not.toContain("Paginação visual aproximada");
+  });
+
+  it("gera DOCX sem artefatos da paginação visual", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "artigo");
+    fireEvent.change(getTitleInput(), { target: { value: "Título de teste" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    await user.click(getButtonByText(/Gerar DOCX/));
+    await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
+    const blob = saveAsMock.mock.calls[0][0] as Blob;
+    const content = await blob.text();
+    expect(content).not.toContain("Paginação visual aproximada");
+    expect(content).not.toContain("Página anterior");
+    expect(content).not.toContain("Próxima página");
+    expect(content).not.toContain("Página 1 de");
+    expect(content).not.toContain("[PAGE]");
+    expect(content).not.toContain("[QUEBRA DE PÁGINA]");
+  });
 });

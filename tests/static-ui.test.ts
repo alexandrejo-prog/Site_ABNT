@@ -117,4 +117,33 @@ describe("interface estática", () => {
     expect(editorMarkup).not.toContain("Paginação visual aproximada");
     expect(editorMarkup).not.toContain("editor-page-stack");
   });
+
+  it("paginação visual aproximada tem navegação e não corta o conteúdo", () => {
+    expect(app).toContain('className="editor-pagination-toolbar"');
+    expect(app).toContain('className="editor-page-viewport"');
+    expect(app).toContain("Página anterior");
+    expect(app).toContain("Próxima página");
+    expect(app).toContain('aria-label="Ir para a página visual anterior"');
+    expect(app).toContain('aria-label="Ir para a próxima página visual"');
+    expect(app).toContain('title="Paginação visual aproximada do editor; a paginação final depende do Word/LibreOffice."');
+    expect(app).toContain("Página {currentPage} de {totalPages}");
+    expect(wordToolbar).toContain(".editor-pagination-toolbar");
+    expect(wordToolbar).toContain(".editor-page-viewport");
+    expect(wordToolbar).toContain("overflow-y: auto");
+    expect(wordToolbar).not.toContain("overflow: hidden");
+    expect(app).toContain('disabled={currentPage <= 1}');
+    expect(app).toContain('disabled={currentPage >= totalPages}');
+  });
+
+  it("paginação visual não insere marcadores dentro do editorText", () => {
+    expect(app).not.toContain("[PAGE]");
+    expect(app).not.toContain("[QUEBRA DE PÁGINA]");
+    expect(app).not.toContain("PageBreak");
+    const editorMarkup = readFileSync(join(process.cwd(), "src", "editor-markup.ts"), "utf8");
+    expect(editorMarkup).not.toContain("Página anterior");
+    expect(editorMarkup).not.toContain("Próxima página");
+    expect(editorMarkup).not.toContain("Página 1 de");
+    expect(editorMarkup).not.toContain("[PAGE]");
+    expect(editorMarkup).not.toContain("[QUEBRA DE PÁGINA]");
+  });
 });
