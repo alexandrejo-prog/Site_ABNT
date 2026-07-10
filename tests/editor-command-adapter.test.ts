@@ -92,4 +92,45 @@ describe("editor-command-adapter", () => {
     expect(paragraph.dataset.leftIndent).toBe("4");
   });
 
+  it("define indenta??o atual do bloco via setCurrentBlockIndent", () => {
+    const { paragraph } = mountEditorWithSelection();
+    const adapter = createEditorCommandAdapter({ document });
+
+    expect(adapter.setCurrentBlockIndent("firstLine", 1.0)).toBe(true);
+    expect(paragraph.style.textIndent).toBe("1cm");
+    expect(paragraph.dataset.firstLineIndent).toBe("1");
+
+    expect(adapter.setCurrentBlockIndent("left", 2.0)).toBe(true);
+    expect(paragraph.style.marginLeft).toBe("2cm");
+    expect(paragraph.dataset.leftIndent).toBe("2");
+
+    expect(adapter.setCurrentBlockIndent("right", 1.5)).toBe(true);
+    expect(paragraph.style.marginRight).toBe("1.5cm");
+    expect(paragraph.dataset.rightIndent).toBe("1.5");
+  });
+
+  it("dispara input do editor apos alterar indenta??o", () => {
+    const { editor } = mountEditorWithSelection();
+    const adapter = createEditorCommandAdapter({ document });
+    const events: Event[] = [];
+    editor.addEventListener("input", (event) => events.push(event));
+
+    expect(adapter.setCurrentBlockIndent("firstLine", 0.5)).toBe(true);
+    expect(events.length).toBeGreaterThanOrEqual(1);
+    expect(events[0]?.type).toBe("input");
+  });
+
+  it("respeita limites maximos em setCurrentBlockIndent", () => {
+    const { paragraph } = mountEditorWithSelection();
+    const adapter = createEditorCommandAdapter({ document });
+
+    expect(adapter.setCurrentBlockIndent("firstLine", 5.0)).toBe(true);
+    expect(paragraph.style.textIndent).toBe("3cm");
+    expect(paragraph.dataset.firstLineIndent).toBe("3");
+
+    expect(adapter.setCurrentBlockIndent("left", 10.0)).toBe(true);
+    expect(paragraph.style.marginLeft).toBe("4cm");
+    expect(paragraph.dataset.leftIndent).toBe("4");
+  });
+
 });

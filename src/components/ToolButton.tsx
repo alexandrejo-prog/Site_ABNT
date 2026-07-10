@@ -6,6 +6,7 @@ interface ToolButtonProps {
   glyph: ReactNode;
   onClick: () => void;
   className?: string;
+  tooltip?: string;
 }
 
 function rememberEditorSelection() {
@@ -28,7 +29,7 @@ export function setLineSpacing(value: string) {
   editorCommandAdapter.setCurrentBlockLineSpacing(value);
 }
 
-export function ToolButton({ title, glyph, onClick, className }: ToolButtonProps) {
+export function ToolButton({ title, glyph, onClick, className, tooltip }: ToolButtonProps) {
   function handleMouseDown(event: MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
     rememberEditorSelection();
@@ -43,7 +44,7 @@ export function ToolButton({ title, glyph, onClick, className }: ToolButtonProps
     <button
       className={`word-tool-button ${className ?? ""}`.trim()}
       type="button"
-      title={title}
+      title={tooltip ?? title}
       aria-label={title}
       onMouseDown={handleMouseDown}
       onClick={handleClick}

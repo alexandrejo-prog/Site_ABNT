@@ -642,4 +642,13 @@ Fonte: elaborado pelo autor (2026).`;
     expect(sourceIndex).toBeGreaterThan(tableEnd);
   });
 
+  it("move bloco [REF] para referencias no DOCX geral", async () => {
+    const editorText = "# 1 Introducao\nTexto.\n[REF] SOUZA, J. Texto. Lavras: UFLA, 2025.\n[REF] LIMA, A. Outro texto. Lavras: UFLA, 2024.";
+    const documentXml = await generatedXml(editorText, fields);
+
+    expect(documentXml).toContain("REFER\u00caNCIAS");
+    expect(documentXml).toContain("SOUZA, J.");
+    expect(documentXml).toContain("LIMA, A.");
+  });
+
 });

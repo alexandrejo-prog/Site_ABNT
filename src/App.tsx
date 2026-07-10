@@ -505,7 +505,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                   <ToolButton title="Título 1" glyph="T1" onClick={() => applyBlockStyle("# ")} />
                   <ToolButton title="Título 2" glyph="T2" onClick={() => applyBlockStyle("## ")} />
                   <ToolButton title="Citação longa" glyph="❝" onClick={() => applyBlockStyle("> ")} />
-                  <ToolButton title="Marcar como referência bibliográfica. Marca o parágrafo como referência bibliográfica para a seção REFERÊNCIAS do DOCX." glyph="Ref. ABNT" className="tool-reference" onClick={() => applyBlockStyle("[REF] ")} />
+                  <ToolButton title="Marcar como referência bibliográfica" glyph="Ref. ABNT" className="tool-reference" tooltip="Marca o parágrafo como referência bibliográfica para a seção REFERÊNCIAS do DOCX." onClick={() => applyBlockStyle("[REF] ")} />
                 </div>
                 <span className="word-tool-group-label">Estrutura</span>
               </div>
