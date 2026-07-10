@@ -3,22 +3,15 @@ import { Packer } from "docx";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const TOC_FIELD_PATTERN = /<w:instrText[^>]*>\s*TOC\b|<w:fldSimple[^>]*w:instr="\s*TOC\b/i;
-const TOC_FIELD_PARAGRAPH_PATTERN = /<w:p\b(?:(?!<\/w:p>)[\s\S])*?(?:<w:instrText[^>]*>\s*TOC\b|<w:fldSimple[^>]*w:instr="\s*TOC\b)(?:(?!<\/w:p>)[\s\S])*?<\/w:p>/g;
+const TOC_FIELD_CONTAINER_PATTERN = /<w:sdt\b(?:(?!<\/w:sdt>)[\s\S])*?(?:<w:instrText[^>]*>\s*TOC\b|<w:fldSimple[^>]*w:instr="\s*TOC\b)(?:(?!<\/w:sdt>)[\s\S])*?<\/w:sdt>|<w:p\b(?:(?!<\/w:p>)[\s\S])*?(?:<w:instrText[^>]*>\s*TOC\b|<w:fldSimple[^>]*w:instr="\s*TOC\b)(?:(?!<\/w:p>)[\s\S])*?<\/w:p>/g;
 const SUMMARY_TITLE_PATTERN = /<w:t[^>]*>\s*SUM[ÁA]RIO\s*<\/w:t>/i;
 const STATIC_TOC_PARAGRAPH_PATTERN = /<w:p\b(?:(?!<\/w:p>)[\s\S])*?<w:pStyle\s+w:val="TOC[123]"(?:(?!<\/w:p>)[\s\S])*?<\/w:p>/g;
-const GENERIC_MONOGRAPH_NATURE = "Trabalho acadêmico apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis.";
-const MONOGRAPH_NATURE = "Monografia apresentada à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis.";
-
-function replaceEvery(value: string, search: string, replacement: string): string {
-  return value.split(search).join(replacement);
-}
 
 function dynamicTocFieldXml(): string {
   return [
     "<w:p>",
-    "<w:pPr><w:pStyle w:val=\"TOC1\"/></w:pPr>",
     "<w:r><w:fldChar w:fldCharType=\"begin\" w:dirty=\"true\"/></w:r>",
-    "<w:r><w:instrText xml:space=\"preserve\"> TOC \\o \"1-3\" \\h \\z \\u </w:instrText></w:r>",
+    "<w:r><w:instrText xml:space=\"preserve\"> TOC \\o &quot;1-3&quot; \\h \\z \\u </w:instrText></w:r>",
     "<w:r><w:fldChar w:fldCharType=\"separate\"/></w:r>",
     "<w:r><w:t>Clique com o botão direito e atualize o campo para gerar o sumário.</w:t></w:r>",
     "<w:r><w:fldChar w:fldCharType=\"end\"/></w:r>",
@@ -31,7 +24,7 @@ function patchDynamicTocField(xml: string): { xml: string; changed: boolean } {
 
   let inserted = false;
   if (TOC_FIELD_PATTERN.test(xml)) {
-    const patchedXml = xml.replace(TOC_FIELD_PARAGRAPH_PATTERN, () => {
+    const patchedXml = xml.replace(TOC_FIELD_CONTAINER_PATTERN, () => {
       if (inserted) return "";
       inserted = true;
       return dynamicTocFieldXml();
@@ -48,19 +41,6 @@ function patchDynamicTocField(xml: string): { xml: string; changed: boolean } {
   });
 
   return { xml: patchedXml, changed: inserted && patchedXml !== xml };
-}
-
-function patchMonographDraftLabels(xml: string): { xml: string; changed: boolean } {
-  const isLikelyMonograph =
-    xml.includes(GENERIC_MONOGRAPH_NATURE) &&
-    /Banca examinadora/i.test(xml) &&
-    !/Dissertação apresentada|Tese apresentada/i.test(xml);
-
-  if (!isLikelyMonograph) return { xml, changed: false };
-
-  const patchedXml = replaceEvery(xml, GENERIC_MONOGRAPH_NATURE, MONOGRAPH_NATURE).replace(/(<w:t[^>]*>)Programa:/g, "$1Curso:");
-
-  return { xml: patchedXml, changed: patchedXml !== xml };
 }
 
 async function ensureUpdateFieldsSetting(zip: JSZip): Promise<boolean> {
@@ -91,14 +71,13 @@ export async function ensureDynamicTocField(blob: Blob): Promise<Blob> {
 
   const xml = await documentFile.async("string");
   const tocPatch = patchDynamicTocField(xml);
-  const monographPatch = patchMonographDraftLabels(tocPatch.xml);
   const updateFieldsChanged = await ensureUpdateFieldsSetting(zip);
 
-  if (tocPatch.changed || monographPatch.changed) {
-    zip.file("word/document.xml", monographPatch.xml);
+  if (tocPatch.changed) {
+    zip.file("word/document.xml", tocPatch.xml);
   }
 
-  if (!tocPatch.changed && !monographPatch.changed && !updateFieldsChanged) return blob;
+  if (!tocPatch.changed && !updateFieldsChanged) return blob;
   return zip.generateAsync({ type: "blob", mimeType: DOCX_MIME });
 }
 
