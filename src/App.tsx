@@ -19,10 +19,9 @@ import { finalVersionPendingReport } from "./final-version-pending";
 import { AdherencePanel } from "./components/AdherencePanel";
 import { ValidationSidebar } from "./components/ValidationSidebar";
 import { DraftStatus } from "./components/DraftStatus";
-import { ToolButton, FontSelector, runEditorCommand, insertEditorText, setLineSpacing } from "./components/ToolButton";
+import { ToolButton, FontSelector, runEditorCommand } from "./components/ToolButton";
 import { ImportBlock } from "./components/ImportBlock";
 import { WorkTypeSelector } from "./components/WorkTypeSelector";
-import EditorRuler from "./components/EditorRuler";
 import { useTiptapExperimentalEditor } from "./editor-feature-flags";
 import type { TiptapEditorCommand } from "./tiptap-command-bridge";
 
@@ -134,7 +133,7 @@ export default function App() {
   const editorAriaLabel = editorMode === "references" ? "Editor de referências" : "Editor do texto principal";
   const editorHelpText = isTiptapEditorEnabled
     ? "Edição estruturada em teste. Negrito, itálico, sublinhado, títulos, listas, citação, referência ABNT e alinhamento funcionam."
-    : "Editor acadêmico: selecione o texto e use a faixa de formatação. A régua altera recuos do parágrafo selecionado em passos de 0,25 cm.";
+    : "Editor acadêmico: use a faixa de formatação para estrutura, listas, citações e alinhamento. O corpo textual segue o padrão UFLA/ABNT com recuo automático de 1,25 cm e espaçamento 1,5.";
   const finalPending = useMemo(() => finalVersionPendingReport(fields, activeEditorText), [fields, activeEditorText]);
 
   useEffect(() => installEditorScrollFix(), []);
@@ -569,7 +568,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                 </div>
               </div>
             ) : (
-              <div className="toolbar word-ribbon" aria-label="Faixa de formatação do editor">
+                <div className="toolbar word-ribbon" aria-label="Faixa de formatação do editor">
                 <div className="word-tool-group" data-group="Área de edição" aria-label="Área de Transferência">
                   <div className="word-tool-row">
                     <ToolButton title="Limpar formatação" glyph="⌫" onClick={() => runEditorAction("clearFormatting", clearFormatting)} />
@@ -604,27 +603,14 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                   <div className="word-tool-row">
                     <ToolButton title="Lista com marcadores" glyph="•" onClick={() => runEditorAction("bulletList", () => runEditorCommand("insertUnorderedList"))} />
                     <ToolButton title="Lista numerada" glyph="1." onClick={() => runEditorAction("orderedList", () => runEditorCommand("insertOrderedList"))} />
-                    {!isTiptapEditorEnabled && <ToolButton title="Inserir tabulação" glyph="⇥" onClick={() => insertEditorText("\t")} />}
-                    {!isTiptapEditorEnabled && <ToolButton title="Diminuir recuo" glyph="←" onClick={() => runEditorCommand("outdent")} />}
-                    {!isTiptapEditorEnabled && <ToolButton title="Aumentar recuo" glyph="→" onClick={() => runEditorCommand("indent")} />}
                     <ToolButton title="Alinhar à esquerda" glyph="E" onClick={() => runEditorAction("alignLeft", () => runEditorCommand("justifyLeft"))} />
                     <ToolButton title="Centralizar" glyph="C" onClick={() => runEditorAction("alignCenter", () => runEditorCommand("justifyCenter"))} />
                     <ToolButton title="Justificar" glyph="J" onClick={() => runEditorAction("alignJustify", () => runEditorCommand("justifyFull"))} />
                   </div>
                   <span className="word-tool-group-label">Parágrafo</span>
                 </div>
-
-                <div className="word-tool-group" data-group="Espaçamento" aria-label="Espaçamento">
-                  <div className="word-tool-row">
-                    {!isTiptapEditorEnabled && <ToolButton title="Espaçamento simples" glyph="1,0" onClick={() => setLineSpacing("1.2")} />}
-                    {!isTiptapEditorEnabled && <ToolButton title="Espaçamento 1,5" glyph="1,5" onClick={() => setLineSpacing("1.5")} />}
-                    {!isTiptapEditorEnabled && <ToolButton title="Espaçamento duplo" glyph="2,0" onClick={() => setLineSpacing("2")} />}
-                  </div>
-                  <span className="word-tool-group-label">Espaçamento</span>
-                </div>
               </div>
             )}
-            {!isTiptapEditorEnabled && <EditorRuler onCommand={handleRichEditorInput} />}
             {isTiptapEditorEnabled && (
               <p className="tiptap-mode-banner" role="note">
                 Modo Tiptap experimental. Use para testar a nova edição. O DOCX continua sendo gerado pelo exportador estável.

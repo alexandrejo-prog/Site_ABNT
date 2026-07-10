@@ -84,7 +84,11 @@
 }
 
 .tiptap-editor[data-editor-mode="body"] .ProseMirror > p {
+  margin-top: 0;
+  margin-bottom: 0;
+  line-height: var(--ufla-body-line-height);
   text-indent: var(--ufla-body-first-line-indent);
+  text-align: justify;
 }
 
 .tiptap-editor .ProseMirror blockquote p,

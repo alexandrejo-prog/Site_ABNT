@@ -75,7 +75,7 @@ describe("interface estática", () => {
     expect(app).toContain("word-ribbon-tab");
     expect(app).toContain("Página Inicial");
     expect(app).toContain("Área de Transferência");
-    expect(app).toContain("Espaçamento");
+    expect(app).not.toContain("Espaçamento");
     expect(app).toContain('data-group="Fonte"');
     expect(app).toContain('data-group="Parágrafo"');
   });
@@ -85,8 +85,10 @@ describe("interface estática", () => {
     expect(app).toContain("FontSelector");
   });
 
-  it("régua é componente funcional, mostra valores e não usa pseudo-elemento CSS", () => {
-    expect(app).toContain("EditorRuler");
+  it("regua nao e mais renderizada na interface", () => {
+    expect(app).not.toContain("EditorRuler");
+    expect(app).not.toContain("A régua altera");
+    expect(app).not.toContain("Recuos do parágrafo selecionado");
     expect(ruler).toContain("editor-ruler-controls");
     expect(ruler).toContain("Passo: 0,25 cm por clique");
     expect(ruler).toContain("Primeira linha:");

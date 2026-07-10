@@ -43,13 +43,13 @@ describe("Tiptap clean toolbar", () => {
     expect(source).toContain("runEditorAction(\"redo\"");
   });
 
-  it("nao renderiza EditorRuler no modo Tiptap", () => {
-    expect(source).toContain("{!isTiptapEditorEnabled && <EditorRuler");
+  it("nao renderiza EditorRuler", () => {
+    expect(source).not.toContain("<EditorRuler");
   });
 
-  it("nao renderiza botoes de espacamento no modo Tiptap", () => {
-    expect(source).toContain("{!isTiptapEditorEnabled && <ToolButton title=\"Espaçamento simples\"");
-    expect(source).toContain("{!isTiptapEditorEnabled && <ToolButton title=\"Espaçamento 1,5\"");
-    expect(source).toContain("{!isTiptapEditorEnabled && <ToolButton title=\"Espaçamento duplo\"");
+  it("nao renderiza botoes de espacamento manual", () => {
+    expect(source).not.toContain("Espaçamento simples");
+    expect(source).not.toContain("Espaçamento 1,5");
+    expect(source).not.toContain("Espaçamento duplo");
   });
 });

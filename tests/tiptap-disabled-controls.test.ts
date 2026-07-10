@@ -5,20 +5,20 @@ import { describe, expect, it } from "vitest";
 describe("Tiptap disabled controls", () => {
   const source = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
 
-  it("condiciona EditorRuler ao modo legacy", () => {
-    expect(source).toContain("{!isTiptapEditorEnabled && <EditorRuler");
+  it("nao renderiza EditorRuler", () => {
+    expect(source).not.toContain("<EditorRuler");
   });
 
-  it("esconde controles de tabulacao e recuo no Tiptap", () => {
-    expect(source).toContain("{!isTiptapEditorEnabled && <ToolButton title=\"Inserir tabulação\"");
-    expect(source).toContain("{!isTiptapEditorEnabled && <ToolButton title=\"Diminuir recuo\"");
-    expect(source).toContain("{!isTiptapEditorEnabled && <ToolButton title=\"Aumentar recuo\"");
+  it("nao renderiza controles de tabulacao e recuo", () => {
+    expect(source).not.toContain("Inserir tabulação");
+    expect(source).not.toContain("Diminuir recuo");
+    expect(source).not.toContain("Aumentar recuo");
   });
 
-  it("esconde controles de espacamento no Tiptap", () => {
-    expect(source).toContain("{!isTiptapEditorEnabled && <ToolButton title=\"Espaçamento simples\"");
-    expect(source).toContain("{!isTiptapEditorEnabled && <ToolButton title=\"Espaçamento 1,5\"");
-    expect(source).toContain("{!isTiptapEditorEnabled && <ToolButton title=\"Espaçamento duplo\"");
+  it("nao renderiza controles de espacamento manual", () => {
+    expect(source).not.toContain("Espaçamento simples");
+    expect(source).not.toContain("Espaçamento 1,5");
+    expect(source).not.toContain("Espaçamento duplo");
   });
 
   it("mantem botoes funcionais do Tiptap visiveis", () => {

@@ -489,7 +489,11 @@ button:focus-visible,
 }
 
 .editor.rich-editor[data-editor-mode="body"] p {
+  margin-top: 0;
+  margin-bottom: 0;
+  line-height: var(--ufla-body-line-height);
   text-indent: var(--ufla-body-first-line-indent);
+  text-align: justify;
 }
 
 .editor.rich-editor[data-editor-mode="body"] blockquote p,
