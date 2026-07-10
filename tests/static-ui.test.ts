@@ -76,13 +76,14 @@ describe("interface estática", () => {
     expect(app).toContain("Página Inicial");
     expect(app).toContain("Área de Transferência");
     expect(app).not.toContain("Espaçamento");
-    expect(app).toContain('data-group="Fonte"');
+    expect(app).not.toContain('data-group="Fonte"');
     expect(app).toContain('data-group="Parágrafo"');
   });
 
-  it("seletores de fonte são visuais e desabilitados", () => {
-    expect(app).toContain("Times New Roman");
-    expect(app).toContain("FontSelector");
+  it("nao renderiza controles de fonte/tamanho editaveis", () => {
+    expect(app).not.toContain("FontSelector");
+    expect(app).not.toContain("Times New Roman");
+    expect(app).not.toContain('value="12"');
   });
 
   it("regua nao e mais renderizada na interface", () => {

@@ -19,7 +19,7 @@ import { finalVersionPendingReport } from "./final-version-pending";
 import { AdherencePanel } from "./components/AdherencePanel";
 import { ValidationSidebar } from "./components/ValidationSidebar";
 import { DraftStatus } from "./components/DraftStatus";
-import { ToolButton, FontSelector, runEditorCommand } from "./components/ToolButton";
+import { ToolButton, runEditorCommand } from "./components/ToolButton";
 import { ImportBlock } from "./components/ImportBlock";
 import { WorkTypeSelector } from "./components/WorkTypeSelector";
 import { useTiptapExperimentalEditor } from "./editor-feature-flags";
@@ -132,8 +132,8 @@ export default function App() {
   const isTiptapEditorEnabled = useMemo(() => useTiptapExperimentalEditor(), []);
   const editorAriaLabel = editorMode === "references" ? "Editor de referências" : "Editor do texto principal";
   const editorHelpText = isTiptapEditorEnabled
-    ? "Edição estruturada em teste. Negrito, itálico, sublinhado, títulos, listas, citação, referência ABNT e alinhamento funcionam."
-    : "Editor acadêmico: use a faixa de formatação para estrutura, listas, citações e alinhamento. O corpo textual segue o padrão UFLA/ABNT com recuo automático de 1,25 cm e espaçamento 1,5.";
+    ? "Modo experimental de edição. Use para testar a nova experiência. O DOCX continua sendo gerado pelo exportador estável."
+    : "Editor acadêmico: edite o conteúdo e marque a estrutura do texto. Fonte, tamanho, recuos e espaçamentos seguem automaticamente o padrão UFLA/ABNT no DOCX.";
   const finalPending = useMemo(() => finalVersionPendingReport(fields, activeEditorText), [fields, activeEditorText]);
 
   useEffect(() => installEditorScrollFix(), []);
@@ -501,27 +501,6 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
             <div className="toolbar editor-mode-toolbar" aria-label="Modo de edição">
               <button className={`text-button ${editorMode === "body" ? "active" : ""}`} type="button" onClick={() => setEditorMode("body")}>Texto</button>
               <button className={`text-button ${editorMode === "references" ? "active" : ""}`} type="button" onClick={() => setEditorMode("references")}>Referências</button>
-              <span className="editor-mode-divider" aria-hidden="true" />
-              <label className="editor-selector-label" htmlFor="editor-mode-select">Editor</label>
-              <select
-                id="editor-mode-select"
-                className="editor-mode-select"
-                value={isTiptapEditorEnabled ? "tiptap" : "legacy"}
-                onChange={(event) => {
-                  const next = event.target.value === "tiptap";
-                  const url = new URL(window.location.href);
-                  if (next) {
-                    url.searchParams.set("editor", "tiptap");
-                  } else {
-                    url.searchParams.delete("editor");
-                  }
-                  window.history.pushState({}, "", url.toString());
-                  window.location.reload();
-                }}
-              >
-                <option value="legacy">Legado estável</option>
-                <option value="tiptap">Tiptap experimental</option>
-              </select>
             </div>
             {isTiptapEditorEnabled ? (
               <div className="tiptap-toolbar" aria-label="Faixa de formatação Tiptap">
@@ -576,17 +555,6 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                     <ToolButton title="Refazer" glyph="↷" onClick={() => runEditorAction("redo", () => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("redo"); })} />
                   </div>
                   <span className="word-tool-group-label">Área de Transferência</span>
-                </div>
-
-                <div className="word-tool-group" data-group="Fonte" aria-label="Fonte">
-                  <div className="word-tool-row">
-                    <FontSelector title="O DOCX final usa Times New Roman 12 conforme UFLA.">Times New Roman</FontSelector>
-                    <FontSelector title="O DOCX final usa Times New Roman 12 conforme UFLA.">12</FontSelector>
-                    <ToolButton title="Negrito" glyph="N" className="tool-negrito" onClick={() => runEditorAction("bold", () => wrapSelection("bold"))} />
-                    <ToolButton title="Itálico" glyph="I" onClick={() => runEditorAction("italic", () => wrapSelection("italic"))} />
-                    <ToolButton title="Sublinhado" glyph="S" className="tool-sublinhado" onClick={() => runEditorAction("underline", () => runEditorCommand("underline"))} />
-                  </div>
-                  <span className="word-tool-group-label">Fonte</span>
                 </div>
 
                 <div className="word-tool-group" data-group="Estrutura" aria-label="Estrutura">
