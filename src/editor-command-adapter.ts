@@ -62,7 +62,9 @@ export function getActiveRichEditor(scopeDocument?: Document): HTMLElement | nul
   const active = doc.activeElement;
   if (isHTMLElement(active)) {
     const activeEditor = active.closest(".rich-editor[contenteditable='true'], .rich-editor, [contenteditable='true']");
-    if (isHTMLElement(activeEditor)) return activeEditor;
+    if (isHTMLElement(activeEditor) && !activeEditor.classList.contains("tiptap-editor")) {
+      return activeEditor;
+    }
   }
 
   const candidates = [
@@ -73,7 +75,9 @@ export function getActiveRichEditor(scopeDocument?: Document): HTMLElement | nul
 
   for (const selector of candidates) {
     const editor = doc.querySelector(selector);
-    if (isHTMLElement(editor)) return editor;
+    if (isHTMLElement(editor) && !editor.classList.contains("tiptap-editor")) {
+      return editor;
+    }
   }
 
   return null;

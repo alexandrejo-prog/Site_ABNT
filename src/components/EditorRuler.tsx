@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { editorCommandAdapter, getActiveRichEditor } from "../editor-command-adapter";
+import { useTiptapExperimentalEditor } from "../editor-feature-flags";
 
 const CM_STEP = 0.25;
 const MAX_FIRST_LINE_CM = 3;
@@ -83,6 +84,7 @@ function markerPosition(value: number): string {
 
 export default function EditorRuler({ onCommand }: EditorRulerProps) {
   const [values, setValues] = useState<RulerValues>(DEFAULT_VALUES);
+  const isTiptapEnabled = useTiptapExperimentalEditor();
 
   const refreshValues = useCallback(() => {
     setValues(readCurrentValues());
@@ -97,6 +99,7 @@ export default function EditorRuler({ onCommand }: EditorRulerProps) {
 
   const handleAdjust = useCallback(
     (kind: RulerIndentKind, delta: number) => {
+      if (isTiptapEnabled) return;
       const nextValue = boundedCm(kind, values[kind] + delta);
       const changed = editorCommandAdapter.setCurrentBlockIndent(kind, nextValue);
       if (changed) {
@@ -104,7 +107,7 @@ export default function EditorRuler({ onCommand }: EditorRulerProps) {
         onCommand?.();
       }
     },
-    [onCommand, values],
+    [onCommand, values, isTiptapEnabled],
   );
 
   const preventSelectionLoss = useCallback((event: MouseEvent<HTMLButtonElement>) => {
