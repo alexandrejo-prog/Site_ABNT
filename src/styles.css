@@ -35,10 +35,10 @@
 }
 
 .diagnostic-panel {
-  border: 1px solid #cfe3cf;
+  border: 1px solid var(--ufla-gray-light);
   border-radius: 8px;
   padding: 10px 12px;
-  background: #f3f8f3;
+  background: var(--ufla-white);
   margin-bottom: 10px;
 }
 
@@ -80,7 +80,7 @@
 }
 
 .assisted-panel {
-  border: 1px solid #bcd3ef;
+  border: 1px solid var(--ufla-gray-light);
   border-radius: 8px;
   padding: 10px 12px;
   background: #eef4fc;
@@ -114,7 +114,7 @@
 }
 
 .impact-indicators-group {
-  border-top: 1px dashed #c7d2dd;
+  border-top: 1px dashed var(--ufla-gray-light);
   padding-top: 8px;
 }
 
@@ -130,16 +130,25 @@
   --ufla-body-line-height: 1.5;
   --ufla-body-font-family: "Times New Roman", Times, serif;
   --ufla-body-font-size: 12pt;
-  color: #1f2933;
-  background: #f5f7f4;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+
+  --ufla-blue: #004B80;
+  --ufla-green: #00943E;
+  --ufla-white: #FFFFFF;
+  --ufla-gray-light: #97B1BF;
+  --ufla-blue-light: #0087C0;
+  --ufla-green-light: #A8CF45;
+  --ufla-gray-dark: #5C6C75;
+  --ufla-blue-dark: #064B76;
+  --ufla-green-dark: #006B3E;
+  --ufla-interface-font: "Segoe UI", Arial, sans-serif;
 }
 
 body {
   margin: 0;
   min-width: 320px;
+  font-family: var(--ufla-interface-font);
+  color: #1f2933;
+  background: #f5f7f4;
 }
 
 button,
@@ -170,14 +179,20 @@ button:disabled {
   justify-content: space-between;
   gap: 24px;
   padding: 22px clamp(18px, 3vw, 36px);
-  color: #f8fafc;
-  background: #163f36;
-  border-bottom: 5px solid #d2a53a;
+  color: var(--ufla-white);
+  background: var(--ufla-blue);
+  border-bottom: 4px solid var(--ufla-green);
+}
+
+.ufla-logo {
+  height: 48px;
+  width: auto;
+  margin-right: 16px;
 }
 
 .eyebrow {
   margin: 0 0 4px;
-  color: #d8ece5;
+  color: var(--ufla-green-light);
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0;
@@ -209,11 +224,11 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  border: 1px solid var(--ufla-gray-light);
   border-radius: 6px;
   padding: 0 14px;
-  color: #f8fafc;
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--ufla-white);
+  background: var(--ufla-blue);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -228,8 +243,8 @@ h1 {
 
 .primary-action.strong {
   color: #12231f;
-  background: #f0c458;
-  border-color: #f0c458;
+  background: var(--ufla-green);
+  border-color: var(--ufla-green);
 }
 
 .workspace {
@@ -238,7 +253,7 @@ h1 {
   display: grid;
   grid-template-columns: minmax(260px, 360px) minmax(340px, 1fr) minmax(240px, 320px);
   gap: 0;
-  border-top: 1px solid #d7dfd8;
+  border-top: 1px solid var(--ufla-gray-light);
 }
 
 .metadata-pane,
@@ -250,8 +265,8 @@ h1 {
 
 .metadata-pane {
   overflow: auto;
-  background: #ffffff;
-  border-right: 1px solid #d7dfd8;
+  background: var(--ufla-white);
+  border-right: 1px solid var(--ufla-gray-light);
 }
 
 .editor-pane {
@@ -263,7 +278,7 @@ h1 {
 
 .validation-pane {
   background: #fffdfa;
-  border-left: 1px solid #d7dfd8;
+  border-left: 1px solid var(--ufla-gray-light);
 }
 
 .field-group {
@@ -360,7 +375,7 @@ button:focus-visible,
   padding: 12px;
   color: #1e3932;
   background: #e7f2ee;
-  border-left: 4px solid #1f7b69;
+  border-left: 4px solid var(--ufla-green);
   border-radius: 6px;
   line-height: 1.35;
 }
@@ -395,8 +410,8 @@ button:focus-visible,
   gap: 8px;
   flex-wrap: wrap;
   padding: 10px;
-  background: #ffffff;
-  border: 1px solid #d7dfd8;
+  background: var(--ufla-white);
+  border: 1px solid var(--ufla-gray-light);
   border-radius: 8px;
 }
 
@@ -406,10 +421,10 @@ button:focus-visible,
   height: 38px;
   display: inline-grid;
   place-items: center;
-  border: 1px solid #c9d3cd;
+  border: 1px solid var(--ufla-gray-light);
   border-radius: 6px;
   color: #24343c;
-  background: #ffffff;
+  background: var(--ufla-white);
   font-weight: 700;
 }
 
@@ -419,9 +434,9 @@ button:focus-visible,
 }
 
 .text-button.active {
-  color: #ffffff;
-  background: #1f7b69;
-  border-color: #1f7b69;
+  color: var(--ufla-white);
+  background: var(--ufla-blue);
+  border-color: var(--ufla-blue);
 }
 
 .toolbar-text {
@@ -431,8 +446,8 @@ button:focus-visible,
 
 .icon-button:hover,
 .text-button:hover {
-  border-color: #1f7b69;
-  color: #105a4b;
+  border-color: var(--ufla-blue);
+  color: var(--ufla-blue-dark);
 }
 
 .text-button.active:hover {
@@ -613,7 +628,7 @@ button:focus-visible,
   margin-bottom: 12px;
   padding: 10px;
   background: #e7f2ee;
-  border-left: 4px solid #1f7b69;
+  border-left: 4px solid var(--ufla-green);
   border-radius: 6px;
   font-size: 0.84rem;
   color: #1e3932;
@@ -623,7 +638,7 @@ button:focus-visible,
 .status-line {
   margin-bottom: 16px;
   padding: 12px;
-  border-left: 4px solid #1f7b69;
+  border-left: 4px solid var(--ufla-green);
   color: #1e3932;
   background: #e7f2ee;
   font-weight: 750;
@@ -707,8 +722,14 @@ button:focus-visible,
   .validation-pane {
     grid-column: 1 / -1;
     border-left: 0;
-    border-top: 1px solid #d7dfd8;
+    border-top: 1px solid var(--ufla-gray-light);
   }
+}
+
+.ufla-logo {
+  height: 48px;
+  width: auto;
+  margin-right: 16px;
 }
 
 @media (max-width: 780px) {
@@ -735,11 +756,24 @@ button:focus-visible,
   .editor-pane,
   .validation-pane {
     border: 0;
-    border-top: 1px solid #d7dfd8;
+    border-top: 1px solid var(--ufla-gray-light);
   }
 
   .editor {
     min-height: 420px;
+  }
+}
+
+.ufla-logo {
+  height: 48px;
+  width: auto;
+  margin-right: 16px;
+}
+
+@media (max-width: 780px) {
+  .ufla-logo {
+    height: 40px;
+    margin-right: 10px;
   }
 }
 
@@ -807,8 +841,8 @@ button:focus-visible,
 
 .secondary-action {
   background: transparent;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  color: #374151;
+  border: 1px solid var(--ufla-blue);
+  color: var(--ufla-blue);
   padding: 8px 14px;
   border-radius: 6px;
   cursor: pointer;
@@ -818,7 +852,7 @@ button:focus-visible,
   margin-bottom: 14px;
   padding: 12px;
   background: #eef4fc;
-  border: 1px solid #bcd3ef;
+  border: 1px solid var(--ufla-gray-light);
   border-radius: 8px;
 }
 
@@ -904,12 +938,12 @@ button:focus-visible,
 
 .work-type-info {
   margin: 8px 0 0;
-  font-size: 0.82rem;
+  padding: 6px 8px;
   color: #1e3932;
   background: #e7f2ee;
-  border-left: 3px solid #1f7b69;
+  border-left: 3px solid var(--ufla-green);
   border-radius: 4px;
-  padding: 6px 8px;
+  font-size: 0.82rem;
 }
 
 .editor-mode-toolbar {
@@ -1009,9 +1043,9 @@ button:focus-visible,
 }
 
 .tiptap-toolbar .word-tool-button:focus-visible {
-  outline: 2px solid #1f7b69;
+  outline: 2px solid var(--ufla-blue);
   outline-offset: 1px;
-  border-color: #1f7b69;
+  border-color: var(--ufla-blue);
 }
 
 .tiptap-toolbar .tool-reference {

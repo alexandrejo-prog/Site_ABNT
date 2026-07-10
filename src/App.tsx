@@ -442,7 +442,11 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div><p className="eyebrow">Ferramenta de apoio UFLA/ABNT</p><h1>Assistente de estruturação e pré-normalização UFLA/ABNT</h1></div>
+        <img src="/assets/ufla-logo.jpeg" alt="Marca UFLA" className="ufla-logo" />
+        <div>
+          <p className="eyebrow">Ferramenta de apoio UFLA/ABNT</p>
+          <h1>Assistente de estruturação e normalização acadêmica</h1>
+        </div>
         <div className="header-actions">
           <DraftStatus draftStatus={draftStatus} hasDraft={hasStoredDraft} onClearDraft={handleClearDraft} />
           <button className="primary-action" type="button" onClick={() => runValidation()}><FileCheck2 size={18} aria-hidden="true" />Validar trabalho</button>
