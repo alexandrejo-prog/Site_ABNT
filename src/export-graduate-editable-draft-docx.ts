@@ -9,7 +9,7 @@ const CATALOG_PLACEHOLDER_AFTER =
 
 const APPROVAL_PLACEHOLDER_BEFORE = "Banca examinadora a ser preenchida na versão final.";
 const APPROVAL_PLACEHOLDER_AFTER =
-  "Folha de aprovação provisória. Substitua os dados da banca após a aprovação ou conforme orientação do programa.";
+  "Banca examinadora provisória. Folha de aprovação provisória. Substitua os dados da banca após a aprovação ou conforme orientação do programa.";
 
 function replaceEvery(value: string, search: string | RegExp, replacement: string): string {
   if (search instanceof RegExp) {
