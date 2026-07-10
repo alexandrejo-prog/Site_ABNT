@@ -1,5 +1,3 @@
-import { useEffect } from "react";
-import { installAcademicEditorEnhancer } from "../academic-editor-enhancer";
 import { ADHERENCE_CATEGORIES } from "../validators";
 
 interface AdherencePanelProps {
@@ -8,8 +6,6 @@ interface AdherencePanelProps {
 }
 
 export function AdherencePanel({ expanded, onToggle }: AdherencePanelProps) {
-  useEffect(() => installAcademicEditorEnhancer(), []);
-
   return (
     <div className="adherence-panel">
       <button type="button" className="adherence-header" onClick={onToggle} aria-expanded={expanded} aria-controls="adherence-content">
