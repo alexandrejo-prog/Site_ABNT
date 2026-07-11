@@ -94,6 +94,14 @@ function cleanValue(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+function cleanAcademicCandidate(value: string): string {
+  return value
+    .replace(/\[Imagem detectada:[^\]]+\]/gi, " ")
+    .replace(/\b(?:campo|placeholder|preencher|inserir)\b[^.\n]*(?:\.|$)/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function joinLines(lines: string[]): string {
   return lines.map(cleanValue).filter(Boolean).join("\n").trim();
 }
@@ -479,6 +487,148 @@ function splitAbstract(blocks: ImportedBlock[]): {
   return { abstractText: joinLines(collected), keywords };
 }
 
+function keywordValue(text: string, label: "palavras" | "keywords"): string {
+  const pattern =
+    label === "palavras"
+      ? /^palavras[- ]chave\s*[:\-]\s*(.+)$/i
+      : /^keywords\s*[:\-]\s*(.+)$/i;
+  return cleanValue(text.match(pattern)?.[1] ?? "");
+}
+
+function isPalavrasChaveLine(text: string): boolean {
+  return /^palavras[- ]chave\s*[:\-]/i.test(text.trim());
+}
+
+function isKeywordsLine(text: string): boolean {
+  return /^keywords\s*[:\-]/i.test(text.trim());
+}
+
+function isLikelyDelimiterBoundary(block: ImportedBlock, text: string): boolean {
+  const normalized = normalizeForDetection(text);
+  return (
+    block.type === "pageBreak" ||
+    isPageHeading(block, [
+      "RESUMO",
+      "ABSTRACT",
+      "AGRADECIMENTOS",
+      "SUMARIO",
+      "SUMÁRIO",
+      "LISTA DE QUADROS",
+      "LISTA DE GRÁFICOS",
+      "LISTA DE GRAFICOS",
+      "LISTA DE SIGLAS",
+      "INDICADORES DE IMPACTO",
+      "IMPACT INDICATORS",
+    ]) ||
+    /^APROVAD[AO]\b/.test(normalized) ||
+    /^ORIENTADOR/.test(normalized) ||
+    /^BIBLIOGRAFIA/.test(normalized)
+  );
+}
+
+function collectBeforeDelimiter(
+  blocks: ImportedBlock[],
+  delimiterIndex: number,
+  options: { afterIndex?: number; stopAtPalavrasChave?: boolean } = {},
+): string {
+  const collected: string[] = [];
+  const minIndex = options.afterIndex ?? 0;
+
+  for (let index = delimiterIndex - 1; index >= minIndex; index -= 1) {
+    const block = blocks[index];
+    const text = textFromBlockForSection(block).trim();
+    if (!text) continue;
+    if (options.stopAtPalavrasChave && isPalavrasChaveLine(text)) break;
+    if (isKeywordsLine(text)) break;
+    if (isLikelyDelimiterBoundary(block, text)) {
+      if (collected.length) break;
+      continue;
+    }
+    if (looksLikePrimaryHeading(block, text)) {
+      if (collected.length) break;
+      continue;
+    }
+    if (text.startsWith("[Imagem detectada")) continue;
+    collected.unshift(text);
+  }
+
+  return cleanAcademicCandidate(joinLines(collected));
+}
+
+function recoverResumoByDelimiter(blocks: ImportedBlock[]): {
+  resumo: string;
+  palavrasChave: string;
+  confidence: Confidence;
+} {
+  const keywordIndex = blocks.findIndex((block) => isPalavrasChaveLine(textFromBlockForSection(block).trim()));
+  if (keywordIndex < 0) return { resumo: "", palavrasChave: "", confidence: "nao-identificado" };
+
+  const resumo = collectBeforeDelimiter(blocks, keywordIndex);
+  return {
+    resumo,
+    palavrasChave: keywordValue(textFromBlockForSection(blocks[keywordIndex]).trim(), "palavras"),
+    confidence: resumo ? "baixa" : "nao-identificado",
+  };
+}
+
+function recoverAbstractByDelimiter(blocks: ImportedBlock[]): {
+  abstractText: string;
+  keywords: string;
+  confidence: Confidence;
+} {
+  const keywordIndex = blocks.findIndex((block) => isKeywordsLine(textFromBlockForSection(block).trim()));
+  if (keywordIndex < 0) return { abstractText: "", keywords: "", confidence: "nao-identificado" };
+
+  let previousPalavrasIndex = -1;
+  for (let index = keywordIndex - 1; index >= 0; index -= 1) {
+    if (isPalavrasChaveLine(textFromBlockForSection(blocks[index]).trim())) {
+      previousPalavrasIndex = index;
+      break;
+    }
+  }
+  const abstractText = collectBeforeDelimiter(blocks, keywordIndex, {
+    afterIndex: previousPalavrasIndex >= 0 ? previousPalavrasIndex + 1 : 0,
+    stopAtPalavrasChave: true,
+  });
+
+  return {
+    abstractText,
+    keywords: keywordValue(textFromBlockForSection(blocks[keywordIndex]).trim(), "keywords"),
+    confidence: abstractText ? "baixa" : "nao-identificado",
+  };
+}
+
+function stripAdvisorNoise(value: string): string {
+  return cleanValue(
+    value
+      .replace(/\bBibliografia\b.*$/i, "")
+      .replace(/\bFicha catalogr[aá]fica\b.*$/i, ""),
+  );
+}
+
+function hasCatalogCard(lines: string[]): boolean {
+  return lines.some((line) => /ficha catalogr[aá]fica|bibliografia\./i.test(line));
+}
+
+function hasApprovalSheet(lines: string[]): boolean {
+  return lines.some((line) => /aprovad[ao]\s+em\s+\d{1,2}\s+de\s+\p{L}+\s+de\s+(?:19|20)\d{2}/iu.test(line));
+}
+
+function hasPreTextualLists(lines: string[]): boolean {
+  const normalized = lines.map(normalizeForDetection).join("\n");
+  return /LISTA DE (QUADROS|GRAFICOS|SIGLAS|ILUSTRACOES|TABELAS)/.test(normalized);
+}
+
+function looksLikePdfConvertedDocx(structure: DocxStructure, lines: string[]): boolean {
+  const normalized = lines.map(normalizeForDetection).join("\n");
+  const hasDelimiterWithoutHeading =
+    (/PALAVRAS[- ]CHAVE:/.test(normalized) && !/^RESUMO$/m.test(normalized)) ||
+    (/KEYWORDS:/.test(normalized) && !/^ABSTRACT$/m.test(normalized));
+  const hasDisplacedPreTextual =
+    /INDICADORES DE IMPACTO|IMPACT INDICATORS|LISTA DE QUADROS|LISTA DE GRAFICOS|LISTA DE SIGLAS/.test(normalized);
+  return hasDelimiterWithoutHeading || (structure.images.length > 0 && hasDisplacedPreTextual);
+}
+
 function findIntroductionIndex(blocks: ImportedBlock[]): number {
   return findHeadingIndex(blocks, (block) => {
     const normalized = normalizeForDetection(blockText(block));
@@ -687,9 +837,10 @@ export function detectAcademicFieldsFromStructure(
   fields.year = coverYear.value;
   confidence.year = coverYear.confidence;
 
-  fields.advisor =
+  fields.advisor = stripAdvisorNoise(
     findByLabel(text, [/^\s*orientador(?:a)?\s*[:\-]\s*(.+)$/im]) ||
-    findFollowingLabel(lines, ["Orientador", "Orientadora"]);
+      findFollowingLabel(lines, ["Orientador", "Orientadora"]),
+  );
   fields.coadvisor =
     findByLabel(text, [/^\s*coorientador(?:a)?\s*[:\-]\s*(.+)$/im]) ||
     findFollowingLabel(lines, ["Coorientador", "Coorientadora"]);
@@ -703,10 +854,28 @@ export function detectAcademicFieldsFromStructure(
   const resumo = splitResumo(structure.blocks);
   fields.resumo = resumo.resumo;
   fields.palavrasChave = resumo.palavrasChave;
+  const recoveredResumo = recoverResumoByDelimiter(structure.blocks);
+  if (!fields.resumo && recoveredResumo.resumo) {
+    fields.resumo = recoveredResumo.resumo;
+    confidence.resumo = recoveredResumo.confidence;
+  }
+  if (!fields.palavrasChave && recoveredResumo.palavrasChave) {
+    fields.palavrasChave = recoveredResumo.palavrasChave;
+    confidence.palavrasChave = recoveredResumo.confidence === "baixa" ? "media" : recoveredResumo.confidence;
+  }
 
   const abstract = splitAbstract(structure.blocks);
   fields.abstractText = abstract.abstractText;
   fields.keywords = abstract.keywords;
+  const recoveredAbstract = recoverAbstractByDelimiter(structure.blocks);
+  if (!fields.abstractText && recoveredAbstract.abstractText) {
+    fields.abstractText = recoveredAbstract.abstractText;
+    confidence.abstractText = recoveredAbstract.confidence;
+  }
+  if (!fields.keywords && recoveredAbstract.keywords) {
+    fields.keywords = recoveredAbstract.keywords;
+    confidence.keywords = recoveredAbstract.confidence === "baixa" ? "media" : recoveredAbstract.confidence;
+  }
 
   fields.introducao = collectIntroduction(structure.blocks);
   fields.conclusao = collectConclusion(structure.blocks);
@@ -724,6 +893,24 @@ export function detectAcademicFieldsFromStructure(
     "INDICADORES DE IMPACTO",
   ]);
   fields.impactIndicators = collectPreTextualSection(structure.blocks, ["IMPACT INDICATORS"]);
+
+  if (hasCatalogCard(lines)) {
+    messages.push("Ficha catalografica detectada no documento importado; preserve os dados reais e revise antes de gerar.");
+  }
+  if (hasApprovalSheet(lines)) {
+    messages.push("Folha de aprovacao detectada no documento importado; preserve os dados reais e revise antes de gerar.");
+  }
+  if (fields.indicadoresImpacto || fields.impactIndicators) {
+    messages.push("Indicadores de impacto detectados no documento importado.");
+  }
+  if (hasPreTextualLists(lines)) {
+    messages.push("Listas pre-textuais detectadas no documento importado.");
+  }
+  if (looksLikePdfConvertedDocx(structure, lines)) {
+    messages.push(
+      "Este DOCX parece ter sido convertido de PDF. Alguns títulos, caixas de texto, imagens, quadros e elementos pré-textuais podem ter sido deslocados para cabeçalhos, rodapés ou objetos ancorados. Revise os campos extraídos antes de gerar o DOCX.",
+    );
+  }
 
   const imageBlocks = structure.blocks.filter((block) => block.type === "image");
   if (imageBlocks.length) {
