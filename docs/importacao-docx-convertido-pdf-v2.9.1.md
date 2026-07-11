@@ -284,3 +284,21 @@ Marcadores técnicos `[Imagem detectada: ...]` e `[Imagem: ...]` são removidos 
 - `npm test`: **856 passed** (116 arquivos, 1 skipped)
 - `npm run build`: **built in 6.81s**
 - Teste local com `_diagnostico/andrade-2025/Andrade_2025.docx`: pré-textuais antes do sumário, aprovação normalizada, 135 tabelas como `w:tbl`, sem marcadores de imagem.
+
+## Correção final — isolamento de pré-textuais, listas e imagens
+
+Esta etapa fecha os bloqueadores observados no fluxo real de Andrade (2025), mantendo a regra de não inventar conteúdo acadêmico quando o DOCX convertido de PDF perde estrutura confiável.
+
+- `AGRADECIMENTOS` agora para em delimitadores fortes de resumo/abstract (`A presente pesquisa teve como objetivo`, `This study aimed`, `Palavras-chave`, `Keywords`), evitando que o RESUMO seja capturado dentro dos agradecimentos.
+- O RESUMO permanece no campo próprio e não deve aparecer duplicado no bloco de agradecimentos ou no corpo textual.
+- Fragmentos soltos da banca, como `Prof.` em uma linha e `Dr. Dany Flavio Tonelli Orientador` na linha seguinte, são unidos antes da renderização, resultando em `Prof. Dr. Dany Flavio Tonelli — Orientador`.
+- Quando `INDICADORES DE IMPACTO`, `IMPACT INDICATORS` e `LISTA DE SIGLAS` são esperados em DOCX convertido de PDF, mas o conteúdo não é extraível com segurança, o sistema insere aviso revisável em vez de criar texto artificial.
+- `LISTA DE QUADROS`, `LISTA DE GRÁFICOS` e `LISTA DE TABELAS` preservam apenas entradas com paginação e param antes de legendas/fontes do corpo, evitando que `Fonte:` e captions reais sejam misturados à lista pré-textual.
+- Tabelas extraídas continuam sendo exportadas como tabelas reais (`w:tbl`), com legenda/fonte associadas quando a posição é confiável, sem repetir grosseiramente caption e fonte como texto solto.
+- No DOCX local de Andrade foram detectadas 57 entradas de mídia no pacote OOXML e 0 imagens/gráficos acadêmicos do corpo preservados automaticamente; nenhuma pôde ser posicionada com confiabilidade. O importador agora informa a contagem detectada, quantas foram preservadas automaticamente e quantas exigem revisão manual, sem afirmar preservação inexistente.
+- Referências continuam filtradas de forma conservadora para não receber texto narrativo do corpo, legendas, fontes, quadros, gráficos ou materiais de anexo/apêndice.
+
+### Validação (correção final)
+
+- Testes sintéticos cobrem isolamento de agradecimentos/resumo, limpeza de listas pré-textuais, aviso revisável para pré-textuais ausentes, diagnóstico honesto de imagens e normalização de banca.
+- Teste local opcional `tests/real-flow-audit-andrade-local.test.ts` audita o DOCX real quando `_diagnostico/andrade-2025/Andrade_2025.docx` existe, e pula sem falhar quando o arquivo não está no repositório.

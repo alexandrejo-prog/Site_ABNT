@@ -380,8 +380,10 @@ function buildImportResult(
   const fields = sanitizeFields(repairRecordHeadingFragments(detected.fields));
   const confidence = sanitizeConfidence(detected.confidence, fields);
   const workTypeSuggestion = detectWorkTypeSuggestion(text, fields);
+  const sourceImages = normalized.structure.images.length;
   const preservedImages = importedImages.filter((image) => image.status === "preserved").length;
   const missingImages = importedImages.filter((image) => image.status === "detected-but-not-preserved").length;
+  const reviewImages = Math.max(0, sourceImages - preservedImages);
   const preservedTables = importedTables.filter((table) => table.status === "preserved").length;
   const missingTables = importedTables.filter((table) => table.status === "detected-but-not-preserved").length;
   const imageMessages = [
@@ -390,6 +392,9 @@ function buildImportResult(
       : "",
     missingImages
       ? `${missingImages} imagem(ns) detectada(s), mas nem todas puderam ser preservadas automaticamente. Reinsira manualmente as imagens ausentes e confira legendas e fontes.`
+      : "",
+    sourceImages
+      ? `${sourceImages} imagem(ns)/grafico(s) detectado(s) no DOCX original; ${preservedImages} preservado(s) automaticamente; ${reviewImages} exigem revisao manual.`
       : "",
   ].filter(Boolean);
   const tableMessages = [
@@ -400,7 +405,7 @@ function buildImportResult(
       ? `${missingTables} tabela(s)/quadro(s) detectada(s), mas nao preservada(s) automaticamente. Reinsira manualmente as tabelas ausentes se necessario.`
       : "",
   ].filter(Boolean);
-  if (preservedImages || missingImages) {
+  if (sourceImages || preservedImages || missingImages) {
     fields.imageWarnings = imageMessages.join(" ");
   }
   const nonImageMessages = messages.filter(

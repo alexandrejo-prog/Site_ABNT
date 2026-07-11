@@ -35,10 +35,10 @@ IMPACT INDICATORS
 Synthetic impact text.
 
 LISTA DE QUADROS
-Quadro 1 - Exemplo sintetico
+Quadro 1 - Exemplo sintetico 12
 
 LISTA DE GRAFICOS
-Grafico 1 - Exemplo sintetico
+Grafico 1 - Exemplo sintetico 14
 
 LISTA DE SIGLAS
 PGD - Programa de Gestao e Desempenho
@@ -148,5 +148,78 @@ MARX, Karl. O capital: critica da economia politica. Sao Paulo: Boitempo, 2013.`
     if (organizacaoIdx >= 0 && quadroIdx >= 0) {
       expect(quadroIdx).toBeLessThan(organizacaoIdx);
     }
+  });
+
+  it("agradecimentos inferidos param antes de delimitadores fortes de resumo e abstract", () => {
+    const result = detectAcademicFieldsFromText(`UNIVERSIDADE FEDERAL DE LAVRAS
+AUTORA SINTETICA
+Dissertacao apresentada a Universidade Federal de Lavras para obtencao do titulo de Mestre.
+
+A Universidade Federal de Lavras, ao orientador e aos colegas pelo apoio durante a caminhada academica.
+Aos meus familiares pelo incentivo e carinho.
+A presente pesquisa teve como objetivo analisar a politica institucional.
+Palavras-chave: gestao; trabalho.
+This study aimed to analyze institutional policy.
+Keywords: management; work.
+
+1 INTRODUCAO
+Texto do corpo.`);
+
+    expect(result.fields.agradecimentos).toContain("A Universidade Federal de Lavras");
+    expect(result.fields.agradecimentos).not.toContain("A presente pesquisa teve como objetivo");
+    expect(result.fields.agradecimentos).not.toContain("This study aimed");
+    expect(result.fields.resumo).toContain("A presente pesquisa teve como objetivo");
+    expect(result.fields.abstractText).toContain("This study aimed");
+  });
+
+  it("listas de quadros e graficos preservam entradas paginadas e param antes de legenda/fonte do corpo", () => {
+    const result = detectAcademicFieldsFromText(`UNIVERSIDADE FEDERAL DE LAVRAS
+AUTORA SINTETICA
+Dissertacao apresentada a Universidade Federal de Lavras para obtencao do titulo de Mestre.
+
+LISTA DE QUADROS
+Quadro 1 - Sintese teorica 31
+Quadro 2 - Matriz documental 44
+Quadro 3 - Roteiro de entrevistas
+Fonte: elaborado pelo autor (2025).
+
+LISTA DE GRAFICOS
+Grafico 1 - Perfil dos respondentes 58
+Grafico 2 - Frequencia de respostas 62
+Grafico 3 - Resultado do corpo
+Fonte: dados da pesquisa.
+
+SUMARIO
+1 INTRODUCAO
+Texto do corpo.`);
+
+    expect(result.fields.listaQuadros).toContain("Quadro 1 - Sintese teorica 31");
+    expect(result.fields.listaQuadros).toContain("Quadro 2 - Matriz documental 44");
+    expect(result.fields.listaQuadros).not.toContain("Quadro 3 - Roteiro de entrevistas");
+    expect(result.fields.listaQuadros).not.toContain("Fonte:");
+    expect(result.fields.listaGraficos).toContain("Grafico 1 - Perfil dos respondentes 58");
+    expect(result.fields.listaGraficos).toContain("Grafico 2 - Frequencia de respostas 62");
+    expect(result.fields.listaGraficos).not.toContain("Grafico 3 - Resultado do corpo");
+    expect(result.fields.listaGraficos).not.toContain("Fonte:");
+  });
+
+  it("DOCX convertido provavel recebe aviso revisavel para pre-textuais ausentes", () => {
+    const result = detectAcademicFieldsFromText(`UNIVERSIDADE FEDERAL DE LAVRAS
+AUTORA SINTETICA
+Dissertacao apresentada a Universidade Federal de Lavras para obtencao do titulo de Mestre.
+
+A presente pesquisa teve como objetivo analisar a gestao publica.
+Palavras-chave: gestao; impacto.
+This study aimed to analyze public management.
+Keywords: management; impact.
+
+1 INTRODUCAO
+Texto do corpo.`);
+
+    expect(result.fields.indicadoresImpacto).toContain("Revise manualmente");
+    expect(result.fields.impactIndicators).toContain("Revise manualmente");
+    expect(result.fields.listaSiglas).toContain("Revise manualmente");
+    expect(result.messages.join("\n")).toContain("Indicadores de impacto");
+    expect(result.messages.join("\n")).toContain("Lista de siglas");
   });
 });

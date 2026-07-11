@@ -349,6 +349,24 @@ describe("DOCX export", () => {
     }
   });
 
+  it("une titulo solto da banca ao membro seguinte na folha de aprovacao", async () => {
+    const documentXml = await generatedXml("# 1 Introducao\nTexto comum.", {
+      ...fields,
+      workType: "dissertacao",
+      aprovalDate: "APROVADA em 08 de julho de 2025.",
+      approvalMembers: [
+        "Dra. Suzanne Erica Nobrega Correia UFCG",
+        "Dr. Rafael dos Santos Pereira UFMG",
+        "Prof.",
+        "Dr. Dany Flavio Tonelli Orientador",
+      ],
+    });
+    const paragraphs = paragraphsIn(documentXml).map(paragraphText);
+
+    expect(paragraphs).not.toContain("Prof.");
+    expect(paragraphs.some((text) => /Prof\.\s+Dr\.\s+Dany Flavio Tonelli.*Orientador/.test(text))).toBe(true);
+  });
+
   it("keeps summary and pre-textual titles out of Word heading levels", async () => {
     const documentXml = await generatedXml("# 1 Introdu\u00e7\u00e3o\nTexto.", {
       ...fields,

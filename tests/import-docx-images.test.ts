@@ -21,7 +21,12 @@ function imageParagraphXml(relationshipId: string): string {
 }
 
 async function makeSyntheticDocx(
-  options: { duplicateBodyImage?: boolean; headerImage?: boolean; missingMedia?: boolean } = {},
+  options: {
+    duplicateBodyImage?: boolean;
+    headerImage?: boolean;
+    missingMedia?: boolean;
+    noAcademicImageContext?: boolean;
+  } = {},
 ): Promise<ArrayBuffer> {
   const zip = new JSZip();
   const body = [
@@ -30,10 +35,10 @@ async function makeSyntheticDocx(
     paragraphXml("TITULO SINTETICO"),
     paragraphXml("1 INTRODUCAO"),
     paragraphXml("Texto antes da imagem."),
-    paragraphXml("Grafico 1 - Sexo."),
+    ...(options.noAcademicImageContext ? [] : [paragraphXml("Grafico 1 - Sexo.")]),
     imageParagraphXml("rId22"),
     ...(options.duplicateBodyImage ? [imageParagraphXml("rId22")] : []),
-    paragraphXml("Fonte: elaboracao propria (2025)."),
+    ...(options.noAcademicImageContext ? [] : [paragraphXml("Fonte: elaboracao propria (2025).")]),
     paragraphXml("Texto normal depois."),
     paragraphXml("REFERENCIAS"),
     paragraphXml("SILVA, A. Referencia sintetica."),
@@ -70,7 +75,12 @@ async function makeSyntheticDocx(
   return zip.generateAsync({ type: "arraybuffer" });
 }
 
-async function importSyntheticDocx(options?: { duplicateBodyImage?: boolean; headerImage?: boolean; missingMedia?: boolean }) {
+async function importSyntheticDocx(options?: {
+  duplicateBodyImage?: boolean;
+  headerImage?: boolean;
+  missingMedia?: boolean;
+  noAcademicImageContext?: boolean;
+}) {
   const docx = await makeSyntheticDocx(options);
   const file = new File([docx], "sintetico.docx", {
     type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -164,5 +174,15 @@ describe("importacao de imagens DOCX", () => {
     expect(result.importedImages).toHaveLength(1);
     expect(result.importedImages[0].relationshipId).toBe("rId22");
     expect(result.importedImages.some((image) => image.relationshipId === "rHeader1")).toBe(false);
+  });
+
+  it("avisa quando ha midia no DOCX original sem imagem academica preservavel", async () => {
+    const result = await importSyntheticDocx({ noAcademicImageContext: true });
+
+    expect(result.importedImages).toHaveLength(0);
+    expect(result.fields.imageWarnings).toContain("1 imagem(ns)/grafico(s) detectado(s) no DOCX original");
+    expect(result.fields.imageWarnings).toContain("0 preservado(s) automaticamente");
+    expect(result.fields.imageWarnings).toContain("1 exigem revisao manual");
+    expect(result.messages.join("\n")).toContain("1 imagem(ns)/grafico(s) detectado(s) no DOCX original");
   });
 });

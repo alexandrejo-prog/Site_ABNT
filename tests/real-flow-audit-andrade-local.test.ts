@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { importDocumentFile } from "../src/import-docx";
 import { normalizeFieldsForSelectedModel } from "../src/work-type-field-normalizer";
 import { templateForWorkType } from "../src/document-template";
+import { extractDocxStructure } from "../src/word-structure-extractor";
+import { documentText } from "./test-utils/ooxml";
 import JSZip from "jszip";
 import fs from "fs";
 
@@ -194,5 +196,54 @@ describe(" Auditoria do fluxo real com DOCX de Andrade (local)", () => {
 
   it.skipIf(hasRealFile)("pula se o arquivo de diagnóstico não existir", () => {
     expect(hasRealFile).toBe(false);
+  });
+
+  it.skipIf(!hasRealFile)("bloqueadores finais ficam isolados no fluxo real", async () => {
+    const arrayBuffer = fs.readFileSync(REAL_DOCX_PATH);
+    const sourceStructure = await extractDocxStructure(arrayBuffer, { includeMediaData: true });
+    const file = new File([arrayBuffer], "Andrade_2025.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
+    const result = await importDocumentFile(file);
+    const generationFields = normalizeFieldsForSelectedModel(result.fields);
+    const blob = await templateForWorkType(generationFields.workType).generate({
+      fields: generationFields,
+      editorText: result.editorText,
+      importedImages: result.importedImages,
+      importedTables: result.importedTables,
+    });
+
+    const zip = await JSZip.loadAsync(Buffer.from(await blob.arrayBuffer()));
+    const documentXml = (await zip.file("word/document.xml")?.async("string")) ?? "";
+    const text = documentText(documentXml);
+
+    expect(result.fields.agradecimentos).not.toContain("A presente pesquisa teve como objetivo");
+    expect(result.fields.resumo).toContain("A presente pesquisa teve como objetivo");
+    expect((text.match(/Palavras-chave:/g) ?? []).length).toBe(1);
+    expect((text.match(/Keywords:/g) ?? []).length).toBe(1);
+    expect(text.split("\n")).not.toContain("Prof.");
+    expect(text).toMatch(/Prof\.\s+Dr\.\s+Dany Flavio Tonelli.*Orientador/);
+
+    expect(result.fields.indicadoresImpacto).toContain("Revise manualmente");
+    expect(result.fields.impactIndicators).toContain("Revise manualmente");
+    expect(result.fields.listaSiglas).toContain("Revise manualmente");
+    expect(result.fields.listaQuadros).not.toContain("Fonte:");
+    expect(result.fields.listaGraficos).not.toContain("Fonte:");
+    expect(result.fields.listaQuadros).not.toContain("Quadro 4 -");
+    expect(result.fields.listaGraficos).not.toContain("GrÃ¡fico 12 -");
+    expect(result.fields.referencias).not.toContain("Fonte:");
+    expect(result.fields.referencias).not.toContain("Quadro ");
+    expect(result.fields.referencias).not.toContain("GrÃ¡fico ");
+
+    expect(documentXml).toContain("<w:tbl>");
+    expect(text).not.toContain("[Imagem detectada: rId");
+    expect(text).not.toContain("[[Imagem importada preservada");
+    expect(sourceStructure.images.length).toBeGreaterThan(0);
+    if (result.importedImages.length === 0) {
+      expect(result.fields.imageWarnings).toContain(`${sourceStructure.images.length} imagem(ns)/grafico(s) detectado(s)`);
+      expect(result.fields.imageWarnings).toContain("0 preservado(s) automaticamente");
+      expect(result.fields.imageWarnings).toContain("exigem revisao manual");
+    }
   });
 });

@@ -1433,7 +1433,30 @@ function splitApprovalMembers(members: string[]): string[] {
       split.push(cleaned);
     }
   }
-  return split;
+  return mergeLooseApprovalTitles(split);
+}
+
+function isLooseApprovalTitle(value: string): boolean {
+  return /^(Prof|Profa|Dr|Dra)\.$/i.test(cleanMojibakeText(value).trim());
+}
+
+function mergeLooseApprovalTitles(members: string[]): string[] {
+  const merged: string[] = [];
+
+  for (let index = 0; index < members.length; index += 1) {
+    const current = cleanMojibakeText(members[index]).trim();
+    const next = cleanMojibakeText(members[index + 1] ?? "").trim();
+
+    if (isLooseApprovalTitle(current) && next) {
+      merged.push(`${current} ${next}`.trim());
+      index += 1;
+      continue;
+    }
+
+    if (current) merged.push(current);
+  }
+
+  return merged.filter((member) => !isLooseApprovalTitle(member));
 }
 
 function extractMembersFromString(text: string): string[] {

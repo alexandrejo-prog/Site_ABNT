@@ -778,6 +778,13 @@ function collectPreTextualSection(blocks: ImportedBlock[], headings: string[]): 
   const start = findHeadingIndex(blocks, (block) => isPageHeading(block, headings));
   return collectAfterHeading(blocks, start, (block) => {
     if (block.type === "pageBreak") return false;
+    const text = blockText(block);
+    const normalizedText = normalizeForDetection(text);
+    if (
+      /^(A PRESENTE PESQUISA TEVE COMO OBJETIVO|THIS STUDY AIMED|PALAVRAS[- ]CHAVE|KEYWORDS)\b/.test(normalizedText)
+    ) {
+      return true;
+    }
     if (!looksLikePrimaryHeading(block)) return false;
     const normalized = headingBase(blockText(block));
     const isTarget = headings.map(normalizeForDetection).includes(normalized);
@@ -801,6 +808,41 @@ function collectPreTextualSection(blocks: ImportedBlock[], headings: string[]): 
     const isReference = normalized === "REFERENCIAS" || normalized === "ANEXOS" || normalized === "ANEXO" || normalized === "APENDICES" || normalized === "APENDICE";
     return isKnownPreTextual || isIntro || isReference;
   });
+}
+
+function preTextualRecoveryNotice(): string {
+  return "Seção detectada no arquivo importado, mas o conteúdo não pôde ser preservado automaticamente. Revise manualmente.";
+}
+
+function isPagedListEntry(text: string, labels: string[]): boolean {
+  const normalized = normalizeForDetection(text.replace(/[.]+$/, ""));
+  const labelPattern = labels.map((label) => normalizeForDetection(label)).join("|");
+  return new RegExp(`^(?:${labelPattern})\\s+\\d+\\b.+\\s+\\d{1,4}$`).test(normalized);
+}
+
+function isUnpagedBodyCaption(text: string, labels: string[]): boolean {
+  const normalized = normalizeForDetection(text);
+  const labelPattern = labels.map((label) => normalizeForDetection(label)).join("|");
+  return new RegExp(`^(?:${labelPattern})\\s+\\d+\\b`).test(normalized) && !isPagedListEntry(text, labels);
+}
+
+function cleanPreTextualList(value: string, labels: string[]): string {
+  const lines = splitLines(value);
+  const kept: string[] = [];
+  let sawPaged = false;
+
+  for (const line of lines) {
+    if (/^Fonte\s*:/i.test(line)) break;
+    if (isPagedListEntry(line, labels)) {
+      kept.push(line.replace(/[.]+$/, ""));
+      sawPaged = true;
+      continue;
+    }
+    if (sawPaged && isUnpagedBodyCaption(line, labels)) break;
+    if (!sawPaged && !isUnpagedBodyCaption(line, labels)) kept.push(line);
+  }
+
+  return kept.join("\n").trim();
 }
 
 function looksLikeThanksBlock(text: string): boolean {
@@ -839,7 +881,10 @@ function collectPreTextualByContent(blocks: ImportedBlock[]): {
     }
 
     if (agradecimentosStart >= 0 && agradecimentosEnd < 0) {
-      if (/^(PALAVRAS[- ]CHAVE|KEYWORDS|RESUMO|ABSTRACT|1\s+INTRODUCAO|INTRODUCAO|REFERENCIAS)/i.test(normalized)) {
+      if (
+        /^(PALAVRAS[- ]CHAVE|KEYWORDS|RESUMO|ABSTRACT|INDICADORES DE IMPACTO|IMPACT INDICATORS|LISTA DE|SUMARIO|1\s+INTRODUCAO|INTRODUCAO|REFERENCIAS)/i.test(normalized) ||
+        /^(A PRESENTE PESQUISA TEVE COMO OBJETIVO|THIS STUDY AIMED)\b/.test(normalized)
+      ) {
         agradecimentosEnd = i;
       }
       continue;
@@ -1112,6 +1157,9 @@ export function detectAcademicFieldsFromStructure(
     "INDICADORES DE IMPACTO",
   ]);
   fields.impactIndicators = collectPreTextualSection(structure.blocks, ["IMPACT INDICATORS"]);
+  fields.listaQuadros = cleanPreTextualList(fields.listaQuadros, ["Quadro"]);
+  fields.listaGraficos = cleanPreTextualList(fields.listaGraficos, ["GrÃ¡fico", "Grafico"]);
+  fields.listaTabelas = cleanPreTextualList(fields.listaTabelas, ["Tabela"]);
 
   if (!fields.agradecimentos || !fields.listaQuadros || !fields.listaGraficos || !fields.listaSiglas) {
     const inferred = collectPreTextualByContent(structure.blocks);
@@ -1136,6 +1184,24 @@ export function detectAcademicFieldsFromStructure(
       messages.push("Lista de siglas inferida a partir do texto. Revise antes de gerar.");
     }
   }
+  fields.listaQuadros = cleanPreTextualList(fields.listaQuadros, ["Quadro"]);
+  fields.listaGraficos = cleanPreTextualList(fields.listaGraficos, ["GrÃ¡fico", "Grafico"]);
+  fields.listaTabelas = cleanPreTextualList(fields.listaTabelas, ["Tabela"]);
+  const convertedPdfLikely = looksLikePdfConvertedDocx(structure, lines);
+  if (convertedPdfLikely && (fields.workType === "dissertacao" || fields.workType === "tese")) {
+    if (!fields.indicadoresImpacto) {
+      fields.indicadoresImpacto = preTextualRecoveryNotice();
+      messages.push("Indicadores de impacto parecem existir no documento convertido, mas nÃ£o foram preservados como texto editÃ¡vel.");
+    }
+    if (!fields.impactIndicators) {
+      fields.impactIndicators = preTextualRecoveryNotice();
+      messages.push("Impact indicators parecem existir no documento convertido, mas nÃ£o foram preservados como texto editÃ¡vel.");
+    }
+    if (!fields.listaSiglas) {
+      fields.listaSiglas = preTextualRecoveryNotice();
+      messages.push("Lista de siglas parece existir no documento convertido, mas nÃ£o foi preservada como texto editÃ¡vel.");
+    }
+  }
 
   if (hasCatalogCard(lines)) {
     messages.push("Ficha catalografica detectada no documento importado; preserve os dados reais e revise antes de gerar.");
@@ -1149,7 +1215,7 @@ export function detectAcademicFieldsFromStructure(
   if (hasPreTextualLists(lines)) {
     messages.push("Listas pre-textuais detectadas no documento importado.");
   }
-  if (looksLikePdfConvertedDocx(structure, lines)) {
+  if (convertedPdfLikely) {
     messages.push(
       "Este DOCX parece ter sido convertido de PDF. Alguns títulos, caixas de texto, imagens, quadros e elementos pré-textuais podem ter sido deslocados para cabeçalhos, rodapés ou objetos ancorados. Revise os campos extraídos antes de gerar o DOCX.",
     );
