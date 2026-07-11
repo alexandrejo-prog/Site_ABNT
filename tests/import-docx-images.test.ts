@@ -157,4 +157,12 @@ describe("importacao de imagens DOCX", () => {
     expect(result.importedImages).toHaveLength(1);
     expect(result.importedImages[0].relationshipId).toBe("rId22");
   });
+
+  it("nao reinsere logo de cabecalho na secao textual", async () => {
+    const result = await importSyntheticDocx({ headerImage: true });
+
+    expect(result.importedImages).toHaveLength(1);
+    expect(result.importedImages[0].relationshipId).toBe("rId22");
+    expect(result.importedImages.some((image) => image.relationshipId === "rHeader1")).toBe(false);
+  });
 });

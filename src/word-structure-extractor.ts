@@ -57,6 +57,7 @@ export type ImportedBlock =
       caption?: string;
       source?: string;
       section?: ImportedSectionKind;
+      isDecorative?: boolean;
     }
   | { type: "pageBreak" };
 
@@ -565,14 +566,33 @@ export async function extractDocxStructure(
           blocks.push(textBlock);
         }
 
-        for (const relationshipId of imageRelationshipIds) {
+      for (const relationshipId of imageRelationshipIds) {
+        const target = relationships[relationshipId];
+        const fileName = (target || "").split("/").at(-1) ?? "";
+        const isHeaderFooterImage =
+          Boolean(relationships[relationshipId]?.startsWith("media/")) &&
+          (target || "").startsWith("header") ||
+          (target || "").startsWith("footer") ||
+          /logo|ufla|fundo|moldura|capa/i.test(fileName);
+
+        if (isHeaderFooterImage) {
           blocks.push({
             type: "image",
             relationshipId,
-            target: relationships[relationshipId],
+            target,
             section: currentSection,
+            isDecorative: true,
           });
+          continue;
         }
+
+        blocks.push({
+          type: "image",
+          relationshipId,
+          target,
+          section: currentSection,
+        });
+      }
 
         paragraphIndex += 1;
       }

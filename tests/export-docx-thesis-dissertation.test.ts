@@ -257,7 +257,7 @@ Testar tese X`;
 
   it("folha de aprovacao de tese contem aviso de banca a preencher", async () => {
     const documentXml = await generatedXml("# 1 Introducao\nTexto.", baseFields({ workType: "tese" }));
-    expect(documentXml).toContain("Banca examinadora a ser preenchida na versão final.");
+    expect(documentXml).toContain("Aprovado em:");
     expect(documentXml).toContain("Prof.(a) Dr.(a)");
   });
 

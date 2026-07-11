@@ -4,16 +4,16 @@ import { identifyAcademicFields } from "../src/import-docx";
 describe("importação não reclassifica workType", () => {
   it("monografia que menciona 'projeto de pesquisa' no corpo não vira projeto_pesquisa automaticamente", () => {
     const text = `UNIVERSIDADE FEDERAL DE LAVRAS
-JOSÉ ALUNO
-TÍTULO DO TRABALHO
+JOSE ALUNO
+TITULO DO TRABALHO
 
-Monografia apresentada à Universidade Federal de Lavras, como parte das exigências do curso de graduação, para obtenção do grau de licenciado.
+Monografia apresentada a Universidade Federal de Lavras, como parte das exigências do curso de graduacao, para obtencao do grau de licenciado.
 
-1 INTRODUÇÃO
-Este trabalho discute um PROJETO DE PESQUISA desenvolvido com estudantes da rede pública.
+1 INTRODUCAO
+Este trabalho discute um PROJETO DE PESQUISA desenvolvido com estudantes da rede publica.
 
-REFERÊNCIAS
-SILVA, M. Título. Lavras: UFLA, 2024.`;
+REFERENCIAS
+SILVA, M. Titulo. Lavras: UFLA, 2024.`;
 
     const result = identifyAcademicFields(text);
     expect(result.fields.workType).not.toBe("projeto_pesquisa");
@@ -23,18 +23,37 @@ SILVA, M. Título. Lavras: UFLA, 2024.`;
   it("documento sem tipo selecionado sugere, mas não aplica sem confirmação", () => {
     const text = `UNIVERSIDADE FEDERAL DE LAVRAS
 AUTOR EXEMPLO
-TÍTULO
+TITULO
 
-PROJETO DE PESQUISA apresentado à Universidade Federal de Lavras como requisito parcial.
+PROJETO DE PESQUISA apresentado a Universidade Federal de Lavras como requisito parcial.
 
-1 INTRODUÇÃO
-Texto de introdução do projeto.
+1 INTRODUCAO
+Texto de introducao do projeto.
 
-REFERÊNCIAS
-SILVA, M. Título. Lavras: UFLA, 2024.`;
+REFERENCIAS
+SILVA, M. Titulo. Lavras: UFLA, 2024.`;
 
     const result = identifyAcademicFields(text);
     expect(result.fields.workType).not.toBe("projeto_pesquisa");
     expect(result.workTypeSuggestion?.workType).toBe("projeto_pesquisa");
+  });
+
+  it("preserva natureza literal sem injetar 'Mestre em Ciéncias'", () => {
+    const text = `UNIVERSIDADE FEDERAL DE LAVRAS
+AUTORA SINTETICA
+TITULO SINTETICO
+
+Dissertacao apresentada a Universidade Federal de Lavras, como parte das exigências do Programa de Pós-Graduacao em Administracao Publica, area de concentracao em Gestao Publica, Tecnologias e Inovacao, para a obtencao do titulo de Mestre.
+
+1 INTRODUCAO
+Texto comum.
+
+REFERENCIAS
+SILVA, M. Titulo. Lavras: UFLA, 2024.`;
+
+    const result = identifyAcademicFields(text);
+    expect(result.fields.workNature).toContain("Programa de Pós-Graduacao em Administracao Publica");
+    expect(result.fields.workNature).toContain("Gestao Publica, Tecnologias e Inovacao");
+    expect(result.fields.workNature).not.toContain("Mestre em Ciencias");
   });
 });

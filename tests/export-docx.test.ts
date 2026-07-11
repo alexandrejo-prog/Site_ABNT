@@ -328,13 +328,14 @@ describe("DOCX export", () => {
 
   it("keeps dissertation and thesis complete UFLA structure", async () => {
     for (const workType of ["dissertacao", "tese"] as const) {
+      const workNature =
+        workType === "tese"
+          ? "Tese apresentada para obtencao do titulo de Doutor."
+          : "Dissertacao apresentada para obtencao do titulo de Mestre.";
       const documentXml = await generatedXml("# 1 Introducao\nTexto comum.", {
         ...fields,
         workType,
-        workNature:
-          workType === "tese"
-            ? "Dissertacao apresentada para obtencao do titulo de Mestre em Ciencias."
-            : "Tese apresentada para obtencao do titulo de Doutor em Ciencias.",
+        workNature,
         indicadoresImpacto: "Impacto social informado.",
         impactIndicators: "Social impact text.",
       });
@@ -344,7 +345,7 @@ describe("DOCX export", () => {
       expect(documentXml).toContain("Aprovado em:");
       expect(documentXml).toContain("INDICADORES DE IMPACTO");
       expect(documentXml).toContain("IMPACT INDICATORS");
-      expect(documentXml).toContain(workType === "tese" ? "Doutor em Ciencias" : "Mestre em Ciencias");
+      expect(documentXml).toContain(workNature);
     }
   });
 

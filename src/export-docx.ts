@@ -1256,25 +1256,11 @@ function natureParagraph(text: string): Paragraph {
 }
 
 function normalizeNatureForWorkType(nature: string, fields: AcademicFields): string {
-  if (fields.workType === "tese") {
-    return nature
-      .replace(/obtenção do título de Mestre/gi, "obtenção do título de Doutor")
-      .replace(/título de Mestre/gi, "título de Doutor")
-      .replace(/Mestre em/gi, "Doutor em")
-      .replace(/Mestrado/gi, "Doutorado")
-      .replace(/dissertação/gi, "tese");
+  const provided = cleanMojibakeText(nature).trim();
+  if (!provided || isInternalWorkNature(provided)) {
+    return fallbackWorkNature(fields);
   }
-
-  if (fields.workType === "dissertacao") {
-    return nature
-      .replace(/obtenção do título de Doutor/gi, "obtenção do título de Mestre")
-      .replace(/título de Doutor/gi, "título de Mestre")
-      .replace(/Doutor em/gi, "Mestre em")
-      .replace(/Doutorado/gi, "Mestrado")
-      .replace(/tese/gi, "dissertação");
-  }
-
-  return nature;
+  return provided;
 }
 
 function coverChildren(fields: AcademicFields, logo?: DocxLogoAsset): Paragraph[] {
@@ -1398,29 +1384,39 @@ function approvalPageChildren(fields: AcademicFields): Paragraph[] {
       ]
     : [];
 
-  // Rascunho técnico: não finge aprovação final. Linhas editáveis para a banca.
   const bancaLines: Paragraph[] = [
     new Paragraph({ spacing: { before: 360, after: 240, line: SINGLE_LINE } }),
-    centeredParagraph("Banca examinadora a ser preenchida na versão final.", true, BODY_SIZE, {
-      after: 360,
-      line: SINGLE_LINE,
-    }),
-    centeredParagraph("Prof.(a) Dr.(a) ______________________________", false, BODY_SIZE, {
-      after: 0,
-      line: SINGLE_LINE,
-    }),
-    centeredParagraph("Instituição: ________________________________", false, BODY_SIZE, {
-      after: 240,
-      line: SINGLE_LINE,
-    }),
-    centeredParagraph("Prof.(a) Dr.(a) ______________________________", false, BODY_SIZE, {
-      after: 0,
-      line: SINGLE_LINE,
-    }),
-    centeredParagraph("Instituição: ________________________________", false, BODY_SIZE, {
-      after: 0,
-      line: SINGLE_LINE,
-    }),
+    ...(fields.aprovalDate
+      ? [
+          centeredParagraph(
+            cleanMojibakeText(`Aprovado em: ${fields.aprovalDate}.`),
+            false,
+            BODY_SIZE,
+            { after: 240, line: SINGLE_LINE },
+          ),
+        ]
+      : [
+          centeredParagraph(
+            "Aprovado em: ____ de ____________________ de ______.",
+            false,
+            BODY_SIZE,
+            { after: 240, line: SINGLE_LINE },
+          ),
+        ]),
+    ...(fields.approvalMembers?.length
+      ? fields.approvalMembers.map((member) =>
+          centeredParagraph(cleanMojibakeText(member), false, BODY_SIZE, { after: 120, line: SINGLE_LINE }),
+        )
+      : [
+          centeredParagraph("Prof.(a) Dr.(a) ______________________________", false, BODY_SIZE, {
+            after: 0,
+            line: SINGLE_LINE,
+          }),
+          centeredParagraph("Instituição: ________________________________", false, BODY_SIZE, {
+            after: 240,
+            line: SINGLE_LINE,
+          }),
+        ]),
   ];
 
   return [
@@ -1435,10 +1431,6 @@ function approvalPageChildren(fields: AcademicFields): Paragraph[] {
       line: ONE_AND_HALF_LINE,
     }),
     natureParagraph(cleanMojibakeText(workNature(fields))),
-    simpleParagraph("Aprovado em: ____ de ____________________ de ______.", {
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 480, after: 240, line: SINGLE_LINE },
-    }),
     ...orientationLines,
     ...bancaLines,
   ];
@@ -1484,7 +1476,9 @@ function preTextualChildren(fields: AcademicFields): Paragraph[] {
       pageBreak(),
       unnumberedTitle("Ficha catalográfica"),
       simpleParagraph(
-        cleanMojibakeText("Inserir aqui a ficha catalográfica oficial gerada pela Biblioteca Universitária da UFLA. Não substitua por texto manual na versão final."),
+        cleanMojibakeText(
+          "Ficha catalográfica detectada no arquivo importado. Preserve ou substitua manualmente pela ficha oficial da Biblioteca Universitária da UFLA.",
+        ),
       ),
     );
   }
@@ -1509,6 +1503,28 @@ function preTextualChildren(fields: AcademicFields): Paragraph[] {
     ...optionalPage("Indicadores de impacto", cleanMojibakeText(indicadores)),
     ...optionalPage("Impact indicators", impactIndicators),
   );
+
+  if (
+    hasText(fields.listaQuadros) ||
+    hasText(fields.listaGraficos) ||
+    hasText(fields.listaTabelas) ||
+    hasText(fields.listaSiglas)
+  ) {
+    children.push(pageBreak());
+  }
+
+  if (hasText(fields.listaQuadros)) {
+    children.push(...optionalPage("Lista de quadros", cleanMojibakeText(fields.listaQuadros)));
+  }
+  if (hasText(fields.listaGraficos)) {
+    children.push(...optionalPage("Lista de gráficos", cleanMojibakeText(fields.listaGraficos)));
+  }
+  if (hasText(fields.listaTabelas)) {
+    children.push(...optionalPage("Lista de tabelas", cleanMojibakeText(fields.listaTabelas)));
+  }
+  if (hasText(fields.listaSiglas)) {
+    children.push(...optionalPage("Lista de siglas", cleanMojibakeText(fields.listaSiglas)));
+  }
 
   return children;
 }

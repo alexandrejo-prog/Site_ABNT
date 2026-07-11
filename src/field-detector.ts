@@ -408,13 +408,23 @@ function findFollowingLabel(lines: string[], labels: string[]): string {
 }
 
 function detectWorkNature(lines: string[]): string {
-  return (
-    lines.find((line) =>
-      /apresentad[ao]\s+[aà]\s+universidade|obten[cç][aã]o\s+do\s+t[ií]tulo/i.test(
-        line,
-      ),
-    ) ?? ""
+  const index = lines.findIndex((line) =>
+    /apresentad[ao]\s+[aà]\s+universidade|obten[cç][aã]o\s+do\s+t[ií]tulo/i.test(line),
   );
+  if (index < 0) return "";
+
+  const parts: string[] = [];
+  for (let i = index; i < lines.length; i += 1) {
+    const text = cleanValue(lines[i]);
+    if (!text) continue;
+    if (/palavras[- ]chave\s*[:\-]/i.test(text) || /^keywords\s*[:\-]/i.test(text)) break;
+    if (/^bibliografia$/i.test(text) || /^referencias$/i.test(text) || /^sumario$/i.test(text)) break;
+    if (/^ficha catalogr/i.test(text) || /^folha de aprov/i.test(text)) break;
+    if (parts.join(" ").length > 1200) break;
+    parts.push(text);
+  }
+
+  return parts.join(" ").trim();
 }
 
 function splitResumo(blocks: ImportedBlock[]): {
@@ -438,12 +448,21 @@ function splitResumo(blocks: ImportedBlock[]): {
       break;
     }
 
-    if (
+    const normalized = normalizeForDetection(text);
+    const isNextPreTextual =
       isPageHeading(block, ["ABSTRACT", "SUMARIO", "SUMÁRIO"]) ||
-      (looksLikePrimaryHeading(block, text) && collected.length)
-    ) {
-      break;
-    }
+      normalized === "AGRADECIMENTOS" ||
+      normalized === "DEDICATORIA" ||
+      normalized === "EPIGRAFE" ||
+      normalized === "INDICADORES DE IMPACTO" ||
+      normalized === "IMPACT INDICATORS" ||
+      normalized === "LISTA DE QUADROS" ||
+      normalized === "LISTA DE GRAFICOS" ||
+      normalized === "LISTA DE SIGLAS" ||
+      /^1\s+INTRODUCAO$/i.test(normalized);
+
+    if (isNextPreTextual) break;
+    if (looksLikePrimaryHeading(block, text) && collected.length) break;
 
     collected.push(text);
   }
@@ -472,7 +491,8 @@ function splitAbstract(blocks: ImportedBlock[]): {
       break;
     }
 
-    if (
+    const normalized = normalizeForDetection(text);
+    const isNextPreTextual =
       isPageHeading(block, [
         "INDICADORES DE IMPACTO",
         "IMPACT INDICATORS",
@@ -481,10 +501,16 @@ function splitAbstract(blocks: ImportedBlock[]): {
         "INTRODUCAO",
         "INTRODUÇÃO",
       ]) ||
-      /^1\s+INTRODUCAO$/.test(normalizeForDetection(text))
-    ) {
-      break;
-    }
+      normalized === "AGRADECIMENTOS" ||
+      normalized === "DEDICATORIA" ||
+      normalized === "EPIGRAFE" ||
+      normalized === "LISTA DE QUADROS" ||
+      normalized === "LISTA DE GRAFICOS" ||
+      normalized === "LISTA DE SIGLAS" ||
+      /^1\s+INTRODUCAO$/i.test(normalized);
+
+    if (isNextPreTextual) break;
+    if (looksLikePrimaryHeading(block, text) && collected.length) break;
 
     collected.push(text);
   }
@@ -627,6 +653,26 @@ function hasApprovalSheet(lines: string[]): boolean {
   return lines.some((line) => /aprovad[ao]\s+em\s+\d{1,2}\s+de\s+\p{L}+\s+de\s+(?:19|20)\d{2}/iu.test(line));
 }
 
+function detectApprovalSheet(lines: string[]): { date: string; members: string[] } {
+  const dateMatch = lines.find((line) => /aprovad[ao]\s+em\s+(\d{1,2}\s+de\s+\p{L}+\s+de\s+(?:19|20)\d{2})/iu.exec(line)?.[1]);
+  const date = dateMatch ? dateMatch : "";
+
+  const start = lines.findIndex((line) => /aprovad[ao]\s+em/i.test(line));
+  const members: string[] = [];
+  if (start >= 0) {
+    for (let index = start + 1; index < lines.length; index += 1) {
+      const text = lines[index].trim();
+      if (!text) continue;
+      if (/^(RESUMO|ABSTRACT|PALAVRAS[- ]CHAVE|KEYWORDS|AGRADECIMENTOS|DEDICATORIA|EPIGRAFE|INDICADORES|IMPACT|LISTA|SUMARIO|1\s+INTRODUCAO|REFERENCIAS|ANEXOS|APENDICES|CONCLUSAO)/i.test(text)) break;
+      if (/prof\.?\(?a\)?\s+dr\.?\(?a\)?/i.test(text) || /institui[cç][aã]o/i.test(text)) {
+        members.push(text);
+      }
+    }
+  }
+
+  return { date, members };
+}
+
 function hasPreTextualLists(lines: string[]): boolean {
   const normalized = lines.map(normalizeForDetection).join("\n");
   return /LISTA DE (QUADROS|GRAFICOS|SIGLAS|ILUSTRACOES|TABELAS)/.test(normalized);
@@ -702,7 +748,26 @@ function collectPreTextualSection(blocks: ImportedBlock[], headings: string[]): 
     if (block.type === "pageBreak") return false;
     if (!looksLikePrimaryHeading(block)) return false;
     const normalized = headingBase(blockText(block));
-    return !headings.map(normalizeForDetection).includes(normalized);
+    const isTarget = headings.map(normalizeForDetection).includes(normalized);
+    if (isTarget) return false;
+    const isKnownPreTextual =
+      normalized === "RESUMO" ||
+      normalized === "ABSTRACT" ||
+      normalized === "AGRADECIMENTOS" ||
+      normalized === "DEDICATORIA" ||
+      normalized === "EPIGRAFE" ||
+      normalized === "SUMARIO" ||
+      normalized === "SUMÁRIO" ||
+      normalized === "LISTA DE ILUSTRACOES" ||
+      normalized === "LISTA DE TABELAS" ||
+      normalized === "LISTA DE QUADROS" ||
+      normalized === "LISTA DE GRAFICOS" ||
+      normalized === "LISTA DE SIGLAS" ||
+      normalized === "INDICADORES DE IMPACTO" ||
+      normalized === "IMPACT INDICATORS";
+    const isIntro = normalized === "INTRODUCAO" || /^1\s+INTRODUCAO$/i.test(normalized);
+    const isReference = normalized === "REFERENCIAS" || normalized === "ANEXOS" || normalized === "ANEXO" || normalized === "APENDICES" || normalized === "APENDICE";
+    return isKnownPreTextual || isIntro || isReference;
   });
 }
 
@@ -722,7 +787,6 @@ function blocksToEditorText(blocks: ImportedBlock[]): string {
   const lines: string[] = [];
   for (let index = start; index < blocks.length; index += 1) {
     const block = blocks[index];
-    if (isReferenceHeading(block) || isAnnexHeading(block) || isAppendixHeading(block)) break;
     if (block.type === "pageBreak") continue;
 
     if (block.type === "heading") {
@@ -864,6 +928,10 @@ export function detectAcademicFieldsFromStructure(
       fields.workNature.match(/programa de p[óo]s-gradua[cç][aã]o em ([^,]+)/i)?.[1]?.trim() ?? "";
   }
 
+  const approval = detectApprovalSheet(lines);
+  fields.aprovalDate = approval.date;
+  fields.approvalMembers = approval.members;
+
   const resumo = splitResumo(structure.blocks);
   fields.resumo = resumo.resumo;
   fields.palavrasChave = resumo.palavrasChave;
@@ -902,6 +970,10 @@ export function detectAcademicFieldsFromStructure(
   fields.anexos = collectAnnexes(structure.blocks);
   fields.apendices = collectAppendices(structure.blocks);
   fields.agradecimentos = collectPreTextualSection(structure.blocks, ["AGRADECIMENTOS"]);
+  fields.listaQuadros = collectPreTextualSection(structure.blocks, ["LISTA DE QUADROS"]);
+  fields.listaGraficos = collectPreTextualSection(structure.blocks, ["LISTA DE GRÁFICOS", "LISTA DE GRAFICOS"]);
+  fields.listaTabelas = collectPreTextualSection(structure.blocks, ["LISTA DE TABELAS"]);
+  fields.listaSiglas = collectPreTextualSection(structure.blocks, ["LISTA DE SIGLAS"]);
   fields.indicadoresImpacto = collectPreTextualSection(structure.blocks, [
     "INDICADORES DE IMPACTO",
   ]);
@@ -925,7 +997,7 @@ export function detectAcademicFieldsFromStructure(
     );
   }
 
-  const imageBlocks = structure.blocks.filter((block) => block.type === "image");
+  const imageBlocks = structure.blocks.filter((block) => block.type === "image" && !block.isDecorative);
   if (imageBlocks.length) {
     fields.imageWarnings = `${imageBlocks.length} imagem(ns) detectada(s), mas nem todas puderam ser preservadas automaticamente. Reinsira manualmente as imagens ausentes e confira legendas e fontes.`;
     messages.push(fields.imageWarnings);

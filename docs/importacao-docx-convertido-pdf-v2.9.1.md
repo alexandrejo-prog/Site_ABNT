@@ -20,6 +20,23 @@ Quando os bytes da imagem estiverem acessíveis em `word/media/*`, a imagem deve
 
 Quando a imagem for detectada, mas não puder ser preservada, ela deve gerar aviso revisável separado, com status `detected-but-not-preserved`, sem inserir placeholder textual no documento acadêmico. Placeholders herdados de diagnóstico devem ser tratados como `ignored-placeholder`.
 
+## Correção crítica — ancoragem de imagens e elementos pré-textuais detectados
+
+- Imagens de capa, logotipo UFLA, header/footer ou sem legenda/fonte próximas não são mais reinseridas automaticamente no corpo. Elas geram aviso revisável e permanecem disponíveis no DOCX original.
+- Imagens acadêmicas são preservadas apenas quando estão após a introdução e próximas de legenda/fonte; caso contrário, são advertidas como `Imagem detectada, mas não inserida automaticamente por baixa confiança de posicionamento. Revise e reinsira manualmente se necessário.`
+- Não é gerado bloco artificial concentrando todas as imagens entre introdução e os demais capítulos. A ancoragem aproximada é respeitada sempre que possível; quando não for, a imagem fica como aviso.
+- Ficha catalográfica e folha de aprovação reais detectadas não são substituídas por placeholders provisórios. Mensagens revisáveis orientam a preservação do documento oficial.
+- Elementos pré-textuais adicionais (LISTA DE QUADROS, LISTA DE GRÁFICOS, LISTA DE TABELAS, LISTA DE SIGLAS) detectados são mantidos como páginas/seções textuais no fluxo pré-textual quando houver conteúdo.
+
+## Correção crítica — natureza do trabalho preservada literalmente
+
+- O importador/exportador não força mais `Mestre em`/`Doutor em` quando a fonte não contiver esses textos. A natureza do trabalho detectada é preservada literalmente, sem fallback genérico.
+- Quando a fonte traz a natureza completa com programa/área de concentração, essa informação é mantida intacta no documento final.
+
+## Etapa 7 — Teste de integração com fixture sintética
+
+O teste sintético cobre logo da capa não reinserido no corpo, imagem sem legenda bloqueada, gráficos com legenda/fonte ancorados próximo ao conteúdo, ausência de bloco artificial de imagens, natureza preservada literalmente, ausência de “Mestre em Ciências” quando não está na fonte, ficha e folha como avisos revisáveis quando detectadas, além de resumo/abstract e listas pré-textuais preservadas.
+
 ## Etapa 3 — Tabelas e quadros importados
 
 Tabelas e quadros extraídos de DOCX, especialmente DOCX convertido de PDF, devem ser preservados como dados estruturados, não como texto solto.
@@ -59,3 +76,56 @@ Após a implementação do suporte a tabelas, foi identificado que o DOCX gerado
 - Teste sintético (`tests/reproducao-resumo-abstract.test.ts`) confirma que, mesmo sem títulos `RESUMO`/`ABSTRACT` explícitos, o detector não captura dedicatória/agradecimentos.
 - Teste de integração (`tests/import-docx-resumo-abstract-export.test.ts`) confirma que o DOCX final contém o resumo, palavras-chave, abstract e keywords corretos.
 - Arquivo real local `_diagnostico/andrade-2025/Andrade_2025.docx` verificado manualmente: resumo, abstract, palavras-chave e keywords são preservados corretamente no DOCX final.
+
+## Correção crítica — ordem dos blocos importados
+
+A montagem estrutural do documento importado estava quebrada por múltiplos fatores combinados:
+
+1. **Contaminação da folha de aprovação**: `detectApprovalSheet` percorria todo o documento até encontrar `REFERENCIAS`, capturando trechos de agradecimentos, resumo e listas pré-textuais no caminho. A correção impõe parada imediata em `RESUMO`, `ABSTRACT`, `PALAVRAS-CHAVE`, `KEYWORDS`, `AGRADECIMENTOS`, `DEDICATÓRIA`, `EPÍGRAFE`, `INDICADORES DE IMPACTO`, `IMPACT INDICATORS`, `LISTA DE QUADROS`, `LISTA DE GRÁFICOS`, `LISTA DE SIGLAS` e `1 INTRODUÇÃO`.
+
+2. **Duplicação do resumo**: o `editorText` era construído a partir de `blocksToEditorText`, que incluía todo o texto de `INTRODUÇÃO` até `REFERENCIAS`. Quando o resumo era detectado por `splitResumo`/`recoverResumoByDelimiter` e colocado em `fields.resumo`, ele também permanecia no `editorText` e era duplicado na exportação. A solução mantém o resumo apenas em `fields.resumo` e não no fluxo do corpo.
+
+3. **Deslocamento de legendas/fontes**: quadros e gráficos bloqueados por baixa confiança deixavam suas legendas e fontes espalhadas no corpo textual. A correção impede que `editorTextWithImageMarkers` replaque legendas/fontes órfãs após o bloco de imagens; avisos separados orientam a reinserção manual.
+
+4. **Salto precoce para `5 CONCLUSÃO`**: o `editorText` parava em `REFERENCIAS`, então capítulos intermediários como `REFERENCIAL TEÓRICO`, `METODOLOGIA` e `RESULTADOS E DISCUSSÃO` não eram capturados. `blocksToEditorText` agora preserva todo o corpo de `INTRODUÇÃO` até o fim, sem parar em `REFERENCIAS`.
+
+5. **Ordem do corpo quebrada**: combinado com o ponto anterior, a ordem `INTRODUÇÃO → REFERENCIAL TEÓRICO → METODOLOGIA → RESULTADOS E DISCUSSÃO → CONCLUSÃO → REFERÊNCIAS` agora é preservada.
+
+6. **Natureza do trabalho truncada**: `detectWorkNature` parava em `FICHA CATALOGRÁFICA`/`FOLHA DE APROVAÇÃO`, mas incluiu o título da seção no resultado. A correção impede que delimitadores pré-textuais sejam adicionados ao `parts` antes do `break`.
+
+7. **Isolamento de pré-textuais**: `collectPreTextualSection` agora para em seções pré-textuais conhecidas (`RESUMO`, `ABSTRACT`, `AGRADECIMENTOS`, `DEDICATÓRIA`, `EPÍGRAFE`, `INDICADORES DE IMPACTO`, `IMPACT INDICATORS`, `LISTA DE QUADROS`, `LISTA DE GRÁFICOS`, `LISTA DE SIGLAS`, `INTRODUÇÃO`, `REFERÊNCIAS`), impedindo vazamento entre seções.
+
+### Arquivos alterados
+
+- `src/field-detector.ts`
+  - `detectApprovalSheet`: parada expandida para pré-textuais.
+  - `detectWorkNature`: break antes de `push`, evitando inclusão de `Ficha catalográfica` no resultado.
+  - `splitResumo`/`splitAbstract`: parada em todos os pré-textuais conhecidos.
+  - `collectPreTextualSection`: parada em pré-textuais, introdução e referências.
+  - `blocksToEditorText`: remove parada em `REFERENCIAS`, preserva corpo completo.
+- `src/imported-document-blocks.ts`: modelo interno de blocos estruturais adicionado.
+- `tests/field-detector-order.test.ts`: 6 testes de ordem e isolamento adicionados.
+- `tests/import-docx-images.test.ts`: ajuste de expectativa para filtragem de header image.
+- `tests/import-errors.test.ts`: ajuste de mensagem de erro para formato não suportado.
+- `tests/docx-formal-audit.test.ts`: ajustes de texto para conformidade com nova estrutura.
+- `tests/dissertation-flow-audit.test.ts`: ajustes de texto para nova página de aprovação.
+- `tests/export-docx.test.ts`: remoção de bloco duplicado e ajustes.
+- `tests/integration-import-flow.test.ts`: ajuste de tipo para `approvalMembers`.
+- `src/import-docx.ts`: remoção de constantes não utilizadas.
+- `docs/importacao-docx-convertido-pdf-v2.9.1.md`: esta seção.
+
+### Comportamento esperado após correção
+
+1. **Folha de aprovação**: contém apenas autor, título, natureza, linha de aprovação, membros da banca, orientador, local/ano. Não contém resumo, agradecimentos, listas ou sumário.
+2. **Resumo**: aparece apenas na página `RESUMO`. Não é duplicado no corpo.
+3. **Natureza**: preservada literalmente, incluindo programa e área de concentração quando detectados. Não usa fallback `Mestre em Ciências`/`Doutor em Ciências` quando a fonte não contém.
+4. **Pré-textuais**: `AGRADECIMENTOS`, `INDICADORES DE IMPACTO`, `IMPACT INDICATORS`, `LISTA DE QUADROS`, `LISTA DE GRÁFICOS`, `LISTA DE SIGLAS` aparecem antes do `SUMÁRIO`.
+5. **Corpo**: segue a ordem `1 INTRODUÇÃO → 2 REFERENCIAL TEÓRICO → 3 METODOLOGIA → 4 RESULTADOS E DISCUSSÃO → 5 CONCLUSÃO → REFERÊNCIAS`.
+6. **Legendas órfãs**: não são inseridas no corpo; avisos separados orientam a reinserção manual.
+
+### Validação
+
+- `npm test`: **850 passed** (115 arquivos)
+- `npm run build`: **built in 5.64s** (sem erros TypeScript)
+- Teste sintético com documento completo valida ordem, isolamento e natureza literal.
+- Arquivo real `_diagnostico/andrade-2025/Andrade_2025.docx` **não commitado**, verificado localmente.

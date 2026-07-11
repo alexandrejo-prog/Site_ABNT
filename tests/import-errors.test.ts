@@ -76,7 +76,7 @@ describe("Erros de importação", () => {
       const file = createMockFile("dummy pdf content", "documento.pdf");
 
       await expect(importDocumentFile(file)).rejects.toThrow(
-        "Formato não suportado",
+        "Formato nao suportado",
       );
     });
 
@@ -84,7 +84,7 @@ describe("Erros de importação", () => {
       const file = createMockFile("dummy odt content", "documento.odt");
 
       await expect(importDocumentFile(file)).rejects.toThrow(
-        "Formato não suportado",
+        "Formato nao suportado",
       );
     });
 
@@ -92,7 +92,7 @@ describe("Erros de importação", () => {
       const file = createMockFile("dummy jpg content", "foto.jpg");
 
       await expect(importDocumentFile(file)).rejects.toThrow(
-        "Formato não suportado",
+        "Formato nao suportado",
       );
     });
 
@@ -100,7 +100,7 @@ describe("Erros de importação", () => {
       const file = createMockFile("conteúdo qualquer", "arquivo.xyz");
 
       await expect(importDocumentFile(file)).rejects.toThrow(
-        "Formato não suportado",
+        "Formato nao suportado",
       );
     });
 
@@ -108,7 +108,7 @@ describe("Erros de importação", () => {
       const file = createMockFile("conteúdo qualquer", "README");
 
       await expect(importDocumentFile(file)).rejects.toThrow(
-        "Formato não suportado",
+        "Formato nao suportado",
       );
     });
   });
@@ -323,18 +323,18 @@ abc def ghi jkl mno pqr stu vwx yz
       });
 
       await expect(importDocumentFile(file)).rejects.toThrow(
-        "Não foi possível abrir",
+        "Nao foi possivel abrir",
       );
     });
 
-    it("rejeita arquivo .docx que não é ZIP válido", async () => {
-      const invalidContent = "Este não é um arquivo DOCX válido";
+    it("rejeita arquivo .docx que nao e ZIP valido", async () => {
+      const invalidContent = "Este nao e um arquivo DOCX valido";
       const file = new File([invalidContent], "falso.docx", {
         type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       });
 
       await expect(importDocumentFile(file)).rejects.toThrow(
-        "Não foi possível abrir",
+        "Nao foi possivel abrir",
       );
     });
 

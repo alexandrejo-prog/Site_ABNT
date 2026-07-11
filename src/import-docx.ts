@@ -39,6 +39,13 @@ export interface ImportResult {
   workTypeSuggestion?: WorkTypeSuggestion;
 }
 
+const DECORATIVE_SECTION_NAMES = new Set([
+  "CAPA",
+  "FOLHA DE ROSTO",
+  "FICHA CATALOGRAFICA",
+  "FOLHA DE APROVACAO",
+]);
+
 function isLikelyZipFile(arrayBuffer: ArrayBuffer): boolean {
   const bytes = new Uint8Array(arrayBuffer.slice(0, 4));
   return bytes[0] === 0x50 && bytes[1] === 0x4b;
@@ -46,7 +53,7 @@ function isLikelyZipFile(arrayBuffer: ArrayBuffer): boolean {
 
 function docxOpenError(fileName: string): Error {
   return new Error(
-    `Não foi possível abrir "${fileName}" como DOCX válido. O arquivo pode estar corrompido, incompleto ou em formato .doc antigo renomeado para .docx. Abra o arquivo no Word ou LibreOffice, use "Salvar como" > "Documento do Word (.docx)" e tente importar novamente.`,
+    `Nao foi possivel abrir "${fileName}" como DOCX valido. O arquivo pode estar corrompido, incompleto ou em formato .doc antigo renomeado para .docx. Abra o arquivo no Word ou LibreOffice, use "Salvar como" > "Documento do Word (.docx)" e tente importar novamente.`,
   );
 }
 
@@ -62,15 +69,13 @@ function looksLikeResearchProject(text: string, fields: AcademicFields): boolean
   );
 }
 
-// Não reclassifica o workType automaticamente. Apenas sugere quando o texto
-// parece projeto de pesquisa e o trabalho ainda não é desse tipo.
 function detectWorkTypeSuggestion(text: string, fields: AcademicFields): WorkTypeSuggestion | undefined {
   if (fields.workType === "projeto_pesquisa") return undefined;
   if (!looksLikeResearchProject(text, fields)) return undefined;
   return {
     workType: "projeto_pesquisa",
     confidence: "media",
-    message: "O sistema detectou possível Projeto de pesquisa. Aplicar este tipo?",
+    message: "O sistema detectou possivel Projeto de pesquisa. Aplicar este tipo?",
   };
 }
 
@@ -98,7 +103,7 @@ function blockText(block: ImportedBlock): string {
 }
 
 function looksLikeImageCaption(text: string): boolean {
-  return /^(Figura|Imagem|Gr[aá]fico|Grafico|Quadro|Tabela)\s+\d+\s*[-–—]/i.test(text.trim());
+  return /^(Figura|Imagem|Graf|Grafico|Quadro|Tabela)\s+\d+\s*[-–—]/i.test(text.trim());
 }
 
 function looksLikeImageSource(text: string): boolean {
@@ -106,7 +111,7 @@ function looksLikeImageSource(text: string): boolean {
 }
 
 function looksLikeTableCaption(text: string): boolean {
-  return /^(Quadro|Tabela|Gr[aá]fico|Grafico)\s+\d+\s*[-–—]/i.test(text.trim());
+  return /^(Quadro|Tabela|Graf|Grafico)\s+\d+\s*[-–—]/i.test(text.trim());
 }
 
 function looksLikeTableSource(text: string): boolean {
@@ -128,6 +133,27 @@ function nearestText(
   return "";
 }
 
+function isDecorativeImageBlock(block: ImportedBlock): boolean {
+  if (block.type !== "image") return false;
+  const target = normalizeForDetection(block.target || block.fileName || "");
+  return DECORATIVE_SECTION_NAMES.has(normalizeForDetection(block.section || "")) || target.includes("logo");
+}
+
+function classifyAcademicImage(block: ImportedBlock, index: number, blocks: ImportedBlock[]): boolean {
+  if (block.type !== "image") return false;
+  if (isDecorativeImageBlock(block)) return false;
+
+  const caption = nearestText(blocks, index, -1, looksLikeImageCaption);
+  const source = nearestText(blocks, index, 1, looksLikeImageSource);
+  if (!caption && !source) return false;
+
+  const bodyIndex = blocks.findIndex((b) => /1\s+INTRODUCAO/i.test(blockText(b)));
+  if (bodyIndex < 0) return false;
+  if (index < bodyIndex) return false;
+
+  return true;
+}
+
 function importedImagesFromStructure(structure: DocxStructure): ImportedDocumentImage[] {
   const assetsByRelationship = new Map(
     structure.images
@@ -140,6 +166,7 @@ function importedImagesFromStructure(structure: DocxStructure): ImportedDocument
 
   structure.blocks.forEach((block, index) => {
     if (block.type !== "image") return;
+    if (!classifyAcademicImage(block, index, structure.blocks)) return;
 
     const asset =
       (block.relationshipId ? assetsByRelationship.get(block.relationshipId) : undefined) ||
@@ -210,11 +237,7 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
 function isEditorHeading(block: ImportedBlock): boolean {
   if (block.type !== "heading") return false;
   const normalized = normalizeForDetection(block.text);
-  return (
-    /^(\d+(?:\.\d+)*)\s+\S+/.test(normalized) ||
-    normalized === "INTRODUCAO" ||
-    normalized === "INTRODUÇÃO"
-  );
+  return /^(\d+(?:\.\d+)*)\s+\S+/.test(normalized) || normalized === "INTRODUCAO";
 }
 
 function isReferenceOrPostTextual(block: ImportedBlock): boolean {
@@ -243,6 +266,9 @@ function editorTextWithImageMarkers(
 
     const appended: string[] = [];
     for (const image of missingPreservedImages) {
+      appended.push(
+        "Imagem detectada, mas nao inserida automaticamente por baixa confianca de posicionamento. Revise e reinsira manualmente se necessario.",
+      );
       if (image.caption) appended.push(image.caption);
       appended.push(importedImageMarker(image.id));
       if (image.source) appended.push(image.source);
@@ -333,7 +359,7 @@ function buildImportResult(
   const missingTables = importedTables.filter((table) => table.status === "detected-but-not-preserved").length;
   const imageMessages = [
     preservedImages
-      ? `${preservedImages} imagem(ns) importada(s) e preservada(s) no rascunho. Revise posição, legenda e fonte antes da versão final.`
+      ? `${preservedImages} imagem(ns) importada(s) e preservada(s) no rascunho. Revise posicao, legenda e fonte antes da versao final.`
       : "",
     missingImages
       ? `${missingImages} imagem(ns) detectada(s), mas nem todas puderam ser preservadas automaticamente. Reinsira manualmente as imagens ausentes e confira legendas e fontes.`
@@ -341,10 +367,10 @@ function buildImportResult(
   ].filter(Boolean);
   const tableMessages = [
     preservedTables
-      ? `${preservedTables} tabela(s)/quadro(s) importada(s) e preservada(s) no rascunho. Revise estrutura, legenda e fonte antes da versão final.`
+      ? `${preservedTables} tabela(s)/quadro(s) importada(s) e preservada(s) no rascunho. Revise estrutura, legenda e fonte antes da versao final.`
       : "",
     missingTables
-      ? `${missingTables} tabela(s)/quadro(s) detectada(s), mas não preservada(s) automaticamente. Reinsira manualmente as tabelas ausentes se necessário.`
+      ? `${missingTables} tabela(s)/quadro(s) detectada(s), mas nao preservada(s) automaticamente. Reinsira manualmente as tabelas ausentes se necessario.`
       : "",
   ].filter(Boolean);
   if (preservedImages || missingImages) {
@@ -404,7 +430,7 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
         ),
       );
     } catch {
-      messages.push("Mammoth não conseguiu extrair texto bruto; tentando estrutura OOXML.");
+      messages.push("Mammoth nao conseguiu extrair texto bruto; tentando estrutura OOXML.");
     }
 
     try {
@@ -426,7 +452,7 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
         const detected = detectAcademicFieldsFromStructure(normalized.structure);
         return buildImportResult(normalized, detected, [
           ...messages,
-          "Não foi possível ler a estrutura OOXML; o arquivo foi importado apenas como texto bruto.",
+          "Nao foi possivel ler a estrutura OOXML; o arquivo foi importado apenas como texto bruto.",
           ...normalized.messages,
           ...detected.messages,
         ]);
@@ -446,5 +472,5 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
     ]);
   }
 
-  throw new Error("Formato não suportado. Use .docx, .txt ou .md.");
+  throw new Error("Formato nao suportado. Use .docx, .txt ou .md.");
 }
