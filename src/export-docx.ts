@@ -1321,6 +1321,38 @@ function isInternalWorkNature(value: string): boolean {
   );
 }
 
+function stripTrailingAdvisorLocationYear(value: string): string {
+  const cleaned = cleanMojibakeText(value).trim();
+  if (!cleaned) return cleaned;
+
+  const normalized = normalizeForDetection(cleaned);
+  const advisorPatterns = [
+    /prof\.?\s*dr\.?\s+[a-zà-úç\s]+orientador(?:a)?(?:\s*uf)?(?:\s*-?\s*ufla)?/i,
+    /dra\.?\s+[a-zà-úç\s]+uf(?:c?g|mg)/i,
+    /dr\.?\s+[a-zà-úç\s]+uf(?:c?g|mg)/i,
+    /orientador(?:a)?\s*[:\-]?\s*[a-zà-úç\s]+/i,
+    /lavras\s*-\s*mg\s*\d{4}/i,
+    /\b(?:19|20)\d{2}\b/,
+  ];
+
+  let earliestMatch: number | undefined;
+  for (const pattern of advisorPatterns) {
+    const match = normalized.match(pattern);
+    if (match && match.index !== undefined) {
+      const startIndex = cleaned.slice(0, match.index).trim().length;
+      if (earliestMatch === undefined || startIndex < earliestMatch) {
+        earliestMatch = startIndex;
+      }
+    }
+  }
+
+  if (earliestMatch !== undefined && earliestMatch > 20) {
+    return cleaned.slice(0, earliestMatch).trim();
+  }
+
+  return cleaned;
+}
+
 function fallbackWorkNature(fields: AcademicFields): string {
   if (fields.workType === "projeto_pesquisa") {
     return "Projeto de pesquisa apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis.";
@@ -1331,8 +1363,9 @@ function fallbackWorkNature(fields: AcademicFields): string {
 function workNature(fields: AcademicFields): string {
   const providedNature = cleanMojibakeText(fields.workNature).trim();
   const safeNature = providedNature && !isInternalWorkNature(providedNature) ? providedNature : fallbackWorkNature(fields);
+  const cleaned = stripTrailingAdvisorLocationYear(safeNature);
 
-  return cleanMojibakeText(normalizeNatureForWorkType(safeNature, fields));
+  return cleanMojibakeText(normalizeNatureForWorkType(cleaned || safeNature, fields));
 }
 
 function titlePageChildren(fields: AcademicFields): Paragraph[] {
@@ -1374,6 +1407,33 @@ function titlePageChildren(fields: AcademicFields): Paragraph[] {
   ];
 }
 
+function formatApprovalDate(value: string): string {
+  const cleaned = cleanMojibakeText(value).trim();
+  if (!cleaned) return "";
+  return cleaned.replace(/^Aprovad[ao]\s+em\s*/i, "").replace(/\.$/, "").trim();
+}
+
+function splitApprovalMembers(members: string[]): string[] {
+  const split: string[] = [];
+  for (const member of members) {
+    const cleaned = cleanMojibakeText(member).trim();
+    if (!cleaned) continue;
+    
+    const parts = cleaned
+      .replace(/\s+/g, " ")
+      .split(/(?=(?:Prof\.|Dra\.|Dr\.)\s)/i)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    
+    if (parts.length > 1) {
+      split.push(...parts);
+    } else {
+      split.push(cleaned);
+    }
+  }
+  return split;
+}
+
 function approvalPageChildren(fields: AcademicFields): Paragraph[] {
   if (!hasApprovalPage(fields)) return [];
 
@@ -1384,12 +1444,13 @@ function approvalPageChildren(fields: AcademicFields): Paragraph[] {
       ]
     : [];
 
+  const formattedDate = formatApprovalDate(fields.aprovalDate || "");
   const bancaLines: Paragraph[] = [
     new Paragraph({ spacing: { before: 360, after: 240, line: SINGLE_LINE } }),
-    ...(fields.aprovalDate
+    ...(formattedDate
       ? [
           centeredParagraph(
-            cleanMojibakeText(`Aprovado em: ${fields.aprovalDate}.`),
+            cleanMojibakeText(`Aprovado em: ${formattedDate}.`),
             false,
             BODY_SIZE,
             { after: 240, line: SINGLE_LINE },
@@ -1404,7 +1465,7 @@ function approvalPageChildren(fields: AcademicFields): Paragraph[] {
           ),
         ]),
     ...(fields.approvalMembers?.length
-      ? fields.approvalMembers.map((member) =>
+      ? splitApprovalMembers(fields.approvalMembers).map((member) =>
           centeredParagraph(cleanMojibakeText(member), false, BODY_SIZE, { after: 120, line: SINGLE_LINE }),
         )
       : [

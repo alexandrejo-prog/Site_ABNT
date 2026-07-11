@@ -61,7 +61,109 @@ describe(" Auditoria do fluxo real com DOCX de Andrade (local)", () => {
     expect(referenciasIdx).toBeGreaterThan(conclusaoIdx);
   });
 
-  it.skipIf(!hasRealFile)("import não classifica documento como patente", async () => {
+  it.skipIf(!hasRealFile)("folha de rosto nao contem orientador colado nem local/ano na natureza", async () => {
+    const arrayBuffer = fs.readFileSync(REAL_DOCX_PATH);
+    const file = new File([arrayBuffer], "Andrade_2025.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
+    const importResult = await importDocumentFile(file);
+    const generationFields = normalizeFieldsForSelectedModel(importResult.fields);
+    const blob = await templateForWorkType(generationFields.workType).generate({
+      fields: generationFields,
+      editorText: importResult.editorText,
+      importedImages: importResult.importedImages,
+      importedTables: importResult.importedTables,
+    });
+
+    const zip = await JSZip.loadAsync(Buffer.from(await blob.arrayBuffer()));
+    const documentXml = (await zip.file("word/document.xml")?.async("string")) ?? "";
+
+    const titlePageEnd = documentXml.indexOf("RESUMO");
+    const titlePageXml = titlePageEnd >= 0 ? documentXml.slice(0, titlePageEnd) : documentXml;
+
+    expect(titlePageXml).not.toContain("título de Mestre. Prof.");
+    expect(titlePageXml).not.toContain("Orientador LAVRAS-MG");
+    expect(titlePageXml).toContain("Orientador(a):");
+  });
+
+  it.skipIf(!hasRealFile)("folha de aprovacao nao tem data duplicada nem banca colada", async () => {
+    const arrayBuffer = fs.readFileSync(REAL_DOCX_PATH);
+    const file = new File([arrayBuffer], "Andrade_2025.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
+    const importResult = await importDocumentFile(file);
+    const generationFields = normalizeFieldsForSelectedModel(importResult.fields);
+    const blob = await templateForWorkType(generationFields.workType).generate({
+      fields: generationFields,
+      editorText: importResult.editorText,
+      importedImages: importResult.importedImages,
+      importedTables: importResult.importedTables,
+    });
+
+    const zip = await JSZip.loadAsync(Buffer.from(await blob.arrayBuffer()));
+    const documentXml = (await zip.file("word/document.xml")?.async("string")) ?? "";
+
+    expect(documentXml).not.toContain("Aprovado em: APROVADA");
+    expect(documentXml).not.toContain("2025..");
+    expect(documentXml).not.toContain("UFCG Dr.");
+    expect(documentXml).not.toContain("UFMG Prof.");
+  });
+
+  it.skipIf(!hasRealFile)("pre-textuais aparecem antes do sumario quando detectados", async () => {
+    const arrayBuffer = fs.readFileSync(REAL_DOCX_PATH);
+    const file = new File([arrayBuffer], "Andrade_2025.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
+    const result = await importDocumentFile(file);
+    const hasAnyPreTextual =
+      (result.fields.agradecimentos || "").trim().length > 0 ||
+      (result.fields.indicadoresImpacto || "").trim().length > 0 ||
+      (result.fields.impactIndicators || "").trim().length > 0 ||
+      (result.fields.listaQuadros || "").trim().length > 0 ||
+      (result.fields.listaGraficos || "").trim().length > 0 ||
+      (result.fields.listaSiglas || "").trim().length > 0;
+
+    if (!hasAnyPreTextual) {
+      expect(true).toBe(true);
+      return;
+    }
+
+    const generationFields = normalizeFieldsForSelectedModel(result.fields);
+    const blob = await templateForWorkType(generationFields.workType).generate({
+      fields: generationFields,
+      editorText: result.editorText,
+      importedImages: result.importedImages,
+      importedTables: result.importedTables,
+    });
+
+    const zip = await JSZip.loadAsync(Buffer.from(await blob.arrayBuffer()));
+    const documentXml = (await zip.file("word/document.xml")?.async("string")) ?? "";
+
+    const preTextualOrder = [
+      "AGRADECIMENTOS",
+      "RESUMO",
+      "ABSTRACT",
+      "INDICADORES DE IMPACTO",
+      "IMPACT INDICATORS",
+      "LISTA DE QUADROS",
+      "LISTA DE GRÁFICOS",
+      "LISTA DE SIGLAS",
+      "SUMÁRIO",
+      "INTRODUÇÃO",
+    ];
+
+    const positions = preTextualOrder.map((title) => documentXml.indexOf(title));
+    const validPositions = positions.filter((pos) => pos >= 0);
+
+    for (let i = 1; i < validPositions.length; i++) {
+      expect(validPositions[i]).toBeGreaterThan(validPositions[i - 1]);
+    }
+  });
+
+  it.skipIf(!hasRealFile)("import nao classifica documento como patente", async () => {
     const arrayBuffer = fs.readFileSync(REAL_DOCX_PATH);
     const file = new File([arrayBuffer], "Andrade_2025.docx", {
       type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

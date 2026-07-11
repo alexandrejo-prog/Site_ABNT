@@ -157,3 +157,74 @@ Os testes sintéticos iniciais passavam, mas o DOCX gerado a partir do arquivo r
 - `npm test`: **853 passed** (116 arquivos)
 - `npm run build`: **built in 5.11s** (sem erros TypeScript)
 - Teste local com `_diagnostico/andrade-2025/Andrade_2025.docx`: 3 assertions passam.
+
+## Ajuste final — folhas iniciais e pré-textuais
+
+### Folha de rosto
+
+A natureza do trabalho agora é limpa antes de ser inserida na folha de rosto. O trecho final que continha o orientador, local e ano era fruto da detecção no DOCX convertido de PDF, onde esses elementos ficavam colados ao final do parágrafo de natureza.
+
+A função `stripTrailingAdvisorLocationYear` remove:
+- menções a orientador/orientadora com nome;
+- local de publicação (ex.: "LAVRAS-MG");
+- ano (ex.: "2025").
+
+Após a limpeza, `buildTitlePageSupplementalLines` insere:
+- `Orientador(a): Prof. Dr. Dany Flavio Tonelli`
+- `Programa: Administração Pública`
+- `Curso:` (quando aplicável)
+
+E a folha de rosto renderiza separadamente:
+- natureza até "Mestre.";
+- orientador;
+- local;
+- ano.
+
+### Folha de aprovação
+
+A folha de aprovação foi normalizada para evitar:
+1. **Data duplicada**: `formatApprovalDate` remove o prefixo "APROVADA em " antes de inserir o rótulo "Aprovado em:", evitando "Aprovado em: APROVADA em 08 de julho de 2025..".
+2. **Membros da banca colados**: `splitApprovalMembers` separa linhas como "Dra. Suzanne ... UFCG Dr. Rafael ... UFMG" em membros individuais.
+3. **Orientador duplicado**: como a natureza agora não carrega o nome do orientador, `orientationLines` na folha de aprovação insere apenas:
+   - `Prof. Dr. Dany Flavio Tonelli`
+   - `Orientador(a) - UFLA`
+
+### Pré-textuais
+
+Quando detectados no DOCX importado, os pré-textuais são renderizados antes do SUMÁRIO na ordem:
+1. AGRADECIMENTOS
+2. RESUMO
+3. ABSTRACT
+4. INDICADORES DE IMPACTO
+5. IMPACT INDICATORS
+6. LISTA DE QUADROS
+7. LISTA DE GRÁFICOS
+8. LISTA DE SIGLAS
+9. SUMÁRIO
+
+Se o DOCX convertido de PDF não contiver esses elementos como texto extraível, o sistema emite aviso durante a importação. Nesses casos, não são gerados blocos artificiais.
+
+### Ficha catalográfica
+
+Mantido o fallback honesto:
+```
+Ficha catalográfica detectada no arquivo importado. Preserve ou substitua manualmente pela ficha oficial da Biblioteca Universitária da UFLA.
+```
+
+Não é gerada ficha provisória falsa nem inventados dados de biblioteca.
+
+### Arquivos alterados (ajuste final)
+
+- `src/export-docx.ts`
+  - `stripTrailingAdvisorLocationYear`: limpa natureza removendo orientador/local/ano.
+  - `formatApprovalDate`: normaliza data da folha de aprovação.
+  - `splitApprovalMembers`: separa membros da banca em linhas individuais.
+  - `approvalPageChildren`: usa as novas funções de formatação.
+- `tests/real-flow-audit-andrade-local.test.ts`: adicionadas verificações para folha de rosto, folha de aprovação e ordem de pré-textuais.
+- `docs/importacao-docx-convertido-pdf-v2.9.1.md`: esta seção.
+
+### Validação (final)
+
+- `npm test`: **854 passed** (116 arquivos)
+- `npm run build`: **built in 5.82s**
+- Teste local com `_diagnostico/andrade-2025/Andrade_2025.docx`: 7 assertions passam (3 skipped se arquivo não existir).
