@@ -151,6 +151,15 @@ function looksLikePrimaryHeading(block: ImportedBlock, text = blockText(block)):
   );
 }
 
+function looksLikePersonalThanks(text: string): boolean {
+  const normalized = normalizeForDetection(text);
+  if (text.length < 25) return false;
+  const startsWithThanks = /^(agrade[çc]o|a\s+deus|aos\s+meus|ao\s+meu|a\s+minha|[àa]\s+minha|a\s+todos|aos\s+|[àa]\s+luiza|[àa]\s+universidade|ao\s+programa)/i.test(normalized);
+  if (!startsWithThanks) return false;
+  const hasThanksContent = /(esposo|filhos|pais|familiares|orientador|agradecimento|dedicatoria|amigos|colegas|equipe|trabalho|apoio|incentivo|carinho|paci[eê]ncia|universidade|programa|sustentar|guiar|caminhada|oportunidade|vivenciar|colabora[cç][aã]o|contribui[cç][aã]o|parceria|companheirismo|est[íi]mulo|acolhimento|qualidade|forma|processo|ensin[oa]|aprendizado|experi[eê]ncia)/i.test(normalized);
+  return hasThanksContent;
+}
+
 function isReferenceHeading(block: ImportedBlock): boolean {
   return isPageHeading(block, ["REFERENCIAS", "REFERÊNCIAS"]) || isEquivalentSectionTitle(blockText(block), "referencias");
 }
@@ -507,6 +516,8 @@ function isLikelyDelimiterBoundary(block: ImportedBlock, text: string): boolean 
       "RESUMO",
       "ABSTRACT",
       "AGRADECIMENTOS",
+      "DEDICATORIA",
+      "EPIGRAFE",
       "SUMARIO",
       "SUMÁRIO",
       "LISTA DE QUADROS",
@@ -516,9 +527,12 @@ function isLikelyDelimiterBoundary(block: ImportedBlock, text: string): boolean 
       "INDICADORES DE IMPACTO",
       "IMPACT INDICATORS",
     ]) ||
+    /^(DEDICATORIA|AGRADECIMENTOS|EPIGRAFE|FICHA CATALOGR|FOLHA DE APROV|LISTA DE QUADROS|LISTA DE GRAFICOS|LISTA DE SIGLAS|INDICADORES DE IMPACTO|IMPACT INDICATORS)\b/i.test(normalized) ||
     /^APROVAD[AO]\b/.test(normalized) ||
     /^ORIENTADOR/.test(normalized) ||
-    /^BIBLIOGRAFIA/.test(normalized)
+    /^BIBLIOGRAFIA/.test(normalized) ||
+    /^FICHA CATALOGR/i.test(normalized) ||
+    /^FOLHA DE APROV/i.test(normalized)
   );
 }
 
@@ -543,6 +557,9 @@ function collectBeforeDelimiter(
     if (looksLikePrimaryHeading(block, text)) {
       if (collected.length) break;
       continue;
+    }
+    if (looksLikePersonalThanks(text)) {
+      break;
     }
     if (text.startsWith("[Imagem detectada")) continue;
     collected.unshift(text);

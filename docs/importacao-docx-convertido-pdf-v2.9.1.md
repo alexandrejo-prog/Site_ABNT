@@ -39,3 +39,23 @@ Regra de prioridade:
 3. preservar linhas e colunas quando possível;
 4. manter legenda e fonte próximas;
 5. gerar aviso revisável quando uma tabela/quadro não puder ser preservada.
+
+## Correção crítica — RESUMO e ABSTRACT vazios
+
+Após a implementação do suporte a tabelas, foi identificado que o DOCX gerado a partir de DOCX convertido de PDF estava produzindo páginas de RESUMO e ABSTRACT vazias.
+
+ Causa raiz:
+- Em DOCX convertido de PDF, os títulos `RESUMO` e `ABSTRACT` podem não existir como parágrafos separados.
+- O campo `resumo` era preenchido pelo `recoverResumoByDelimiter`, que coletava todo o texto anterior a `Palavras-chave:`.
+- Esse texto incluía seções pré-textuais como dedicatória, agradecimentos e epígrafe, que foram erroneamente atribuídas ao resumo.
+- Na exportação, o conteúdo de `fields.resumo` aparecia na página de resumo, mas como o campo estava "sujo" com dedicatória/agradecimentos, o texto legítimo do resumo ficava ofuscado ou ausente.
+
+ Correção aplicada:
+- `field-detector.ts`: `collectBeforeDelimiter` agora para a coleta antes de seções pré-textuais como `DEDICATÓRIA`, `AGRADECIMENTOS`, `EPÍGRAFE`, `FICHA CATALOGRÁFICA`, `FOLHA DE APROVAÇÃO`, `LISTAS PRÉ-TEXTUAIS`.
+- `field-detector.ts`: adicionada heurística `looksLikePersonalThanks` para identificar parágrafos de agradecimento/dedicatória (padrões como "A Deus", "Agradeço", "Aos meus", "Ao meu", "À") e evitar que sejam capturados como resumo.
+- A mesma lógica foi aplicada ao fallback de abstract via `recoverAbstractByDelimiter`.
+
+ Validação:
+- Teste sintético (`tests/reproducao-resumo-abstract.test.ts`) confirma que, mesmo sem títulos `RESUMO`/`ABSTRACT` explícitos, o detector não captura dedicatória/agradecimentos.
+- Teste de integração (`tests/import-docx-resumo-abstract-export.test.ts`) confirma que o DOCX final contém o resumo, palavras-chave, abstract e keywords corretos.
+- Arquivo real local `_diagnostico/andrade-2025/Andrade_2025.docx` verificado manualmente: resumo, abstract, palavras-chave e keywords são preservados corretamente no DOCX final.
