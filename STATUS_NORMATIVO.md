@@ -26,7 +26,7 @@ Estados usados neste arquivo:
 | Transparencia | Concluido tecnicamente | Score, relatorio e status de conclusao estruturados. |
 | Testes | Concluido tecnicamente | Cobertura local com testes unitarios, integrados e OOXML. |
 | Responsividade | Concluido tecnicamente | Breakpoints e layout minimo rastreados. |
-| Acessibilidade | Concluido tecnicamente | Checklist, regioes nomeadas e foco visivel. |
+| Acessibilidade | Parcial avancado | Checklist, regioes nomeadas, foco visivel, auditoria axe, testes de contraste WCAG e mensagens com role=status/role=alert. Revisao manual recomendada. |
 | Performance | Parcial avancado | Carregamento sob demanda. Chunks grandes sinalizados. |
 | Governanca | Concluido tecnicamente | Matriz, roadmap e status versionados. |
 

@@ -10,8 +10,8 @@ export const ACCESSIBILITY_CHECKLIST: AccessibilityCheck[] = [
   { id: "live-status", label: "Status e erros anunciaveis", method: "automatico", status: "coberto" },
   { id: "keyboard-focus", label: "Foco visivel em botoes, campos e editor", method: "automatico", status: "coberto" },
   { id: "keyboard-flow", label: "Fluxo completo por teclado", method: "manual", status: "parcial" },
-  { id: "contrast", label: "Contraste visual em estados normais, erro e alerta", method: "manual", status: "parcial" },
-  { id: "automated-audit", label: "Auditoria automatizada de acessibilidade", method: "automatico", status: "pendente" },
+  { id: "contrast", label: "Contraste visual em estados normais, erro e alerta", method: "automatico", status: "coberto" },
+  { id: "automated-audit", label: "Auditoria automatizada de acessibilidade", method: "automatico", status: "coberto" },
 ];
 
 export function pendingAccessibilityChecks(): AccessibilityCheck[] {

@@ -73,7 +73,7 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
           Importante: o tipo de trabalho não é alterado automaticamente pelo nome do arquivo. Confira se o modelo selecionado corresponde ao documento.
         </p>
       )}
-      {status && <p className="import-note">{status}</p>}
+      {status && <p className="import-note" role="status" aria-live="polite">{status}</p>}
     </div>
   );
 }

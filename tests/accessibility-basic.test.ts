@@ -21,10 +21,11 @@ describe("Acessibilidade básica da interface", () => {
   it("possui exatamente um skip-link apontando para o conteudo principal", () => {
     const { container } = render(createElement(App));
     const skipLinks = container.querySelectorAll(".skip-link");
-    const workspace = container.querySelector("main#workspace");
+    const workspace = container.querySelector("main#main-content");
 
     expect(skipLinks).toHaveLength(1);
-    expect(skipLinks[0]).toHaveAttribute("href", "#workspace");
+    expect(skipLinks[0]).toHaveAttribute("href", "#main-content");
+    expect(skipLinks[0]).toHaveTextContent("Pular para o conte\u00fado principal");
     expect(workspace).toBeInTheDocument();
   });
 
