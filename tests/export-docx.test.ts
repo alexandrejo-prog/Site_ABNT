@@ -253,7 +253,7 @@ describe("DOCX export", () => {
     expect(documentXml).toContain("1 INTRODUCAO");
     expect(documentXml).not.toMatch(/SUM[\s\S]{0,80}RIO/);
     expect(documentXml).not.toContain("FICHA CATALOGR");
-    expect(documentXml).not.toContain("Aprovado em:");
+    expect(documentXml).not.toContain("APROVADO EM:");
     expect(documentXml).not.toContain("Programa:");
     expect(documentXml).not.toContain("Trabalho acad");
   });
@@ -342,7 +342,7 @@ describe("DOCX export", () => {
 
       expect(documentXml).toContain("SUMÁRIO");
       expect(documentXml).toContain("FICHA CATALOGR");
-      expect(documentXml).toContain("Aprovado em:");
+      expect(documentXml).toContain("APROVADO EM:");
       expect(documentXml).toContain("INDICADORES DE IMPACTO");
       expect(documentXml).toContain("IMPACT INDICATORS");
       expect(documentXml).toContain(workNature);

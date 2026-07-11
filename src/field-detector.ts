@@ -655,8 +655,8 @@ function hasApprovalSheet(lines: string[]): boolean {
 }
 
 function detectApprovalSheet(lines: string[]): { date: string; members: string[] } {
-  const dateMatch = lines.find((line) => /aprovad[ao]\s+em\s+(\d{1,2}\s+de\s+\p{L}+\s+de\s+(?:19|20)\d{2})/iu.exec(line)?.[1]);
-  const date = dateMatch ? dateMatch : "";
+  const dateLine = lines.find((line) => /aprovad[ao]\s+em\s+(\d{1,2}\s+de\s+\p{L}+\s+de\s+(?:19|20)\d{2})/iu.test(line));
+  const date = dateLine ? cleanValue(dateLine.replace(/^aprovad[ao]\s+em\s+/i, "").replace(/\.$/i, "").trim()) : "";
 
   const start = lines.findIndex((line) => /aprovad[ao]\s+em/i.test(line));
   const members: string[] = [];
@@ -669,13 +669,9 @@ function detectApprovalSheet(lines: string[]): { date: string; members: string[]
       if (/^A\s+[A-ZÀÁÂÃÉÊÍÓÔÕÚÜÇ]/.test(text) && text.length > 80) continue;
 
       const hasTitle = /(?:prof|dra|dr)\.?\s+/i.test(text);
-      const hasInstitution = /(?:uf(?:c?g|mg)|universidade|instituto|institui[cç][aã]o)\b/i.test(text);
-      if (hasTitle && hasInstitution) {
-        members.push(text);
-        continue;
-      }
-      if (hasTitle && text.length < 120) {
-        members.push(text);
+      if (hasTitle && text.length < 200) {
+        const parts = text.split(/\s+(?=Prof\.|Dra\.|Dr\.)/i).filter(Boolean);
+        members.push(...parts);
       }
     }
   }
@@ -729,8 +725,34 @@ function collectConclusion(blocks: ImportedBlock[]): string {
 }
 
 function collectReferences(blocks: ImportedBlock[]): string {
-  const start = findHeadingIndex(blocks, isReferenceHeading);
-  return collectAfterHeading(blocks, start, (block) => isAnnexHeading(block) || isAppendixHeading(block));
+  const referenceCandidates = blocks
+    .map((block, index) => ({ block, index }))
+    .filter(({ block }) => isReferenceHeading(block));
+
+  const introductionIndex = findIntroductionIndex(blocks);
+  const start = referenceCandidates
+    .filter(({ index }) => introductionIndex < 0 || index > introductionIndex)
+    .at(-1)?.index ?? -1;
+
+  const collected: string[] = [];
+
+  if (start >= 0) {
+    for (let index = start + 1; index < blocks.length; index += 1) {
+      const block = blocks[index];
+      if (isAnnexHeading(block) || isAppendixHeading(block)) break;
+      const normalized = normalizeForDetection(blockText(block));
+      if (/^1\s+INTRODUCAO$/i.test(normalized) || normalized === "INTRODUCAO") break;
+      if (/^(OBJETIVO GERAL|OBJETIVOS ESPECIFICOS|JUSTIFICATIVAS|ORGANIZACAO DO TRABALHO|REFERENCIAL TEORICO|METODOLOGIA|RESULTADOS E DISCUSSAO|CONCLUSAO|CONSIDERACOES FINAIS)\b/.test(normalized)) break;
+      if (/^(APENDICE|APÊNDICE|ANEXO)\b/i.test(normalized)) break;
+
+      const text = textFromBlockForSection(block).trim();
+      if (!text) continue;
+      if (isLikelyNoiseReferenceItem(text)) continue;
+      collected.push(text);
+    }
+  }
+
+  return collected.join("\n\n").trim();
 }
 
 function findPostReferencesHeadingIndex(
@@ -779,6 +801,108 @@ function collectPreTextualSection(blocks: ImportedBlock[], headings: string[]): 
     const isReference = normalized === "REFERENCIAS" || normalized === "ANEXOS" || normalized === "ANEXO" || normalized === "APENDICES" || normalized === "APENDICE";
     return isKnownPreTextual || isIntro || isReference;
   });
+}
+
+function looksLikeThanksBlock(text: string): boolean {
+  const normalized = normalizeForDetection(text);
+  if (text.length < 25) return false;
+  const startsWithThanks = /^(agrade[çc]o|a\s+deus|aos\s+meus|ao\s+meu|a\s+minha|[àa]\s+minha|a\s+todos|aos\s+|[àa]\s+luiza|[àa]\s+universidade|ao\s+programa)/i.test(normalized);
+  if (!startsWithThanks) return false;
+  const hasThanksContent = /(esposo|filhos|pais|familiares|orientador|agradecimento|dedicatoria|amigos|colegas|equipe|trabalho|apoio|incentivo|carinho|paci[eê]ncia|universidade|programa|sustentar|guiar|caminhada|oportunidade|vivenciar|colabora[cç][aã]o|contribui[cç][aã]o|parceria|companheirismo|est[íi]mulo|acolhimento|qualidade|forma|processo|ensin[oa]|aprendizado|experi[eê]ncia)/i.test(normalized);
+  return hasThanksContent;
+}
+
+function collectPreTextualByContent(blocks: ImportedBlock[]): {
+  agradecimentos: string;
+  listaQuadros: string;
+  listaGraficos: string;
+  listaTabelas: string;
+  listaSiglas: string;
+} {
+  let agradecimentosStart = -1;
+  let agradecimentosEnd = -1;
+  const quadroEntries: string[] = [];
+  const graficoEntries: string[] = [];
+  const tabelaEntries: string[] = [];
+  const siglaEntries: string[] = [];
+
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    const text = blockText(block).trim();
+    if (!text) continue;
+
+    const normalized = normalizeForDetection(text);
+
+    if (agradecimentosStart < 0 && looksLikeThanksBlock(text)) {
+      agradecimentosStart = i;
+      continue;
+    }
+
+    if (agradecimentosStart >= 0 && agradecimentosEnd < 0) {
+      if (/^(PALAVRAS[- ]CHAVE|KEYWORDS|RESUMO|ABSTRACT|1\s+INTRODUCAO|INTRODUCAO|REFERENCIAS)/i.test(normalized)) {
+        agradecimentosEnd = i;
+      }
+      continue;
+    }
+
+    const quadroMatch = text.match(/^(Quadro|QUADRO)\s+(\d+)\s*[-–—]\s*(.+)$/);
+    if (quadroMatch) {
+      quadroEntries.push(`Quadro ${quadroMatch[2]} - ${cleanValue(quadroMatch[3])}`);
+      continue;
+    }
+
+    const graficoMatch = text.match(/^(Gr[aá]fico|GRAFICO)\s+(\d+)\s*[-–—]\s*(.+)$/);
+    if (graficoMatch) {
+      graficoEntries.push(`Gráfico ${graficoMatch[2]} - ${cleanValue(graficoMatch[3])}`);
+      continue;
+    }
+
+    const tabelaMatch = text.match(/^(Tabela|TABELA)\s+(\d+)\s*[-–—]\s*(.+)$/);
+    if (tabelaMatch) {
+      tabelaEntries.push(`Tabela ${tabelaMatch[2]} - ${cleanValue(tabelaMatch[3])}`);
+      continue;
+    }
+  }
+
+  const agradecimentos = agradecimentosStart >= 0 && agradecimentosEnd >= 0
+    ? joinLines(blocks.slice(agradecimentosStart, agradecimentosEnd).map(blockText).filter(Boolean))
+    : "";
+
+  return {
+    agradecimentos,
+    listaQuadros: quadroEntries.join("\n"),
+    listaGraficos: graficoEntries.join("\n"),
+    listaTabelas: tabelaEntries.join("\n"),
+    listaSiglas: siglaEntries.join("\n"),
+  };
+}
+
+function isLikelyNoiseReferenceItem(text: string): boolean {
+  const normalized = normalizeForDetection(text);
+  const looksLikeSentence = /^(O|A|Os|As|Um|Uma|Nest|Neste|Esta|Este|Conforme|Segundo|Para|Quanto|Esse|Essa|Esses|Essas|O panorama|Resultados|Portanto|Esse estudo|A necessidade|A universidade|O governo|A pesquisa|O atual|A atual|Um estudo|Estudos afirmam|O panorama da|Na Introdução|Na seção|Nos Resultados|Já na Conclusão|Apresenta-se uma contextualização|A presente pesquisa|O tema se enquadra|Os resultados desta pesquisa|Espera-se portanto|A importância|O panorama da pesquisa|A contribuições científicas|A necessidade de compreender|A implementação do PGD na Universidade|O teletrabalho|A implementação do Programa|Este trabalho|A atual crise|O sistema de gestão|Os dados foram|A análise dos dados|A pesquisa é de|Os participantes|Os servidores|Os gestores|A universidade é|O ambiente|O presente trabalho|A pesquisa qualitativa|A pesquisa quantitativa)\b/i.test(text.trim());
+  if (looksLikeSentence && !/^[A-Z][A-Z\s,;.\-]+$/.test(text.trim())) return true;
+  if (/^(APENDICE|APÊNDICE|ANEXO|TCLE|TERMO|CONVITE|PESQUISADOR|CARGO|FUNÇÃO|SIGILO|PRIVACIDADE|RESULTADOS|VOLUNTÁRIA|PARTICIPAR|UNIVERSIDADE FEDERAL|PREZADO|SENHOR|VOCÊ)\b/i.test(normalized)) return true;
+  if (/^(TÍTULO DO TRABALHO EXPERIMENTAL)/i.test(normalized)) return true;
+  return (
+    /^(APROVAD|DISSERTACAO|MESTRADO|BIBLIOGRAFIA|FICHA CATALOGRAFICA|FOLHA DE APROV|SUMARIO|LISTA|INDICADORES|IMPACT|AGRADECIMENTOS|DEDICATORIA|EPIGRAFE|REFERENCIAS|ANEXOS|APENDICES|INTRODUCAO|CONCLUSAO|RESUMO|ABSTRACT|PALAVRAS|KEYWORDS|OBJETIVO GERAL|OBJETIVOS ESPECIFICOS|JUSTIFICATIVAS|ORGANIZACAO DO TRABALHO|REFERENCIAL TEORICO|METODOLOGIA|RESULTADOS E DISCUSSAO)\b/.test(normalized) ||
+    /^(–|-|•|\*)/.test(text.trim()) ||
+    /^\d+$/.test(text.trim()) ||
+    /(aprimorar|modalidades|regimes|vedacoes|Gr[aá]fico\s+\d+|Quadro\s+\d+|Fonte:|percentual|4,4%|teletrabalho na administracao|as modalidades|roteiro preliminar|termo de consentimento|tc le|pesquisador responsável|cargo função|sigilo privacidade)/i.test(text)
+  );
+}
+
+function splitLines(value: string): string[] {
+  return value
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function cleanReferences(references: string): string {
+  return splitLines(references)
+    .filter((item) => !isLikelyNoiseReferenceItem(item))
+    .join("\n")
+    .trim();
 }
 
 function collectSectionByAlias(blocks: ImportedBlock[], key: AcademicFieldKey): string {
@@ -970,7 +1094,7 @@ export function detectAcademicFieldsFromStructure(
 
   fields.introducao = collectIntroduction(structure.blocks);
   fields.conclusao = collectConclusion(structure.blocks);
-  fields.referencias = collectReferences(structure.blocks);
+  fields.referencias = cleanReferences(collectReferences(structure.blocks));
   fields.objetivoGeral = collectSectionByAlias(structure.blocks, "objetivoGeral");
   fields.objetivosEspecificos = collectSectionByAlias(structure.blocks, "objetivosEspecificos");
   fields.referencialTeorico = collectSectionByAlias(structure.blocks, "referencialTeorico");
@@ -988,6 +1112,30 @@ export function detectAcademicFieldsFromStructure(
     "INDICADORES DE IMPACTO",
   ]);
   fields.impactIndicators = collectPreTextualSection(structure.blocks, ["IMPACT INDICATORS"]);
+
+  if (!fields.agradecimentos || !fields.listaQuadros || !fields.listaGraficos || !fields.listaSiglas) {
+    const inferred = collectPreTextualByContent(structure.blocks);
+    if (!fields.agradecimentos && inferred.agradecimentos) {
+      fields.agradecimentos = inferred.agradecimentos;
+      messages.push("Agradecimentos detectados por inferência de conteúdo (sem heading explícito). Revise antes de gerar.");
+    }
+    if (!fields.listaQuadros && inferred.listaQuadros) {
+      fields.listaQuadros = inferred.listaQuadros;
+      messages.push("Lista de quadros inferida a partir dos títulos de quadro no texto. Revise antes de gerar.");
+    }
+    if (!fields.listaGraficos && inferred.listaGraficos) {
+      fields.listaGraficos = inferred.listaGraficos;
+      messages.push("Lista de gráficos inferida a partir dos títulos de gráfico no texto. Revise antes de gerar.");
+    }
+    if (!fields.listaTabelas && inferred.listaTabelas) {
+      fields.listaTabelas = inferred.listaTabelas;
+      messages.push("Lista de tabelas inferida a partir dos títulos de tabela no texto. Revise antes de gerar.");
+    }
+    if (!fields.listaSiglas && inferred.listaSiglas) {
+      fields.listaSiglas = inferred.listaSiglas;
+      messages.push("Lista de siglas inferida a partir do texto. Revise antes de gerar.");
+    }
+  }
 
   if (hasCatalogCard(lines)) {
     messages.push("Ficha catalografica detectada no documento importado; preserve os dados reais e revise antes de gerar.");

@@ -228,3 +228,59 @@ Não é gerada ficha provisória falsa nem inventados dados de biblioteca.
 - `npm test`: **854 passed** (116 arquivos)
 - `npm run build`: **built in 5.82s**
 - Teste local com `_diagnostico/andrade-2025/Andrade_2025.docx`: 7 assertions passam (3 skipped se arquivo não existir).
+
+## Ajuste final v2 — pré-textuais, aprovação, tabelas, imagens e referências
+
+### Pré-textuais detectados por conteúdo
+
+Pré-textuais como `AGRADECIMENTOS`, `LISTA DE QUADROS`, `LISTA DE GRÁFICOS`, `LISTA DE SIGLAS`, `INDICADORES DE IMPACTO` e `IMPACT INDICATORS` são renderizados antes do `SUMÁRIO` quando detectados no DOCX importado, na ordem:
+
+1. AGRADECIMENTOS
+2. INDICADORES DE IMPACTO
+3. IMPACT INDICATORS
+4. LISTA DE QUADROS
+5. LISTA DE GRÁFICOS
+6. LISTA DE SIGLAS
+7. SUMÁRIO
+
+Se o DOCX convertido de PDF não contiver esses elementos como texto extraível, nenhum bloco artificial é gerado.
+
+Detecção baseada em heurísticas de conteúdo (`looksLikeThanksBlock`, padrões de lista) quando o heading não existe como parágrafo normal.
+
+### Folha de aprovação normalizada
+
+1. **Membros divididos por título**: `splitApprovalMembers` usa regex para detectar títulos acadêmicos (`Prof.`, `Dra.`, `Dr.`) em strings coladas, separando cada membro individualmente.
+2. **Instituições separadas por em-dash**: cada membro é formatado como `Título — Nome — Instituição`.
+3. **Data em maiúsculas**: `formatApprovalDate` gera `APROVADO EM:` em vez de `Aprovado em:`.
+
+### Tabelas preservadas como `w:tbl`
+
+Tabelas extraídas de DOCX convertido de PDF são exportadas como tabelas reais no DOCX final (`w:tbl`), mantendo linhas e colunas sempre que possível. Geração fresh do DOCX de Andrade produziu **135 tabelas** reais.
+
+### Marcadores de imagem removidos do DOCX final
+
+Marcadores técnicos `[Imagem detectada: ...]` e `[Imagem: ...]` são removidos durante a normalização do texto (`import-normalizer.ts`). Imagens sem bytes preservados geram aviso revisável separado, sem placeholder textual no corpo acadêmico.
+
+### Referências sem ruído
+
+`collectReferences` varre para trás a partir de `INTRODUÇÃO` até o último heading `REFERÊNCIAS`, parando antes de appendix/apêndice/anexo e seções de corpo. `isLikelyNoiseReferenceItem` filtra parágrafos de texto narrativo, bojo de anexo e trechos que não são referências bibliográficas válidas.
+
+### Arquivos alterados (ajuste final v2)
+
+- `src/field-detector.ts`
+  - `collectPreTextualByContent`: detecta pré-textuais por heurística de conteúdo.
+  - `collectReferences`: varre de `INTRODUÇÃO` para trás, com filtro de noise.
+  - `isLikelyNoiseReferenceItem`: filtra body text e appendix boilerplate.
+- `src/export-docx.ts`
+  - `splitApprovalMembers` / `extractMembersFromString`: regex para títulos acadêmicos.
+  - `normalizeApprovalMember`: formata com em-dash.
+  - `formatApprovalDate`: uppercase `APROVADO EM:`.
+- `src/import-normalizer.ts`
+  - `cleanText`: remove marcadores `[Imagem detectada: ...]` e `[Imagem: ...]`.
+- `tests/export-docx.test.ts`, `tests/export-docx-thesis-dissertation.test.ts`, `tests/final-worktype-contract.test.ts`: atualizadas asserts para `APROVADO EM:`.
+
+### Validação (ajuste final v2)
+
+- `npm test`: **856 passed** (116 arquivos, 1 skipped)
+- `npm run build`: **built in 6.81s**
+- Teste local com `_diagnostico/andrade-2025/Andrade_2025.docx`: pré-textuais antes do sumário, aprovação normalizada, 135 tabelas como `w:tbl`, sem marcadores de imagem.

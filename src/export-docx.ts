@@ -764,27 +764,35 @@ function scheduleTableBlock(text: string): Array<Paragraph | Table> {
 }
 
 function importedImageParagraph(image: ImportedDocumentImage | undefined): Paragraph[] {
-  if (!image?.data?.byteLength) return [];
+  if (!image) return [];
+
+  if (image.data?.byteLength) {
+    return [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 120, after: 120, line: SINGLE_LINE },
+        children: [
+          new ImageRun({
+            data: image.data,
+            transformation: {
+              width: image.width ?? 420,
+              height: image.height ?? 260,
+            },
+            altText: {
+              title: image.caption || image.fileName || image.id,
+              description: image.source || "Imagem importada do DOCX original",
+              name: image.fileName || image.id,
+            },
+          }),
+        ],
+      }),
+    ];
+  }
 
   return [
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 120, after: 120, line: SINGLE_LINE },
-      children: [
-        new ImageRun({
-          data: image.data,
-          transformation: {
-            width: image.width ?? 420,
-            height: image.height ?? 260,
-          },
-          altText: {
-            title: image.caption || image.fileName || image.id,
-            description: image.source || "Imagem importada do DOCX original",
-            name: image.fileName || image.id,
-          },
-        }),
-      ],
-    }),
+    simpleParagraph(
+      `[IMAGEM DETECTADA] ${image.caption ? image.caption + ". " : ""}Reinsira manualmente esta imagem no documento final.`,
+    ),
   ];
 }
 
@@ -1418,20 +1426,65 @@ function splitApprovalMembers(members: string[]): string[] {
   for (const member of members) {
     const cleaned = cleanMojibakeText(member).trim();
     if (!cleaned) continue;
-    
-    const parts = cleaned
-      .replace(/\s+/g, " ")
-      .split(/(?=(?:Prof\.|Dra\.|Dr\.)\s)/i)
-      .map((part) => part.trim())
-      .filter(Boolean);
-    
-    if (parts.length > 1) {
+    const parts = extractMembersFromString(cleaned);
+    if (parts.length > 0) {
       split.push(...parts);
     } else {
       split.push(cleaned);
     }
   }
   return split;
+}
+
+function extractMembersFromString(text: string): string[] {
+  const results: string[] = [];
+  const titleRegex = /((?:Prof|Dra|Dr)\.(?:\s+(?:Prof|Dra|Dr)\.)?)/gi;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let currentTitle = "";
+
+  while ((match = titleRegex.exec(text)) !== null) {
+    if (currentTitle && match.index > lastIndex) {
+      const name = text.slice(lastIndex, match.index).trim();
+      results.push(`${currentTitle}${name ? " " + name : ""}`.trim());
+    }
+    currentTitle = match[1].trim();
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (currentTitle || lastIndex < text.length) {
+    const name = text.slice(lastIndex).trim();
+    results.push(`${currentTitle}${name ? " " + name : ""}`.trim());
+  }
+
+  return results.filter(Boolean);
+}
+
+function normalizeApprovalMember(member: string): string {
+  const cleaned = cleanMojibakeText(member).trim();
+  if (!cleaned) return "";
+
+  const titleMatch = cleaned.match(/^(Prof\.|Dra\.|Dr\.)(?:\s+(Prof\.|Dra\.|Dr\.))?\s*/i);
+  const titles = titleMatch ? titleMatch[0].trim() : "";
+  const rest = titleMatch ? cleaned.slice(titleMatch[0].length).trim() : cleaned;
+
+  const institutionMatch = rest.match(/\b(UFCG|UFMG|UFLA|UTFPR|UNESP|USP|UFRJ|UFRGS|UFSC|UFPE|UFPEL|UFPB|UFBA|UFC|UFMA|UFPA|UFRR|UFRN|UFAL|UFES|UFG|UFMT|UFRR|UnB|UTF|UNIFESP|FIOCRUZ|EMBRAPA|CNPEN|Instituto|Universidade|Centro|Faculdade|Escola)\b.*$/i);
+  const institution = institutionMatch ? institutionMatch[0].trim() : "";
+
+  let name = rest;
+  let role = "";
+  if (institution) {
+    name = rest.slice(0, institutionMatch!.index).trim();
+    role = institution;
+  } else if (/\bOrientador(a)?\b/i.test(rest)) {
+    role = rest.match(/\bOrientador(a)?\b/i)?.[0] ?? "";
+    name = rest.replace(new RegExp(`\\s*${role}\\s*`, "i"), "").trim();
+  }
+
+  if (role) {
+    return `${titles}${name ? " " + name : ""} — ${role}`;
+  }
+  return `${titles}${name ? " " + name : ""}`;
 }
 
 function approvalPageChildren(fields: AcademicFields): Paragraph[] {
@@ -1450,7 +1503,7 @@ function approvalPageChildren(fields: AcademicFields): Paragraph[] {
     ...(formattedDate
       ? [
           centeredParagraph(
-            cleanMojibakeText(`Aprovado em: ${formattedDate}.`),
+            cleanMojibakeText(`APROVADO EM: ${formattedDate}.`),
             false,
             BODY_SIZE,
             { after: 240, line: SINGLE_LINE },
@@ -1458,7 +1511,7 @@ function approvalPageChildren(fields: AcademicFields): Paragraph[] {
         ]
       : [
           centeredParagraph(
-            "Aprovado em: ____ de ____________________ de ______.",
+            "APROVADO EM: ____ de ____________________ de ______.",
             false,
             BODY_SIZE,
             { after: 240, line: SINGLE_LINE },
@@ -1466,7 +1519,7 @@ function approvalPageChildren(fields: AcademicFields): Paragraph[] {
         ]),
     ...(fields.approvalMembers?.length
       ? splitApprovalMembers(fields.approvalMembers).map((member) =>
-          centeredParagraph(cleanMojibakeText(member), false, BODY_SIZE, { after: 120, line: SINGLE_LINE }),
+          centeredParagraph(cleanMojibakeText(normalizeApprovalMember(member)), false, BODY_SIZE, { after: 120, line: SINGLE_LINE }),
         )
       : [
           centeredParagraph("Prof.(a) Dr.(a) ______________________________", false, BODY_SIZE, {
