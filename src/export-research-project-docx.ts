@@ -367,7 +367,7 @@ function referenceParagraphs(references: string[]): Paragraph[] {
 
 function createProjectDocument(input: DocxGenerationInput): Document {
   const blocks = parseEditorContent(projectEditorText(input));
-  const bodyBlocks = blocks.filter((block) => block.type !== "reference");
+  const bodyBlocks = blocks.filter((block) => block.type !== "reference" && block.type !== "importedImage");
   const references = [
     ...splitParagraphs(input.fields.referencias),
     ...blocks.filter((block) => block.type === "reference").map((block) => block.text),

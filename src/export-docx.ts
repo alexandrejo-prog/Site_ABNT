@@ -25,6 +25,7 @@ import { normalizeReferences, type ReferenceRun } from "./references-normalizer"
 import { buildFlowingImpactText } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
 import { captionParagraph, cleanMojibakeText, detectCaption, tabbedTableBlock } from "./docx-render-core";
+import { ImportedDocumentImage, IMPORTED_IMAGE_MARKER_PATTERN } from "./imported-images";
 
 export type EditorBlockType =
   | "paragraph"
@@ -36,6 +37,7 @@ export type EditorBlockType =
   | "markdownTable"
   | "plainScheduleTable"
   | "tabbedTable"
+  | "importedImage"
   | "reference";
 
 export interface EditorBlock {
@@ -53,6 +55,7 @@ export interface DocxGenerationInput {
   fields: AcademicFields;
   editorText: string;
   logo?: DocxLogoAsset;
+  importedImages?: ImportedDocumentImage[];
 }
 
 interface ScheduleRow {
@@ -356,6 +359,12 @@ export function parseEditorContent(editorText: string): EditorBlock[] {
 
     if (/^\[REF\]\s+/i.test(trimmed)) {
       blocks.push({ type: "reference", text: trimmed.replace(/^\[REF\]\s+/i, "") });
+      continue;
+    }
+
+    const importedImageMatch = trimmed.match(IMPORTED_IMAGE_MARKER_PATTERN);
+    if (importedImageMatch?.[1]) {
+      blocks.push({ type: "importedImage", text: importedImageMatch[1] });
       continue;
     }
 
@@ -744,9 +753,35 @@ function scheduleTableBlock(text: string): Array<Paragraph | Table> {
   ];
 }
 
+function importedImageParagraph(image: ImportedDocumentImage | undefined): Paragraph[] {
+  if (!image?.data?.byteLength) return [];
+
+  return [
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 120, after: 120, line: SINGLE_LINE },
+      children: [
+        new ImageRun({
+          data: image.data,
+          transformation: {
+            width: image.width ?? 420,
+            height: image.height ?? 260,
+          },
+          altText: {
+            title: image.caption || image.fileName || image.id,
+            description: image.source || "Imagem importada do DOCX original",
+            name: image.fileName || image.id,
+          },
+        }),
+      ],
+    }),
+  ];
+}
+
 function blockToParagraph(
   block: EditorBlock,
   isFirstTextualBlock: boolean = false,
+  importedImages: ImportedDocumentImage[] = [],
 ): Array<Paragraph | Table> {
   if (block.type === "heading1") {
     const title = new Paragraph({
@@ -827,6 +862,10 @@ function blockToParagraph(
 
   if (block.type === "tabbedTable") {
     return tabbedTableBlock(block.text);
+  }
+
+  if (block.type === "importedImage") {
+    return importedImageParagraph(importedImages.find((image) => image.id === block.text));
   }
 
   const cleanedText = cleanMojibakeText(block.text);
@@ -1411,7 +1450,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   ];
 
   const textualAndPostTextualChildren: Array<Paragraph | Table> = [
-    ...bodyBlocks.flatMap((block, index) => blockToParagraph(block, index === 0)),
+    ...bodyBlocks.flatMap((block, index) => blockToParagraph(block, index === 0, input.importedImages ?? [])),
     pageBreak(),
     sectionTitle("Referências"),
     ...buildReferences(references),

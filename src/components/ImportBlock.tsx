@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Upload, XCircle } from "lucide-react";
 import { importDocumentFile } from "../import-docx";
+import type { ImportedDocumentImage } from "../imported-images";
 import { emptyAcademicFields, emptyConfidenceMap, WORK_TYPE_LABELS } from "../ufla-rules";
 
 interface ImportBlockProps {
@@ -10,6 +11,7 @@ interface ImportBlockProps {
     editorText: string;
     messages: string[];
     fileName: string;
+    importedImages?: ImportedDocumentImage[];
   }) => void;
   onRemove: () => void;
   importedFileName: string | null;

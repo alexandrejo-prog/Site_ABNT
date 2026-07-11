@@ -163,7 +163,7 @@ function referenceParagraphs(references: string[]): Paragraph[] {
 function createArticleDocument(input: DocxGenerationInput): Document {
   const blocks = parseEditorContent(input.editorText);
   const bodyBlocks = stripLeadingArticleMetadataBlocks(
-    blocks.filter((block) => block.type !== "reference"),
+    blocks.filter((block) => block.type !== "reference" && block.type !== "importedImage"),
     input,
   );
   const references = [

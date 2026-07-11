@@ -350,7 +350,7 @@ function cpgResumoChildren(input: DocxGenerationInput): CpgChild[] {
 function cpgFullChildren(input: DocxGenerationInput): CpgChild[] {
   const sanitizedEditorText = stripCpgForbiddenSections(input.editorText);
   const blocks = parseEditorContent(sanitizedEditorText);
-  const bodyBlocks = blocks.filter((block) => block.type !== "reference");
+  const bodyBlocks = blocks.filter((block) => block.type !== "reference" && block.type !== "importedImage");
   const references = [
     ...splitParagraphs(input.fields.referencias),
     ...blocks.filter((block) => block.type === "reference").map((block) => block.text),

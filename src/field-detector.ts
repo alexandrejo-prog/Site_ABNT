@@ -108,9 +108,7 @@ function joinLines(lines: string[]): string {
 
 function blockText(block: ImportedBlock): string {
   if (block.type === "pageBreak") return "";
-  if (block.type === "image") {
-    return `[Imagem detectada: ${block.relationshipId ?? "sem relacao"}]`;
-  }
+  if (block.type === "image") return "";
   if (block.type === "table") {
     return block.rows.map((row) => row.join("\t")).join("\n");
   }
@@ -176,9 +174,7 @@ function findHeadingIndex(
 
 function textFromBlockForSection(block: ImportedBlock): string {
   if (block.type === "pageBreak") return "";
-  if (block.type === "image") {
-    return `[Imagem detectada: ${block.relationshipId ?? "sem relacao"}]`;
-  }
+  if (block.type === "image") return "";
   if (block.type === "table") {
     return block.rows.map((row) => row.join("\t")).join("\n");
   }
@@ -914,7 +910,7 @@ export function detectAcademicFieldsFromStructure(
 
   const imageBlocks = structure.blocks.filter((block) => block.type === "image");
   if (imageBlocks.length) {
-    fields.imageWarnings = `${imageBlocks.length} imagem(ns) detectada(s). O sistema registra a presenca de imagens, mas nao garante preservacao visual; confira ou reinsira manualmente cada imagem no DOCX final e revise legendas e posicao.`;
+    fields.imageWarnings = `${imageBlocks.length} imagem(ns) detectada(s), mas nem todas puderam ser preservadas automaticamente. Reinsira manualmente as imagens ausentes e confira legendas e fontes.`;
     messages.push(fields.imageWarnings);
   }
 

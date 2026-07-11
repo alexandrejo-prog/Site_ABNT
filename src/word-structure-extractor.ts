@@ -588,7 +588,7 @@ export async function extractDocxStructure(
   const text = blocks
     .flatMap((block) => {
       if (block.type === "pageBreak") return [];
-      if (block.type === "image") return [`[Imagem detectada: ${block.relationshipId ?? "sem relacao"}]`];
+      if (block.type === "image") return [];
       if (block.type === "table") return block.rows.map((row) => row.join("\t"));
       return [block.text];
     })
