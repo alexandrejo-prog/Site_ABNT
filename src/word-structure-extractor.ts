@@ -518,9 +518,7 @@ export async function extractDocxStructure(
 
     if (xml.startsWith("<w:tbl")) {
       const rows = extractTableRows(xml);
-      if (rows.length) {
-        blocks.push({ type: "table", rows, section: currentSection });
-      }
+      blocks.push({ type: "table", rows, section: currentSection });
       continue;
     }
 

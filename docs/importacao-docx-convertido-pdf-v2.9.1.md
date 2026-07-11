@@ -19,3 +19,23 @@ Os marcadores técnicos como `[Imagem detectada: rId22]` são diagnósticos inte
 Quando os bytes da imagem estiverem acessíveis em `word/media/*`, a imagem deve ser representada internamente com id estável, relationship id original, arquivo, mime type, bytes, posição aproximada, legenda/fonte próximas e status `preserved`. No editor, essa imagem pode aparecer como um bloco amigável de imagem importada; no DOCX gerado, deve virar uma imagem real.
 
 Quando a imagem for detectada, mas não puder ser preservada, ela deve gerar aviso revisável separado, com status `detected-but-not-preserved`, sem inserir placeholder textual no documento acadêmico. Placeholders herdados de diagnóstico devem ser tratados como `ignored-placeholder`.
+
+## Etapa 3 — Tabelas e quadros importados
+
+Tabelas e quadros extraídos de DOCX, especialmente DOCX convertido de PDF, devem ser preservados como dados estruturados, não como texto solto.
+
+- Tabela preservada deve virar tabela real no DOCX final (`w:tbl`), mantendo linhas e colunas sempre que possível.
+- Tabela não preservada deve gerar aviso revisável, não parágrafo acadêmico com lixo textual.
+- Conteúdo tabular não deve ser descartado silenciosamente; se a confiança for baixa, o sistema deve avisar o usuário.
+- Quadros convertidos como imagem devem seguir o fluxo de imagens (`ImportedDocumentImage`).
+- Quadros convertidos como tabela devem seguir o fluxo tabular (`ImportedTable`).
+- Legendas próximas (ex.: "Quadro 1 - ...", "Tabela 1 - ...") e fontes ("Fonte: ...") devem ser associadas à tabela quando possível.
+- Tabelas em `header/footer` não são trazidas automaticamente para o corpo, salvo evidência clara de conteúdo acadêmico.
+- O importador não deve introduzir marcadores técnicos como `[Tabela detectada: ...]` no corpo acadêmico.
+
+Regra de prioridade:
+1. não perder dados tabulares;
+2. não transformar tabela em lixo textual;
+3. preservar linhas e colunas quando possível;
+4. manter legenda e fonte próximas;
+5. gerar aviso revisável quando uma tabela/quadro não puder ser preservada.

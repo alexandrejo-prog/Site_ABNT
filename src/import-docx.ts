@@ -19,6 +19,7 @@ import {
 import { repairHeadingFragments, repairRecordHeadingFragments } from "./heading-fragment-repair";
 import { sanitizeImportedTitle } from "./title-sanitizer";
 import { ImportedDocumentImage, importedImageMarker } from "./imported-images";
+import { ImportedTable, importedTableMarker } from "./imported-tables";
 
 export interface WorkTypeSuggestion {
   workType: WorkTypeValue;
@@ -34,6 +35,7 @@ export interface ImportResult {
   messages: string[];
   blocks: ImportedBlock[];
   importedImages: ImportedDocumentImage[];
+  importedTables: ImportedTable[];
   workTypeSuggestion?: WorkTypeSuggestion;
 }
 
@@ -103,6 +105,14 @@ function looksLikeImageSource(text: string): boolean {
   return /^Fonte\s*:/i.test(text.trim());
 }
 
+function looksLikeTableCaption(text: string): boolean {
+  return /^(Quadro|Tabela|Gr[aá]fico|Grafico)\s+\d+\s*[-–—]/i.test(text.trim());
+}
+
+function looksLikeTableSource(text: string): boolean {
+  return /^Fonte\s*:/i.test(text.trim());
+}
+
 function nearestText(
   blocks: ImportedBlock[],
   startIndex: number,
@@ -157,6 +167,46 @@ function importedImagesFromStructure(structure: DocxStructure): ImportedDocument
   return imported;
 }
 
+function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] {
+  const imported: ImportedTable[] = [];
+
+  structure.blocks.forEach((block, index) => {
+    if (block.type !== "table") return;
+
+    const rows = block.rows.filter((row) => row.some((cell) => cell.trim()));
+    if (!rows.length) {
+      imported.push({
+        id: `tbl-${imported.length + 1}`,
+        rows: [],
+        rowCount: 0,
+        columnCount: 0,
+        position: index,
+        origin: "docx-table",
+        status: "ignored-empty-table",
+      });
+      return;
+    }
+
+    const columnCount = Math.max(...rows.map((row) => row.length), 1);
+    const caption = nearestText(structure.blocks, index, -1, looksLikeTableCaption);
+    const source = nearestText(structure.blocks, index, 1, looksLikeTableSource);
+
+    imported.push({
+      id: `tbl-${imported.length + 1}`,
+      rows,
+      rowCount: rows.length,
+      columnCount,
+      caption: caption || undefined,
+      source: source || undefined,
+      position: index,
+      origin: "docx-table",
+      status: "preserved",
+    });
+  });
+
+  return imported;
+}
+
 function isEditorHeading(block: ImportedBlock): boolean {
   if (block.type !== "heading") return false;
   const normalized = normalizeForDetection(block.text);
@@ -176,32 +226,49 @@ function editorTextWithImageMarkers(
   blocks: ImportedBlock[],
   fallbackEditorText: string,
   importedImages: ImportedDocumentImage[],
+  importedTables: ImportedTable[],
 ): string {
-  if (!importedImages.length) return fallbackEditorText;
-  const appendMissingImages = (output: string, emittedImageIds: Set<string>): string => {
+  if (!importedImages.length && !importedTables.length) return fallbackEditorText;
+  const appendMissingPreserved = (
+    output: string,
+    emittedImageIds: Set<string>,
+    emittedTableIds: Set<string>,
+  ): string => {
     const missingPreservedImages = importedImages.filter(
       (image) => image.status === "preserved" && !emittedImageIds.has(image.id),
     );
-    if (!missingPreservedImages.length) return repairHeadingFragments(output);
+    const missingPreservedTables = importedTables.filter(
+      (table) => table.status === "preserved" && !emittedTableIds.has(table.id),
+    );
 
-    const appendedImages = missingPreservedImages.flatMap((image) => [
-      image.caption ?? "",
-      importedImageMarker(image.id),
-      image.source ?? "",
-    ]).filter(Boolean);
+    const appended: string[] = [];
+    for (const image of missingPreservedImages) {
+      if (image.caption) appended.push(image.caption);
+      appended.push(importedImageMarker(image.id));
+      if (image.source) appended.push(image.source);
+    }
+    for (const table of missingPreservedTables) {
+      if (table.caption) appended.push(table.caption);
+      appended.push(importedTableMarker(table.id));
+      if (table.source) appended.push(table.source);
+    }
 
-    return repairHeadingFragments([output, ...appendedImages].filter(Boolean).join("\n\n"));
+    if (!appended.length) return repairHeadingFragments(output);
+
+    return repairHeadingFragments([output, ...appended].filter(Boolean).join("\n\n"));
   };
 
   const imagesByPosition = new Map(importedImages.map((image) => [image.position, image]));
+  const tablesByPosition = new Map(importedTables.map((table) => [table.position, table]));
   const start = blocks.findIndex((block) => {
     const normalized = normalizeForDetection(blockText(block));
     return normalized === "1 INTRODUCAO" || normalized === "INTRODUCAO";
   });
-  if (start < 0) return appendMissingImages(fallbackEditorText, new Set());
+  if (start < 0) return appendMissingPreserved(fallbackEditorText, new Set(), new Set());
 
   const lines: string[] = [];
   const emittedImageIds = new Set<string>();
+  const emittedTableIds = new Set<string>();
   for (let index = start; index < blocks.length; index += 1) {
     const block = blocks[index];
     if (isReferenceOrPostTextual(block)) break;
@@ -212,6 +279,15 @@ function editorTextWithImageMarkers(
       if (image?.status === "preserved") {
         lines.push(importedImageMarker(image.id));
         emittedImageIds.add(image.id);
+      }
+      continue;
+    }
+
+    if (block.type === "table") {
+      const table = tablesByPosition.get(index);
+      if (table?.status === "preserved") {
+        lines.push(importedTableMarker(table.id));
+        emittedTableIds.add(table.id);
       }
       continue;
     }
@@ -231,7 +307,7 @@ function editorTextWithImageMarkers(
   }
 
   const output = lines.join("\n\n").trim() || fallbackEditorText;
-  return appendMissingImages(output, emittedImageIds);
+  return appendMissingPreserved(output, emittedImageIds, emittedTableIds);
 }
 
 function buildImportResult(
@@ -241,25 +317,37 @@ function buildImportResult(
 ): ImportResult {
   const text = repairHeadingFragments(normalized.text);
   const importedImages = importedImagesFromStructure(normalized.structure);
+  const importedTables = importedTablesFromStructure(normalized.structure);
   const editorText = editorTextWithImageMarkers(
     normalized.structure.blocks,
     repairHeadingFragments(detected.editorText || text),
     importedImages,
+    importedTables,
   );
   const fields = sanitizeFields(repairRecordHeadingFragments(detected.fields));
   const confidence = sanitizeConfidence(detected.confidence, fields);
   const workTypeSuggestion = detectWorkTypeSuggestion(text, fields);
-  const preservedCount = importedImages.filter((image) => image.status === "preserved").length;
-  const missingCount = importedImages.filter((image) => image.status === "detected-but-not-preserved").length;
+  const preservedImages = importedImages.filter((image) => image.status === "preserved").length;
+  const missingImages = importedImages.filter((image) => image.status === "detected-but-not-preserved").length;
+  const preservedTables = importedTables.filter((table) => table.status === "preserved").length;
+  const missingTables = importedTables.filter((table) => table.status === "detected-but-not-preserved").length;
   const imageMessages = [
-    preservedCount
-      ? `${preservedCount} imagem(ns) importada(s) e preservada(s) no rascunho. Revise posição, legenda e fonte antes da versão final.`
+    preservedImages
+      ? `${preservedImages} imagem(ns) importada(s) e preservada(s) no rascunho. Revise posição, legenda e fonte antes da versão final.`
       : "",
-    missingCount
-      ? `${missingCount} imagem(ns) detectada(s), mas nem todas puderam ser preservadas automaticamente. Reinsira manualmente as imagens ausentes e confira legendas e fontes.`
+    missingImages
+      ? `${missingImages} imagem(ns) detectada(s), mas nem todas puderam ser preservadas automaticamente. Reinsira manualmente as imagens ausentes e confira legendas e fontes.`
       : "",
   ].filter(Boolean);
-  if (preservedCount || missingCount) {
+  const tableMessages = [
+    preservedTables
+      ? `${preservedTables} tabela(s)/quadro(s) importada(s) e preservada(s) no rascunho. Revise estrutura, legenda e fonte antes da versão final.`
+      : "",
+    missingTables
+      ? `${missingTables} tabela(s)/quadro(s) detectada(s), mas não preservada(s) automaticamente. Reinsira manualmente as tabelas ausentes se necessário.`
+      : "",
+  ].filter(Boolean);
+  if (preservedImages || missingImages) {
     fields.imageWarnings = imageMessages.join(" ");
   }
   const nonImageMessages = messages.filter(
@@ -271,16 +359,17 @@ function buildImportResult(
     editorText,
     fields,
     confidence,
-    messages: [...nonImageMessages, ...imageMessages],
+    messages: [...nonImageMessages, ...imageMessages, ...tableMessages],
     blocks: normalized.structure.blocks,
     importedImages,
+    importedTables,
     workTypeSuggestion,
   };
 }
 
 export function identifyAcademicFields(
   text: string,
-): Omit<ImportResult, "text" | "editorText" | "messages" | "blocks" | "importedImages"> {
+): Omit<ImportResult, "text" | "editorText" | "messages" | "blocks" | "importedImages" | "importedTables"> {
   const normalized = normalizePlainAcademicText(text);
   const identified = detectAcademicFieldsFromStructure(normalized.structure);
   const repairedText = repairHeadingFragments(normalized.text);

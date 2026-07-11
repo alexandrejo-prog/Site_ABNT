@@ -1,5 +1,6 @@
 import {
   AlignmentType,
+  BorderStyle,
   Document,
   HeadingLevel,
   Header,
@@ -26,6 +27,7 @@ import { buildFlowingImpactText } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
 import { captionParagraph, cleanMojibakeText, detectCaption, tabbedTableBlock } from "./docx-render-core";
 import { ImportedDocumentImage, IMPORTED_IMAGE_MARKER_PATTERN } from "./imported-images";
+import { ImportedTable, IMPORTED_TABLE_MARKER_PATTERN } from "./imported-tables";
 
 export type EditorBlockType =
   | "paragraph"
@@ -38,6 +40,7 @@ export type EditorBlockType =
   | "plainScheduleTable"
   | "tabbedTable"
   | "importedImage"
+  | "importedTable"
   | "reference";
 
 export interface EditorBlock {
@@ -56,6 +59,7 @@ export interface DocxGenerationInput {
   editorText: string;
   logo?: DocxLogoAsset;
   importedImages?: ImportedDocumentImage[];
+  importedTables?: ImportedTable[];
 }
 
 interface ScheduleRow {
@@ -365,6 +369,12 @@ export function parseEditorContent(editorText: string): EditorBlock[] {
     const importedImageMatch = trimmed.match(IMPORTED_IMAGE_MARKER_PATTERN);
     if (importedImageMatch?.[1]) {
       blocks.push({ type: "importedImage", text: importedImageMatch[1] });
+      continue;
+    }
+
+    const importedTableMatch = trimmed.match(IMPORTED_TABLE_MARKER_PATTERN);
+    if (importedTableMatch?.[1]) {
+      blocks.push({ type: "importedTable", text: importedTableMatch[1] });
       continue;
     }
 
@@ -778,10 +788,96 @@ function importedImageParagraph(image: ImportedDocumentImage | undefined): Parag
   ];
 }
 
+function importedTableParagraph(table: ImportedTable | undefined): Array<Paragraph | Table> {
+  if (!table || !table.rows.length) return [];
+
+  const columnCount = Math.max(table.columnCount, 1);
+  const columnWidth = Math.max(1, Math.floor(100 / columnCount));
+
+  const tableRows = table.rows.map((cells, rowIndex) => {
+    const padded = Array.from({ length: columnCount }, (_, i) => (cells[i] ?? "").trim());
+    return new TableRow({
+      children: padded.map((cellText) => new TableCell({
+        width: { size: columnWidth, type: WidthType.PERCENTAGE },
+        margins: { top: 40, bottom: 40, left: 80, right: 80 },
+        children: [
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { line: SINGLE_LINE, after: 0 },
+            children: [
+              new TextRun({
+                text: cleanMojibakeText(cellText),
+                bold: rowIndex === 0,
+                font: UFLA_RULES.typography.fontFamily,
+                size: BODY_SIZE,
+                color: BLACK,
+              }),
+            ],
+          }),
+        ],
+      })),
+    });
+  });
+
+  const result: Array<Paragraph | Table> = [];
+  if (table.caption) {
+    result.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 120, after: 120, line: SINGLE_LINE },
+        children: [
+          new TextRun({
+            text: cleanMojibakeText(table.caption),
+            bold: true,
+            font: UFLA_RULES.typography.fontFamily,
+            size: BODY_SIZE,
+            color: BLACK,
+          }),
+        ],
+      }),
+    );
+  }
+
+  result.push(
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        bottom: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        left: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        right: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        insideVertical: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+      },
+      rows: tableRows,
+    }),
+  );
+
+  if (table.source) {
+    result.push(
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        spacing: { before: 120, after: 120, line: SINGLE_LINE },
+        children: [
+          new TextRun({
+            text: cleanMojibakeText(table.source),
+            font: UFLA_RULES.typography.fontFamily,
+            size: BODY_SIZE,
+            color: BLACK,
+          }),
+        ],
+      }),
+    );
+  }
+
+  return result;
+}
+
 function blockToParagraph(
   block: EditorBlock,
   isFirstTextualBlock: boolean = false,
   importedImages: ImportedDocumentImage[] = [],
+  importedTables: ImportedTable[] = [],
 ): Array<Paragraph | Table> {
   if (block.type === "heading1") {
     const title = new Paragraph({
@@ -866,6 +962,11 @@ function blockToParagraph(
 
   if (block.type === "importedImage") {
     return importedImageParagraph(importedImages.find((image) => image.id === block.text));
+  }
+
+  if (block.type === "importedTable") {
+    const table = importedTables.find((item) => item.id === block.text);
+    return importedTableParagraph(table);
   }
 
   const cleanedText = cleanMojibakeText(block.text);
@@ -1450,7 +1551,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   ];
 
   const textualAndPostTextualChildren: Array<Paragraph | Table> = [
-    ...bodyBlocks.flatMap((block, index) => blockToParagraph(block, index === 0, input.importedImages ?? [])),
+    ...bodyBlocks.flatMap((block, index) => blockToParagraph(block, index === 0, input.importedImages ?? [], input.importedTables ?? [])),
     pageBreak(),
     sectionTitle("Referências"),
     ...buildReferences(references),
