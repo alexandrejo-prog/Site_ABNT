@@ -226,6 +226,10 @@ function findByLabel(text: string, patterns: RegExp[]): string {
 function detectWorkType(text: string): WorkType | "" {
   const normalized = normalizeForDetection(text);
 
+  if (/\bTESE\b/.test(normalized)) return "tese";
+  if (/\bDISSERTACAO\b/.test(normalized)) return "dissertacao";
+  if (/\bMONOGRAFIA\b|\bTCC\b/.test(normalized)) return "monografia";
+
   for (const type of ACADEMIC_PRODUCTION_TYPES) {
     for (const alias of type.sectionAliases) {
       if (AMBIGUOUS_ALIASES.has(alias.toLowerCase())) continue;
@@ -233,16 +237,13 @@ function detectWorkType(text: string): WorkType | "" {
     }
   }
 
-  if (/\bTESE\b/.test(normalized)) return "tese";
-  if (/\bDISSERTACAO\b/.test(normalized)) return "dissertacao";
-  if (/\bMONOGRAFIA\b|\bTCC\b/.test(normalized)) return "monografia";
+  if (/\bRELATORIO DE ESTAGIO\b|\bESTAGIO SUPERVISIONADO\b/.test(normalized)) return "relatorio_estagio_ufla";
   if (/\bPROPOSTA DE INTERVENCAO\b|\bINTERVENCAO CLINICA\b|\bINTERVENCAO EM SERVICO\b/.test(normalized)) return "proposta_intervencao_ufla";
   if (/\bSOFTWARE\b|\bAPLICATIVO\b|\bDESENVOLVIMENTO DE SOFTWARE\b/.test(normalized)) return "software_aplicativo_ufla";
   if (/\bPATENTE\b|\bPEDIDO DE PATENTE\b|\bREIVINDICACOES\b/.test(normalized)) return "patente_ufla";
   if (/\bREVISAO SISTEMATICA\b|\bREVISAO APROFUNDADA\b/.test(normalized)) return "revisao_sistematica_ufla";
   if (/\bESTUDO DE CASO\b|\bCASOS MULTIPLOS\b/.test(normalized)) return "estudo_caso_ufla";
   if (/\bCULTIVAR\b|\bMELHORAMENTO GENETICO\b/.test(normalized)) return "cultivar_ufla";
-  if (/\bRELATORIO DE ESTAGIO\b|\bESTAGIO SUPERVISIONADO\b/.test(normalized)) return "relatorio_estagio_ufla";
   if (/\bARTIGO CIENTIFICO\b/.test(normalized)) return "artigo_cientifico_ufla";
   if (/\bARTIGO\b/.test(normalized)) return "artigo";
 
@@ -664,7 +665,16 @@ function detectApprovalSheet(lines: string[]): { date: string; members: string[]
       const text = lines[index].trim();
       if (!text) continue;
       if (/^(RESUMO|ABSTRACT|PALAVRAS[- ]CHAVE|KEYWORDS|AGRADECIMENTOS|DEDICATORIA|EPIGRAFE|INDICADORES|IMPACT|LISTA|SUMARIO|1\s+INTRODUCAO|REFERENCIAS|ANEXOS|APENDICES|CONCLUSAO)/i.test(text)) break;
-      if (/prof\.?\(?a\)?\s+dr\.?\(?a\)?/i.test(text) || /institui[cç][aã]o/i.test(text)) {
+      if (text.length > 250) continue;
+      if (/^A\s+[A-ZÀÁÂÃÉÊÍÓÔÕÚÜÇ]/.test(text) && text.length > 80) continue;
+
+      const hasTitle = /(?:prof|dra|dr)\.?\s+/i.test(text);
+      const hasInstitution = /(?:uf(?:c?g|mg)|universidade|instituto|institui[cç][aã]o)\b/i.test(text);
+      if (hasTitle && hasInstitution) {
+        members.push(text);
+        continue;
+      }
+      if (hasTitle && text.length < 120) {
         members.push(text);
       }
     }

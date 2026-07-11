@@ -129,3 +129,31 @@ A montagem estrutural do documento importado estava quebrada por múltiplos fato
 - `npm run build`: **built in 5.64s** (sem erros TypeScript)
 - Teste sintético com documento completo valida ordem, isolamento e natureza literal.
 - Arquivo real `_diagnostico/andrade-2025/Andrade_2025.docx` **não commitado**, verificado localmente.
+
+## Correção crítica — divergência entre teste sintético e fluxo real
+
+Os testes sintéticos iniciais passavam, mas o DOCX gerado a partir do arquivo real continuava errado porque a detecção e a montagem do fluxo real possuíam falhas distintas:
+
+1. **Classificação incorreta do tipo de trabalho**: `detectWorkType` verificava `ACADEMIC_PRODUCTION_TYPES` antes dos tipos padrão (`tese`, `dissertacao`, `monografia`). Como o documento contém palavras como "reivindicações", "artigo", "estudo de caso" e "software" no corpo textual, ele era classificado como `patente_ufla` ou outro tipo de produção acadêmica. A correção move os padrões explícitos (`TESE`, `DISSERTACAO`, `MONOGRAFIA`, `PROJETO DE PESQUISA`) para o início da verificação, garantindo que documentos com natureza explícita de dissertação/tese sejam classificados corretamente.
+
+2. **Contaminação da folha de aprovação**: `detectApprovalSheet` usava heurísticas muito amplas (`/institui[cç][aã]o/i`) que capturavam parágrafos de agradecimentos e resumo simplesmente por conter a palavra "instituição". A correção exige que a linha contenha simultaneamente um título acadêmico (`Prof.`, `Dra.`, `Dr.`) e uma instituição (`UFCG`, `UFMG`, `Universidade`, `Instituto`), além de limitar o tamanho da linha e rejeitar narrativas em primeira pessoa.
+
+3. **Quebra prematura do `editorText` em referências artifactuais**: `editorTextWithImageMarkers` interrompia a coleta do corpo no primeiro heading `REFERÊNCIAS` encontrado. Em DOCX convertido de PDF, headings artifactuais de sumário aparecem antes do corpo real. A correção implementa `tocArtifactMode`: se `REFERÊNCIAS` for detectado antes de `CONCLUSÃO` e for seguido por parágrafos descritivos ("Na Introdução...", "REFERENCIAL TEÓRICO"), ele é ignorado até o próximo heading real.
+
+4. **Work type no fluxo do site**: `App.tsx` chama `normalizeFieldsForSelectedModel` antes de gerar o DOCX. Quando o `workType` era errado (`patente_ufla`), o normalizador substituía a natureza correta por um fallback genérico. Com a classificação corrigida para `dissertacao`, o normalizador preserva a natureza literal.
+
+### Arquivos alterados (etapa 2)
+
+- `src/field-detector.ts`
+  - `detectWorkType`: tipos padrão (`tese`, `dissertacao`, `monografia`) verificados antes de `ACADEMIC_PRODUCTION_TYPES`.
+  - `detectApprovalSheet`: heurística restrita a linhas com título + instituição, rejeitando narrativas longas.
+- `src/import-docx.ts`
+  - `editorTextWithImageMarkers`: adicionado `tocArtifactMode` para ignorar headings `REFERÊNCIAS` artifactuais antes de `CONCLUSÃO`.
+- `tests/real-flow-audit-andrade-local.test.ts`: teste local opcional que valida o DOCX real.
+- `docs/importacao-docx-convertido-pdf-v2.9.1.md`: esta seção.
+
+### Validação (atualizada)
+
+- `npm test`: **853 passed** (116 arquivos)
+- `npm run build`: **built in 5.11s** (sem erros TypeScript)
+- Teste local com `_diagnostico/andrade-2025/Andrade_2025.docx`: 3 assertions passam.

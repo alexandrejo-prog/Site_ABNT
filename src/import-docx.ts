@@ -295,9 +295,36 @@ function editorTextWithImageMarkers(
   const lines: string[] = [];
   const emittedImageIds = new Set<string>();
   const emittedTableIds = new Set<string>();
+  let sawConclusion = false;
+  let tocArtifactMode = false;
   for (let index = start; index < blocks.length; index += 1) {
     const block = blocks[index];
-    if (isReferenceOrPostTextual(block)) break;
+    const normalized = normalizeForDetection(blockText(block));
+    if (/^(CONCLUSAO|CONCLUSÃO|CONSIDERACOES FINAIS|CONSIDERAÇÕES FINAIS)\b/.test(normalized)) {
+      sawConclusion = true;
+    }
+    if (/^(REFERENCIAS|ANEXOS|ANEXO|APENDICES|APENDICE)\b/.test(normalized)) {
+      if (sawConclusion) break;
+      if (!tocArtifactMode) {
+        const nextBlocks = blocks.slice(index + 1, index + 6);
+        const looksLikeTocArtifact = nextBlocks.some(
+          (next) => /^(Na Introdução|Na seção|Nos Resultados|Já na Conclusão|Na Introducao|Na secao|REFERENCIAL TEORICO|REFERENCIAL TEÓRICO)\b/i.test(blockText(next)),
+        );
+        if (looksLikeTocArtifact) {
+          tocArtifactMode = true;
+          continue;
+        }
+      }
+    }
+    if (tocArtifactMode) {
+      if (block.type === "heading") {
+        tocArtifactMode = false;
+        if (isReferenceOrPostTextual(block)) continue;
+      } else {
+        continue;
+      }
+    }
+    if (isReferenceOrPostTextual(block) && sawConclusion) break;
     if (block.type === "pageBreak") continue;
 
     if (block.type === "image") {
