@@ -1,7 +1,8 @@
-import type { ImportedPdfDocument, PdfDocumentBlock } from "./imported-pdf";
+import type { ImportedPdfDocument, PdfDocumentBlock, PdfPageText } from "./imported-pdf";
 import type { AcademicFields } from "./ufla-rules";
 import { emptyAcademicFields, emptyConfidenceMap } from "./ufla-rules";
-import { detectPdfVisualRegionCandidates } from "./pdf-region-renderer";
+import { detectPdfVisualRegionCandidates, isListOrSummaryPage } from "./pdf-region-renderer";
+import type { ImportedDocumentPayload } from "./import-contract";
 
 export const PDF_DRAFT_WARNING =
   "Rascunho gerado a partir de PDF (experimental, sem OCR). Revise estrutura, tabelas, quadros, gráficos, imagens, paginação, sumário e referências antes de usar.";
@@ -13,13 +14,7 @@ export function pdfDraftStatusMessage(fileName: string, pageCount: number): stri
   return `PDF lido: ${fileName} (${pageCount} páginas). ${PDF_DRAFT_STATUS_NOTE}`;
 }
 
-export type PdfDraftInput = {
-  fields: AcademicFields;
-  confidence: ReturnType<typeof emptyConfidenceMap>;
-  editorText: string;
-  messages: string[];
-  fileName: string;
-};
+export type PdfDraftInput = ImportedDocumentPayload;
 
 function extractSuggestedTitle(document: ImportedPdfDocument): string {
   const heading = document.blocks.find(
@@ -40,6 +35,10 @@ function extractSuggestedTitle(document: ImportedPdfDocument): string {
   return "";
 }
 
+function isPreTextualPage(page: PdfPageText): boolean {
+  return isListOrSummaryPage(page);
+}
+
 export function buildPdfDraftInput(
   document: ImportedPdfDocument,
   fileName: string,
@@ -50,14 +49,23 @@ export function buildPdfDraftInput(
 
   const title = extractSuggestedTitle(document);
   const regions = detectPdfVisualRegionCandidates(document);
-  const pdfText = document.pages.map((page) => page.normalizedText).join("\n\n").trim();
+
+  // Texto bruto de todas as páginas (preservado para o diagnóstico).
+  const rawPageText = document.pages.map((page) => page.normalizedText).join("\n\n").trim();
+  // Texto ordenado para exportação: páginas pré-textuais (lista/sumário) excluídas
+  // por padrão; o diagnóstico continua com o texto completo em rawPageText.
+  const orderedText = document.pages
+    .filter((page) => !isPreTextualPage(page))
+    .map((page) => page.normalizedText)
+    .join("\n\n")
+    .trim();
 
   const bodyLines: string[] = [PDF_DRAFT_WARNING];
   if (title) {
     bodyLines.push("", `Título sugerido (verificar na capa): ${title}`);
   }
   bodyLines.push("", "Texto extraído do PDF (revisar e reorganizar):", "");
-  bodyLines.push(pdfText || "(sem texto extraível)");
+  bodyLines.push(orderedText || "(sem texto extraível)");
 
   if (regions.length > 0) {
     bodyLines.push(
@@ -73,10 +81,20 @@ export function buildPdfDraftInput(
   const editorText = bodyLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 
   return {
+    sourceKind: "pdf",
+    documentMode: "pdf-text-draft",
     fields: baseFields,
     confidence: emptyConfidenceMap(),
     editorText: editorText.length > 0 ? editorText : PDF_DRAFT_WARNING,
     messages: [PDF_DRAFT_WARNING],
     fileName,
+    rawPageText,
+    orderedText,
+    regionDiagnostics: regions,
+    importMetadata: {
+      pageCount: document.source.pageCount,
+      fingerprint: document.source.fingerprint,
+      quality: document.quality,
+    },
   };
 }

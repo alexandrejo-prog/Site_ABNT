@@ -40,6 +40,26 @@ describe("buildPdfDraftInput", () => {
     expect(input.fileName).toBe("exemplo.pdf");
   });
 
+  it("define explicitamente origem PDF e modo pdf-text-draft", () => {
+    const doc = pdfDoc([{ pageNumber: 1, normalizedText: "Conteudo." }]);
+    const input = buildPdfDraftInput(doc, "x.pdf", "monografia");
+    expect(input.sourceKind).toBe("pdf");
+    expect(input.documentMode).toBe("pdf-text-draft");
+  });
+
+  it("preserva texto bruto e texto ordenado separadamente (exclui pré-textuais do ordenado)", () => {
+    const doc = pdfDoc([
+      { pageNumber: 1, normalizedText: "LISTA DE QUADROS\nQuadro 1 – X ................................ 98" },
+      { pageNumber: 2, normalizedText: "Introdução com conteúdo real de exemplo." },
+    ]);
+    const input = buildPdfDraftInput(doc, "x.pdf");
+    expect(input.rawPageText).toContain("LISTA DE QUADROS");
+    expect(input.orderedText).not.toContain("LISTA DE QUADROS");
+    expect(input.orderedText).toContain("Introdução com conteúdo real");
+    expect(input.regionDiagnostics).toEqual([]);
+    expect(input.importMetadata?.pageCount).toBe(2);
+  });
+
   it("PDF sem texto extraível gera aviso e mantém pendências de campos", () => {
     const doc = pdfDoc([{ pageNumber: 1, normalizedText: "   " }]);
     const input = buildPdfDraftInput(doc, "vazio.pdf");

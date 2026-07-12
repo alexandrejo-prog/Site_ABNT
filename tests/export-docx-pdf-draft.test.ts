@@ -2,6 +2,7 @@ import { inflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { generateDocxBlob } from "../src/export-docx";
 import { buildPdfDraftInput } from "../src/pdf-to-imported-blocks";
+import { emptyAcademicFields } from "../src/ufla-rules";
 import type { ImportedPdfDocument } from "../src/imported-pdf";
 
 function pdfDoc(normalizedText: string): ImportedPdfDocument {
@@ -52,7 +53,12 @@ describe("DOCX de rascunho a partir de PDF", () => {
   it("gera DOCX contendo o aviso de revisão e o texto extraído", async () => {
     const doc = pdfDoc("Secao importante com texto extraido de exemplo para o rascunho.");
     const input = buildPdfDraftInput(doc, "exemplo.pdf", "monografia");
-    const blob = await generateDocxBlob({ fields: input.fields, editorText: input.editorText });
+    const blob = await generateDocxBlob({
+      fields: input.fields,
+      editorText: input.editorText,
+      sourceKind: input.sourceKind,
+      documentMode: input.documentMode,
+    });
     const xml = extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
     expect(xml).toContain("Rascunho gerado a partir de PDF");
     expect(xml).toContain("texto extraido de exemplo");
@@ -63,7 +69,12 @@ describe("DOCX de rascunho a partir de PDF", () => {
     const doc = pdfDoc("Conteudo unico de teste para rascunho textual.");
     const input = buildPdfDraftInput(doc, "exemplo.pdf", "monografia");
     expect(input.editorText).not.toMatch(/w:drawing/);
-    const blob = await generateDocxBlob({ fields: input.fields, editorText: input.editorText });
+    const blob = await generateDocxBlob({
+      fields: input.fields,
+      editorText: input.editorText,
+      sourceKind: input.sourceKind,
+      documentMode: input.documentMode,
+    });
     const xml = extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
     expect(xml).not.toContain("<w:drawing>");
   });
@@ -71,7 +82,12 @@ describe("DOCX de rascunho a partir de PDF", () => {
   it("Modo B não gera capa com placeholders AUTOR/TÍTULO DO TRABALHO", async () => {
     const doc = pdfDoc("Introducao com conteudo de exemplo para o rascunho.");
     const input = buildPdfDraftInput(doc, "exemplo.pdf", "monografia");
-    const blob = await generateDocxBlob({ fields: input.fields, editorText: input.editorText });
+    const blob = await generateDocxBlob({
+      fields: input.fields,
+      editorText: input.editorText,
+      sourceKind: input.sourceKind,
+      documentMode: input.documentMode,
+    });
     const xml = extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
     expect(xml).not.toContain("AUTOR");
     expect(xml).not.toContain("TÍTULO DO TRABALHO");
@@ -81,9 +97,25 @@ describe("DOCX de rascunho a partir de PDF", () => {
   it("gera DOCX mesmo com campos vazios (sem bloqueio de capa)", async () => {
     const doc = pdfDoc("Texto de exemplo para rascunho de PDF.");
     const input = buildPdfDraftInput(doc, "exemplo.pdf");
-    const blob = await generateDocxBlob({ fields: input.fields, editorText: input.editorText });
+    const blob = await generateDocxBlob({
+      fields: input.fields,
+      editorText: input.editorText,
+      sourceKind: input.sourceKind,
+      documentMode: input.documentMode,
+    });
     const xml = extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
     expect(xml).toContain("Rascunho gerado a partir de PDF");
     expect(xml).toContain("Texto de exemplo");
+  });
+
+  it("texto comum contendo a frase não é classificado como PDF (modo ufla-structured)", async () => {
+    const blob = await generateDocxBlob({
+      fields: emptyAcademicFields(),
+      editorText: "Rascunho gerado a partir de PDF é só um texto comum de exemplo.",
+      documentMode: "ufla-structured",
+    });
+    const xml = extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
+    expect(xml).toContain("TÍTULO DO TRABALHO");
+    expect(xml).toContain("AUTOR");
   });
 });

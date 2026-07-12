@@ -61,6 +61,8 @@ export interface DocxGenerationInput {
   logo?: DocxLogoAsset;
   importedImages?: ImportedDocumentImage[];
   importedTables?: ImportedTable[];
+  sourceKind?: "pdf" | "docx" | "txt" | "markdown";
+  documentMode?: "ufla-structured" | "pdf-text-draft";
 }
 
 interface ScheduleRow {
@@ -2054,8 +2056,9 @@ export async function loadDefaultLogoAsset(): Promise<DocxLogoAsset | undefined>
 export async function generateDocxBlob(input: DocxGenerationInput): Promise<Blob> {
   // Modo B: rascunho experimental a partir de PDF. Não usa capa/template da UFLA,
   // apenas o texto extraído (visualmente já ordenado) com aviso de revisão.
-  if (input.editorText.startsWith(PDF_DRAFT_WARNING)) {
-    return generatePdfDraftDocxBlob(input);
+  // A decisão usa o discriminador explícito, nunca o conteúdo do editorText.
+  if (input.documentMode === "pdf-text-draft") {
+    return buildPdfTextDraftDocxBlob(input);
   }
 
   if (input.fields.workType === "artigo") {
@@ -2067,7 +2070,7 @@ export async function generateDocxBlob(input: DocxGenerationInput): Promise<Blob
   return Packer.toBlob(createDocxDocument({ ...input, logo }));
 }
 
-export async function generatePdfDraftDocxBlob(input: DocxGenerationInput): Promise<Blob> {
+export async function buildPdfTextDraftDocxBlob(input: DocxGenerationInput): Promise<Blob> {
   if (typeof Blob === "undefined") {
     throw new Error("A geração de DOCX requer um navegador (Blob indisponível).");
   }

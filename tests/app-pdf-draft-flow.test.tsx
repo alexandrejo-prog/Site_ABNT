@@ -65,6 +65,9 @@ describe("fluxo de rascunho DOCX a partir de PDF importado", () => {
     fireEvent.click(getButtonByText(/Gerar DOCX/));
 
     await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
+    // PDF usa exclusivamente o modo pdf-text-draft (exportador dedicado),
+    // não o template UFLA mockado.
+    expect(generateMock).not.toHaveBeenCalled();
   });
 
   it("PDF importado sem marcar o rascunho fica bloqueado por pendências", async () => {

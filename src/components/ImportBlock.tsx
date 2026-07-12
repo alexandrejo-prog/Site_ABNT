@@ -2,21 +2,14 @@ import { useMemo, useRef, useState } from "react";
 import { Upload, XCircle } from "lucide-react";
 import { importDocumentFile } from "../import-docx";
 import { importAcademicFile } from "../import-file-router";
-import type { ImportedDocumentImage } from "../imported-images";
 import type { ImportedPdfDocument, PdfRegion, RenderedPdfRegion } from "../imported-pdf";
 import { detectPdfVisualRegionCandidates, renderPdfRegionToPng } from "../pdf-region-renderer";
 import { buildPdfDraftInput } from "../pdf-to-imported-blocks";
-import { emptyAcademicFields, emptyConfidenceMap, WORK_TYPE_LABELS } from "../ufla-rules";
+import { WORK_TYPE_LABELS } from "../ufla-rules";
+import type { ImportedDocumentPayload, SourceKind } from "../import-contract";
 
 interface ImportBlockProps {
-  onImport: (result: {
-    fields: ReturnType<typeof emptyAcademicFields>;
-    confidence: ReturnType<typeof emptyConfidenceMap>;
-    editorText: string;
-    messages: string[];
-    fileName: string;
-    importedImages?: ImportedDocumentImage[];
-  }) => void;
+  onImport: (result: ImportedDocumentPayload) => void;
   onRemove: () => void;
   importedFileName: string | null;
   workType: string;
@@ -24,6 +17,14 @@ interface ImportBlockProps {
 
 function selectedWorkTypeLabel(workType: string): string {
   return workType ? WORK_TYPE_LABELS[workType as keyof typeof WORK_TYPE_LABELS] || workType : "Nenhum tipo selecionado";
+}
+
+function sourceKindFromFileName(fileName: string): SourceKind {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith(".pdf")) return "pdf";
+  if (lower.endsWith(".txt")) return "txt";
+  if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "markdown";
+  return "docx";
 }
 
 function buildPdfDiagnosticText(pdf: ImportedPdfDocument): string {
@@ -70,24 +71,45 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
        setPreviewErrors({});
        if (file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf") {
          const result = await importAcademicFile(file);
-         if (result.kind === "pdf") {
-           setPdfFile(file);
-           setPdfDiagnostic(result.document);
-           const draft = buildPdfDraftInput(result.document, file.name, workType);
-           onImport(draft);
-           setStatus(
-             `PDF lido (${result.document.source.pageCount} páginas). Um rascunho foi gerado abaixo — revise antes de usar.`,
-           );
-         } else if (result.kind === "unknown") {
+        if (result.kind === "pdf") {
+          setPdfFile(file);
+          setPdfDiagnostic(result.document);
+          const draft = buildPdfDraftInput(result.document, file.name, workType);
+          onImport(draft);
+          setStatus(
+            `PDF lido (${result.document.source.pageCount} páginas). Um rascunho foi gerado abaixo — revise antes de usar.`,
+          );
+        } else if (result.kind === "unknown") {
           setStatus(result.error);
         } else {
-          onImport({ ...result.result, fileName: file.name });
+          const docResult = result.result;
+          onImport({
+            sourceKind: sourceKindFromFileName(file.name),
+            documentMode: "ufla-structured",
+            fields: docResult.fields,
+            confidence: docResult.confidence,
+            editorText: docResult.editorText,
+            messages: docResult.messages,
+            fileName: file.name,
+            importedImages: docResult.importedImages,
+            importedTables: docResult.importedTables,
+          });
           setStatus(`Arquivo importado: ${file.name}`);
         }
         return;
       }
       const docResult = await importDocumentFile(file);
-      onImport({ ...docResult, fileName: file.name });
+      onImport({
+        sourceKind: sourceKindFromFileName(file.name),
+        documentMode: "ufla-structured",
+        fields: docResult.fields,
+        confidence: docResult.confidence,
+        editorText: docResult.editorText,
+        messages: docResult.messages,
+        fileName: file.name,
+        importedImages: docResult.importedImages,
+        importedTables: docResult.importedTables,
+      });
       setStatus(`Arquivo importado: ${file.name}`);
      } catch (error) {
        setStatus(error instanceof Error ? error.message : "Não foi possível ler o arquivo.");

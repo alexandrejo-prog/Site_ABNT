@@ -23,7 +23,7 @@ function captionKindToRegionKind(caption: string): PdfRegionKind {
 const LIST_OR_SUMMARY_HEADING = /(^|\n)\s*(LISTA DE (QUADROS|FIGURAS|GR[ÁA]FICOS|ILUSTRA[ÇC][ÕO]ES)|SUM[ÁA]RIO|ÍNDICE)\b/i;
 const LIST_ENTRY_CAPTION = /^(Quadro|Tabela|Figura|Gr[áa]fico)\s+\d+[^\n]*\.{2,}\s*\d+\s*$/i;
 
-function isListOrSummaryPage(page: PdfPageText): boolean {
+export function isListOrSummaryPage(page: PdfPageText): boolean {
   const head = page.normalizedText.split("\n").slice(0, 8).join("\n");
   return LIST_OR_SUMMARY_HEADING.test(head);
 }

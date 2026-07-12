@@ -202,7 +202,7 @@ O usuário pode então marcar "Gerar rascunho mesmo com pendências" e gerar um 
 
 - **Ordenação do texto (capa/folha de rosto não saem invertidas):** o eixo Y do PDF é medido de baixo para cima, então `groupPdfTextIntoLines` (`src/import-pdf-text.ts`) agora ordena por **Y decrescente** (topo → base) e, na mesma linha, por **X crescente** (esquerda → direita). Também foi adicionado dedupe de fragmentos de texto idênticos e sobrepostos. `buildPageNormalizedText` herda a correção.
 - **Filtro de regiões visuais falsas:** `detectPdfVisualRegionCandidates` (`src/pdf-region-renderer.ts`) agora ignora páginas de **Lista de Quadros/Figuras/Gráficos/Sumário/Índice** e entradas que são apenas itens de índice (ex.: `Quadro 1 – ... ................................ 98`, com líderes de ponto e número de página). Assim a lista não mistura o índice com figuras/quadros reais.
-- **Modo B — rascunho textual experimental separado do template da UFLA:** o `editorText` produzido por `buildPdfDraftInput` (`src/pdf-to-imported-blocks.ts`) começa com `PDF_DRAFT_WARNING` e traz título sugerido (extraído da primeira heading/cap) + aviso de revisão + texto extraído + inventário dos elementos visuais detectados (página, legenda, fonte). `generateDocxBlob` (`src/export-docx.ts`) desvia esse caso para `generatePdfDraftDocxBlob`, que gera um DOCX **sem capa** (portanto sem os placeholders `AUTOR`/`TÍTULO DO TRABALHO`) contendo apenas o texto extraído, o aviso e o inventário. Nada é inventado nos metadados.
+- **Modo B — rascunho textual experimental separado do template da UFLA:** o `editorText` produzido por `buildPdfDraftInput` (`src/pdf-to-imported-blocks.ts`) traz título sugerido (extraído da primeira heading/cap) + aviso de revisão + texto extraído + inventário dos elementos visuais detectados (página, legenda, fonte). A decisão de usar esse modo **não** é inferida pelo conteúdo do texto: ela usa o discriminador explícito `documentMode: "pdf-text-draft"` (e `sourceKind: "pdf"`) definido no contrato de importação. `generateDocxBlob` (`src/export-docx.ts`) desvia esse caso para `buildPdfTextDraftDocxBlob`, que gera um DOCX **sem capa** (portanto sem os placeholders `AUTOR`/`TÍTULO DO TRABALHO`) contendo apenas o texto extraído, o aviso e o inventário. Nada é inventado nos metadados.
 - **UI simplificada (`src/components/ImportBlock.tsx`):** mensagens amigáveis ("PDF lido (N páginas). Um rascunho foi gerado abaixo — revise antes de usar."); painel renomeado para "Leitura do PDF (experimental)"; lista de figuras/quadros **agrupada por página/tipo, limitada a 10** com botão "Mostrar todas"; regiões de **baixa confiança ocultas** por padrão; preview de imagem dimensionado via CSS (`max-width:100%`, `max-height:420px`, `object-fit:contain`).
 - **Testes:** novos casos em `tests/import-pdf.test.ts` (ordem topo→base, X na linha, dedupe, capa não invertida), `tests/pdf-region-renderer.test.ts` (lista/sumário e entradas com líder de ponto ignoradas; legenda real preservada), `tests/pdf-to-imported-blocks.test.ts` e `tests/export-docx-pdf-draft.test.ts` (Modo B sem capa/dialog e sem `<w:drawing>`), além de `tests/app-pdf-draft-flow.test.tsx`.
 
@@ -218,6 +218,43 @@ O usuário pode então marcar "Gerar rascunho mesmo com pendências" e gerar um 
 - Inserção automática dos recortes visuais (PNG) no DOCX: as regiões detectadas seguem apenas como diagnóstico/pré-visualização e como inventário textual no rascunho. A inserção de recortes selecionados como fallback controlado é o próximo passo.
 - Reconstrução semântica das tabelas PDF.
 - Confirmação visual do worker pdfjs em navegador real (pendente de teste manual do usuário).
+
+### Discriminador explícito de origem/modo (quinta rodada)
+
+**Objetivo:** nunca identificar um rascunho PDF "adivinhando" pelo conteúdo do `editorText`, pelo aviso textual, pela extensão do título, pela ausência de tipo de trabalho, pela ausência de autor/título ou pela existência de pendências. A origem e o modo de saída passam a ser um **discriminador explícito** no contrato de importação.
+
+**Contrato (`src/import-contract.ts`):**
+
+```ts
+export type SourceKind = "pdf" | "docx" | "txt" | "markdown";
+export type DocumentMode = "ufla-structured" | "pdf-text-draft";
+
+export interface ImportedDocumentPayload {
+  sourceKind: SourceKind;
+  documentMode: DocumentMode;
+  fields: AcademicFields;
+  confidence: Record<AcademicFieldKey, Confidence>;
+  editorText: string;
+  messages: string[];
+  fileName: string;
+  importedImages?: ImportedDocumentImage[];
+  importedTables?: ImportedTable[];
+  rawPageText?: string;        // texto bruto de todas as páginas (diagnóstico)
+  orderedText?: string;        // texto ordenado para exportação (sem pré-textuais)
+  regionDiagnostics?: PdfRegion[]; // diagnóstico de regiões visuais
+  importMetadata?: { pageCount?; fingerprint?; quality? };
+}
+```
+
+**Regras implementadas:**
+
+- `buildPdfDraftInput` (`src/pdf-to-imported-blocks.ts`) retorna explicitamente `sourceKind: "pdf"` e `documentMode: "pdf-text-draft"`, além de preservar `rawPageText` (texto bruto de todas as páginas), `orderedText` (texto ordenado para exportação, com páginas pré-textuais de lista/sumário excluídas por padrão), `regionDiagnostics` (regiões visuais detectadas) e `importMetadata` (pageCount, fingerprint, quality).
+- A exportação escolhe o modo **pelo discriminador**: `generateDocxBlob` desvia para `buildPdfTextDraftDocxBlob` quando `input.documentMode === "pdf-text-draft"`; e o `App` roteia diretamente para `buildPdfTextDraftDocxBlob` quando `importedDocumentMode === "pdf-text-draft"` (exportador dedicado, sem rodar o modelo UFLA e depois tentar remover capa).
+- Importações DOCX/TXT/Markdown (`src/components/ImportBlock.tsx`) continuam com `documentMode: "ufla-structured"` e `sourceKind` derivado da extensão (`docx`/`txt`/`markdown`), sem nunca usar o modo PDF.
+- A exclusão padrão das páginas pré-textuais (lista/sumário) afeta **apenas** o `orderedText` (e, por consequência, o DOCX textual gerado); o `rawPageText` completo permanece disponível no diagnóstico.
+- Não há inferência por texto de aviso, extensão no título, ausência de tipo de trabalho, ausência de autor/título ou pendências.
+
+**Testes:** `tests/import-block-mode.test.tsx` (PDF→`pdf-text-draft` e DOCX/TXT→`ufla-structured` via contrato), `tests/pdf-to-imported-blocks.test.ts` (`sourceKind`/`documentMode` explícitos e separação `rawPageText`/`orderedText`), `tests/export-docx-pdf-draft.test.ts` (Modo B sem capa; e texto comum contendo a frase "Rascunho gerado a partir de PDF" **não** é classificado como PDF quando `documentMode: "ufla-structured"`), `tests/app-pdf-draft-flow.test.tsx` (PDF não aciona o template UFLA mockado).
 
 ### Próximos passos
 
