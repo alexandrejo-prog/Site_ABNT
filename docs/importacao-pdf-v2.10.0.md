@@ -194,6 +194,31 @@ O usuário pode então marcar "Gerar rascunho mesmo com pendências" e gerar um 
 - Reconstrução semântica das tabelas PDF.
 - Confirmação visual do worker pdfjs em navegador real (pendente de teste manual do usuário).
 
+### Conserto da experiência de PDF (quarta rodada)
+
+**Problemas reportados:** o DOCX gerado ficava ruim — capa com "AUTOR / TÍTULO DO TRABALHO" genéricos, ordem do texto das primeiras páginas embaralhada (capa/folha de rosto), mensagens técnicas na interface, a lista de regiões visuais misturava entradas de "Lista de Quadros/Gráficos/Sumário" com regiões reais e os recortes apareciam com tamanho estranho.
+
+**Correções:**
+
+- **Ordenação do texto (capa/folha de rosto não saem invertidas):** o eixo Y do PDF é medido de baixo para cima, então `groupPdfTextIntoLines` (`src/import-pdf-text.ts`) agora ordena por **Y decrescente** (topo → base) e, na mesma linha, por **X crescente** (esquerda → direita). Também foi adicionado dedupe de fragmentos de texto idênticos e sobrepostos. `buildPageNormalizedText` herda a correção.
+- **Filtro de regiões visuais falsas:** `detectPdfVisualRegionCandidates` (`src/pdf-region-renderer.ts`) agora ignora páginas de **Lista de Quadros/Figuras/Gráficos/Sumário/Índice** e entradas que são apenas itens de índice (ex.: `Quadro 1 – ... ................................ 98`, com líderes de ponto e número de página). Assim a lista não mistura o índice com figuras/quadros reais.
+- **Modo B — rascunho textual experimental separado do template da UFLA:** o `editorText` produzido por `buildPdfDraftInput` (`src/pdf-to-imported-blocks.ts`) começa com `PDF_DRAFT_WARNING` e traz título sugerido (extraído da primeira heading/cap) + aviso de revisão + texto extraído + inventário dos elementos visuais detectados (página, legenda, fonte). `generateDocxBlob` (`src/export-docx.ts`) desvia esse caso para `generatePdfDraftDocxBlob`, que gera um DOCX **sem capa** (portanto sem os placeholders `AUTOR`/`TÍTULO DO TRABALHO`) contendo apenas o texto extraído, o aviso e o inventário. Nada é inventado nos metadados.
+- **UI simplificada (`src/components/ImportBlock.tsx`):** mensagens amigáveis ("PDF lido (N páginas). Um rascunho foi gerado abaixo — revise antes de usar."); painel renomeado para "Leitura do PDF (experimental)"; lista de figuras/quadros **agrupada por página/tipo, limitada a 10** com botão "Mostrar todas"; regiões de **baixa confiança ocultas** por padrão; preview de imagem dimensionado via CSS (`max-width:100%`, `max-height:420px`, `object-fit:contain`).
+- **Testes:** novos casos em `tests/import-pdf.test.ts` (ordem topo→base, X na linha, dedupe, capa não invertida), `tests/pdf-region-renderer.test.ts` (lista/sumário e entradas com líder de ponto ignoradas; legenda real preservada), `tests/pdf-to-imported-blocks.test.ts` e `tests/export-docx-pdf-draft.test.ts` (Modo B sem capa/dialog e sem `<w:drawing>`), além de `tests/app-pdf-draft-flow.test.tsx`.
+
+### O que funciona agora
+
+- Detectar e listar regiões visuais reais (quadro/tabela, gráfico, figura) entre legenda e fonte, sem confundir com itens de Lista/Sumário.
+- Recortar e pré-visualizar a região como PNG no navegador, sob demanda, com tamanho controlado.
+- Gerar um **rascunho DOCX textual experimental** a partir do PDF, **sem capa** (Modo B), mesmo com pendências, quando o usuário marca "Gerar rascunho mesmo com pendências".
+- Texto das primeiras páginas na ordem visual correta (topo → base).
+
+### O que continua fora desta rodada
+
+- Inserção automática dos recortes visuais (PNG) no DOCX: as regiões detectadas seguem apenas como diagnóstico/pré-visualização e como inventário textual no rascunho. A inserção de recortes selecionados como fallback controlado é o próximo passo.
+- Reconstrução semântica das tabelas PDF.
+- Confirmação visual do worker pdfjs em navegador real (pendente de teste manual do usuário).
+
 ### Próximos passos
 
 1. Inserir recortes visuais PDF selecionados no DOCX como fallback controlado (legenda, imagem PNG, fonte, aviso), limitando a quantidade inicial de recortes para não gerar documento gigante.

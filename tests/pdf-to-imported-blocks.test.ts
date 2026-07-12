@@ -40,10 +40,11 @@ describe("buildPdfDraftInput", () => {
     expect(input.fileName).toBe("exemplo.pdf");
   });
 
-  it("PDF sem texto suficiente gera apenas o aviso e mantém pendências de campos", () => {
+  it("PDF sem texto extraível gera aviso e mantém pendências de campos", () => {
     const doc = pdfDoc([{ pageNumber: 1, normalizedText: "   " }]);
     const input = buildPdfDraftInput(doc, "vazio.pdf");
-    expect(input.editorText).toBe(PDF_DRAFT_WARNING);
+    expect(input.editorText).toContain(PDF_DRAFT_WARNING);
+    expect(input.editorText).toContain("sem texto extraível");
     expect(input.editorText).not.toContain("PREENCHER");
     const issues = validateWork(input.fields, input.editorText);
     expect(issues.some((i) => i.code === "title-required")).toBe(true);

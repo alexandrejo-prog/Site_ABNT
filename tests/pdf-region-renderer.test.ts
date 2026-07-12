@@ -144,6 +144,53 @@ describe("detectPdfVisualRegionCandidates", () => {
     const emptyDoc = docWith([], []);
     expect(detectPdfVisualRegionCandidates(emptyDoc)).toHaveLength(0);
   });
+
+  it("ignora entradas de lista com líderes de ponto e número de página", () => {
+    const listPage: PdfPageText = {
+      pageNumber: 5,
+      width: 800,
+      height: 1000,
+      items: [],
+      normalizedText: "Quadro 1 – Benefícios ................................ 98\nQuadro 2 – Riscos ................................ 99",
+    };
+    const document = docWith(
+      [listPage],
+      [
+        block({ id: "c1", kind: "caption", pageNumber: 5, text: "Quadro 1 – Benefícios ................................ 98", x: 0, y: 800, height: 20 }),
+        block({ id: "c2", kind: "caption", pageNumber: 5, text: "Quadro 2 – Riscos ................................ 99", x: 0, y: 760, height: 20 }),
+      ],
+    );
+    expect(detectPdfVisualRegionCandidates(document)).toHaveLength(0);
+  });
+
+  it("ignora páginas de Lista de Quadros/Figuras/Gráficos inteiras", () => {
+    const listPage: PdfPageText = {
+      pageNumber: 6,
+      width: 800,
+      height: 1000,
+      items: [],
+      normalizedText: "LISTA DE QUADROS\nQuadro 1 – Benefícios\nQuadro 2 – Riscos",
+    };
+    const document = docWith(
+      [listPage],
+      [
+        block({ id: "c1", kind: "caption", pageNumber: 6, text: "Quadro 1 – Benefícios", x: 0, y: 800, height: 20 }),
+        block({ id: "c2", kind: "caption", pageNumber: 6, text: "Quadro 2 – Riscos", x: 0, y: 760, height: 20 }),
+      ],
+    );
+    expect(detectPdfVisualRegionCandidates(document)).toHaveLength(0);
+  });
+
+  it("ainda detecta legenda real de quadro (sem líder de ponto)", () => {
+    const document = docWith(
+      [page(1)],
+      [
+        block({ id: "c1", kind: "caption", pageNumber: 1, text: "Quadro 1 – Vantagens do teletrabalho.", x: 0, y: 800, height: 20 }),
+        block({ id: "s1", kind: "source", pageNumber: 1, text: "Fonte: Autor (2025).", x: 0, y: 600 }),
+      ],
+    );
+    expect(detectPdfVisualRegionCandidates(document)).toHaveLength(1);
+  });
 });
 
 describe("computeRegionCropRect", () => {

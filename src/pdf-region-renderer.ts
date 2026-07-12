@@ -20,6 +20,18 @@ function captionKindToRegionKind(caption: string): PdfRegionKind {
   return "table-visual";
 }
 
+const LIST_OR_SUMMARY_HEADING = /(^|\n)\s*(LISTA DE (QUADROS|FIGURAS|GR[ÁA]FICOS|ILUSTRA[ÇC][ÕO]ES)|SUM[ÁA]RIO|ÍNDICE)\b/i;
+const LIST_ENTRY_CAPTION = /^(Quadro|Tabela|Figura|Gr[áa]fico)\s+\d+[^\n]*\.{2,}\s*\d+\s*$/i;
+
+function isListOrSummaryPage(page: PdfPageText): boolean {
+  const head = page.normalizedText.split("\n").slice(0, 8).join("\n");
+  return LIST_OR_SUMMARY_HEADING.test(head);
+}
+
+function isListEntryCaption(text: string): boolean {
+  return LIST_ENTRY_CAPTION.test(text.trim());
+}
+
 function blockScreenSpan(pageHeight: number, block: PdfDocumentBlock): { top: number; bottom: number } {
   const y = block.y ?? 0;
   const h = block.height ?? 0;
@@ -88,7 +100,14 @@ export function detectPdfVisualRegionCandidates(document: ImportedPdfDocument): 
     const page = pagesByNumber.get(pageNumber);
     if (!page) continue;
 
-    const captions = blocks.filter((b) => b.kind === "caption" || b.kind === "image-candidate");
+    // Páginas de Lista de Quadros/Figuras/Gráficos/Sumário não contêm figuras reais;
+    // pulamos para não sugerir recortes dos itens de índice.
+    if (isListOrSummaryPage(page)) continue;
+
+    const captions = blocks.filter(
+      (b) =>
+        (b.kind === "caption" || b.kind === "image-candidate") && !isListEntryCaption(b.text),
+    );
     const sources = blocks
       .filter((b) => b.kind === "source")
       .sort((a, b) => (b.y ?? 0) - (a.y ?? 0));

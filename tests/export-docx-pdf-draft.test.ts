@@ -67,4 +67,23 @@ describe("DOCX de rascunho a partir de PDF", () => {
     const xml = extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
     expect(xml).not.toContain("<w:drawing>");
   });
+
+  it("Modo B não gera capa com placeholders AUTOR/TÍTULO DO TRABALHO", async () => {
+    const doc = pdfDoc("Introducao com conteudo de exemplo para o rascunho.");
+    const input = buildPdfDraftInput(doc, "exemplo.pdf", "monografia");
+    const blob = await generateDocxBlob({ fields: input.fields, editorText: input.editorText });
+    const xml = extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
+    expect(xml).not.toContain("AUTOR");
+    expect(xml).not.toContain("TÍTULO DO TRABALHO");
+    expect(xml).toContain("Texto extraído do PDF");
+  });
+
+  it("gera DOCX mesmo com campos vazios (sem bloqueio de capa)", async () => {
+    const doc = pdfDoc("Texto de exemplo para rascunho de PDF.");
+    const input = buildPdfDraftInput(doc, "exemplo.pdf");
+    const blob = await generateDocxBlob({ fields: input.fields, editorText: input.editorText });
+    const xml = extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
+    expect(xml).toContain("Rascunho gerado a partir de PDF");
+    expect(xml).toContain("Texto de exemplo");
+  });
 });

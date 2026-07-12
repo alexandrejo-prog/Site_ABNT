@@ -28,6 +28,7 @@ import { normalizeForDetection } from "./word-structure-extractor";
 import { captionParagraph, cleanMojibakeText, detectCaption, tabbedTableBlock } from "./docx-render-core";
 import { ImportedDocumentImage, IMPORTED_IMAGE_MARKER_PATTERN } from "./imported-images";
 import { ImportedTable, IMPORTED_TABLE_MARKER_PATTERN, buildStructuredTextFromTable } from "./imported-tables";
+import { PDF_DRAFT_WARNING } from "./pdf-to-imported-blocks";
 
 export type EditorBlockType =
   | "paragraph"
@@ -2051,6 +2052,12 @@ export async function loadDefaultLogoAsset(): Promise<DocxLogoAsset | undefined>
 }
 
 export async function generateDocxBlob(input: DocxGenerationInput): Promise<Blob> {
+  // Modo B: rascunho experimental a partir de PDF. Não usa capa/template da UFLA,
+  // apenas o texto extraído (visualmente já ordenado) com aviso de revisão.
+  if (input.editorText.startsWith(PDF_DRAFT_WARNING)) {
+    return generatePdfDraftDocxBlob(input);
+  }
+
   if (input.fields.workType === "artigo") {
     const { generateArticleDocxBlob } = await import("./export-article-docx");
     return generateArticleDocxBlob(input);
@@ -2058,4 +2065,53 @@ export async function generateDocxBlob(input: DocxGenerationInput): Promise<Blob
 
   const logo = input.logo ?? (await loadDefaultLogoAsset());
   return Packer.toBlob(createDocxDocument({ ...input, logo }));
+}
+
+export async function generatePdfDraftDocxBlob(input: DocxGenerationInput): Promise<Blob> {
+  if (typeof Blob === "undefined") {
+    throw new Error("A geração de DOCX requer um navegador (Blob indisponível).");
+  }
+  const content = (input.editorText || PDF_DRAFT_WARNING).trim();
+  const rawLines = content.split("\n");
+  const children: Paragraph[] = rawLines.map((rawLine, index) => {
+    const line = rawLine.trim();
+    if (line.length === 0) return new Paragraph({});
+    const isFirst = index === 0;
+    return new Paragraph({
+      alignment: isFirst ? AlignmentType.CENTER : AlignmentType.JUSTIFIED,
+      spacing: { line: ONE_AND_HALF_LINE, after: 120 },
+      children: [
+        new TextRun({
+          text: line,
+          font: UFLA_RULES.typography.fontFamily,
+          size: isFirst ? COVER_TITLE_SIZE : BODY_SIZE,
+          bold: isFirst,
+          color: BLACK,
+        }),
+      ],
+    });
+  });
+
+  const document = new Document({
+    creator: "UFLA DOCX Acadêmico",
+    title: input.fields.title || "Rascunho de PDF",
+    description: "Rascunho textual experimental gerado a partir de PDF.",
+    styles: DOCUMENT_STYLES,
+    sections: [
+      {
+        properties: {
+          page: {
+            size: {
+              orientation: PageOrientation.PORTRAIT,
+              width: UFLA_RULES.page.widthTwip,
+              height: UFLA_RULES.page.heightTwip,
+            },
+            margin: pageMargins(),
+          },
+        },
+        children,
+      },
+    ],
+  });
+  return Packer.toBlob(document);
 }

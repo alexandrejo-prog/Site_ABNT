@@ -5,7 +5,7 @@ import { importAcademicFile } from "../import-file-router";
 import type { ImportedDocumentImage } from "../imported-images";
 import type { ImportedPdfDocument, PdfRegion, RenderedPdfRegion } from "../imported-pdf";
 import { detectPdfVisualRegionCandidates, renderPdfRegionToPng } from "../pdf-region-renderer";
-import { buildPdfDraftInput, pdfDraftStatusMessage } from "../pdf-to-imported-blocks";
+import { buildPdfDraftInput } from "../pdf-to-imported-blocks";
 import { emptyAcademicFields, emptyConfidenceMap, WORK_TYPE_LABELS } from "../ufla-rules";
 
 interface ImportBlockProps {
@@ -41,29 +41,44 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
   const [previews, setPreviews] = useState<Record<string, RenderedPdfRegion>>({});
   const [previewErrors, setPreviewErrors] = useState<Record<string, string>>({});
 
+  const [showAllRegions, setShowAllRegions] = useState(false);
+
   const regionCandidates = useMemo(
     () => (pdfDiagnostic ? detectPdfVisualRegionCandidates(pdfDiagnostic) : []),
     [pdfDiagnostic],
   );
 
+  const visibleRegions = useMemo(() => {
+    const sorted = [...regionCandidates].sort(
+      (a, b) => a.pageNumber - b.pageNumber || a.kind.localeCompare(b.kind),
+    );
+    const reliable = sorted.filter((r) => r.confidence !== "low");
+    const base = reliable.length > 0 ? reliable : sorted;
+    return showAllRegions ? base : base.slice(0, 10);
+  }, [regionCandidates, showAllRegions]);
+
+  const hiddenLowCount = regionCandidates.filter((r) => r.confidence === "low").length;
+
   async function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    try {
-      setStatus("Importando arquivo...");
-      setPdfDiagnostic(null);
-      setPdfFile(null);
-      setPreviews({});
-      setPreviewErrors({});
-      if (file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf") {
-        const result = await importAcademicFile(file);
-        if (result.kind === "pdf") {
-          setPdfFile(file);
-          setPdfDiagnostic(result.document);
-          const draft = buildPdfDraftInput(result.document, file.name, workType);
-          onImport(draft);
-          setStatus(pdfDraftStatusMessage(result.document.source.fileName, result.document.source.pageCount));
-        } else if (result.kind === "unknown") {
+     try {
+       setStatus("Lendo arquivo...");
+       setPdfDiagnostic(null);
+       setPdfFile(null);
+       setPreviews({});
+       setPreviewErrors({});
+       if (file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf") {
+         const result = await importAcademicFile(file);
+         if (result.kind === "pdf") {
+           setPdfFile(file);
+           setPdfDiagnostic(result.document);
+           const draft = buildPdfDraftInput(result.document, file.name, workType);
+           onImport(draft);
+           setStatus(
+             `PDF lido (${result.document.source.pageCount} páginas). Um rascunho foi gerado abaixo — revise antes de usar.`,
+           );
+         } else if (result.kind === "unknown") {
           setStatus(result.error);
         } else {
           onImport({ ...result.result, fileName: file.name });
@@ -74,9 +89,9 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
       const docResult = await importDocumentFile(file);
       onImport({ ...docResult, fileName: file.name });
       setStatus(`Arquivo importado: ${file.name}`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Falha ao importar.");
-    } finally {
+     } catch (error) {
+       setStatus(error instanceof Error ? error.message : "Não foi possível ler o arquivo.");
+     } finally {
       event.target.value = "";
     }
   }
@@ -144,67 +159,85 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
       )}
       {pdfDiagnostic ? (
         <div className="import-pdf-diagnostic">
-          <h3>Diagnóstico de PDF (experimental)</h3>
+          <h3>Leitura do PDF (experimental)</h3>
+          <p className="import-note import-note-info">
+            Extraímos o texto e possíveis figuras/quadros. As imagens ainda não entram no DOCX —
+            revise o rascunho e ajuste manualmente antes de usar.
+          </p>
           <ul>
             <li><strong>Arquivo:</strong> {pdfDiagnostic.source.fileName}</li>
             <li><strong>Páginas:</strong> {pdfDiagnostic.source.pageCount}</li>
-            <li>
-              <strong>Confiança de texto:</strong> {pdfDiagnostic.quality.textConfidence} |{" "}
-              <strong>Confiança de layout:</strong> {pdfDiagnostic.quality.layoutConfidence} |{" "}
-              <strong>Revisão manual:</strong> {pdfDiagnostic.quality.requiresManualReview ? "necessária" : "não"}
-            </li>
           </ul>
           {pdfDiagnostic.diagnostics.map((d, i) => (
             <p key={i} className={`import-note import-note-${d.severity}`}>
-              [{d.severity}] {d.message}
+              {d.message}
             </p>
           ))}
           <details>
-            <summary>Texto extraído do PDF ({pdfDiagnostic.source.pageCount} páginas)</summary>
+            <summary>Ver texto extraído ({pdfDiagnostic.source.pageCount} páginas)</summary>
             <pre className="import-pdf-text">{buildPdfDiagnosticText(pdfDiagnostic)}</pre>
           </details>
-          <h4>Regiões visuais detectadas ({regionCandidates.length})</h4>
+          <h4>Figuras e quadros encontrados ({regionCandidates.length})</h4>
           {regionCandidates.length === 0 ? (
             <p className="import-note import-note-info">Nenhuma legenda de figura/quadro/gráfico detectada automaticamente.</p>
           ) : (
-            <ul className="pdf-region-list">
-              {regionCandidates.map((region) => {
-                const key = `${region.pageNumber}:${region.caption}`;
-                const preview = previews[key];
-                const previewError = previewErrors[key];
-                return (
-                  <li key={key} className={`pdf-region-item pdf-region-${region.kind}`}>
-                    <div className="pdf-region-meta">
-                      <span className="pdf-region-kind">{region.kind}</span>
-                      <span className="pdf-region-page">página {region.pageNumber}</span>
-                      <span className={`pdf-region-confidence pdf-region-confidence-${region.confidence}`}>
-                        confiança: {region.confidence}
-                      </span>
-                    </div>
-                    <p className="pdf-region-caption">{region.caption}</p>
-                    {region.source ? <p className="pdf-region-source">{region.source}</p> : null}
-                    {region.warnings && region.warnings.length > 0 ? (
-                      <ul className="pdf-region-warnings">
-                        {region.warnings.map((w, wi) => (
-                          <li key={wi}>{w}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    <button className="secondary-action" type="button" onClick={() => handlePreviewRegion(region)} title={`Visualizar recorte da página ${region.pageNumber}`}>
-                      <span>Visualizar recorte</span>
-                    </button>
-                    {previewError ? <p className="import-note import-note-error">{previewError}</p> : null}
-                    {preview ? (
-                      <img className="pdf-region-preview" src={preview.dataUrl} alt={`Recorte de ${region.kind} na página ${region.pageNumber}`} />
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
+            <>
+              <p className="import-note import-note-info">
+                São apenas sugestões para revisão; nada é inserido no DOCX automaticamente.
+              </p>
+              <ul className="pdf-region-list">
+                {visibleRegions.map((region) => {
+                  const key = `${region.pageNumber}:${region.caption}`;
+                  const preview = previews[key];
+                  const previewError = previewErrors[key];
+                  return (
+                    <li key={key} className={`pdf-region-item pdf-region-${region.kind}`}>
+                      <div className="pdf-region-meta">
+                        <span className="pdf-region-page">página {region.pageNumber}</span>
+                        <span className={`pdf-region-confidence pdf-region-confidence-${region.confidence}`}>
+                          {region.confidence === "high" ? "boa" : region.confidence === "medium" ? "média" : "baixa"} confiança
+                        </span>
+                      </div>
+                      <p className="pdf-region-caption">{region.caption}</p>
+                      {region.source ? <p className="pdf-region-source">{region.source}</p> : null}
+                      {region.warnings && region.warnings.length > 0 ? (
+                        <ul className="pdf-region-warnings">
+                          {region.warnings.map((w, wi) => (
+                            <li key={wi}>{w}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      <button className="secondary-action" type="button" onClick={() => handlePreviewRegion(region)} title={`Visualizar recorte da página ${region.pageNumber}`}>
+                        <span>Visualizar recorte</span>
+                      </button>
+                      {previewError ? <p className="import-note import-note-error">{previewError}</p> : null}
+                      {preview ? (
+                        <img className="pdf-region-preview" src={preview.dataUrl} alt={`Recorte de ${region.kind} na página ${region.pageNumber}`} />
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+              {hiddenLowCount > 0 && !showAllRegions ? (
+                <p className="import-note import-note-info">
+                  {hiddenLowCount} {hiddenLowCount === 1 ? "região com baixa confiança está oculta" : "regiões com baixa confiança estão ocultas"}.
+                </p>
+              ) : null}
+              {regionCandidates.length > 10 && !showAllRegions ? (
+                <button className="secondary-action" type="button" onClick={() => setShowAllRegions(true)} title="Mostrar todas as regiões">
+                  <span>Mostrar todas ({regionCandidates.length})</span>
+                </button>
+              ) : null}
+              {showAllRegions && regionCandidates.length > 10 ? (
+                <button className="secondary-action" type="button" onClick={() => setShowAllRegions(false)} title="Mostrar apenas as primeiras regiões">
+                  <span>Mostrar menos</span>
+                </button>
+              ) : null}
+            </>
           )}
-          <button className="secondary-action" type="button" onClick={clearPdfDiagnostic} title="Fechar diagnóstico de PDF">
+          <button className="secondary-action" type="button" onClick={clearPdfDiagnostic} title="Fechar leitura do PDF">
             <XCircle size={18} aria-hidden="true" />
-            <span>Fechar diagnóstico</span>
+            <span>Fechar</span>
           </button>
         </div>
       ) : null}

@@ -26,7 +26,7 @@ describe("normalizePdfTextItems", () => {
 });
 
 describe("groupPdfTextIntoLines", () => {
-  it("ordena itens fora de ordem por linha (y) e dentro da linha por x", () => {
+  it("ordena itens de cima para baixo (Y decrescente) e dentro da linha por x", () => {
     const items = [
       item("exemplo", 60, 20),
       item("de", 40, 20),
@@ -34,7 +34,18 @@ describe("groupPdfTextIntoLines", () => {
       item("Primeira", 10, 10),
     ];
     const lines = groupPdfTextIntoLines(items);
-    expect(lines.map((l) => l.text)).toEqual(["Primeira", "Texto de exemplo"]);
+    // y=20 é o topo (maior Y no espaço PDF), y=10 é a base.
+    expect(lines.map((l) => l.text)).toEqual(["Texto de exemplo", "Primeira"]);
+  });
+
+  it("não duplica fragmentos de texto sobrepostos idênticos", () => {
+    const items = [
+      item("Texto repetido", 10, 50),
+      item("Texto repetido", 10, 50),
+      item("Outro", 40, 50),
+    ];
+    const lines = groupPdfTextIntoLines(items);
+    expect(lines.map((l) => l.text)).toEqual(["Texto repetido Outro"]);
   });
 
   it("junta texto da mesma linha em um unico trecho", () => {
@@ -42,6 +53,28 @@ describe("groupPdfTextIntoLines", () => {
     const lines = groupPdfTextIntoLines(items);
     expect(lines).toHaveLength(1);
     expect(lines[0].text).toBe("um dois tres");
+  });
+
+  it("ordena itens da mesma linha por x crescente", () => {
+    const items = [item("dir", 80, 100), item("esq", 10, 100), item("meio", 45, 100)];
+    const lines = groupPdfTextIntoLines(items);
+    expect(lines[0].text).toBe("esq meio dir");
+  });
+
+  it("capa simples com autor/título/local/ano não sai invertida", () => {
+    const items = [
+      item("AUTOR EXEMPLO", 10, 800),
+      item("TÍTULO DO TRABALHO", 10, 650),
+      item("Lavras - MG", 10, 500),
+      item("2026", 10, 400),
+    ];
+    const lines = groupPdfTextIntoLines(items);
+    expect(lines.map((l) => l.text)).toEqual([
+      "AUTOR EXEMPLO",
+      "TÍTULO DO TRABALHO",
+      "Lavras - MG",
+      "2026",
+    ]);
   });
 
   it("separa linhas por salto vertical", () => {
@@ -52,9 +85,10 @@ describe("groupPdfTextIntoLines", () => {
 });
 
 describe("buildPageNormalizedText", () => {
-  it("junta linhas com quebra de linha", () => {
+  it("junta linhas com quebra de linha (topo primeiro)", () => {
     const items = [item("linha um", 10, 10), item("linha dois", 10, 40)];
-    expect(buildPageNormalizedText(items)).toBe("linha um\nlinha dois");
+    // y=40 é o topo no espaço PDF; a ordenação é de cima para baixo.
+    expect(buildPageNormalizedText(items)).toBe("linha dois\nlinha um");
   });
 });
 

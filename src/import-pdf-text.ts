@@ -20,6 +20,18 @@ export function normalizePdfTextItems(items: PdfTextItem[]): PdfTextItem[] {
     .filter((item) => item.text.length > 0);
 }
 
+function dedupePdfItems(items: PdfTextItem[]): PdfTextItem[] {
+  const seen = new Set<string>();
+  const result: PdfTextItem[] = [];
+  for (const item of items) {
+    const key = `${item.pageNumber}|${Math.round(item.x)}|${Math.round(item.y)}|${item.text}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
 function isMostlyUpper(text: string): boolean {
   const letters = text.match(/[a-zA-ZÀ-Þà-þ]/g);
   if (!letters) return false;
@@ -39,10 +51,12 @@ const SOURCE_PATTERN = /^Fonte\s*:/i;
 const IMAGE_LABELS = /^(Figura|Gráfico)/i;
 
 export function groupPdfTextIntoLines(items: PdfTextItem[], lineTolerance = 6): PdfTextLine[] {
-  const cleaned = normalizePdfTextItems(items);
+  const cleaned = dedupePdfItems(normalizePdfTextItems(items));
   const sorted = [...cleaned].sort((a, b) => {
     if (a.pageNumber !== b.pageNumber) return a.pageNumber - b.pageNumber;
-    if (Math.abs(a.y - b.y) > lineTolerance) return a.y - b.y;
+    // PDF Y é medido de baixo para cima: maior Y = topo da página.
+    // Ordenamos de cima para baixo (Y decrescente) e, na mesma linha, da esquerda para a direita (X crescente).
+    if (Math.abs(a.y - b.y) > lineTolerance) return b.y - a.y;
     return a.x - b.x;
   });
 
