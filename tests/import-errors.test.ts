@@ -76,7 +76,7 @@ describe("Erros de importação", () => {
       const file = createMockFile("dummy pdf content", "documento.pdf");
 
       await expect(importDocumentFile(file)).rejects.toThrow(
-        "Nao foi possivel ler o PDF",
+        "Não foi possível ler o PDF",
       );
     });
 

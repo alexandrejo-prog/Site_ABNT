@@ -88,7 +88,7 @@ describe("importacao diagnostica de PDF", () => {
   it("PDF invalido gera mensagem controlada", async () => {
     const file = new File(["nao e pdf"], "invalido.pdf", { type: "application/pdf" });
 
-    await expect(importDocumentFile(file)).rejects.toThrow("Nao foi possivel ler o PDF");
+    await expect(importDocumentFile(file)).rejects.toThrow("Não foi possível ler o PDF");
   });
 
   it("importar PDF nao altera campos academicos nem insere texto no editor", async () => {
@@ -101,6 +101,6 @@ describe("importacao diagnostica de PDF", () => {
     expect(result.editorText).toBe("");
     expect(result.importedImages).toEqual([]);
     expect(result.importedTables).toEqual([]);
-    expect(result.messages.join(" ")).toContain("conversao para DOCX ainda nao esta habilitada");
+    expect(result.messages.join(" ")).toContain("conversão para DOCX ainda não está habilitada");
   });
 });

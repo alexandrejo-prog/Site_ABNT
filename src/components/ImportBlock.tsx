@@ -53,7 +53,7 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
       <div className="import-header">
         <div>
           <h2>Importar arquivo existente</h2>
-          <p>Importe DOCX, TXT ou Markdown para extrair texto e metadados. PDF entra apenas como diagnostico experimental.</p>
+          <p>Importe DOCX, TXT ou Markdown para extrair texto e metadados. PDF entra apenas como diagnóstico experimental.</p>
         </div>
         <label className="upload-button primary">
           <Upload size={18} aria-hidden="true" />

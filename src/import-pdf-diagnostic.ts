@@ -26,7 +26,7 @@ function normalizeRawText(parts: string[]): string {
 
 export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagnostic> {
   const warnings = [
-    "O PDF foi lido para diagnostico. A conversao para DOCX ainda nao esta habilitada nesta etapa.",
+    "O PDF foi lido para diagnóstico. A conversão para DOCX ainda não está habilitada nesta etapa.",
   ];
 
   try {
@@ -53,7 +53,7 @@ export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagno
     }
 
     if (!pages.some((page) => page.rawText.trim())) {
-      warnings.push("Nenhum texto bruto extraivel foi encontrado. O PDF pode estar digitalizado, protegido ou exigir OCR, que nao e usado nesta etapa.");
+      warnings.push("Nenhum texto bruto extraível foi encontrado. O PDF pode estar digitalizado, protegido ou exigir OCR, que não é usado nesta etapa.");
     }
 
     return {
@@ -63,6 +63,6 @@ export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagno
       warnings,
     };
   } catch {
-    throw new Error("Nao foi possivel ler o PDF. O arquivo pode estar invalido, protegido, corrompido ou ilegivel sem OCR.");
+    throw new Error("Não foi possível ler o PDF. O arquivo pode estar inválido, protegido, corrompido ou ilegível sem OCR.");
   }
 }

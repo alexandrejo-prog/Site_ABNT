@@ -115,6 +115,8 @@ export default function App() {
   const [importedImages, setImportedImages] = useState<ImportedDocumentImage[]>([]);
   const [importedTables, setImportedTables] = useState<ImportedTable[]>([]);
   const [pdfDiagnostic, setPdfDiagnostic] = useState<ImportedPdfDiagnostic | null>(null);
+  const [importedSourceKind, setImportedSourceKind] = useState<SourceKind | null>(null);
+  const [importedDocumentMode, setImportedDocumentMode] = useState<DocumentMode | null>(null);
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
   const [status, setStatus] = useState("Pronto para editar.");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -142,7 +144,7 @@ export default function App() {
     ? "Modo experimental de edição. Use para testar a nova experiência. O DOCX continua sendo gerado pelo exportador estável."
     : "Editor acadêmico: edite o conteúdo e marque a estrutura do texto. Fonte, tamanho, recuos e espaçamentos seguem automaticamente o padrão UFLA/ABNT no DOCX.";
   const finalPending = useMemo(() => finalVersionPendingReport(fields, activeEditorText), [fields, activeEditorText]);
-  const isPdfDiagnosticMode = Boolean(pdfDiagnostic);
+  const isPdfDiagnosticMode = importedSourceKind === "pdf" && importedDocumentMode === "pdf-diagnostic";
 
   useEffect(() => installEditorScrollFix(), []);
 
@@ -207,6 +209,13 @@ export default function App() {
       editorContentVersionRef.current += 1;
     }
   }, [activeEditorText, editorMode]);
+
+  useEffect(() => {
+    if (isPdfDiagnosticMode || !editorRef.current) return;
+    editorRef.current.innerHTML = editorMarkupToHtml(activeEditorText);
+    lastAppliedEditorTextRef.current = activeEditorText;
+    editorContentVersionRef.current += 1;
+  }, [isPdfDiagnosticMode]);
 
   function updateField(key: AcademicFieldKey, value: string) {
     setFields((current) => {
@@ -283,30 +292,21 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
   }) {
     try {
       setStatus("Importando arquivo...");
+      setImportedSourceKind(result.sourceKind);
+      setImportedDocumentMode(result.documentMode);
+      const previousWorkType = fields.workType;
+      if (result.documentMode === "pdf-diagnostic") {
+        setPdfDiagnostic(result.pdfDiagnostic ?? null);
+        setStatus("O PDF foi lido para diagnóstico. A conversão para DOCX ainda não está habilitada nesta etapa.");
+        return;
+      }
+
       if (autosaveTimeoutRef.current) {
         clearTimeout(autosaveTimeoutRef.current);
         autosaveTimeoutRef.current = null;
       }
       clearDraft(window.localStorage);
       setHasStoredDraft(false);
-      const previousWorkType = fields.workType;
-      if (result.documentMode === "pdf-diagnostic") {
-        setPdfDiagnostic(result.pdfDiagnostic ?? null);
-        setImportedFileName(result.fileName);
-        setFields(emptyAcademicFields());
-        setConfidence(emptyConfidenceMap());
-        setEditorText("");
-        setEditorMode("body");
-        setIssues([]);
-        setGenerateAnyway(false);
-        setImportedImages([]);
-        setImportedTables([]);
-        lastAppliedEditorTextRef.current = "";
-        if (editorRef.current) editorRef.current.innerHTML = "";
-        editorContentVersionRef.current += 1;
-        setStatus("O PDF foi lido para diagnostico. A conversao para DOCX ainda nao esta habilitada nesta etapa.");
-        return;
-      }
       setPdfDiagnostic(null);
       replaceFieldsWithImportedDocument(result.fields, result.confidence);
       setImportedFileName(result.fileName);
@@ -329,6 +329,13 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
   }
 
   function handleRemoveImport() {
+    if (isPdfDiagnosticMode) {
+      setImportedSourceKind(null);
+      setImportedDocumentMode(null);
+      setPdfDiagnostic(null);
+      setStatus("Diagnóstico de PDF removido. O documento acadêmico anterior foi preservado.");
+      return;
+    }
     setFields(emptyAcademicFields());
     setConfidence(emptyConfidenceMap());
     setEditorText("");
@@ -338,6 +345,8 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setImportedImages([]);
     setImportedTables([]);
     setPdfDiagnostic(null);
+    setImportedSourceKind(null);
+    setImportedDocumentMode(null);
     setEditorMode("body");
     lastAppliedEditorTextRef.current = "";
     editorContentVersionRef.current += 1;
@@ -359,6 +368,8 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setImportedImages([]);
     setImportedTables([]);
     setPdfDiagnostic(null);
+    setImportedSourceKind(null);
+    setImportedDocumentMode(null);
     setEditorMode("body");
     lastAppliedEditorTextRef.current = "";
     if (editorRef.current) editorRef.current.innerHTML = "";
@@ -449,7 +460,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
 
   async function handleGenerateDocx() {
     if (isPdfDiagnosticMode) {
-      setStatus("O PDF esta em modo diagnostico. Nenhum DOCX e gerado a partir de PDF nesta etapa.");
+      setStatus("O PDF está em modo diagnóstico. Nenhum DOCX é gerado a partir de PDF nesta etapa.");
       return;
     }
     const generationFields = normalizeFieldsForSelectedModel(fields);
@@ -491,39 +502,45 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
           <p className="eyebrow">Ferramenta de apoio UFLA/ABNT</p>
           <h1>Assistente de estruturação e normalização acadêmica</h1>
         </div>
-        <div className="header-actions">
+        {!isPdfDiagnosticMode && <div className="header-actions">
           <DraftStatus draftStatus={draftStatus} hasDraft={hasStoredDraft} onClearDraft={handleClearDraft} />
           <button className="primary-action" type="button" onClick={() => runValidation()}><FileCheck2 size={18} aria-hidden="true" />Validar trabalho</button>
           <button className="primary-action strong" type="button" onClick={handleGenerateDocx} disabled={isGenerating || isPdfDiagnosticMode}><FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar DOCX editável"}</button>
-        </div>
+        </div>}
       </header>
 
       <p className="global-draft-notice" role="note">O DOCX é rascunho técnico. Sumário, ficha catalográfica, paginação final e PDF devem ser conferidos no Word/LibreOffice. Após abrir no Word/LibreOffice, clique com o botão direito no sumário e selecione &ldquo;Atualizar campo&rdquo;.</p>
 
       <a href="#main-content" className="skip-link">Pular para o conte&uacute;do principal</a>
       <main id="main-content" className="workspace" tabIndex={-1} aria-busy={isGenerating}>
-        <section className="metadata-pane" aria-label="Campos acadêmicos">
-          <ImportBlock onImport={handleImport} onRemove={handleRemoveImport} importedFileName={importedFileName} workType={fields.workType} />
+        {isPdfDiagnosticMode ? (
+        <section className="metadata-pane pdf-diagnostic-workspace" aria-label="Diagnóstico de PDF">
+          <ImportBlock onImport={handleImport} onRemove={handleRemoveImport} importedFileName={pdfDiagnostic?.fileName ?? null} workType={fields.workType} />
           {pdfDiagnostic && (
             <div className="pdf-diagnostic-panel" role="status" aria-live="polite">
-              <h2>Leitura de PDF - diagnostico experimental</h2>
-              <p>O PDF foi lido para diagnostico. A conversao para DOCX ainda nao esta habilitada nesta etapa.</p>
+              <h2>Leitura de PDF — diagnóstico experimental</h2>
+              <p>O PDF foi lido para diagnóstico. A conversão para DOCX ainda não está habilitada nesta etapa.</p>
               <dl>
                 <div><dt>Arquivo</dt><dd>{pdfDiagnostic.fileName}</dd></div>
-                <div><dt>Paginas</dt><dd>{pdfDiagnostic.pageCount}</dd></div>
+                <div><dt>Páginas</dt><dd>{pdfDiagnostic.pageCount}</dd></div>
                 <div><dt>Itens textuais</dt><dd>{pdfDiagnostic.pages.reduce((sum, page) => sum + page.textItemCount, 0)}</dd></div>
               </dl>
               <div className="pdf-diagnostic-preview">
                 {pdfDiagnostic.pages.slice(0, 3).map((page) => (
                   <section key={page.pageNumber}>
-                    <h3>Pagina {page.pageNumber}</h3>
-                    <p>{page.rawText.slice(0, 700) || "Sem texto bruto extraivel nesta pagina."}</p>
+                    <h3>Página {page.pageNumber}</h3>
+                    <p>{page.rawText.slice(0, 700) || "Nenhum texto bruto extraível foi encontrado nesta página."}</p>
                   </section>
                 ))}
               </div>
               {pdfDiagnostic.warnings.map((warning) => <p className="import-note" key={warning}>{warning}</p>)}
             </div>
           )}
+        </section>
+        ) : (
+        <>
+        <section className="metadata-pane" aria-label="Campos acadêmicos">
+          <ImportBlock onImport={handleImport} onRemove={handleRemoveImport} importedFileName={importedFileName} workType={fields.workType} />
           <div className="work-type-section">
             <WorkTypeSelector value={fields.workType} onChange={updateWorkType} />
           </div>
@@ -693,6 +710,8 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
           warnings={warnings}
           finalPending={finalPending}
         />
+        </>
+        )}
       </main>
     </div>
   );

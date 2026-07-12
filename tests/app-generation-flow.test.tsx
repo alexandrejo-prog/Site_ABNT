@@ -34,6 +34,30 @@ function getGenerateAnywayCheckbox(): HTMLInputElement {
   return screen.getByRole("checkbox", { name: /Gerar rascunho/i }) as HTMLInputElement;
 }
 
+function pdfDiagnosticResult(fileName = "diagnostico.pdf") {
+  return {
+    sourceKind: "pdf",
+    documentMode: "pdf-diagnostic",
+    text: "",
+    editorText: "",
+    fields: emptyAcademicFields(),
+    confidence: emptyConfidenceMap(),
+    messages: ["O PDF foi lido para diagnóstico. A conversão para DOCX ainda não está habilitada nesta etapa."],
+    blocks: [],
+    importedImages: [],
+    importedTables: [],
+    pdfDiagnostic: {
+      fileName,
+      pageCount: 139,
+      pages: [
+        { pageNumber: 1, rawText: "Texto bruto da pagina um.", textItemCount: 7 },
+        { pageNumber: 2, rawText: "Texto bruto da pagina dois.", textItemCount: 8 },
+      ],
+      warnings: ["O PDF foi lido para diagnóstico. A conversão para DOCX ainda não está habilitada nesta etapa."],
+    },
+  };
+}
+
 describe("fluxo real de bloqueio de geração (App)", () => {
   beforeEach(() => {
     generateMock.mockClear();
@@ -297,91 +321,63 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     await screen.findByText(/O tipo atual é Projeto de pesquisa. O nome do arquivo importado não será usado para alterar o modelo./);
   });
 
-  it("importar PDF mostra diagnostico separado e nao chama gerador DOCX", async () => {
+  it("importar PDF preserva campos e editor, oculta interface academica e restaura ao remover", async () => {
     const user = userEvent.setup();
-    importDocumentFileMock.mockResolvedValue({
-      sourceKind: "pdf",
-      documentMode: "pdf-diagnostic",
-      text: "",
-      editorText: "",
-      fields: emptyAcademicFields(),
-      confidence: emptyConfidenceMap(),
-      messages: ["O PDF foi lido para diagnostico. A conversao para DOCX ainda nao esta habilitada nesta etapa."],
-      blocks: [],
-      importedImages: [],
-      importedTables: [],
-      pdfDiagnostic: {
-        fileName: "andrade.pdf",
-        pageCount: 139,
-        pages: [
-          { pageNumber: 1, rawText: "Texto bruto da pagina um.", textItemCount: 7 },
-          { pageNumber: 2, rawText: "Texto bruto da pagina dois.", textItemCount: 8 },
-        ],
-        warnings: ["O PDF foi lido para diagnostico. A conversao para DOCX ainda nao esta habilitada nesta etapa."],
-      },
-    });
+    importDocumentFileMock.mockResolvedValue(pdfDiagnosticResult("andrade.pdf"));
 
     render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "dissertacao");
+    fireEvent.change(getTitleInput(), { target: { value: "Título preservado" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.change(screen.getByLabelText("Introdução"), { target: { value: "Texto acadêmico preservado." } });
+    await user.click(getButtonByText(/Montar rascunho/));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: /Editor do texto principal/i }).textContent).toContain("Texto acadêmico preservado."));
+
     await user.upload(screen.getByLabelText("Importar arquivo"), new File(["pdf"], "andrade.pdf", { type: "application/pdf" }));
 
     expect(await screen.findByText(/Leitura de PDF/i)).toBeInTheDocument();
     expect(screen.getByText("139")).toBeInTheDocument();
     expect(screen.getByText(/Texto bruto da pagina um/)).toBeInTheDocument();
-    expect(getButtonByText(/Gerar DOCX/).disabled).toBe(true);
-    fireEvent.click(getButtonByText(/Gerar DOCX/));
+    expect(screen.queryByLabelText("Tipo de trabalho")).not.toBeInTheDocument();
+    expect(screen.queryByText("Validar trabalho")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Gerar DOCX/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /Editor do texto principal/i })).not.toBeInTheDocument();
     expect(generateMock).not.toHaveBeenCalled();
-  });
-
-  it("remover PDF limpa diagnostico", async () => {
-    const user = userEvent.setup();
-    importDocumentFileMock.mockResolvedValue({
-      sourceKind: "pdf",
-      documentMode: "pdf-diagnostic",
-      text: "",
-      editorText: "",
-      fields: emptyAcademicFields(),
-      confidence: emptyConfidenceMap(),
-      messages: [],
-      blocks: [],
-      importedImages: [],
-      importedTables: [],
-      pdfDiagnostic: {
-        fileName: "diagnostico.pdf",
-        pageCount: 1,
-        pages: [{ pageNumber: 1, rawText: "Texto bruto.", textItemCount: 2 }],
-        warnings: [],
-      },
-    });
-
-    render(<App />);
-    await user.upload(screen.getByLabelText("Importar arquivo"), new File(["pdf"], "diagnostico.pdf", { type: "application/pdf" }));
-    expect(await screen.findByText(/Leitura de PDF/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Remover importa/i }));
 
     expect(screen.queryByText(/Leitura de PDF/i)).not.toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Título preservado")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Maria Silva")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("textbox", { name: /Editor do texto principal/i }).textContent).toContain("Texto acadêmico preservado."));
+  });
+
+  it("PDF nao chama clearDraft nem altera workType", async () => {
+    const user = userEvent.setup();
+    importDocumentFileMock.mockResolvedValue(pdfDiagnosticResult());
+
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "dissertacao");
+    window.localStorage.setItem("site-abnt:draft:v3", JSON.stringify({
+      fields: { title: "Rascunho" },
+      editorText: "Texto salvo",
+      updatedAt: new Date().toISOString(),
+    }));
+    await user.upload(screen.getByLabelText("Importar arquivo"), new File(["pdf"], "diagnostico.pdf", { type: "application/pdf" }));
+    expect(await screen.findByText(/Leitura de PDF/i)).toBeInTheDocument();
+    expect(window.localStorage.getItem("site-abnt:draft:v3")).not.toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Remover importa/i }));
+
+    expect(screen.queryByText(/Leitura de PDF/i)).not.toBeInTheDocument();
+    expect((screen.getByLabelText("Tipo de trabalho") as HTMLSelectElement).value).toBe("dissertacao");
   });
 
   it("importar DOCX depois de PDF volta ao fluxo estruturado normal", async () => {
     const user = userEvent.setup();
     importDocumentFileMock
       .mockResolvedValueOnce({
-        sourceKind: "pdf",
-        documentMode: "pdf-diagnostic",
-        text: "",
-        editorText: "",
-        fields: emptyAcademicFields(),
-        confidence: emptyConfidenceMap(),
-        messages: [],
-        blocks: [],
-        importedImages: [],
-        importedTables: [],
-        pdfDiagnostic: {
-          fileName: "diagnostico.pdf",
-          pageCount: 1,
-          pages: [{ pageNumber: 1, rawText: "Texto bruto.", textItemCount: 2 }],
-          warnings: [],
-        },
+        ...pdfDiagnosticResult(),
       })
       .mockResolvedValueOnce({
         sourceKind: "docx",
@@ -412,8 +408,10 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     expect(getButtonByText(/Gerar DOCX/).disabled).toBe(false);
   });
 
-  it("importar PDF depois de DOCX nao reutiliza campos anteriores como dados do PDF", async () => {
+  it("importar PDF depois de DOCX preserva dados importados, imagens e tabelas ao remover", async () => {
     const user = userEvent.setup();
+    const importedImages = [{ id: "img-1", position: 1, status: "preserved" }];
+    const importedTables = [{ id: "tbl-1", rows: [[{ text: "A" }]], rowCount: 1, columnCount: 1, position: 2, origin: "docx-table", status: "preserved" }];
     importDocumentFileMock
       .mockResolvedValueOnce({
         sourceKind: "docx",
@@ -429,27 +427,10 @@ describe("fluxo real de bloqueio de geração (App)", () => {
         confidence: emptyConfidenceMap(),
         messages: [],
         blocks: [],
-        importedImages: [],
-        importedTables: [],
+        importedImages,
+        importedTables,
       })
-      .mockResolvedValueOnce({
-        sourceKind: "pdf",
-        documentMode: "pdf-diagnostic",
-        text: "",
-        editorText: "",
-        fields: emptyAcademicFields(),
-        confidence: emptyConfidenceMap(),
-        messages: [],
-        blocks: [],
-        importedImages: [],
-        importedTables: [],
-        pdfDiagnostic: {
-          fileName: "diagnostico.pdf",
-          pageCount: 1,
-          pages: [{ pageNumber: 1, rawText: "Texto bruto do PDF.", textItemCount: 4 }],
-          warnings: [],
-        },
-      });
+      .mockResolvedValueOnce(pdfDiagnosticResult("diagnostico.pdf"));
 
     render(<App />);
     await user.upload(screen.getByLabelText("Importar arquivo"), new File(["docx"], "normal.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }));
@@ -458,8 +439,23 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     await user.upload(screen.getByLabelText("Importar arquivo"), new File(["pdf"], "diagnostico.pdf", { type: "application/pdf" }));
 
     expect(await screen.findByText(/Leitura de PDF/i)).toBeInTheDocument();
-    expect(getTitleInput().value).toBe("");
-    expect(screen.queryByDisplayValue("Maria Silva")).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Titulo DOCX")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Remover importa/i }));
+
+    expect(await screen.findByDisplayValue("Titulo DOCX")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Maria Silva")).toBeInTheDocument();
+    fireEvent.click(getGenerateAnywayCheckbox());
+    await user.click(getButtonByText(/Gerar DOCX/));
+    await waitFor(() => expect(generateMock).toHaveBeenCalledTimes(1));
+    const generationCalls = generateMock.mock.calls as unknown as Array<[{ importedImages?: unknown; importedTables?: unknown }]>;
+    const savedFileName = saveAsMock.mock.calls[0]?.[1];
+    const generationInput = generationCalls[0]?.[0];
+    expect(generationInput).toBeDefined();
+    expect(savedFileName).toBeDefined();
+    expect(generationInput?.importedImages).toEqual(importedImages);
+    expect(generationInput?.importedTables).toEqual(importedTables);
+    expect(savedFileName).not.toContain("diagnostico");
   });
 
   it("mostra aviso de rascunho editável para dissertação", async () => {
