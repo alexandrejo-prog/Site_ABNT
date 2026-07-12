@@ -18,7 +18,7 @@ import {
 } from "./import-normalizer";
 import { repairHeadingFragments, repairRecordHeadingFragments } from "./heading-fragment-repair";
 import { sanitizeImportedTitle } from "./title-sanitizer";
-import { ImportedDocumentImage, importedImageMarker } from "./imported-images";
+import { ImportedDocumentImage, importedImageMarker, looksLikeAcademicImageLabel, looksLikeAcademicImageCaption, looksLikeImageSource } from "./imported-images";
 import { ImportedTable, importedTableMarker, normalizePhantomColumns, isTableUnreadable, buildStructuredTextFromTable } from "./imported-tables";
 
 function estimateColumnWidths(gridWidths: number[], columnCount: number): number[] {
@@ -166,18 +166,6 @@ function blockText(block: ImportedBlock): string {
   return block.text.trim();
 }
 
-function looksLikeImageCaption(text: string): boolean {
-  return /^(Figura|Imagem|Graf|Grafico|Quadro|Tabela)\s+\d+\s*[-–—:.]?/i.test(text.trim());
-}
-
-function looksLikeImageLabel(text: string): boolean {
-  return /^(Figura|Imagem|Graf|Grafico|Quadro|Tabela)\s+\d+/i.test(text.trim());
-}
-
-function looksLikeImageSource(text: string): boolean {
-  return /^Fonte\s*:/i.test(text.trim());
-}
-
 function looksLikeTableCaption(text: string): boolean {
   return /^(Quadro|Tabela|Graf|Grafico)\s+\d+\s*[-–—:.]?/i.test(text.trim());
 }
@@ -222,50 +210,109 @@ function findBodyEndIndex(blocks: ImportedBlock[]): number {
   });
 }
 
-// Busca, em ambas as direções (janela de até 7 blocos), o rótulo/legenda e a fonte
+// Busca, em ambas as direções (janela de até 10 blocos), o rótulo/legenda e a fonte
 // mais próximos da imagem. Cobre os padrões de DOCX convertido de PDF em que a
 // legenda pode vir antes ou depois da imagem e a fonte aparece em bloco vizinho.
 function nearestAcademicImageContext(
   blocks: ImportedBlock[],
   index: number,
-): { caption: string; source: string } {
-  const windowSize = 7;
+): { caption: string; source: string; captionOffset: number; sourceOffset: number } {
+  const windowSize = 10;
   let caption = "";
   let source = "";
+  let captionOffset = Infinity;
+  let sourceOffset = Infinity;
 
   for (let offset = 1; offset <= windowSize; offset += 1) {
     const before = blocks[index - offset];
     const after = blocks[index + offset];
 
     if (!caption) {
-      if (before && (looksLikeImageCaption(blockText(before)) || looksLikeImageLabel(blockText(before)))) {
+      if (before && (looksLikeAcademicImageCaption(blockText(before)) || looksLikeAcademicImageLabel(blockText(before)))) {
         caption = blockText(before);
-      } else if (after && (looksLikeImageCaption(blockText(after)) || looksLikeImageLabel(blockText(after)))) {
+        captionOffset = -offset;
+      } else if (after && (looksLikeAcademicImageCaption(blockText(after)) || looksLikeAcademicImageLabel(blockText(after)))) {
         caption = blockText(after);
+        captionOffset = offset;
       }
     }
 
     if (!source) {
       if (before && looksLikeImageSource(blockText(before))) {
         source = blockText(before);
+        sourceOffset = -offset;
       } else if (after && looksLikeImageSource(blockText(after))) {
         source = blockText(after);
+        sourceOffset = offset;
       }
     }
 
     if (caption && source) break;
   }
 
-  return { caption, source };
+  return { caption, source, captionOffset, sourceOffset };
+}
+
+function computeImageInsertionHint(
+  captionOffset: number,
+  sourceOffset: number,
+): { hint: "after-caption" | "before-source" | "between-caption-and-source" | "original-position"; anchorText?: string } {
+  const captionBefore = captionOffset < 0;
+  const sourceBefore = sourceOffset < 0;
+  const captionAfter = captionOffset > 0;
+  const sourceAfter = sourceOffset > 0;
+
+  if (captionBefore && sourceBefore) {
+    return { hint: "between-caption-and-source", anchorText: "" };
+  }
+  if (captionBefore && sourceAfter) {
+    return { hint: "between-caption-and-source", anchorText: "" };
+  }
+  if (captionAfter && sourceBefore) {
+    return { hint: "between-caption-and-source", anchorText: "" };
+  }
+  if (captionBefore && sourceOffset === Infinity) {
+    return { hint: "after-caption", anchorText: "" };
+  }
+  if (captionAfter && sourceOffset === Infinity) {
+    return { hint: "original-position", anchorText: "" };
+  }
+  if (!captionBefore && !captionAfter && sourceBefore) {
+    return { hint: "before-source", anchorText: "" };
+  }
+  if (!captionBefore && !captionAfter && sourceAfter) {
+    return { hint: "original-position", anchorText: "" };
+  }
+  if (captionBefore && sourceBefore && captionOffset < sourceOffset) {
+    return { hint: "after-caption", anchorText: "" };
+  }
+  if (captionBefore && sourceBefore && captionOffset > sourceOffset) {
+    return { hint: "before-source", anchorText: "" };
+  }
+  return { hint: "original-position" };
+}
+
+function hasAmbiguousNeighbors(blocks: ImportedBlock[], index: number): boolean {
+  const windowSize = 3;
+  const currentCaption = nearestAcademicImageContext(blocks, index).caption;
+  if (!currentCaption) return false;
+
+  for (let offset = -windowSize; offset <= windowSize; offset += 1) {
+    if (offset === 0) continue;
+    const neighbor = blocks[index + offset];
+    if (neighbor?.type !== "image") continue;
+    const neighborCaption = nearestAcademicImageContext(blocks, index + offset).caption;
+    if (neighborCaption && neighborCaption === currentCaption) return true;
+  }
+  return false;
 }
 
 function classifyAcademicImage(block: ImportedBlock, index: number, blocks: ImportedBlock[]): boolean {
   if (block.type !== "image") return false;
   if (isDecorativeImageBlock(block)) return false;
 
-  // Imagens do corpo (textual/pós-textual) são candidatas; capa e pré-textuais
-  // (ex.: logo institucional) são descartadas. Quando a seção não está
-  // disponível (estrutura não normalizada), recorre à heurística de título.
+  if (hasAmbiguousNeighbors(blocks, index)) return false;
+
   const section = block.section;
   let inBody: boolean;
   if (section === "textual" || section === "post-textual") {
@@ -306,7 +353,8 @@ function importedImagesFromStructure(structure: DocxStructure): ImportedDocument
 
     const id = `img-${imported.length + 1}`;
     const data = asset?.data;
-    const { caption, source } = nearestAcademicImageContext(structure.blocks, index);
+    const { caption, source, captionOffset, sourceOffset } = nearestAcademicImageContext(structure.blocks, index);
+    const insertion = computeImageInsertionHint(captionOffset, sourceOffset);
     imported.push({
       id,
       relationshipId: block.relationshipId,
@@ -318,6 +366,8 @@ function importedImagesFromStructure(structure: DocxStructure): ImportedDocument
       source,
       position: index,
       status: data?.byteLength ? "preserved" : "detected-but-not-preserved",
+      insertionHint: insertion.hint,
+      insertionAnchorText: insertion.anchorText,
     });
   });
 

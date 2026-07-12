@@ -31,28 +31,62 @@ async function makeSyntheticDocx(
     missingMedia?: boolean;
     noAcademicImageContext?: boolean;
     anchor?: boolean;
+    imageBeforeCaption?: boolean;
+    sourceBeforeImage?: boolean;
+    imageAfterSource?: boolean;
+    imageBetweenCaptionAndSource?: boolean;
+    twoImagesSameCaption?: boolean;
   } = {},
 ): Promise<ArrayBuffer> {
   const zip = new JSZip();
   const imageXml = options.anchor ? imageParagraphXmlAnchor("rId22") : imageParagraphXml("rId22");
+  const imageXml2 = options.anchor ? imageParagraphXmlAnchor("rId23") : imageParagraphXml("rId23");
   const body = [
     paragraphXml("UNIVERSIDADE FEDERAL DE LAVRAS"),
     paragraphXml("AUTORA SINTETICA"),
     paragraphXml("TITULO SINTETICO"),
     paragraphXml("1 INTRODUCAO"),
     paragraphXml("Texto antes da imagem."),
-    ...(options.noAcademicImageContext ? [] : [paragraphXml("Grafico 1 - Sexo.")]),
-    imageXml,
-    ...(options.duplicateBodyImage ? [imageParagraphXml("rId22")] : []),
-    ...(options.noAcademicImageContext ? [] : [paragraphXml("Fonte: elaboracao propria (2025).")]),
+  ];
+
+  if (!options.noAcademicImageContext) {
+    if (options.imageBeforeCaption) {
+      body.push(imageXml);
+      body.push(paragraphXml("Grafico 1 - Sexo."));
+      body.push(paragraphXml("Fonte: elaboracao propria (2025)."));
+    } else if (options.sourceBeforeImage) {
+      body.push(paragraphXml("Fonte: elaboracao propria (2025)."));
+      body.push(imageXml);
+      body.push(paragraphXml("Grafico 1 - Sexo."));
+    } else if (options.imageAfterSource) {
+      body.push(paragraphXml("Fonte: elaboracao propria (2025)."));
+      body.push(imageXml);
+    } else if (options.imageBetweenCaptionAndSource) {
+      body.push(paragraphXml("Grafico 1 - Sexo."));
+      body.push(imageXml);
+      body.push(paragraphXml("Fonte: elaboracao propria (2025)."));
+    } else if (options.twoImagesSameCaption) {
+      body.push(paragraphXml("Grafico 1 - Sexo."));
+      body.push(imageXml);
+      body.push(imageXml2);
+    } else {
+      body.push(paragraphXml("Grafico 1 - Sexo."));
+      body.push(imageXml);
+      body.push(paragraphXml("Fonte: elaboracao propria (2025)."));
+    }
+  }
+
+  body.push(
     paragraphXml("Texto normal depois."),
     paragraphXml("REFERENCIAS"),
     paragraphXml("SILVA, A. Referencia sintetica."),
-  ].join("");
+  );
+
+  const bodyStr = body.join("");
 
   zip.file(
     "word/document.xml",
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}</w:body></w:document>`,
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${bodyStr}</w:body></w:document>`,
   );
   zip.file(
     "word/styles.xml",
@@ -60,7 +94,11 @@ async function makeSyntheticDocx(
   );
   zip.file(
     "word/_rels/document.xml.rels",
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId22" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/></Relationships>`,
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId22" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>${
+      options.twoImagesSameCaption
+        ? '<Relationship Id="rId23" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image2.png"/>'
+        : ''
+    }</Relationships>`,
   );
 
   if (options.headerImage) {
@@ -77,6 +115,9 @@ async function makeSyntheticDocx(
 
   if (!options.missingMedia) {
     zip.file("word/media/image1.png", tinyPng);
+    if (options.twoImagesSameCaption) {
+      zip.file("word/media/image2.png", tinyPng);
+    }
   }
   return zip.generateAsync({ type: "arraybuffer" });
 }
@@ -87,6 +128,11 @@ async function importSyntheticDocx(options?: {
   missingMedia?: boolean;
   noAcademicImageContext?: boolean;
   anchor?: boolean;
+  imageBeforeCaption?: boolean;
+  sourceBeforeImage?: boolean;
+  imageAfterSource?: boolean;
+  imageBetweenCaptionAndSource?: boolean;
+  twoImagesSameCaption?: boolean;
 }) {
   const docx = await makeSyntheticDocx(options);
   const file = new File([docx], "sintetico.docx", {
@@ -225,5 +271,53 @@ describe("importacao de imagens DOCX", () => {
     expect(result.fields.imageWarnings).toContain("0 preservado(s) automaticamente");
     expect(result.fields.imageWarnings).toContain("1 exigem revisao manual");
     expect(result.messages.join("\n")).toContain("1 imagem(ns)/grafico(s) detectado(s) no DOCX original");
+  });
+
+  it("preserva imagem quando a legenda esta depois da imagem", async () => {
+    const result = await importSyntheticDocx({ imageBeforeCaption: true });
+
+    expect(result.importedImages).toHaveLength(1);
+    expect(result.importedImages[0]).toMatchObject({
+      caption: "Grafico 1 - Sexo.",
+      source: "Fonte: elaboracao propria (2025).",
+      status: "preserved",
+      insertionHint: "original-position",
+    });
+    expect(result.importedImages[0].data?.byteLength).toBeGreaterThan(0);
+  });
+
+  it("preserva imagem quando a fonte esta antes da imagem", async () => {
+    const result = await importSyntheticDocx({ sourceBeforeImage: true });
+
+    expect(result.importedImages).toHaveLength(1);
+    expect(result.importedImages[0]).toMatchObject({
+      caption: "Grafico 1 - Sexo.",
+      source: "Fonte: elaboracao propria (2025).",
+      status: "preserved",
+      insertionHint: "between-caption-and-source",
+    });
+    expect(result.importedImages[0].data?.byteLength).toBeGreaterThan(0);
+  });
+
+  it("preserva imagem entre legenda e fonte", async () => {
+    const result = await importSyntheticDocx({ imageBetweenCaptionAndSource: true });
+
+    expect(result.importedImages).toHaveLength(1);
+    expect(result.importedImages[0]).toMatchObject({
+      caption: "Grafico 1 - Sexo.",
+      source: "Fonte: elaboracao propria (2025).",
+      status: "preserved",
+      insertionHint: "between-caption-and-source",
+    });
+    expect(result.importedImages[0].data?.byteLength).toBeGreaterThan(0);
+  });
+
+  it("gera aviso quando ha duas imagens proximas da mesma legenda", async () => {
+    const result = await importSyntheticDocx({ twoImagesSameCaption: true });
+
+    expect(result.importedImages).toHaveLength(0);
+    expect(result.fields.imageWarnings).toContain("2 imagem(ns)/grafico(s) detectado(s) no DOCX original");
+    expect(result.fields.imageWarnings).toContain("0 preservado(s) automaticamente");
+    expect(result.fields.imageWarnings).toContain("2 exigem revisao manual");
   });
 });

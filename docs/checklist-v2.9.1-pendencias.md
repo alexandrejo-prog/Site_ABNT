@@ -39,6 +39,18 @@ A branch melhorou substancialmente a importação de dissertação convertida de
 - Imagens sem legenda/fonte confiável geram aviso revisável claro ao usuário, sem placeholder técnico no `document.xml`.
 - Nenhum placeholder técnico (`[Imagem detectada: rId...]`, `[[Imagem importada preservada: ...]]`) aparece no documento final.
 
+### 1.1. Correlação flexível de imagens (até 10 blocos)
+
+**Situação atual:** a janela de correlação entre imagem, legenda e fonte foi ampliada de 7 para 10 blocos. A ordem pode ser legenda antes/imagem depois/fonte depois, imagem antes/legenda depois/fonte depois, legenda antes/fonte antes/imagem depois, imagem entre legenda e fonte, ou imagem logo depois de Fonte se a legenda estiver próxima antes.
+
+**Critérios de aceite atendidos:**
+
+- Casos confiáveis preservam `w:drawing`.
+- Casos ambíguos (várias imagens próximas da mesma legenda) geram aviso revisável.
+- Nenhum marcador interno aparece no `document.xml`.
+- Logo não conta como gráfico.
+- `insertionHint` indica o ponto mais seguro (`after-caption`, `before-source`, `between-caption-and-source`, `original-position`).
+
 ### 2. Primeira referência ainda parece truncada no DOCX gerado
 
 **Situação atual:** a seção REFERÊNCIAS do DOCX auditado começa com `1995. Seção 1.` antes de aparecer `BRASIL. Decreto nº 1.590...` mais adiante. Isso indica que ainda existe fragmento inicial solto ou referência quebrada não saneada no DOCX final.

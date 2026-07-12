@@ -524,3 +524,54 @@ Quando o fallback é acionado:
 
 - `npm test`: **877 passed** (116 arquivos, 1 skipped)
 - `npm run build`: **built in 5.14s**
+
+## Correção — correlação flexível de imagens acadêmicas
+
+### Problema original
+
+Em DOCX convertido de PDF, a ordem entre imagem, legenda e fonte pode ser invertida ou deslocada. A correlação anterior usava janela de até 7 blocos e exigia posição rígida, fazendo com que muitas imagens acadêmicas do corpo fossem perdidas.
+
+### Correção aplicada
+
+1. **Janela ampliada para 10 blocos**
+   - `nearestAcademicImageContext` agora busca legenda e fonte em até 10 blocos antes/depois da imagem.
+   - Retorna `captionOffset` e `sourceOffset` para permitir cálculo de dica de inserção.
+
+2. **Casos aceitos**
+   - legenda antes, imagem depois, fonte depois;
+   - imagem antes, legenda depois, fonte depois;
+   - legenda antes, fonte antes, imagem depois;
+   - imagem entre legenda e fonte;
+   - imagem logo depois de Fonte, se a legenda estiver próxima antes.
+
+3. **Dica de inserção (`insertionHint`)**
+   - `after-caption`: inserir depois da legenda.
+   - `before-source`: inserir antes da fonte.
+   - `between-caption-and-source`: inserir entre legenda e fonte.
+   - `original-position`: manter posição original quando não for seguro decidir.
+
+4. **Critérios de baixa confiança**
+   - imagem em capa/header/footer não é preservada;
+   - logo institucional não conta como gráfico;
+   - imagem sem legenda/fonte próxima gera aviso;
+   - várias imagens próximas da mesma legenda geram aviso (ambiguidade);
+   - posição ambígua não inserida automaticamente.
+
+5. **Aviso revisável**
+   - Quando a imagem não é preservada, o sistema emite aviso separado sem placeholder técnico no `document.xml`.
+   - Nenhum marcador interno (`[[Imagem importada preservada: ...]]`) aparece no DOCX final.
+
+### Arquivos alterados (correlação flexível)
+
+- `src/imported-images.ts`: adicionados `ImageInsertionHint`, `insertionHint`, `insertionAnchorText`, e funções auxiliares `looksLikeAcademicImageLabel`, `looksLikeAcademicImageCaption`, `looksLikeImageSource`.
+- `src/import-docx.ts`: `nearestAcademicImageContext` ampliado para 10 blocos com offsets; adicionadas `computeImageInsertionHint` e `hasAmbiguousNeighbors`; `classifyAcademicImage` rejeita imagens ambíguas; `importedImagesFromStructure` inclui `insertionHint`.
+- `tests/import-docx-images.test.ts`: adicionados testes para legenda antes da imagem, fonte antes da imagem, imagem entre legenda e fonte, imagem sem contexto e duas imagens próximas da mesma legenda.
+- `docs/importacao-docx-convertido-pdf-v2.9.1.md`: esta seção.
+- `docs/checklist-v2.9.1-pendencias.md`: atualizado.
+
+### Validação (correlação flexível)
+
+- `npm test`: **881 passed** (116 arquivos, 2 skipped)
+- `npm run build`: **built in 5.16s**
+- Testes sintéticos confirmam preservação de `w:drawing` para casos confiáveis, aviso para casos ambíguos e ausência de marcadores internos no `document.xml`.
+- Logo não conta como gráfico acadêmico preservado.
