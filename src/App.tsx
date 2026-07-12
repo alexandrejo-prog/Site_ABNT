@@ -115,6 +115,7 @@ export default function App() {
   const [importedImages, setImportedImages] = useState<ImportedDocumentImage[]>([]);
   const [importedTables, setImportedTables] = useState<ImportedTable[]>([]);
   const [pdfDiagnostic, setPdfDiagnostic] = useState<ImportedPdfDiagnostic | null>(null);
+  const [selectedPdfPageNumber, setSelectedPdfPageNumber] = useState(1);
   const [importedSourceKind, setImportedSourceKind] = useState<SourceKind | null>(null);
   const [importedDocumentMode, setImportedDocumentMode] = useState<DocumentMode | null>(null);
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
@@ -145,6 +146,12 @@ export default function App() {
     : "Editor acadêmico: edite o conteúdo e marque a estrutura do texto. Fonte, tamanho, recuos e espaçamentos seguem automaticamente o padrão UFLA/ABNT no DOCX.";
   const finalPending = useMemo(() => finalVersionPendingReport(fields, activeEditorText), [fields, activeEditorText]);
   const isPdfDiagnosticMode = importedSourceKind === "pdf" && importedDocumentMode === "pdf-diagnostic";
+  const selectedPdfPage = useMemo(() => {
+    if (!pdfDiagnostic) return null;
+    return pdfDiagnostic.pages.find((page) => page.pageNumber === selectedPdfPageNumber) ?? pdfDiagnostic.pages[0] ?? null;
+  }, [pdfDiagnostic, selectedPdfPageNumber]);
+  const pdfLineCount = useMemo(() => pdfDiagnostic?.pages.reduce((sum, page) => sum + page.lines.length, 0) ?? 0, [pdfDiagnostic]);
+  const pdfPagesWithoutText = useMemo(() => pdfDiagnostic?.pages.filter((page) => page.textItemCount === 0).length ?? 0, [pdfDiagnostic]);
 
   useEffect(() => installEditorScrollFix(), []);
 
@@ -297,6 +304,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       const previousWorkType = fields.workType;
       if (result.documentMode === "pdf-diagnostic") {
         setPdfDiagnostic(result.pdfDiagnostic ?? null);
+        setSelectedPdfPageNumber(1);
         setStatus("O PDF foi lido para diagnóstico. A conversão para DOCX ainda não está habilitada nesta etapa.");
         return;
       }
@@ -333,6 +341,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       setImportedSourceKind(null);
       setImportedDocumentMode(null);
       setPdfDiagnostic(null);
+      setSelectedPdfPageNumber(1);
       setStatus("Diagnóstico de PDF removido. O documento acadêmico anterior foi preservado.");
       return;
     }
@@ -345,6 +354,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setImportedImages([]);
     setImportedTables([]);
     setPdfDiagnostic(null);
+    setSelectedPdfPageNumber(1);
     setImportedSourceKind(null);
     setImportedDocumentMode(null);
     setEditorMode("body");
@@ -368,6 +378,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setImportedImages([]);
     setImportedTables([]);
     setPdfDiagnostic(null);
+    setSelectedPdfPageNumber(1);
     setImportedSourceKind(null);
     setImportedDocumentMode(null);
     setEditorMode("body");
@@ -509,7 +520,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
         </div>}
       </header>
 
-      <p className="global-draft-notice" role="note">O DOCX é rascunho técnico. Sumário, ficha catalográfica, paginação final e PDF devem ser conferidos no Word/LibreOffice. Após abrir no Word/LibreOffice, clique com o botão direito no sumário e selecione &ldquo;Atualizar campo&rdquo;.</p>
+      {!isPdfDiagnosticMode && <p className="global-draft-notice" role="note">O DOCX é rascunho técnico. Sumário, ficha catalográfica, paginação final e PDF devem ser conferidos no Word/LibreOffice. Após abrir no Word/LibreOffice, clique com o botão direito no sumário e selecione &ldquo;Atualizar campo&rdquo;.</p>}
 
       <a href="#main-content" className="skip-link">Pular para o conte&uacute;do principal</a>
       <main id="main-content" className="workspace" tabIndex={-1} aria-busy={isGenerating}>
@@ -524,15 +535,49 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                 <div><dt>Arquivo</dt><dd>{pdfDiagnostic.fileName}</dd></div>
                 <div><dt>Páginas</dt><dd>{pdfDiagnostic.pageCount}</dd></div>
                 <div><dt>Itens textuais</dt><dd>{pdfDiagnostic.pages.reduce((sum, page) => sum + page.textItemCount, 0)}</dd></div>
+                <div><dt>Linhas visuais</dt><dd>{pdfLineCount}</dd></div>
+                <div><dt>Páginas sem texto</dt><dd>{pdfPagesWithoutText}</dd></div>
               </dl>
-              <div className="pdf-diagnostic-preview">
-                {pdfDiagnostic.pages.slice(0, 3).map((page) => (
-                  <section key={page.pageNumber}>
-                    <h3>Página {page.pageNumber}</h3>
-                    <p>{page.rawText.slice(0, 700) || "Nenhum texto bruto extraível foi encontrado nesta página."}</p>
-                  </section>
-                ))}
+              {pdfDiagnostic.bodyStart.found && (
+                <p className="import-note">Candidato de início do corpo: página {pdfDiagnostic.bodyStart.pageNumber}, linha {(pdfDiagnostic.bodyStart.lineIndex ?? 0) + 1}: {pdfDiagnostic.bodyStart.text}</p>
+              )}
+              <div className="field-group">
+                <label htmlFor="pdf-page-selector">Página do PDF</label>
+                <input
+                  id="pdf-page-selector"
+                  type="number"
+                  min={1}
+                  max={pdfDiagnostic.pageCount}
+                  value={selectedPdfPageNumber}
+                  onChange={(event) => {
+                    const nextPage = Number(event.target.value);
+                    if (Number.isFinite(nextPage)) setSelectedPdfPageNumber(Math.min(pdfDiagnostic.pageCount, Math.max(1, Math.trunc(nextPage))));
+                  }}
+                />
               </div>
+              {selectedPdfPage && (
+                <div className="pdf-diagnostic-preview">
+                  <section>
+                    <h3>Página {selectedPdfPage.pageNumber}</h3>
+                    <dl>
+                      <div><dt>Tamanho</dt><dd>{Math.round(selectedPdfPage.width)} × {Math.round(selectedPdfPage.height)}</dd></div>
+                      <div><dt>Rotação</dt><dd>{selectedPdfPage.rotation}°</dd></div>
+                      <div><dt>Itens da página</dt><dd>{selectedPdfPage.textItemCount}</dd></div>
+                      <div><dt>Linhas da página</dt><dd>{selectedPdfPage.lines.length}</dd></div>
+                    </dl>
+                    <p className="import-note">As linhas abaixo representam linhas visuais do PDF, não parágrafos reconstruídos.</p>
+                    <ol className="pdf-line-preview">
+                      {selectedPdfPage.lines.slice(0, 30).map((line, index) => (
+                        <li key={`${selectedPdfPage.pageNumber}-${index}`}>{line.text || "[linha sem texto]"}</li>
+                      ))}
+                    </ol>
+                    <details>
+                      <summary>Texto bruto da página</summary>
+                      <p>{selectedPdfPage.rawText.slice(0, 1400) || "Nenhum texto bruto extraível foi encontrado nesta página."}</p>
+                    </details>
+                  </section>
+                </div>
+              )}
               {pdfDiagnostic.warnings.map((warning) => <p className="import-note" key={warning}>{warning}</p>)}
             </div>
           )}

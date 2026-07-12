@@ -49,9 +49,31 @@ function pdfDiagnosticResult(fileName = "diagnostico.pdf") {
     pdfDiagnostic: {
       fileName,
       pageCount: 139,
+      bodyStart: { found: true, pageNumber: 2, lineIndex: 0, text: "1 INTRODUÇÃO", matchType: "numbered-introduction" },
       pages: [
-        { pageNumber: 1, rawText: "Texto bruto da pagina um.", textItemCount: 7 },
-        { pageNumber: 2, rawText: "Texto bruto da pagina dois.", textItemCount: 8 },
+        {
+          pageNumber: 1,
+          width: 595,
+          height: 842,
+          rotation: 0,
+          rawText: "Texto bruto da pagina um.",
+          textItemCount: 7,
+          items: [{ text: "Texto", x: 72, y: 80, width: 40, height: 12 }],
+          lines: [{ pageNumber: 1, text: "Texto bruto da pagina um.", items: [], left: 72, right: 220, top: 80, bottom: 92, height: 12 }],
+        },
+        {
+          pageNumber: 2,
+          width: 595,
+          height: 842,
+          rotation: 0,
+          rawText: "1 INTRODUÇÃO Texto bruto da pagina dois.",
+          textItemCount: 8,
+          items: [{ text: "1 INTRODUÇÃO", x: 72, y: 80, width: 120, height: 12 }],
+          lines: [
+            { pageNumber: 2, text: "1 INTRODUÇÃO", items: [], left: 72, right: 192, top: 80, bottom: 92, height: 12 },
+            { pageNumber: 2, text: "Texto bruto da pagina dois.", items: [], left: 72, right: 240, top: 110, bottom: 122, height: 12 },
+          ],
+        },
       ],
       warnings: ["O PDF foi lido para diagnóstico. A conversão para DOCX ainda não está habilitada nesta etapa."],
     },
@@ -337,7 +359,16 @@ describe("fluxo real de bloqueio de geração (App)", () => {
 
     expect(await screen.findByText(/Leitura de PDF/i)).toBeInTheDocument();
     expect(screen.getByText("139")).toBeInTheDocument();
-    expect(screen.getByText(/Texto bruto da pagina um/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Texto bruto da pagina um/)).toHaveLength(2);
+    expect(screen.getByText("Linhas visuais")).toBeInTheDocument();
+    expect(screen.getByLabelText("Página do PDF")).toHaveValue(1);
+    expect(screen.getByText(/As linhas abaixo representam linhas visuais do PDF/)).toBeInTheDocument();
+    expect(screen.getByText(/Candidato de início do corpo: página 2/)).toBeInTheDocument();
+    expect(screen.queryByText(/O DOCX é rascunho técnico/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Texto bruto da pagina dois/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Página do PDF"), { target: { value: "2" } });
+    expect(screen.getByText("1 INTRODUÇÃO")).toBeInTheDocument();
+    expect(screen.getAllByText(/Texto bruto da pagina dois/)).toHaveLength(2);
     expect(screen.queryByLabelText("Tipo de trabalho")).not.toBeInTheDocument();
     expect(screen.queryByText("Validar trabalho")).not.toBeInTheDocument();
     expect(screen.queryByText(/Gerar DOCX/)).not.toBeInTheDocument();
@@ -347,6 +378,7 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     await user.click(screen.getByRole("button", { name: /Remover importa/i }));
 
     expect(screen.queryByText(/Leitura de PDF/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/O DOCX é rascunho técnico/)).toBeInTheDocument();
     expect(await screen.findByDisplayValue("Título preservado")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Maria Silva")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("textbox", { name: /Editor do texto principal/i }).textContent).toContain("Texto acadêmico preservado."));

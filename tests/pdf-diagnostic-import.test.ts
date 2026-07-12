@@ -83,6 +83,11 @@ describe("importacao diagnostica de PDF", () => {
     expect(result.pdfDiagnostic?.pages[0].rawText).toContain("Texto da pagina um");
     expect(result.pdfDiagnostic?.pages[1].rawText).toContain("Texto da pagina dois");
     expect(result.pdfDiagnostic?.pages[0].textItemCount).toBeGreaterThan(0);
+    expect(result.pdfDiagnostic?.pages[0].items.length).toBeGreaterThan(0);
+    expect(result.pdfDiagnostic?.pages[0].lines.length).toBeGreaterThan(0);
+    expect(result.pdfDiagnostic?.pages[0].width).toBeGreaterThan(0);
+    expect(result.pdfDiagnostic?.pages[0].height).toBeGreaterThan(0);
+    expect(result.pdfDiagnostic?.bodyStart.found).toBe(false);
   });
 
   it("PDF invalido gera mensagem controlada", async () => {
