@@ -27,7 +27,7 @@ import { buildFlowingImpactText } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
 import { captionParagraph, cleanMojibakeText, detectCaption, tabbedTableBlock } from "./docx-render-core";
 import { ImportedDocumentImage, IMPORTED_IMAGE_MARKER_PATTERN } from "./imported-images";
-import { ImportedTable, IMPORTED_TABLE_MARKER_PATTERN } from "./imported-tables";
+import { ImportedTable, IMPORTED_TABLE_MARKER_PATTERN, buildStructuredTextFromTable } from "./imported-tables";
 
 export type EditorBlockType =
   | "paragraph"
@@ -798,6 +798,83 @@ function importedImageParagraph(image: ImportedDocumentImage | undefined): Parag
 
 function importedTableParagraph(table: ImportedTable | undefined): Array<Paragraph | Table> {
   if (!table || !table.rows.length) return [];
+
+  if (table.status === "rendered-as-structured-text") {
+    const result: Array<Paragraph | Table> = [];
+    if (table.caption) {
+      result.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 120, after: 120, line: SINGLE_LINE },
+          children: [
+            new TextRun({
+              text: cleanMojibakeText(table.caption),
+              bold: true,
+              font: "Times New Roman",
+              size: BODY_SIZE,
+              color: BLACK,
+            }),
+          ],
+        }),
+      );
+    }
+
+    const structuredText = buildStructuredTextFromTable(table);
+    for (const line of structuredText.split("\n")) {
+      if (!line.trim()) continue;
+      result.push(
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { line: SINGLE_LINE, after: 120 },
+          children: [
+            new TextRun({
+              text: cleanMojibakeText(line),
+              font: "Times New Roman",
+              size: BODY_SIZE,
+              color: BLACK,
+            }),
+          ],
+        }),
+      );
+    }
+
+    if (table.source) {
+      result.push(
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { before: 120, after: 120, line: SINGLE_LINE },
+          children: [
+            new TextRun({
+              text: cleanMojibakeText(table.source),
+              font: "Times New Roman",
+              size: BODY_SIZE,
+              color: BLACK,
+            }),
+          ],
+        }),
+      );
+    }
+
+    if (table.layoutWarning) {
+      result.push(
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { before: 120, after: 120, line: SINGLE_LINE },
+          children: [
+            new TextRun({
+              text: cleanMojibakeText(table.layoutWarning),
+              italics: true,
+              font: "Times New Roman",
+              size: BODY_SIZE,
+              color: BLACK,
+            }),
+          ],
+        }),
+      );
+    }
+
+    return result;
+  }
 
   const columnCount = Math.max(table.columnCount, 1);
   const widths = table.estimatedColumnWidths ?? Array.from({ length: columnCount }, () => Math.floor(100 / columnCount));

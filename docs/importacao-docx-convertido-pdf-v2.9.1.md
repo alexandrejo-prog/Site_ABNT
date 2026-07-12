@@ -494,3 +494,33 @@ Pendências/limitações conhecidas:
 - Gráficos/imagens acadêmicas do corpo com legenda e fonte próximas são preservados automaticamente como imagens reais; os demais (ex.: galeria de apêndice sem legenda/fonte individual) ainda exigem revisão manual. O sistema emite aviso revisável para reinserção manual dos elementos ausentes.
 - Ficha catalográfica, indicadores de impacto e lista de siglas podem permanecer como aviso revisável quando o DOCX convertido não expõe conteúdo textual confiável.
 - A importação de DOCX convertido de PDF continua sendo heurística e não deve ser descrita como perfeita.
+
+## Fallback — tabela ilegível renderizada como texto estruturado
+
+Mesmo após remover colunas fantasmas, alguns quadros podem continuar ilegíveis no DOCX final. Nesses casos, o sistema deixa de forçar uma `w:tbl` quebrada e renderiza o quadro como texto estruturado, preservando legenda, fonte e conteúdo.
+
+Critérios para considerar uma tabela ilegível:
+- mais de 40% de células vazias;
+- mais de 60% das células com até 1 palavra (quando houver pelo menos 4 linhas);
+- mais da metade das colunas com largura estimada menor que 5%;
+- mais de 8 colunas após normalização.
+
+Quando o fallback é acionado:
+- o status da tabela vira `rendered-as-structured-text`;
+- a legenda é mantida como título centralizado em negrito;
+- cada linha é transformada em um parágrafo, com células separadas por `; `;
+- a fonte é mantida como parágrafo normalizado;
+- um aviso revisável é inserido: *"Quadro importado de DOCX convertido de PDF foi renderizado como texto estruturado para evitar tabela ilegível. Revise o layout manualmente."*;
+- não há duplicação de legenda/fonte.
+
+### Arquivos alterados (fallback)
+
+- `src/imported-tables.ts`: `isTableUnreadable` e `buildStructuredTextFromTable` adicionadas; status `rendered-as-structured-text` adicionado ao tipo `ImportedTableStatus`.
+- `src/import-docx.ts`: `isTableUnreadable` aplicado após `normalizePhantomColumns`; tabelas ilegíveis recebem `layoutWarning` e `status` atualizado; `editorTextWithImageMarkers` injeta o texto estruturado no lugar do marcador de tabela.
+- `src/export-docx.ts`: `importedTableParagraph` agora detecta `rendered-as-structured-text` e renderiza legenda, linhas, fonte e aviso sem `w:tbl`.
+- `tests/import-docx-tables.test.ts`: teste sintético cobre detecção, ausência de `w:tbl`, presença de legenda, conteúdo e aviso revisável.
+
+### Validação (fallback)
+
+- `npm test`: **877 passed** (116 arquivos, 1 skipped)
+- `npm run build`: **built in 5.14s**

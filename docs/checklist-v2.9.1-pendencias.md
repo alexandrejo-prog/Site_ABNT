@@ -120,4 +120,16 @@ A branch melhorou substancialmente a importação de dissertação convertida de
 - 100% concluído: não.
 - Limitações conhecidas: sim, documentadas.
 
+### 7. Tabelas ilegíveis podem ser renderizadas como texto estruturado
+
+**Situação atual:** quando uma tabela continua ilegível mesmo após remover colunas fantasmas (muitas células vazias, largura insuficiente, muitas colunas), o sistema renderiza o quadro como texto estruturado com legenda, conteúdo e aviso revisável, em vez de manter uma `w:tbl` quebrada.
+
+**Critérios de aceite atendidos:**
+- legenda, conteúdo e fonte são mantidos;
+- aviso revisável é inserido para revisão manual;
+- não há duplicação de legenda/fonte;
+- tabelas legíveis continuam como `w:tbl`.
+
+**Aceitável para v2.9.1:** sim, como fallback para preservar conteúdo e legibilidade.
+
 

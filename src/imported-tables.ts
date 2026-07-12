@@ -7,6 +7,8 @@ export type ImportedTableOrigin =
 export type ImportedTableStatus =
   | "preserved"
   | "preserved-with-layout-warning"
+  | "normalized-columns"
+  | "rendered-as-structured-text"
   | "detected-but-layout-fragile"
   | "detected-but-not-preserved"
   | "inferred-from-text"
@@ -172,4 +174,57 @@ export function normalizePhantomColumns(table: ImportedTable): ImportedTable {
     hasVerticalMerge: false,
     status: table.status === "preserved-with-layout-warning" ? "preserved-with-layout-warning" : ("preserved" as ImportedTableStatus),
   };
+}
+
+const EMPTY_CELL_RATIO_THRESHOLD = 0.7;
+const ONE_WORD_CELL_RATIO_THRESHOLD = 0.85;
+const MIN_COLUMN_WIDTH_RATIO = 5;
+const MIN_ROWS_FOR_FRAGMENTATION = 4;
+
+export function isTableUnreadable(table: ImportedTable): boolean {
+  if (table.rows.length === 0 || table.columnCount <= 1) return false;
+
+  const widths = table.estimatedColumnWidths;
+  const totalWidth = widths?.reduce((sum, w) => sum + w, 0) ?? 0;
+
+  let emptyCells = 0;
+  let oneWordCells = 0;
+  const totalCells = table.rows.length * table.columnCount;
+
+  for (const row of table.rows) {
+    for (const cell of row) {
+      const text = (cell?.text || "").trim();
+      if (!text) {
+        emptyCells += 1;
+      } else if (text.split(/\s+/).length <= 1) {
+        oneWordCells += 1;
+      }
+    }
+  }
+
+  const emptyRatio = totalCells > 0 ? emptyCells / totalCells : 0;
+  const oneWordRatio = totalCells > 0 ? oneWordCells / totalCells : 0;
+
+  if (emptyRatio > EMPTY_CELL_RATIO_THRESHOLD) return true;
+  if (table.rows.length >= MIN_ROWS_FOR_FRAGMENTATION && oneWordRatio > ONE_WORD_CELL_RATIO_THRESHOLD) return true;
+  if (totalWidth > 0 && table.columnCount > 1) {
+    const narrowColumns = widths?.filter((w) => (w / totalWidth) * 100 < MIN_COLUMN_WIDTH_RATIO).length ?? 0;
+    if (narrowColumns / table.columnCount > 0.5) return true;
+  }
+  if (table.columnCount > 8) return true;
+
+  return false;
+}
+
+export function buildStructuredTextFromTable(table: ImportedTable): string {
+  const lines: string[] = [];
+
+  for (const row of table.rows) {
+    const parts = row.map((cell) => (cell?.text || "").trim()).filter(Boolean);
+    if (parts.length === 0) continue;
+    const line = parts.join("; ");
+    lines.push(line);
+  }
+
+  return lines.join("\n");
 }

@@ -19,7 +19,7 @@ import {
 import { repairHeadingFragments, repairRecordHeadingFragments } from "./heading-fragment-repair";
 import { sanitizeImportedTitle } from "./title-sanitizer";
 import { ImportedDocumentImage, importedImageMarker } from "./imported-images";
-import { ImportedTable, importedTableMarker, normalizePhantomColumns } from "./imported-tables";
+import { ImportedTable, importedTableMarker, normalizePhantomColumns, isTableUnreadable, buildStructuredTextFromTable } from "./imported-tables";
 
 function estimateColumnWidths(gridWidths: number[], columnCount: number): number[] {
   if (gridWidths.length === columnCount && gridWidths.every((w) => Number.isFinite(w) && w > 0)) {
@@ -387,6 +387,11 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
         }
       : rawTable;
 
+    if (isTableUnreadable(finalTable)) {
+      finalTable.status = "rendered-as-structured-text";
+      finalTable.layoutWarning = "Quadro importado de DOCX convertido de PDF foi renderizado como texto estruturado para evitar tabela ilegível. Revise o layout manualmente.";
+    }
+
     imported.push(finalTable);
   });
 
@@ -505,6 +510,13 @@ function editorTextWithImageMarkers(
 
     if (block.type === "table") {
       const table = tablesByPosition.get(index);
+      if (table?.status === "rendered-as-structured-text") {
+        const structured = buildStructuredTextFromTable(table);
+        const parts = [table.caption, structured, table.source, table.layoutWarning].filter(Boolean);
+        lines.push(parts.join("\n"));
+        emittedTableIds.add(table.id);
+        continue;
+      }
       if (table?.status === "preserved" || table?.status === "preserved-with-layout-warning") {
         lines.push(importedTableMarker(table.id));
         emittedTableIds.add(table.id);

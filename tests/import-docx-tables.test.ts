@@ -446,4 +446,66 @@ function tableXmlWithPhantomColumns(rows: string[][]): string {
     expect(documentXml).toContain("formação de um grupo de trabalho");
     expect((documentXml?.match(/<w:tc\b/g) ?? []).length).toBe(4);
   });
+
+  it("tabela ilegivel e renderizada como texto estruturado", async () => {
+    const zip = new JSZip();
+    const body = [
+      paragraphXml("1 INTRODUCAO"),
+      `<w:tbl><w:tblGrid><w:gridCol w:w="1000" /><w:gridCol w:w="1000" /><w:gridCol w:w="1000" /><w:gridCol w:w="1000" /><w:gridCol w:w="1000" /><w:gridCol w:w="1000" /><w:gridCol w:w="1000" /><w:gridCol w:w="1000" /><w:gridCol w:w="1000" /></w:tblGrid>` +
+        tableXmlWithPhantomColumns([
+          ["Fase", "Características", "", "", "", "", "", "", ""],
+          ["Projeto", "formação", "", "", "", "", "", "", ""],
+          ["Convencimento", "apresentar", "", "", "", "", "", "", ""],
+          ["Implementação", "teste", "", "", "", "", "", "", ""],
+          ["Avaliação", "revisar", "", "", "", "", "", "", ""],
+        ]) +
+        `</w:tbl>`,
+      paragraphXml("REFERENCIAS"),
+    ].join("");
+
+    zip.file(
+      "word/document.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}</w:body></w:document>`,
+    );
+    zip.file(
+      "word/styles.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`,
+    );
+    zip.file(
+      "word/_rels/document.xml.rels",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`,
+    );
+
+    const result = await importSyntheticDocx(await zip.generateAsync({ type: "arraybuffer" }));
+    const table = result.importedTables[0];
+
+    expect(table.status).toBe("rendered-as-structured-text");
+    expect(table.layoutWarning).toContain("texto estruturado");
+
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "monografia" as const,
+      author: "Autora Sintetica",
+      title: "Titulo Sintetico",
+      resumo: "Resumo sintetico.",
+      abstractText: "Synthetic abstract.",
+      palavrasChave: "teste.",
+      keywords: "test.",
+    };
+
+    const blob = await generateDocxBlob({
+      fields,
+      editorText: result.editorText,
+      importedImages: result.importedImages,
+      importedTables: result.importedTables,
+    });
+    const outputZip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const documentXml = await outputZip.file("word/document.xml")?.async("string");
+
+    expect(documentXml).not.toContain("<w:tbl>");
+    expect(documentXml).toContain("Fase");
+    expect(documentXml).toContain("Características");
+    expect(documentXml).toContain("formação");
+    expect(documentXml).toContain("texto estruturado");
+  });
 });
