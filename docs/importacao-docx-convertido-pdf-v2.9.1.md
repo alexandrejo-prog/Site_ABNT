@@ -575,3 +575,79 @@ Em DOCX convertido de PDF, a ordem entre imagem, legenda e fonte pode ser invert
 - `npm run build`: **built in 5.16s**
 - Testes sintéticos confirmam preservação de `w:drawing` para casos confiáveis, aviso para casos ambíguos e ausência de marcadores internos no `document.xml`.
 - Logo não conta como gráfico acadêmico preservado.
+
+## Correção — coluna fantasma final e reconstrução de coluna de grupo
+
+### Problema original
+
+Quadros como Quadro 5 e Quadro 6, vindos de PDF convertido, chegavam com estrutura lógica quebrada:
+- coluna vazia sobrando à direita (ex.: 4 colunas no DOCX, sendo a última sempre vazia);
+- primeira coluna sem mesclagem vertical adequada;
+- rótulos como "Organização" e "Trabalhadores" repetidos ou mal posicionados;
+- linhas desalinhadas;
+- células que deveriam estar mescladas verticalmente aparecem separadas.
+
+### Correção aplicada
+
+1. **Remoção de coluna fantasma final (`src/imported-tables.ts`)**
+   - `removeTrailingEmptyColumn` detecta quando a última coluna está vazia em pelo menos 80% das linhas e não tem células com texto significativo (>= 3 caracteres).
+   - A coluna fantasma final é removida independentemente de sua largura estimada, evitando o bloqueio que ocorria quando a coluna vazia tinha width ratio >= 15%.
+   - `originalColumnCount`, `normalizedColumnCount` e `removedPhantomColumns` são registrados no modelo.
+
+2. **Reconstrução da coluna de grupo (`src/imported-tables.ts`)**
+   - `detectGroupColumn` identifica a primeira coluna como coluna de grupo quando:
+     - o header é vazio ou genérico (ex.: "Categoria", "Grupo");
+     - há poucos valores distintos (2 a 4) na coluna;
+     - as demais colunas têm conteúdo substancial (> 10 caracteres).
+   - `normalizeGroupColumn` aplica mesclagem vertical lógica:
+     - células do grupo ficam apenas na primeira linha do bloco;
+     - linhas subsequentes do mesmo grupo ficam vazias na primeira coluna;
+     - `groupSpans` registra `{ rowStart, rowEnd, text }` para cada grupo.
+
+3. **Exportação com `verticalMerge` (`src/export-docx.ts`)**
+   - Quando `groupSpans` está presente e `hasReconstructedVerticalMerge` é true:
+     - primeira linha do grupo: `verticalMerge: "restart"`;
+     - linhas seguintes do mesmo grupo: `verticalMerge: "continue"`.
+   - Quando o DOCX fonte traz `vMerge`/`gridSpan` real:
+     - `cellMerges` é extraído célula por célula em `word-structure-extractor.ts`;
+     - o exportador preserva `verticalMerge` original antes de aplicar a reconstrução de grupo.
+
+4. **Heurística segura**
+   - A heurística de grupo NÃO é aplicada em tabelas comuns sem coluna de grupo (ex.: tabela de nome/idade/cidade).
+   - Fallback para texto estruturado só ocorre se:
+     - mais de 6 colunas úteis após normalização;
+     - não há headers claros;
+     - conteúdo irremediavelmente fragmentado;
+     - proporção de células vazias continua muito alta.
+
+### Arquivos alterados (coluna fantasma e grupo)
+
+- `src/imported-tables.ts`
+  - `removeTrailingEmptyColumn`: remove coluna final vazia.
+  - `detectGroupColumn` / `normalizeGroupColumn`: detectam e normalizam coluna de grupo.
+  - `ImportedTable` ganhou `originalColumnCount`, `normalizedColumnCount`, `removedPhantomColumns`, `groupColumnIndex`, `groupSpans`, `hasReconstructedVerticalMerge`, `cellMerges`.
+- `src/import-docx.ts`
+  - Pipeline de normalização aplica remoção de coluna fantasma → detecção de grupo → remoção de colunas fantasmas gerais.
+  - `cellMerges` do bloco fonte é propagado para `ImportedTable`.
+- `src/export-docx.ts`
+  - `importedTableParagraph` aplica `verticalMerge` original e reconstruído.
+- `src/word-structure-extractor.ts`
+  - `extractCellProperties` captura `vMerge`/`gridSpan` por célula.
+  - `ImportedBlock.table` ganhou `cellMerges`.
+- `tests/import-docx-tables.test.ts`
+  - Testes sintéticos para Quadro 5, Quadro 6, tabela comum sem grupo e preservação de vMerge real.
+- `tests/real-flow-audit-andrade-local.test.ts`
+  - Verificações para Quadro 5 e Quadro 6: 3 colunas, sem coluna fantasma, grupos reconstruídos, `w:tbl` mantido.
+
+### Limitações conhecidas
+
+- Quadros vindos de PDF convertido ainda podem exigir revisão manual de layout.
+- Mesclagem complexa (`gridSpan`/`vMerge` avançados) pode não ser reconstruída perfeitamente quando o DOCX fonte não expõe metadados completos.
+- A heurística de grupo é conservadora: só aplica quando o header é genérico e há poucos valores distintos.
+
+### Validação
+
+- `npm test`: **885 passed** (116 arquivos, 3 skipped)
+- `npm run build`: **built in 5.81s**
+- Testes sintéticos confirmam 3 colunas para Quadro 5/6, remoção de coluna fantasma, grupos "Organização"/"Trabalhadores" reconstruídos e preservação de vMerge real.
+- DOCX local gerado: `_diagnostico/andrade-2025/Andrade_2025_v2.9.1.docx` (não commitado).

@@ -296,4 +296,73 @@ describe(" Auditoria do fluxo real com DOCX de Andrade (local)", () => {
       }
     }
   });
+
+  it.skipIf(hasRealFile)("Quadro 5 e Quadro 6 tem estrutura logica de 3 colunas sem coluna fantasma", async () => {
+    const arrayBuffer = fs.readFileSync(REAL_DOCX_PATH);
+    const file = new File([arrayBuffer], "Andrade_2025.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
+    const result = await importDocumentFile(file);
+    const quadro5 = result.importedTables.find((t) => /Quadro\s+5\b/i.test(t.caption || ""));
+    const quadro6 = result.importedTables.find((t) => /Quadro\s+6\b/i.test(t.caption || ""));
+
+    if (!quadro5 && !quadro6) {
+      expect(true).toBe(true);
+      return;
+    }
+
+    if (quadro5) {
+      expect(quadro5.status).not.toBe("rendered-as-structured-text");
+      expect(quadro5.columnCount).toBe(3);
+      expect(quadro5.removedPhantomColumns).toBeDefined();
+      expect(quadro5.groupColumnIndex).toBe(0);
+      expect(quadro5.groupSpans?.length).toBeGreaterThanOrEqual(1);
+      const texts = quadro5.groupSpans?.map((s) => s.text) ?? [];
+      expect(texts).toEqual(
+        expect.arrayContaining(["Organização", "Trabalhadores"]),
+      );
+      expect(quadro5.rows[0].map((c) => c.text)).toEqual(
+        expect.arrayContaining(["Vantagens", "Autores"]),
+      );
+      expect(quadro5.hasReconstructedVerticalMerge).toBe(true);
+    }
+
+    if (quadro6) {
+      expect(quadro6.status).not.toBe("rendered-as-structured-text");
+      expect(quadro6.columnCount).toBe(3);
+      expect(quadro6.removedPhantomColumns).toBeDefined();
+      expect(quadro6.groupColumnIndex).toBe(0);
+      expect(quadro6.groupSpans?.length).toBeGreaterThanOrEqual(1);
+      expect(quadro6.rows[0].map((c) => c.text)).toEqual(
+        expect.arrayContaining(["Pontos críticos", "Autores"]),
+      );
+      expect(quadro6.hasReconstructedVerticalMerge).toBe(true);
+    }
+
+    const generationFields = normalizeFieldsForSelectedModel(result.fields);
+    const blob = await templateForWorkType(generationFields.workType).generate({
+      fields: generationFields,
+      editorText: result.editorText,
+      importedImages: result.importedImages,
+      importedTables: result.importedTables,
+    });
+
+    const zip = await JSZip.loadAsync(Buffer.from(await blob.arrayBuffer()));
+    const documentXml = (await zip.file("word/document.xml")?.async("string")) ?? "";
+
+    if (quadro5) {
+      expect(documentXml).toContain("<w:tbl>");
+      expect(documentXml).toContain("Organização");
+      expect(documentXml).toContain("Trabalhadores");
+      expect(documentXml).toContain("Vantagens");
+      expect(documentXml).toContain("Autores");
+    }
+
+    if (quadro6) {
+      expect(documentXml).toContain("<w:tbl>");
+      expect(documentXml).toContain("Pontos críticos");
+      expect(documentXml).toContain("Autores");
+    }
+  });
 });

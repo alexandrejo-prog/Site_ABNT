@@ -34,6 +34,14 @@ export interface ImportedTable {
   status: ImportedTableStatus;
   position: number;
   origin: ImportedTableOrigin;
+  originalColumnCount?: number;
+  normalizedColumnCount?: number;
+  logicalColumnCount?: number;
+  removedPhantomColumns?: number[];
+  groupColumnIndex?: number;
+  groupSpans?: Array<{ rowStart: number; rowEnd: number; text: string }>;
+  hasReconstructedVerticalMerge?: boolean;
+  cellMerges?: Array<{ row: number; col: number; type: "vMerge-restart" | "vMerge-continue" | "gridSpan" }>;
 }
 
 export const IMPORTED_TABLE_MARKER_PATTERN = /^\[\[Tabela importada preservada:\s*([a-z0-9-]+)\]\]$/i;
@@ -228,3 +236,121 @@ export function buildStructuredTextFromTable(table: ImportedTable): string {
 
   return lines.join("\n");
 }
+
+const TRAILING_EMPTY_THRESHOLD = 0.8;
+
+function isTrailingEmptyColumn(table: ImportedTable): boolean {
+  if (table.rows.length === 0 || table.columnCount <= 1) return false;
+
+  const lastCol = table.columnCount - 1;
+  let emptyRows = 0;
+  let meaningfulCells = 0;
+
+  for (const row of table.rows) {
+    const text = (row[lastCol]?.text || "").trim();
+    if (!text) {
+      emptyRows += 1;
+    } else if (text.length >= 3) {
+      meaningfulCells += 1;
+    }
+  }
+
+  if (emptyRows < table.rows.length * TRAILING_EMPTY_THRESHOLD) return false;
+  if (meaningfulCells > 0) return false;
+
+  return true;
+}
+
+export function removeTrailingEmptyColumn(table: ImportedTable): ImportedTable {
+  if (!isTrailingEmptyColumn(table)) return table;
+
+  const lastCol = table.columnCount - 1;
+  const newRows: ImportedTableCell[][] = [];
+  for (const row of table.rows) {
+    const newRow = row.slice(0, lastCol);
+    newRows.push(newRow);
+  }
+
+  const newWidths = table.estimatedColumnWidths?.slice(0, lastCol);
+  const total = newWidths?.reduce((a, b) => a + b, 0) ?? 0;
+  const normalizedWidths = total > 0 && newWidths
+    ? newWidths.map((w) => Math.round((w / total) * 100))
+    : newWidths;
+
+  return {
+    ...table,
+    rows: newRows,
+    rowCount: newRows.length,
+    columnCount: table.columnCount - 1,
+    estimatedColumnWidths: normalizedWidths,
+    originalColumnCount: table.originalColumnCount ?? table.columnCount,
+    normalizedColumnCount: table.columnCount - 1,
+    removedPhantomColumns: [...(table.removedPhantomColumns ?? []), lastCol],
+  };
+}
+
+export function detectGroupColumn(table: ImportedTable): { isGroup: boolean; groupSpans: Array<{ rowStart: number; rowEnd: number; text: string }> } {
+  if (table.rows.length < 2) return { isGroup: false, groupSpans: [] };
+
+  const firstCol = table.rows.map((row) => (row[0]?.text || "").trim());
+  const header = firstCol[0].toUpperCase();
+  const isGenericHeader = !header || header === "CATEGORIA" || header === "GRUPO" || header === "";
+
+  const dataRows = firstCol.slice(1);
+  const uniqueValues = [...new Set(dataRows.filter((v) => v))];
+  const hasFewDistinct = uniqueValues.length <= 4 && uniqueValues.length >= 2;
+
+  const otherColsHaveContent = table.rows.some((row) =>
+    row.slice(1).some((cell) => (cell?.text || "").trim().length > 10),
+  );
+
+  if (!isGenericHeader || !hasFewDistinct || !otherColsHaveContent) {
+    return { isGroup: false, groupSpans: [] };
+  }
+
+  const groupSpans: Array<{ rowStart: number; rowEnd: number; text: string }> = [];
+  let currentGroup: { rowStart: number; text: string } | null = null;
+
+  for (let i = 1; i < firstCol.length; i++) {
+    const text = firstCol[i];
+    if (text) {
+      if (currentGroup) {
+        groupSpans.push({ rowStart: currentGroup.rowStart, rowEnd: i - 1, text: currentGroup.text });
+      }
+      currentGroup = { rowStart: i, text };
+    }
+  }
+
+  if (currentGroup) {
+    groupSpans.push({ rowStart: currentGroup.rowStart, rowEnd: firstCol.length - 1, text: currentGroup.text });
+  }
+
+  return { isGroup: true, groupSpans };
+}
+
+export function normalizeGroupColumn(
+  table: ImportedTable,
+  groupSpans: Array<{ rowStart: number; rowEnd: number; text: string }>,
+): ImportedTable {
+  if (!groupSpans.length) return table;
+
+  const rows = table.rows.map((row, rowIndex) => {
+    const span = groupSpans.find((s) => rowIndex > s.rowStart && rowIndex <= s.rowEnd);
+    if (span) {
+      return [{ text: "" }, ...row.slice(1)];
+    }
+    return row;
+  });
+
+  return {
+    ...table,
+    rows,
+    groupColumnIndex: 0,
+    groupSpans,
+    hasReconstructedVerticalMerge: true,
+    logicalColumnCount: table.columnCount,
+    layoutWarning:
+      table.layoutWarning || "Coluna de grupo reconstruída com mesclagem vertical lógica.",
+  };
+}
+

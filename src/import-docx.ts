@@ -19,7 +19,7 @@ import {
 import { repairHeadingFragments, repairRecordHeadingFragments } from "./heading-fragment-repair";
 import { sanitizeImportedTitle } from "./title-sanitizer";
 import { ImportedDocumentImage, importedImageMarker, looksLikeAcademicImageLabel, looksLikeAcademicImageCaption, looksLikeImageSource } from "./imported-images";
-import { ImportedTable, importedTableMarker, normalizePhantomColumns, isTableUnreadable, buildStructuredTextFromTable } from "./imported-tables";
+import { ImportedTable, importedTableMarker, normalizePhantomColumns, isTableUnreadable, buildStructuredTextFromTable, removeTrailingEmptyColumn, detectGroupColumn, normalizeGroupColumn } from "./imported-tables";
 
 function estimateColumnWidths(gridWidths: number[], columnCount: number): number[] {
   if (gridWidths.length === columnCount && gridWidths.every((w) => Number.isFinite(w) && w > 0)) {
@@ -424,18 +424,32 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
       tableWidthTwips: block.tableWidthTwips,
       hasGridSpan: block.hasGridSpan ?? false,
       hasVerticalMerge: block.hasVerticalMerge ?? false,
+      cellMerges: block.cellMerges,
       layoutWarning: hasLayoutWarning
         ? "Tabelas/quadros importados de DOCX convertido de PDF podem exigir revisao manual de layout."
         : undefined,
     };
 
-    const normalized = normalizePhantomColumns(rawTable);
-    const finalTable = normalized.columnCount < columnCount
-      ? {
-          ...normalized,
-          layoutWarning: (normalized.layoutWarning || rawTable.layoutWarning || "Colunas artificiais do PDF convertido foram colapsadas."),
-        }
-      : rawTable;
+    const afterTrailingRemoval = removeTrailingEmptyColumn(rawTable);
+    const { isGroup, groupSpans } = detectGroupColumn(afterTrailingRemoval);
+    const afterGroupNormalization = isGroup ? normalizeGroupColumn(afterTrailingRemoval, groupSpans) : afterTrailingRemoval;
+    const normalized = normalizePhantomColumns(afterGroupNormalization);
+
+    const hadTrailingRemoval = afterTrailingRemoval.columnCount < rawTable.columnCount;
+    const hadGroupNormalization = isGroup;
+    const hadPhantomRemoval = normalized.columnCount < afterGroupNormalization.columnCount;
+
+    const finalTable: ImportedTable = {
+      ...normalized,
+      originalColumnCount: rawTable.columnCount,
+      normalizedColumnCount: normalized.columnCount,
+      logicalColumnCount: normalized.columnCount,
+      layoutWarning:
+        (normalized.layoutWarning || rawTable.layoutWarning) ||
+        (hadTrailingRemoval ? "Coluna artificial final do PDF convertido foi removida." : undefined) ||
+        (hadGroupNormalization ? "Coluna de grupo reconstruída com mesclagem vertical lógica." : undefined) ||
+        (hadPhantomRemoval ? "Colunas artificiais do PDF convertido foram colapsadas." : undefined),
+    };
 
     if (isTableUnreadable(finalTable)) {
       finalTable.status = "rendered-as-structured-text";

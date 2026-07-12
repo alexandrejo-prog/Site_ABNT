@@ -508,4 +508,249 @@ function tableXmlWithPhantomColumns(rows: string[][]): string {
     expect(documentXml).toContain("formação");
     expect(documentXml).toContain("texto estruturado");
   });
+
+  it("Quadro 5 com coluna fantasma final vira tabela de 3 colunas com grupo reconstruido", async () => {
+    const zip = new JSZip();
+    const body = [
+      paragraphXml("1 INTRODUCAO"),
+      tableXml([
+        ["Categoria", "Vantagens", "Autores", ""],
+        ["Organização", "Redução de custos", "Goulart (2009)", ""],
+        ["", "Retenção de talentos", "Boonen (2012)", ""],
+        ["Trabalhadores", "Economia de recursos financeiros", "Goulart (2009)", ""],
+        ["", "Redução do estresse", "Aderaldo et al. (2017)", ""],
+      ]),
+      paragraphXml("REFERENCIAS"),
+    ].join("");
+
+    zip.file(
+      "word/document.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}</w:body></w:document>`,
+    );
+    zip.file(
+      "word/styles.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`,
+    );
+    zip.file(
+      "word/_rels/document.xml.rels",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`,
+    );
+
+    const result = await importSyntheticDocx(await zip.generateAsync({ type: "arraybuffer" }));
+    const table = result.importedTables[0];
+
+    expect(table.columnCount).toBe(3);
+    expect(table.rowCount).toBe(5);
+    expect(table.rows[0]).toEqual([{ text: "Categoria" }, { text: "Vantagens" }, { text: "Autores" }]);
+    expect(table.rows[1]).toEqual([{ text: "Organização" }, { text: "Redução de custos" }, { text: "Goulart (2009)" }]);
+    expect(table.rows[2]).toEqual([{ text: "" }, { text: "Retenção de talentos" }, { text: "Boonen (2012)" }]);
+    expect(table.rows[3]).toEqual([{ text: "Trabalhadores" }, { text: "Economia de recursos financeiros" }, { text: "Goulart (2009)" }]);
+    expect(table.rows[4]).toEqual([{ text: "" }, { text: "Redução do estresse" }, { text: "Aderaldo et al. (2017)" }]);
+    expect(table.groupColumnIndex).toBe(0);
+    expect(table.groupSpans).toEqual([
+      { rowStart: 1, rowEnd: 2, text: "Organização" },
+      { rowStart: 3, rowEnd: 4, text: "Trabalhadores" },
+    ]);
+    expect(table.hasReconstructedVerticalMerge).toBe(true);
+    expect(table.status).toBe("preserved");
+
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "monografia" as const,
+      author: "Autora Sintetica",
+      title: "Titulo Sintetico",
+      resumo: "Resumo sintetico.",
+      abstractText: "Synthetic abstract.",
+      palavrasChave: "teste.",
+      keywords: "test.",
+    };
+
+    const blob = await generateDocxBlob({
+      fields,
+      editorText: result.editorText,
+      importedImages: result.importedImages,
+      importedTables: result.importedTables,
+    });
+    const outputZip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const documentXml = await outputZip.file("word/document.xml")?.async("string");
+
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toContain("Organização");
+    expect(documentXml).toContain("Trabalhadores");
+    expect(documentXml).toContain("Vantagens");
+    expect(documentXml).toContain("Autores");
+    expect(documentXml).toContain("Redução de custos");
+    expect(documentXml).toContain("<w:vMerge w:val=\"restart\"");
+    expect(documentXml).toContain("<w:vMerge w:val=\"continue\"");
+    expect((documentXml?.match(/<w:tc\b/g) ?? []).length).toBe(15);
+  });
+
+  it("Quadro 6 com coluna fantasma final vira tabela de 3 colunas", async () => {
+    const zip = new JSZip();
+    const body = [
+      paragraphXml("1 INTRODUCAO"),
+      tableXml([
+        ["Categoria", "Pontos críticos", "Autores", ""],
+        ["Organização", "Resistência à mudança", "Goulart (2009)", ""],
+        ["", "Falta de infraestrutura", "Boonen (2012)", ""],
+        ["Trabalhadores", "Isolamento social", "Aderaldo et al. (2017)", ""],
+        ["", "Sobrecarga de trabalho", "Goulart (2009)", ""],
+      ]),
+      paragraphXml("REFERENCIAS"),
+    ].join("");
+
+    zip.file(
+      "word/document.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}</w:body></w:document>`,
+    );
+    zip.file(
+      "word/styles.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`,
+    );
+    zip.file(
+      "word/_rels/document.xml.rels",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`,
+    );
+
+    const result = await importSyntheticDocx(await zip.generateAsync({ type: "arraybuffer" }));
+    const table = result.importedTables[0];
+
+    expect(table.columnCount).toBe(3);
+    expect(table.rowCount).toBe(5);
+    expect(table.rows[0]).toEqual([{ text: "Categoria" }, { text: "Pontos críticos" }, { text: "Autores" }]);
+    expect(table.rows[1]).toEqual([{ text: "Organização" }, { text: "Resistência à mudança" }, { text: "Goulart (2009)" }]);
+    expect(table.groupColumnIndex).toBe(0);
+    expect(table.groupSpans).toEqual([
+      { rowStart: 1, rowEnd: 2, text: "Organização" },
+      { rowStart: 3, rowEnd: 4, text: "Trabalhadores" },
+    ]);
+    expect(table.hasReconstructedVerticalMerge).toBe(true);
+    expect(table.status).toBe("preserved");
+
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "monografia" as const,
+      author: "Autora Sintetica",
+      title: "Titulo Sintetico",
+      resumo: "Resumo sintetico.",
+      abstractText: "Synthetic abstract.",
+      palavrasChave: "teste.",
+      keywords: "test.",
+    };
+
+    const blob = await generateDocxBlob({
+      fields,
+      editorText: result.editorText,
+      importedImages: result.importedImages,
+      importedTables: result.importedTables,
+    });
+    const outputZip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const documentXml = await outputZip.file("word/document.xml")?.async("string");
+
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toContain("Pontos críticos");
+    expect(documentXml).toContain("Autores");
+    expect(documentXml).toContain("Resistência à mudança");
+    expect(documentXml).not.toContain("verticalMerge=\"restart\"");
+  });
+
+  it("nao aplica heuristica de grupo em tabela comum", async () => {
+    const zip = new JSZip();
+    const body = [
+      paragraphXml("1 INTRODUCAO"),
+      tableXml([
+        ["Nome", "Idade", "Cidade"],
+        ["Ana", "30", "São Paulo"],
+        ["Bruno", "25", "Rio de Janeiro"],
+        ["Carlos", "35", "Belo Horizonte"],
+      ]),
+      paragraphXml("REFERENCIAS"),
+    ].join("");
+
+    zip.file(
+      "word/document.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}</w:body></w:document>`,
+    );
+    zip.file(
+      "word/styles.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`,
+    );
+    zip.file(
+      "word/_rels/document.xml.rels",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`,
+    );
+
+    const result = await importSyntheticDocx(await zip.generateAsync({ type: "arraybuffer" }));
+    const table = result.importedTables[0];
+
+    expect(table.columnCount).toBe(3);
+    expect(table.groupColumnIndex).toBeUndefined();
+    expect(table.groupSpans).toBeUndefined();
+    expect(table.hasReconstructedVerticalMerge).toBeUndefined();
+    expect(table.rows[0]).toEqual([{ text: "Nome" }, { text: "Idade" }, { text: "Cidade" }]);
+  });
+
+  it("preserva vMerge real do DOCX fonte", async () => {
+    const zip = new JSZip();
+    const body = [
+      paragraphXml("1 INTRODUCAO"),
+      `<w:tbl><w:tblGrid><w:gridCol w:w="2000" /><w:gridCol w:w="2000" /></w:tblGrid>` +
+        `<w:tr>` +
+          `<w:tc><w:tcPr><w:vMerge w:val="restart" /></w:tcPr><w:p><w:r><w:t>A</w:t></w:r></w:p></w:tc>` +
+          `<w:tc><w:p><w:r><w:t>B</w:t></w:r></w:p></w:tc>` +
+        `</w:tr>` +
+        `<w:tr>` +
+          `<w:tc><w:tcPr><w:vMerge w:val="continue" /></w:tcPr><w:p><w:r><w:t></w:t></w:r></w:p></w:tc>` +
+          `<w:tc><w:p><w:r><w:t>C</w:t></w:r></w:p></w:tc>` +
+        `</w:tr>` +
+      `</w:tbl>`,
+      paragraphXml("REFERENCIAS"),
+    ].join("");
+
+    zip.file(
+      "word/document.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}</w:body></w:document>`,
+    );
+    zip.file(
+      "word/styles.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`,
+    );
+    zip.file(
+      "word/_rels/document.xml.rels",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`,
+    );
+
+    const result = await importSyntheticDocx(await zip.generateAsync({ type: "arraybuffer" }));
+    const table = result.importedTables[0];
+
+    expect(table.hasVerticalMerge).toBe(true);
+    expect(table.rows).toHaveLength(2);
+    expect(table.rows[0][0].text).toBe("A");
+    expect(table.rows[1][0].text).toBe("");
+    expect(table.rows[1][1].text).toBe("C");
+
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "monografia" as const,
+      author: "Autora Sintetica",
+      title: "Titulo Sintetico",
+      resumo: "Resumo sintetico.",
+      abstractText: "Synthetic abstract.",
+      palavrasChave: "teste.",
+      keywords: "test.",
+    };
+
+    const blob = await generateDocxBlob({
+      fields,
+      editorText: result.editorText,
+      importedImages: result.importedImages,
+      importedTables: result.importedTables,
+    });
+    const outputZip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const documentXml = await outputZip.file("word/document.xml")?.async("string");
+
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toContain("<w:vMerge w:val=\"restart\"");
+    expect(documentXml).toContain("<w:vMerge w:val=\"continue\"");
+  });
 });

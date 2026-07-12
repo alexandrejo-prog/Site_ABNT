@@ -144,4 +144,22 @@ A branch melhorou substancialmente a importação de dissertação convertida de
 
 **Aceitável para v2.9.1:** sim, como fallback para preservar conteúdo e legibilidade.
 
+### 8. Coluna fantasma final e reconstrução de coluna de grupo
+
+**Situação atual:** Quadros como Quadro 5 e Quadro 6, vindos de PDF convertido, chegavam com coluna vazia à direita e primeira coluna sem mesclagem vertical. O sistema agora:
+- remove a coluna fantasma final quando está vazia em >= 80% das linhas;
+- detecta coluna de grupo quando o header é genérico e há poucos valores distintos;
+- reconstroi `verticalMerge` lógico para "Organização" e "Trabalhadores";
+- preserva `vMerge`/`gridSpan` real quando presente no DOCX fonte.
+
+**Critérios de aceite atendidos:**
+- Quadro 5 e Quadro 6 saem com 3 colunas lógicas;
+- coluna fantasma final removida;
+- grupos reconstruídos com `verticalMerge restart/continue`;
+- `w:tbl` mantido no DOCX final.
+
+**Aceitável para v2.9.1:** sim, com aviso "Coluna de grupo reconstruída com mesclagem vertical lógica." quando aplicável.
+
+**Melhoria futura:** reconstrução perfeita de mesclagem complexa quando o DOCX fonte não expõe metadados de tabela.
+
 

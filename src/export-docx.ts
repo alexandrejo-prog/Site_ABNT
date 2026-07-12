@@ -885,25 +885,47 @@ function importedTableParagraph(table: ImportedTable | undefined): Array<Paragra
   const tableRows = table.rows.map((cells, rowIndex) => {
     const padded = Array.from({ length: columnCount }, (_, i) => (cells[i]?.text ?? "").trim());
     return new TableRow({
-      children: padded.map((cellText, columnIndex) => new TableCell({
-        width: { size: normalizedWidths[columnIndex] ?? Math.floor(100 / columnCount), type: WidthType.PERCENTAGE },
-        margins: { top: 40, bottom: 40, left: 80, right: 80 },
-        children: [
-          new Paragraph({
-            alignment: AlignmentType.LEFT,
-            spacing: { line: SINGLE_LINE, after: 0 },
-            children: [
-              new TextRun({
-                text: cleanMojibakeText(cellText),
-                bold: rowIndex === 0,
-                font: "Times New Roman",
-                size: BODY_SIZE,
-                color: BLACK,
-              }),
-            ],
-          }),
-        ],
-      })),
+      children: padded.map((cellText, columnIndex) => {
+        const originalMerge = table.cellMerges?.find(
+          (m) => m.row === rowIndex && m.col === columnIndex,
+        );
+        let verticalMerge: "continue" | "restart" | undefined;
+        if (originalMerge) {
+          if (originalMerge.type === "vMerge-restart") verticalMerge = "restart";
+          else if (originalMerge.type === "vMerge-continue") verticalMerge = "continue";
+        } else if (
+          table.groupColumnIndex === 0 &&
+          columnIndex === 0 &&
+          table.groupSpans &&
+          table.hasReconstructedVerticalMerge
+        ) {
+          const inSpan = table.groupSpans.find((s) => rowIndex >= s.rowStart && rowIndex <= s.rowEnd);
+          if (inSpan) {
+            verticalMerge = rowIndex === inSpan.rowStart ? "restart" : "continue";
+          }
+        }
+
+        return new TableCell({
+          width: { size: normalizedWidths[columnIndex] ?? Math.floor(100 / columnCount), type: WidthType.PERCENTAGE },
+          margins: { top: 40, bottom: 40, left: 80, right: 80 },
+          ...(verticalMerge ? { verticalMerge } : {}),
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.LEFT,
+              spacing: { line: SINGLE_LINE, after: 0 },
+              children: [
+                new TextRun({
+                  text: cleanMojibakeText(cellText),
+                  bold: rowIndex === 0,
+                  font: "Times New Roman",
+                  size: BODY_SIZE,
+                  color: BLACK,
+                }),
+              ],
+            }),
+          ],
+        });
+      }),
     });
   });
 

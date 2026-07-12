@@ -51,6 +51,7 @@ export type ImportedBlock =
       hasGridSpan?: boolean;
       hasVerticalMerge?: boolean;
       cellWidths?: number[][];
+      cellMerges?: Array<{ row: number; col: number; type: "vMerge-restart" | "vMerge-continue" | "gridSpan" }>;
     }
   | {
       type: "image";
@@ -477,22 +478,29 @@ function extractTableWidthTwips(tableXml: string): number | undefined {
   return twipValue(tblWMatch[0]);
 }
 
-function extractCellProperties(tableXml: string): { hasGridSpan: boolean; hasVerticalMerge: boolean; cellWidths: number[][] } {
+function extractCellProperties(tableXml: string): { hasGridSpan: boolean; hasVerticalMerge: boolean; cellWidths: number[][]; cellMerges: Array<{ row: number; col: number; type: "vMerge-restart" | "vMerge-continue" | "gridSpan" }> } {
   const rows = [...tableXml.matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)];
   let hasGridSpan = false;
   let hasVerticalMerge = false;
   const cellWidths: number[][] = [];
+  const cellMerges: Array<{ row: number; col: number; type: "vMerge-restart" | "vMerge-continue" | "gridSpan" }> = [];
 
-  for (const rowMatch of rows) {
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    const rowMatch = rows[rowIndex];
     const rowWidths: number[] = [];
     const cells = [...rowMatch[0].matchAll(/<w:tc\b[\s\S]*?<\/w:tc>/g)];
-    for (const cellMatch of cells) {
-      const cellXml = cellMatch[0];
-      if (/<w:gridSpan\b[^>]*w:val="(\d+)"[^>]*>/i.test(cellXml)) {
+    for (let colIndex = 0; colIndex < cells.length; colIndex++) {
+      const cellXml = cells[colIndex][0];
+      const gridSpanMatch = cellXml.match(/<w:gridSpan\b[^>]*w:val="(\d+)"[^>]*>/i);
+      if (gridSpanMatch) {
         hasGridSpan = true;
+        cellMerges.push({ row: rowIndex, col: colIndex, type: "gridSpan" });
       }
       if (/<w:vMerge\b[^>]*>/i.test(cellXml)) {
         hasVerticalMerge = true;
+        const vMergeVal = cellXml.match(/<w:vMerge\b[^>]*w:val="([^"]+)"[^>]*>/i)?.[1] ?? "restart";
+        const type = vMergeVal === "continue" ? "vMerge-continue" : "vMerge-restart";
+        cellMerges.push({ row: rowIndex, col: colIndex, type });
       }
       const tcPrMatch = cellXml.match(/<w:tcPr\b[^>]*>([\s\S]*?)<\/w:tcPr>/);
       let w: number | undefined;
@@ -505,7 +513,7 @@ function extractCellProperties(tableXml: string): { hasGridSpan: boolean; hasVer
     cellWidths.push(rowWidths);
   }
 
-  return { hasGridSpan, hasVerticalMerge, cellWidths };
+  return { hasGridSpan, hasVerticalMerge, cellWidths, cellMerges };
 }
 
 function parseTableBlock(tableXml: string): {
@@ -515,12 +523,13 @@ function parseTableBlock(tableXml: string): {
   hasGridSpan: boolean;
   hasVerticalMerge: boolean;
   cellWidths: number[][];
+  cellMerges: Array<{ row: number; col: number; type: "vMerge-restart" | "vMerge-continue" | "gridSpan" }>;
 } {
   const rows = extractTableRows(tableXml);
   const gridWidths = extractTableGridWidths(tableXml);
   const tableWidthTwips = extractTableWidthTwips(tableXml);
-  const { hasGridSpan, hasVerticalMerge, cellWidths } = extractCellProperties(tableXml);
-  return { rows, gridWidths, tableWidthTwips, hasGridSpan, hasVerticalMerge, cellWidths };
+  const { hasGridSpan, hasVerticalMerge, cellWidths, cellMerges } = extractCellProperties(tableXml);
+  return { rows, gridWidths, tableWidthTwips, hasGridSpan, hasVerticalMerge, cellWidths, cellMerges };
 }
 
 async function extractImages(
@@ -596,7 +605,7 @@ export async function extractDocxStructure(
     const xml = elementMatch[0];
 
     if (xml.startsWith("<w:tbl")) {
-      const { rows, gridWidths, tableWidthTwips, hasGridSpan, hasVerticalMerge, cellWidths } = parseTableBlock(xml);
+      const { rows, gridWidths, tableWidthTwips, hasGridSpan, hasVerticalMerge, cellWidths, cellMerges } = parseTableBlock(xml);
       blocks.push({
         type: "table",
         rows,
@@ -606,6 +615,7 @@ export async function extractDocxStructure(
         hasGridSpan,
         hasVerticalMerge,
         cellWidths,
+        cellMerges,
       });
       continue;
     }
