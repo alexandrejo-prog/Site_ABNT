@@ -1,10 +1,10 @@
 # Checklist de pendências — v2.9.1
 
-Status honesto da branch `fix/importacao-docx-convertido-pdf-v2.9.1` após a auditoria do DOCX gerado em `dissertacao-andrade-2025(2)(1).docx`.
+Status honesto da branch `fix/importacao-docx-convertido-pdf-v2.9.1` após a auditoria final do DOCX gerado a partir de `_diagnostico/andrade-2025/Andrade_2025.docx`.
 
 ## Estado geral
 
-A branch melhorou substancialmente a importação de dissertação convertida de PDF para DOCX. Ela ainda não deve ser tratada como 100% finalizada. A abertura de PR só deve ocorrer se as limitações remanescentes forem aceitas como conhecidas e houver aviso revisável claro ao usuário.
+A branch melhorou substancialmente a importação de dissertação convertida de PDF para DOCX. A auditoria final local confirma os critérios de regressão (folha de rosto, folha de aprovação, pré-textuais, corpo, referências, imagens e tabelas). O conjunto está **pronto para revisão**, mas a importação de DOCX convertido de PDF continua sendo heurística e **não deve ser descrita como perfeita nem 100% finalizada**: limitações conhecidas permanecem e o aviso revisável é parte do contrato de uso.
 
 ## Correções confirmadas no DOCX auditado
 
@@ -23,6 +23,8 @@ A branch melhorou substancialmente a importação de dissertação convertida de
 - Placeholders técnicos `[Imagem detectada: rId...]`, `[[Imagem importada preservada: ...]]` e `[[Tabela importada preservada: ...]]` não aparecem como texto no DOCX final.
 - Há tabelas reais no DOCX final (`w:tbl`).
 - A duplicação imediata de legenda/fonte do Quadro 1 foi reduzida: a legenda e a fonte aparecem uma vez no trecho auditado.
+- Imagens acadêmicas do corpo com legenda/fonte próximas são preservadas como imagens reais no DOCX final (11 de 57 mídias no Andrade: `w:drawing` + bytes em `word/media`, em `wp:inline` e `wp:anchor`). O logo da capa não entra em `importedImages` e não conta como gráfico preservado.
+- As 46 mídias restantes (galeria de apêndice sem legenda/fonte individual) geram aviso revisável claro, sem inserção em local incorreto e sem placeholder técnico.
 
 ## Bloqueadores antes de declarar pronto sem ressalvas
 

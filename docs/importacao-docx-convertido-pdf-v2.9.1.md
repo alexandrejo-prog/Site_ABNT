@@ -339,6 +339,19 @@ Validação local:
 - Tabelas continuam exportadas como tabelas reais (`w:tbl`).
 - Resumo, abstract, agradecimentos, folha de rosto, folha de aprovação e sumário atualizável não regrediram na auditoria local.
 
+## Auditoria final (v2.9.1)
+
+Validação local completa a partir de `_diagnostico/andrade-2025/Andrade_2025.docx` (DOCX não versionado). Todos os pontos abaixo foram conferidos no `document.xml` gerado e no `editorText` importado. O status é **pronto para revisão**, não "concluído/perfeito".
+
+- Folha de rosto: contém `Administração Pública`, `Gestão Pública`, `Tecnologias e Inovação`; não contém `Mestre em Ciências`.
+- Folha de aprovação: não contém resumo/agradecimentos nem `Prof.` isolado; contém `Prof. Dr. Dany Flavio Tonelli — Orientador`.
+- Pré-textuais: `AGRADECIMENTOS` sem resumo; `RESUMO`/`ABSTRACT` com conteúdo; `Palavras-chave:` e `Keywords:` aparecem uma vez; `INDICADORES DE IMPACTO`, `IMPACT INDICATORS` e `LISTA DE SIGLAS` aparecem como conteúdo ou aviso; `LISTA DE QUADROS` preserva `Quadro 1` a `Quadro 16` sem `Fonte:`; `LISTA DE GRÁFICOS` preserva `Gráfico 1` a `Gráfico 11`; `SUMÁRIO` segue como campo atualizável.
+- Corpo: ordem `INTRODUÇÃO → REFERENCIAL TEÓRICO → METODOLOGIA → RESULTADOS E DISCUSSÃO → CONCLUSÃO → REFERÊNCIAS` mantida.
+- Referências: não inicia com `1995. Seção 1.`; `BRASIL. Decreto nº 1.590` aparece antes de `1995`; não inicia com `Fonte:`/`Quadro`/`Gráfico`/fragmento de corpo.
+- Imagens: 57 mídias detectadas, 11 gráficos acadêmicos do corpo preservados como imagens reais (`w:drawing` + bytes em `word/media`, inclusive `wp:inline` e `wp:anchor`); as 46 restantes (galeria de apêndice sem legenda/fonte individual) geram aviso revisável; o logo da capa não entra em `importedImages` (não conta como gráfico preservado); nenhum marcador técnico (`[Imagem detectada: rId...]`, `[[Imagem importada preservada: ...]]`) aparece no documento final.
+- Tabelas: `w:tbl` presente; `Quadro 1`/`Quadro 2` sem duplicação imediata de legenda/fonte; ausência de `[[Tabela importada preservada: ...]]`.
+- Sumário: `src/docx-toc-field-patch.ts` não foi alterado; segue como campo atualizável.
+
 Pendências/limitações conhecidas:
 
 - Gráficos/imagens acadêmicas do corpo com legenda e fonte próximas são preservados automaticamente como imagens reais; os demais (ex.: galeria de apêndice sem legenda/fonte individual) ainda exigem revisão manual. O sistema emite aviso revisável para reinserção manual dos elementos ausentes.
