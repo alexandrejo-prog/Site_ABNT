@@ -154,6 +154,20 @@ A v2.10.0 deve ser tratada como evolução incremental. Não declarar 100% de im
 
 Foi usado `Andrade_2025.pdf` (`_diagnostico/andrade-2025/`, 3,6 MB, 139 páginas) apenas para validação local. Resultado da extração: **10.673 itens de texto**, **36 legendas de Quadro**, **22 legendas de Figura/Gráfico** e **26 fontes ("Fonte:")** detectadas. A extração e a detecção de blocos funcionam ponta a ponta. O worker do pdfjs não pôde ser exercido em navegador headless neste ambiente; o padrão `?url` do Vite usado em `src/import-pdf.ts` é o recomendado e deve ser confirmado manualmente no navegador via `npm run dev`.
 
+### Verificação de runtime no servidor de desenvolvimento (automática)
+
+Como este ambiente não tem driver de navegador (Playwright/Puppeteer não instalados e a instalação é proibida pelas regras do projeto), o fluxo interativo de clique (enviar PDF e acionar "Visualizar recorte") não pôde ser executado pelo agente. Foi feita, porém, uma verificação automática de runtime:
+
+- `npm run dev` (Vite) sobe e serve a página (`200`, `#root` presente).
+- Os módulos `src/import-pdf.ts`, `src/pdf-region-renderer.ts` e `src/components/ImportBlock.tsx` são transformados pelo Vite sem erro (`200`).
+- O import do worker `pdfjs-dist/build/pdf.worker.min.mjs?url` é resolvido em tempo de transforma para `/node_modules/pdfjs-dist/build/pdf.worker.min.mjs?url`, e o próprio arquivo do worker é servido pelo Vite (`200`, ~6,7 MB). Isso confirma que o `GlobalWorkerOptions.workerSrc` será resolvido no navegador.
+
+O que falta de validação estritamente manual (a ser feito pelo usuário com `npm run dev`):
+
+1. Enviar `Andrade_2025.pdf` e confirmar que o painel mostra nome, páginas (139), confiança, diagnósticos e texto extraído.
+2. Confirmar que a lista de regiões visuais aparece (~36 Quadro, ~22 Figura/Gráfico como candidatos) e que o botão "Visualizar recorte" gera a imagem PNG sem ficar em branco.
+3. Conferir o console do navegador para garantir que não há erro de worker/canvas.
+
 ### O que funciona agora
 
 - Detectar e listar regiões visuais (quadro/tabela, gráfico, figura) entre legenda e fonte.

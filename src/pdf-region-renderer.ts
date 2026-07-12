@@ -156,6 +156,9 @@ export async function renderPdfRegionToPng(input: {
   region: PdfRegion;
   scale?: number;
 }): Promise<RenderedPdfRegion> {
+  if (typeof document === "undefined" || typeof document.createElement !== "function") {
+    throw new Error("A renderização de região de PDF requer um navegador (document indisponível).");
+  }
   const pdfjsLib = await loadPdfJs();
   const data = input.file instanceof ArrayBuffer ? input.file : await input.file.arrayBuffer();
   const doc = await pdfjsLib.getDocument({ data }).promise;
