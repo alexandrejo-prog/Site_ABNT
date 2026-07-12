@@ -5,6 +5,8 @@ import {
   AcademicFields,
   Confidence,
   WorkTypeValue,
+  emptyAcademicFields,
+  emptyConfidenceMap,
 } from "./ufla-rules";
 import {
   ImportedBlock,
@@ -21,6 +23,9 @@ import { sanitizeImportedTitle } from "./title-sanitizer";
 import { ImportedDocumentImage, importedImageMarker, looksLikeAcademicImageLabel, looksLikeAcademicImageCaption, looksLikeImageSource } from "./imported-images";
 import { ImportedTable, importedTableMarker, normalizePhantomColumns, isTableUnreadable, buildStructuredTextFromTable, removeTrailingEmptyColumn, detectGroupColumn, normalizeGroupColumn } from "./imported-tables";
 import { reconstructAcademicTable } from "./academic-table-reconstructor";
+import type { DocumentMode, SourceKind } from "./import-contract";
+import { importPdfDiagnostic } from "./import-pdf-diagnostic";
+import type { ImportedPdfDiagnostic } from "./imported-pdf-diagnostic";
 
 function estimateColumnWidths(gridWidths: number[], columnCount: number): number[] {
   const safeWidths = gridWidths.slice(0, columnCount);
@@ -94,6 +99,8 @@ export interface WorkTypeSuggestion {
 }
 
 export interface ImportResult {
+  sourceKind: SourceKind;
+  documentMode: DocumentMode;
   text: string;
   editorText: string;
   fields: AcademicFields;
@@ -102,6 +109,7 @@ export interface ImportResult {
   blocks: ImportedBlock[];
   importedImages: ImportedDocumentImage[];
   importedTables: ImportedTable[];
+  pdfDiagnostic?: ImportedPdfDiagnostic;
   workTypeSuggestion?: WorkTypeSuggestion;
 }
 
@@ -678,6 +686,7 @@ function buildImportResult(
   normalized: ReturnType<typeof normalizePlainAcademicText>,
   detected: ReturnType<typeof detectAcademicFieldsFromStructure>,
   messages: string[],
+  sourceKind: SourceKind,
 ): ImportResult {
   const text = repairHeadingFragments(normalized.text);
   const importedImages = importedImagesFromStructure(normalized.structure);
@@ -728,6 +737,8 @@ function buildImportResult(
   );
 
   return {
+    sourceKind,
+    documentMode: "ufla-structured",
     text,
     editorText,
     fields,
@@ -752,6 +763,8 @@ export function identifyAcademicFields(
   return {
     fields,
     confidence,
+    sourceKind: "txt",
+    documentMode: "ufla-structured",
     workTypeSuggestion,
   };
 }
@@ -792,7 +805,7 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
         ...messages,
         ...normalized.messages,
         ...detected.messages,
-      ]);
+      ], "docx");
     } catch {
       if (mammothText.trim()) {
         const normalized = normalizePlainAcademicText(mammothText);
@@ -802,7 +815,7 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
           "Nao foi possivel ler a estrutura OOXML; o arquivo foi importado apenas como texto bruto.",
           ...normalized.messages,
           ...detected.messages,
-        ]);
+        ], "docx");
       }
 
       throw docxOpenError(file.name);
@@ -816,8 +829,25 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
     return buildImportResult(normalized, detected, [
       ...normalized.messages,
       ...detected.messages,
-    ]);
+    ], extension === "md" ? "markdown" : "txt");
   }
 
-  throw new Error("Formato nao suportado. Use .docx, .txt ou .md.");
+  if (extension === "pdf") {
+    const pdfDiagnostic = await importPdfDiagnostic(file);
+    return {
+      sourceKind: "pdf",
+      documentMode: "pdf-diagnostic",
+      text: "",
+      editorText: "",
+      fields: emptyAcademicFields(),
+      confidence: emptyConfidenceMap(),
+      messages: pdfDiagnostic.warnings,
+      blocks: [],
+      importedImages: [],
+      importedTables: [],
+      pdfDiagnostic,
+    };
+  }
+
+  throw new Error("Formato nao suportado. Use .docx, .txt, .md ou .pdf.");
 }

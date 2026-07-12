@@ -2,16 +2,23 @@ import { useRef, useState } from "react";
 import { Upload, XCircle } from "lucide-react";
 import { importDocumentFile } from "../import-docx";
 import type { ImportedDocumentImage } from "../imported-images";
+import type { ImportedTable } from "../imported-tables";
+import type { DocumentMode, SourceKind } from "../import-contract";
+import type { ImportedPdfDiagnostic } from "../imported-pdf-diagnostic";
 import { emptyAcademicFields, emptyConfidenceMap, WORK_TYPE_LABELS } from "../ufla-rules";
 
 interface ImportBlockProps {
   onImport: (result: {
+    sourceKind: SourceKind;
+    documentMode: DocumentMode;
     fields: ReturnType<typeof emptyAcademicFields>;
     confidence: ReturnType<typeof emptyConfidenceMap>;
     editorText: string;
     messages: string[];
     fileName: string;
     importedImages?: ImportedDocumentImage[];
+    importedTables?: ImportedTable[];
+    pdfDiagnostic?: ImportedPdfDiagnostic;
   }) => void;
   onRemove: () => void;
   importedFileName: string | null;
@@ -46,7 +53,7 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
       <div className="import-header">
         <div>
           <h2>Importar arquivo existente</h2>
-          <p>Importe DOCX, TXT ou Markdown para extrair texto e metadados. Revise tudo antes de gerar.</p>
+          <p>Importe DOCX, TXT ou Markdown para extrair texto e metadados. PDF entra apenas como diagnostico experimental.</p>
         </div>
         <label className="upload-button primary">
           <Upload size={18} aria-hidden="true" />
@@ -54,7 +61,7 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
           <input
             ref={inputRef}
             type="file"
-            accept=".docx,.txt,.md"
+            accept=".docx,.txt,.md,.pdf"
             onChange={handleChange}
             style={{ display: "none" }}
           />

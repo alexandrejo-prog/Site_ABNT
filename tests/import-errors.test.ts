@@ -72,11 +72,11 @@ describe("Erros de importação", () => {
   });
 
   describe("2. Extensão não suportada", () => {
-    it("rejeita .pdf com mensagem clara", async () => {
+    it("aceita .pdf apenas como diagnostico e falha de forma controlada quando invalido", async () => {
       const file = createMockFile("dummy pdf content", "documento.pdf");
 
       await expect(importDocumentFile(file)).rejects.toThrow(
-        "Formato nao suportado",
+        "Nao foi possivel ler o PDF",
       );
     });
 

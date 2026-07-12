@@ -26,6 +26,8 @@ import { useTiptapExperimentalEditor } from "./editor-feature-flags";
 import type { TiptapEditorCommand } from "./tiptap-command-bridge";
 import type { ImportedDocumentImage } from "./imported-images";
 import type { ImportedTable } from "./imported-tables";
+import type { DocumentMode, SourceKind } from "./import-contract";
+import type { ImportedPdfDiagnostic } from "./imported-pdf-diagnostic";
 
 const FIELD_LABELS: Record<AcademicFieldKey, string> = {
   author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho", course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador", location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave", abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão", referencias: "Referências", anexos: "Anexos", apendices: "Apêndices", dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators", imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema", problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese", objetivoGeral: "Objetivo Geral", objetivosEspecificos: "Objetivos Específicos", justificativa: "Justificativa", referencialTeorico: "Referencial Teórico", metodologia: "Metodologia", cronograma: "Cronograma", recursosOrcamento: "Recursos/Orçamento", resultadosEsperados: "Resultados Esperados", corpusDados: "Corpus/Dados", contextoInstitucional: "Contexto Institucional", conclusaoProvisoria: "Conclusão Provisória", contribuicoesImpactos: "Contribuições/Impactos", impactoSocial: "Impacto social", impactoCientifico: "Impacto científico", impactoEducacional: "Impacto educacional", impactoAmbiental: "Impacto ambiental", impactoTecnologico: "Impacto tecnológico/econômico", publicoBeneficiado: "Público beneficiado", aderenciaOds: "Aderência a ODS/política institucional",
@@ -112,6 +114,7 @@ export default function App() {
   const [editorText, setEditorText] = useState("");
   const [importedImages, setImportedImages] = useState<ImportedDocumentImage[]>([]);
   const [importedTables, setImportedTables] = useState<ImportedTable[]>([]);
+  const [pdfDiagnostic, setPdfDiagnostic] = useState<ImportedPdfDiagnostic | null>(null);
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
   const [status, setStatus] = useState("Pronto para editar.");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -139,6 +142,7 @@ export default function App() {
     ? "Modo experimental de edição. Use para testar a nova experiência. O DOCX continua sendo gerado pelo exportador estável."
     : "Editor acadêmico: edite o conteúdo e marque a estrutura do texto. Fonte, tamanho, recuos e espaçamentos seguem automaticamente o padrão UFLA/ABNT no DOCX.";
   const finalPending = useMemo(() => finalVersionPendingReport(fields, activeEditorText), [fields, activeEditorText]);
+  const isPdfDiagnosticMode = Boolean(pdfDiagnostic);
 
   useEffect(() => installEditorScrollFix(), []);
 
@@ -266,6 +270,8 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
 }
 
   async function handleImport(result: {
+    sourceKind: SourceKind;
+    documentMode: DocumentMode;
     fields: ReturnType<typeof emptyAcademicFields>;
     confidence: ReturnType<typeof emptyConfidenceMap>;
     editorText: string;
@@ -273,6 +279,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     fileName: string;
     importedImages?: ImportedDocumentImage[];
     importedTables?: ImportedTable[];
+    pdfDiagnostic?: ImportedPdfDiagnostic;
   }) {
     try {
       setStatus("Importando arquivo...");
@@ -283,6 +290,24 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       clearDraft(window.localStorage);
       setHasStoredDraft(false);
       const previousWorkType = fields.workType;
+      if (result.documentMode === "pdf-diagnostic") {
+        setPdfDiagnostic(result.pdfDiagnostic ?? null);
+        setImportedFileName(result.fileName);
+        setFields(emptyAcademicFields());
+        setConfidence(emptyConfidenceMap());
+        setEditorText("");
+        setEditorMode("body");
+        setIssues([]);
+        setGenerateAnyway(false);
+        setImportedImages([]);
+        setImportedTables([]);
+        lastAppliedEditorTextRef.current = "";
+        if (editorRef.current) editorRef.current.innerHTML = "";
+        editorContentVersionRef.current += 1;
+        setStatus("O PDF foi lido para diagnostico. A conversao para DOCX ainda nao esta habilitada nesta etapa.");
+        return;
+      }
+      setPdfDiagnostic(null);
       replaceFieldsWithImportedDocument(result.fields, result.confidence);
       setImportedFileName(result.fileName);
       setEditorMode("body");
@@ -312,6 +337,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setImportedFileName(null);
     setImportedImages([]);
     setImportedTables([]);
+    setPdfDiagnostic(null);
     setEditorMode("body");
     lastAppliedEditorTextRef.current = "";
     editorContentVersionRef.current += 1;
@@ -331,6 +357,8 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setGenerateAnyway(false);
     setImportedFileName(null);
     setImportedImages([]);
+    setImportedTables([]);
+    setPdfDiagnostic(null);
     setEditorMode("body");
     lastAppliedEditorTextRef.current = "";
     if (editorRef.current) editorRef.current.innerHTML = "";
@@ -420,6 +448,10 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
   }
 
   async function handleGenerateDocx() {
+    if (isPdfDiagnosticMode) {
+      setStatus("O PDF esta em modo diagnostico. Nenhum DOCX e gerado a partir de PDF nesta etapa.");
+      return;
+    }
     const generationFields = normalizeFieldsForSelectedModel(fields);
     const nextIssues = runValidation(generationFields);
     const nonOverridable = nextIssues.some((issue) => issue.severity === "error" && isNonOverridableError(issue));
@@ -462,7 +494,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
         <div className="header-actions">
           <DraftStatus draftStatus={draftStatus} hasDraft={hasStoredDraft} onClearDraft={handleClearDraft} />
           <button className="primary-action" type="button" onClick={() => runValidation()}><FileCheck2 size={18} aria-hidden="true" />Validar trabalho</button>
-          <button className="primary-action strong" type="button" onClick={handleGenerateDocx} disabled={isGenerating}><FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar DOCX editável"}</button>
+          <button className="primary-action strong" type="button" onClick={handleGenerateDocx} disabled={isGenerating || isPdfDiagnosticMode}><FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar DOCX editável"}</button>
         </div>
       </header>
 
@@ -472,6 +504,26 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       <main id="main-content" className="workspace" tabIndex={-1} aria-busy={isGenerating}>
         <section className="metadata-pane" aria-label="Campos acadêmicos">
           <ImportBlock onImport={handleImport} onRemove={handleRemoveImport} importedFileName={importedFileName} workType={fields.workType} />
+          {pdfDiagnostic && (
+            <div className="pdf-diagnostic-panel" role="status" aria-live="polite">
+              <h2>Leitura de PDF - diagnostico experimental</h2>
+              <p>O PDF foi lido para diagnostico. A conversao para DOCX ainda nao esta habilitada nesta etapa.</p>
+              <dl>
+                <div><dt>Arquivo</dt><dd>{pdfDiagnostic.fileName}</dd></div>
+                <div><dt>Paginas</dt><dd>{pdfDiagnostic.pageCount}</dd></div>
+                <div><dt>Itens textuais</dt><dd>{pdfDiagnostic.pages.reduce((sum, page) => sum + page.textItemCount, 0)}</dd></div>
+              </dl>
+              <div className="pdf-diagnostic-preview">
+                {pdfDiagnostic.pages.slice(0, 3).map((page) => (
+                  <section key={page.pageNumber}>
+                    <h3>Pagina {page.pageNumber}</h3>
+                    <p>{page.rawText.slice(0, 700) || "Sem texto bruto extraivel nesta pagina."}</p>
+                  </section>
+                ))}
+              </div>
+              {pdfDiagnostic.warnings.map((warning) => <p className="import-note" key={warning}>{warning}</p>)}
+            </div>
+          )}
           <div className="work-type-section">
             <WorkTypeSelector value={fields.workType} onChange={updateWorkType} />
           </div>
