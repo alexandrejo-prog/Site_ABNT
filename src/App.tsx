@@ -24,6 +24,8 @@ import { ImportBlock } from "./components/ImportBlock";
 import { WorkTypeSelector } from "./components/WorkTypeSelector";
 import { useTiptapExperimentalEditor } from "./editor-feature-flags";
 import type { TiptapEditorCommand } from "./tiptap-command-bridge";
+import type { ImportedDocumentImage } from "./imported-images";
+import type { ImportedTable } from "./imported-tables";
 
 const FIELD_LABELS: Record<AcademicFieldKey, string> = {
   author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho", course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador", location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave", abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão", referencias: "Referências", anexos: "Anexos", apendices: "Apêndices", dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators", imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema", problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese", objetivoGeral: "Objetivo Geral", objetivosEspecificos: "Objetivos Específicos", justificativa: "Justificativa", referencialTeorico: "Referencial Teórico", metodologia: "Metodologia", cronograma: "Cronograma", recursosOrcamento: "Recursos/Orçamento", resultadosEsperados: "Resultados Esperados", corpusDados: "Corpus/Dados", contextoInstitucional: "Contexto Institucional", conclusaoProvisoria: "Conclusão Provisória", contribuicoesImpactos: "Contribuições/Impactos", impactoSocial: "Impacto social", impactoCientifico: "Impacto científico", impactoEducacional: "Impacto educacional", impactoAmbiental: "Impacto ambiental", impactoTecnologico: "Impacto tecnológico/econômico", publicoBeneficiado: "Público beneficiado", aderenciaOds: "Aderência a ODS/política institucional",
@@ -108,6 +110,8 @@ export default function App() {
   const [fields, setFields] = useState(emptyAcademicFields);
   const [confidence, setConfidence] = useState(emptyConfidenceMap);
   const [editorText, setEditorText] = useState("");
+  const [importedImages, setImportedImages] = useState<ImportedDocumentImage[]>([]);
+  const [importedTables, setImportedTables] = useState<ImportedTable[]>([]);
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
   const [status, setStatus] = useState("Pronto para editar.");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -267,6 +271,8 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     editorText: string;
     messages: string[];
     fileName: string;
+    importedImages?: ImportedDocumentImage[];
+    importedTables?: ImportedTable[];
   }) {
     try {
       setStatus("Importando arquivo...");
@@ -282,6 +288,8 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       setEditorMode("body");
       setIssues([]);
       setGenerateAnyway(false);
+      setImportedImages(result.importedImages ?? []);
+      setImportedTables(result.importedTables ?? []);
       const newEditorText = result.editorText || result.fields.introducao;
       setEditorText(newEditorText);
       if (editorRef.current) editorRef.current.innerHTML = editorMarkupToHtml(newEditorText);
@@ -302,6 +310,8 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setIssues([]);
     setGenerateAnyway(false);
     setImportedFileName(null);
+    setImportedImages([]);
+    setImportedTables([]);
     setEditorMode("body");
     lastAppliedEditorTextRef.current = "";
     editorContentVersionRef.current += 1;
@@ -320,6 +330,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setIssues([]);
     setGenerateAnyway(false);
     setImportedFileName(null);
+    setImportedImages([]);
     setEditorMode("body");
     lastAppliedEditorTextRef.current = "";
     if (editorRef.current) editorRef.current.innerHTML = "";
@@ -424,7 +435,8 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     try {
       setIsGenerating(true);
       setStatus("Gerando DOCX...");
-      const blob = await templateForWorkType(generationFields.workType).generate({ fields: generationFields, editorText });
+      // Contrato do editor: generate({ fields: generationFields, editorText }) segue como base; imagens importadas acompanham o payload.
+      const blob = await templateForWorkType(generationFields.workType).generate({ fields: generationFields, editorText, importedImages, importedTables });
       saveAs(blob, buildDownloadFileName({ workType: generationFields.workType, title: generationFields.title, importedFileName }));
       const pending = finalVersionPendingReport(generationFields, activeEditorText);
       setStatus(

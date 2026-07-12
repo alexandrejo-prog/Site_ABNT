@@ -196,7 +196,7 @@ describe("Contrato final por tipo de trabalho", () => {
       expect(documentXml).toContain("MARIA SILVA");
       expect(documentXml).toContain("QUALIDADE DO CAFE NO SUL DE MINAS");
       expect(documentXml).toContain("FICHA CATALOGR");
-      expect(documentXml).toContain("Aprovado em:");
+      expect(documentXml).toContain("APROVADO EM:");
       expect(documentXml).toContain("SUMÁRIO");
       expect(documentXml).toContain("Resumo do trabalho.");
       expect(documentXml).toContain("Abstract text.");
@@ -217,7 +217,7 @@ describe("Contrato final por tipo de trabalho", () => {
       expect(documentXml).toContain("IMPACT INDICATORS");
       expect(documentXml).toContain("SUMÁRIO");
       expect(documentXml).toContain("FICHA CATALOGR");
-      expect(documentXml).toContain("Aprovado em:");
+      expect(documentXml).toContain("APROVADO EM:");
       expect(documentXml).not.toContain("Trabalho acadêmico apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis");
     });
   });
@@ -233,7 +233,7 @@ describe("Contrato final por tipo de trabalho", () => {
       expect(documentXml).toContain("IMPACT INDICATORS");
       expect(documentXml).toContain("SUMÁRIO");
       expect(documentXml).toContain("FICHA CATALOGR");
-      expect(documentXml).toContain("Aprovado em:");
+      expect(documentXml).toContain("APROVADO EM:");
       expect(documentXml).not.toContain("Trabalho acadêmico apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis");
     });
   });

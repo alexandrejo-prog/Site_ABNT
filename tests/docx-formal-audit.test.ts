@@ -63,7 +63,7 @@ SILVA, M. Projeto de pesquisa. Lavras: UFLA, 2024.
       expect(hasParagraphContaining(xml, "ABSTRACT")).toBe(true);
       expect(hasParagraphContaining(xml, "SUMÁRIO")).toBe(true);
       expect(hasParagraphContaining(xml, "1 INTRODUÇÃO")).toBe(true);
-      expect(hasParagraphContaining(xml, "REFERÊNCIAS")).toBe(true);
+      expect(hasParagraphContaining(xml, "REFERENCIAS")).toBe(true);
     });
 
     it("nao contem ficha catalografica, banca examinadora, trabalho academico apresentado, [PREENCHER, TITLE 1, Toc numerico ou \\uFFFE", async () => {
@@ -133,9 +133,9 @@ Coluna1\tColuna2\tColuna3`;
       const xml = await xmlFrom(blob);
 
       expect(tocInstruction(xml)).toContain("TOC");
-      expect(hasParagraphContaining(xml, "FICHA CATALOGRÁFICA")).toBe(true);
-      expect(hasParagraphContaining(xml, "Banca examinadora")).toBe(true);
-      expect(hasParagraphContaining(xml, "REFERÊNCIAS")).toBe(true);
+      expect(hasParagraphContaining(xml, "FICHA CATALOGRAFICA")).toBe(true);
+      expect(hasParagraphContaining(xml, "APROVADO EM")).toBe(true);
+      expect(hasParagraphContaining(xml, "REFERENCIAS")).toBe(true);
       expect(xml).not.toContain("[PREENCHER");
     });
 
@@ -144,8 +144,8 @@ Coluna1\tColuna2\tColuna3`;
       const blob = await templateForWorkType("tese").generate({ fields: teseFields, editorText: "# 1 INTRODUÇÃO\nTexto." });
       const xml = await xmlFrom(blob);
 
-      expect(hasParagraphContaining(xml, "FICHA CATALOGRÁFICA")).toBe(true);
-      expect(hasParagraphContaining(xml, "Banca examinadora")).toBe(true);
+      expect(hasParagraphContaining(xml, "FICHA CATALOGRAFICA")).toBe(true);
+      expect(hasParagraphContaining(xml, "APROVADO EM")).toBe(true);
     });
   });
 
@@ -167,9 +167,9 @@ Coluna1\tColuna2\tColuna3`;
       const blob = await templateForWorkType("monografia").generate({ fields: monoFields, editorText: "# 1 INTRODUÇÃO\nTexto." });
       const xml = await xmlFrom(blob);
 
-      expect(hasParagraphContaining(xml, "FICHA CATALOGRÁFICA")).toBe(true);
-      expect(hasParagraphContaining(xml, "Banca examinadora")).toBe(true);
-      expect(hasParagraphContaining(xml, "REFERÊNCIAS")).toBe(true);
+      expect(hasParagraphContaining(xml, "FICHA CATALOGRAFICA")).toBe(true);
+      expect(hasParagraphContaining(xml, "APROVADO EM")).toBe(true);
+      expect(hasParagraphContaining(xml, "REFERENCIAS")).toBe(true);
     });
   });
 

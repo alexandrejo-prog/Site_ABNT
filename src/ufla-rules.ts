@@ -128,6 +128,8 @@ export interface AcademicFields {
   indicadoresImpacto: string;
   impactIndicators: string;
   imageWarnings: string;
+  aprovalDate: string;
+  approvalMembers: string[];
   tema: string;
   delimitacaoTema: string;
   problemaPesquisa: string;
@@ -151,6 +153,10 @@ export interface AcademicFields {
   impactoTecnologico: string;
   publicoBeneficiado: string;
   aderenciaOds: string;
+  listaQuadros: string;
+  listaGraficos: string;
+  listaTabelas: string;
+  listaSiglas: string;
 }
 
 const TWIPS_PER_CM = 1440 / 2.54;
@@ -374,6 +380,8 @@ export function emptyAcademicFields(): AcademicFields {
     indicadoresImpacto: "",
     impactIndicators: "",
     imageWarnings: "",
+    aprovalDate: "",
+    approvalMembers: [],
     tema: "",
     delimitacaoTema: "",
     problemaPesquisa: "",
@@ -397,6 +405,10 @@ export function emptyAcademicFields(): AcademicFields {
     impactoTecnologico: "",
     publicoBeneficiado: "",
     aderenciaOds: "",
+    listaQuadros: "",
+    listaGraficos: "",
+    listaTabelas: "",
+    listaSiglas: "",
   };
 }
 

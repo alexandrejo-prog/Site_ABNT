@@ -79,10 +79,10 @@ O texto será revisado para substituir a linguagem de projeto por linguagem pró
 
     expect(normalizedText).toContain(normalizeOoxmlText("Dissertação apresentada à Universidade Federal de Lavras"));
     expect(normalizedText).toContain(normalizeOoxmlText("para obtenção do título de Mestre"));
-    expect(normalizedText).toContain(normalizeOoxmlText("Ficha catalográfica provisória"));
-    expect(normalizedText).toContain(normalizeOoxmlText("Substitua esta página pela ficha oficial gerada pela Biblioteca Universitária da UFLA antes da versão final"));
-    expect(normalizedText).toContain(normalizeOoxmlText("Folha de aprovação provisória"));
-    expect(normalizedText).toContain(normalizeOoxmlText("Substitua os dados da banca após a aprovação ou conforme orientação do programa"));
+    expect(normalizedText).toContain(normalizeOoxmlText("FICHA CATALOGRAFICA DETECTADA"));
+    expect(normalizedText).toContain(normalizeOoxmlText("PRESERVE OU SUBSTITUA MANUALMENTE PELA FICHA OFICIAL DA BIBLIOTECA UNIVERSITARIA DA UFLA"));
+    expect(normalizedText).toContain(normalizeOoxmlText("APROVADO EM"));
+    expect(normalizedText).toContain(normalizeOoxmlText("ORIENTADOR(A)"));
     expect(normalizedText).toContain("RESUMO");
     expect(normalizedText).toContain("ABSTRACT");
     expect(normalizedText).toContain("SUMARIO");

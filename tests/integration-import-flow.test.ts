@@ -33,7 +33,7 @@ function mergeFields(
   const merged = { ...base };
   for (const [key, value] of Object.entries(imported)) {
     if (value && typeof value === "string" && value.trim()) {
-      (merged as Record<string, string>)[key] = value;
+      (merged as any)[key] = value;
     }
   }
   return merged;

@@ -94,15 +94,21 @@ function cleanValue(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+function cleanAcademicCandidate(value: string): string {
+  return value
+    .replace(/\[Imagem detectada:[^\]]+\]/gi, " ")
+    .replace(/\b(?:campo|placeholder|preencher|inserir)\b[^.\n]*(?:\.|$)/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function joinLines(lines: string[]): string {
   return lines.map(cleanValue).filter(Boolean).join("\n").trim();
 }
 
 function blockText(block: ImportedBlock): string {
   if (block.type === "pageBreak") return "";
-  if (block.type === "image") {
-    return `[Imagem detectada: ${block.relationshipId ?? "sem relacao"}]`;
-  }
+  if (block.type === "image") return "";
   if (block.type === "table") {
     return block.rows.map((row) => row.join("\t")).join("\n");
   }
@@ -145,6 +151,15 @@ function looksLikePrimaryHeading(block: ImportedBlock, text = blockText(block)):
   );
 }
 
+function looksLikePersonalThanks(text: string): boolean {
+  const normalized = normalizeForDetection(text);
+  if (text.length < 25) return false;
+  const startsWithThanks = /^(agrade[çc]o|a\s+deus|aos\s+meus|ao\s+meu|a\s+minha|[àa]\s+minha|a\s+todos|aos\s+|[àa]\s+luiza|[àa]\s+universidade|ao\s+programa)/i.test(normalized);
+  if (!startsWithThanks) return false;
+  const hasThanksContent = /(esposo|filhos|pais|familiares|orientador|agradecimento|dedicatoria|amigos|colegas|equipe|trabalho|apoio|incentivo|carinho|paci[eê]ncia|universidade|programa|sustentar|guiar|caminhada|oportunidade|vivenciar|colabora[cç][aã]o|contribui[cç][aã]o|parceria|companheirismo|est[íi]mulo|acolhimento|qualidade|forma|processo|ensin[oa]|aprendizado|experi[eê]ncia)/i.test(normalized);
+  return hasThanksContent;
+}
+
 function isReferenceHeading(block: ImportedBlock): boolean {
   return isPageHeading(block, ["REFERENCIAS", "REFERÊNCIAS"]) || isEquivalentSectionTitle(blockText(block), "referencias");
 }
@@ -168,9 +183,7 @@ function findHeadingIndex(
 
 function textFromBlockForSection(block: ImportedBlock): string {
   if (block.type === "pageBreak") return "";
-  if (block.type === "image") {
-    return `[Imagem detectada: ${block.relationshipId ?? "sem relacao"}]`;
-  }
+  if (block.type === "image") return "";
   if (block.type === "table") {
     return block.rows.map((row) => row.join("\t")).join("\n");
   }
@@ -213,6 +226,10 @@ function findByLabel(text: string, patterns: RegExp[]): string {
 function detectWorkType(text: string): WorkType | "" {
   const normalized = normalizeForDetection(text);
 
+  if (/\bTESE\b/.test(normalized)) return "tese";
+  if (/\bDISSERTACAO\b/.test(normalized)) return "dissertacao";
+  if (/\bMONOGRAFIA\b|\bTCC\b/.test(normalized)) return "monografia";
+
   for (const type of ACADEMIC_PRODUCTION_TYPES) {
     for (const alias of type.sectionAliases) {
       if (AMBIGUOUS_ALIASES.has(alias.toLowerCase())) continue;
@@ -220,16 +237,13 @@ function detectWorkType(text: string): WorkType | "" {
     }
   }
 
-  if (/\bTESE\b/.test(normalized)) return "tese";
-  if (/\bDISSERTACAO\b/.test(normalized)) return "dissertacao";
-  if (/\bMONOGRAFIA\b|\bTCC\b/.test(normalized)) return "monografia";
+  if (/\bRELATORIO DE ESTAGIO\b|\bESTAGIO SUPERVISIONADO\b/.test(normalized)) return "relatorio_estagio_ufla";
   if (/\bPROPOSTA DE INTERVENCAO\b|\bINTERVENCAO CLINICA\b|\bINTERVENCAO EM SERVICO\b/.test(normalized)) return "proposta_intervencao_ufla";
   if (/\bSOFTWARE\b|\bAPLICATIVO\b|\bDESENVOLVIMENTO DE SOFTWARE\b/.test(normalized)) return "software_aplicativo_ufla";
   if (/\bPATENTE\b|\bPEDIDO DE PATENTE\b|\bREIVINDICACOES\b/.test(normalized)) return "patente_ufla";
   if (/\bREVISAO SISTEMATICA\b|\bREVISAO APROFUNDADA\b/.test(normalized)) return "revisao_sistematica_ufla";
   if (/\bESTUDO DE CASO\b|\bCASOS MULTIPLOS\b/.test(normalized)) return "estudo_caso_ufla";
   if (/\bCULTIVAR\b|\bMELHORAMENTO GENETICO\b/.test(normalized)) return "cultivar_ufla";
-  if (/\bRELATORIO DE ESTAGIO\b|\bESTAGIO SUPERVISIONADO\b/.test(normalized)) return "relatorio_estagio_ufla";
   if (/\bARTIGO CIENTIFICO\b/.test(normalized)) return "artigo_cientifico_ufla";
   if (/\bARTIGO\b/.test(normalized)) return "artigo";
 
@@ -395,13 +409,23 @@ function findFollowingLabel(lines: string[], labels: string[]): string {
 }
 
 function detectWorkNature(lines: string[]): string {
-  return (
-    lines.find((line) =>
-      /apresentad[ao]\s+[aà]\s+universidade|obten[cç][aã]o\s+do\s+t[ií]tulo/i.test(
-        line,
-      ),
-    ) ?? ""
+  const index = lines.findIndex((line) =>
+    /apresentad[ao]\s+[aà]\s+universidade|obten[cç][aã]o\s+do\s+t[ií]tulo/i.test(line),
   );
+  if (index < 0) return "";
+
+  const parts: string[] = [];
+  for (let i = index; i < lines.length; i += 1) {
+    const text = cleanValue(lines[i]);
+    if (!text) continue;
+    if (/palavras[- ]chave\s*[:\-]/i.test(text) || /^keywords\s*[:\-]/i.test(text)) break;
+    if (/^bibliografia$/i.test(text) || /^referencias$/i.test(text) || /^sumario$/i.test(text)) break;
+    if (/^ficha catalogr/i.test(text) || /^folha de aprov/i.test(text)) break;
+    if (parts.join(" ").length > 1200) break;
+    parts.push(text);
+  }
+
+  return parts.join(" ").trim();
 }
 
 function splitResumo(blocks: ImportedBlock[]): {
@@ -425,12 +449,21 @@ function splitResumo(blocks: ImportedBlock[]): {
       break;
     }
 
-    if (
+    const normalized = normalizeForDetection(text);
+    const isNextPreTextual =
       isPageHeading(block, ["ABSTRACT", "SUMARIO", "SUMÁRIO"]) ||
-      (looksLikePrimaryHeading(block, text) && collected.length)
-    ) {
-      break;
-    }
+      normalized === "AGRADECIMENTOS" ||
+      normalized === "DEDICATORIA" ||
+      normalized === "EPIGRAFE" ||
+      normalized === "INDICADORES DE IMPACTO" ||
+      normalized === "IMPACT INDICATORS" ||
+      normalized === "LISTA DE QUADROS" ||
+      normalized === "LISTA DE GRAFICOS" ||
+      normalized === "LISTA DE SIGLAS" ||
+      /^1\s+INTRODUCAO$/i.test(normalized);
+
+    if (isNextPreTextual) break;
+    if (looksLikePrimaryHeading(block, text) && collected.length) break;
 
     collected.push(text);
   }
@@ -459,7 +492,8 @@ function splitAbstract(blocks: ImportedBlock[]): {
       break;
     }
 
-    if (
+    const normalized = normalizeForDetection(text);
+    const isNextPreTextual =
       isPageHeading(block, [
         "INDICADORES DE IMPACTO",
         "IMPACT INDICATORS",
@@ -468,15 +502,196 @@ function splitAbstract(blocks: ImportedBlock[]): {
         "INTRODUCAO",
         "INTRODUÇÃO",
       ]) ||
-      /^1\s+INTRODUCAO$/.test(normalizeForDetection(text))
-    ) {
-      break;
-    }
+      normalized === "AGRADECIMENTOS" ||
+      normalized === "DEDICATORIA" ||
+      normalized === "EPIGRAFE" ||
+      normalized === "LISTA DE QUADROS" ||
+      normalized === "LISTA DE GRAFICOS" ||
+      normalized === "LISTA DE SIGLAS" ||
+      /^1\s+INTRODUCAO$/i.test(normalized);
+
+    if (isNextPreTextual) break;
+    if (looksLikePrimaryHeading(block, text) && collected.length) break;
 
     collected.push(text);
   }
 
   return { abstractText: joinLines(collected), keywords };
+}
+
+function keywordValue(text: string, label: "palavras" | "keywords"): string {
+  const pattern =
+    label === "palavras"
+      ? /^palavras[- ]chave\s*[:\-]\s*(.+)$/i
+      : /^keywords\s*[:\-]\s*(.+)$/i;
+  return cleanValue(text.match(pattern)?.[1] ?? "");
+}
+
+function isPalavrasChaveLine(text: string): boolean {
+  return /^palavras[- ]chave\s*[:\-]/i.test(text.trim());
+}
+
+function isKeywordsLine(text: string): boolean {
+  return /^keywords\s*[:\-]/i.test(text.trim());
+}
+
+function isLikelyDelimiterBoundary(block: ImportedBlock, text: string): boolean {
+  const normalized = normalizeForDetection(text);
+  return (
+    block.type === "pageBreak" ||
+    isPageHeading(block, [
+      "RESUMO",
+      "ABSTRACT",
+      "AGRADECIMENTOS",
+      "DEDICATORIA",
+      "EPIGRAFE",
+      "SUMARIO",
+      "SUMÁRIO",
+      "LISTA DE QUADROS",
+      "LISTA DE GRÁFICOS",
+      "LISTA DE GRAFICOS",
+      "LISTA DE SIGLAS",
+      "INDICADORES DE IMPACTO",
+      "IMPACT INDICATORS",
+    ]) ||
+    /^(DEDICATORIA|AGRADECIMENTOS|EPIGRAFE|FICHA CATALOGR|FOLHA DE APROV|LISTA DE QUADROS|LISTA DE GRAFICOS|LISTA DE SIGLAS|INDICADORES DE IMPACTO|IMPACT INDICATORS)\b/i.test(normalized) ||
+    /^APROVAD[AO]\b/.test(normalized) ||
+    /^ORIENTADOR/.test(normalized) ||
+    /^BIBLIOGRAFIA/.test(normalized) ||
+    /^FICHA CATALOGR/i.test(normalized) ||
+    /^FOLHA DE APROV/i.test(normalized)
+  );
+}
+
+function collectBeforeDelimiter(
+  blocks: ImportedBlock[],
+  delimiterIndex: number,
+  options: { afterIndex?: number; stopAtPalavrasChave?: boolean } = {},
+): string {
+  const collected: string[] = [];
+  const minIndex = options.afterIndex ?? 0;
+
+  for (let index = delimiterIndex - 1; index >= minIndex; index -= 1) {
+    const block = blocks[index];
+    const text = textFromBlockForSection(block).trim();
+    if (!text) continue;
+    if (options.stopAtPalavrasChave && isPalavrasChaveLine(text)) break;
+    if (isKeywordsLine(text)) break;
+    if (isLikelyDelimiterBoundary(block, text)) {
+      if (collected.length) break;
+      continue;
+    }
+    if (looksLikePrimaryHeading(block, text)) {
+      if (collected.length) break;
+      continue;
+    }
+    if (looksLikePersonalThanks(text)) {
+      break;
+    }
+    if (text.startsWith("[Imagem detectada")) continue;
+    collected.unshift(text);
+  }
+
+  return cleanAcademicCandidate(joinLines(collected));
+}
+
+function recoverResumoByDelimiter(blocks: ImportedBlock[]): {
+  resumo: string;
+  palavrasChave: string;
+  confidence: Confidence;
+} {
+  const keywordIndex = blocks.findIndex((block) => isPalavrasChaveLine(textFromBlockForSection(block).trim()));
+  if (keywordIndex < 0) return { resumo: "", palavrasChave: "", confidence: "nao-identificado" };
+
+  const resumo = collectBeforeDelimiter(blocks, keywordIndex);
+  return {
+    resumo,
+    palavrasChave: keywordValue(textFromBlockForSection(blocks[keywordIndex]).trim(), "palavras"),
+    confidence: resumo ? "baixa" : "nao-identificado",
+  };
+}
+
+function recoverAbstractByDelimiter(blocks: ImportedBlock[]): {
+  abstractText: string;
+  keywords: string;
+  confidence: Confidence;
+} {
+  const keywordIndex = blocks.findIndex((block) => isKeywordsLine(textFromBlockForSection(block).trim()));
+  if (keywordIndex < 0) return { abstractText: "", keywords: "", confidence: "nao-identificado" };
+
+  let previousPalavrasIndex = -1;
+  for (let index = keywordIndex - 1; index >= 0; index -= 1) {
+    if (isPalavrasChaveLine(textFromBlockForSection(blocks[index]).trim())) {
+      previousPalavrasIndex = index;
+      break;
+    }
+  }
+  const abstractText = collectBeforeDelimiter(blocks, keywordIndex, {
+    afterIndex: previousPalavrasIndex >= 0 ? previousPalavrasIndex + 1 : 0,
+    stopAtPalavrasChave: true,
+  });
+
+  return {
+    abstractText,
+    keywords: keywordValue(textFromBlockForSection(blocks[keywordIndex]).trim(), "keywords"),
+    confidence: abstractText ? "baixa" : "nao-identificado",
+  };
+}
+
+function stripAdvisorNoise(value: string): string {
+  return cleanValue(
+    value
+      .replace(/\bBibliografia\b.*$/i, "")
+      .replace(/\bFicha catalogr[aá]fica\b.*$/i, ""),
+  );
+}
+
+function hasCatalogCard(lines: string[]): boolean {
+  return lines.some((line) => /ficha catalogr[aá]fica|bibliografia\./i.test(line));
+}
+
+function hasApprovalSheet(lines: string[]): boolean {
+  return lines.some((line) => /aprovad[ao]\s+em\s+\d{1,2}\s+de\s+\p{L}+\s+de\s+(?:19|20)\d{2}/iu.test(line));
+}
+
+function detectApprovalSheet(lines: string[]): { date: string; members: string[] } {
+  const dateLine = lines.find((line) => /aprovad[ao]\s+em\s+(\d{1,2}\s+de\s+\p{L}+\s+de\s+(?:19|20)\d{2})/iu.test(line));
+  const date = dateLine ? cleanValue(dateLine.replace(/^aprovad[ao]\s+em\s+/i, "").replace(/\.$/i, "").trim()) : "";
+
+  const start = lines.findIndex((line) => /aprovad[ao]\s+em/i.test(line));
+  const members: string[] = [];
+  if (start >= 0) {
+    for (let index = start + 1; index < lines.length; index += 1) {
+      const text = lines[index].trim();
+      if (!text) continue;
+      if (/^(RESUMO|ABSTRACT|PALAVRAS[- ]CHAVE|KEYWORDS|AGRADECIMENTOS|DEDICATORIA|EPIGRAFE|INDICADORES|IMPACT|LISTA|SUMARIO|1\s+INTRODUCAO|REFERENCIAS|ANEXOS|APENDICES|CONCLUSAO)/i.test(text)) break;
+      if (text.length > 250) continue;
+      if (/^A\s+[A-ZÀÁÂÃÉÊÍÓÔÕÚÜÇ]/.test(text) && text.length > 80) continue;
+
+      const hasTitle = /(?:prof|dra|dr)\.?\s+/i.test(text);
+      if (hasTitle && text.length < 200) {
+        const parts = text.split(/\s+(?=Prof\.|Dra\.|Dr\.)/i).filter(Boolean);
+        members.push(...parts);
+      }
+    }
+  }
+
+  return { date, members };
+}
+
+function hasPreTextualLists(lines: string[]): boolean {
+  const normalized = lines.map(normalizeForDetection).join("\n");
+  return /LISTA DE (QUADROS|GRAFICOS|SIGLAS|ILUSTRACOES|TABELAS)/.test(normalized);
+}
+
+function looksLikePdfConvertedDocx(structure: DocxStructure, lines: string[]): boolean {
+  const normalized = lines.map(normalizeForDetection).join("\n");
+  const hasDelimiterWithoutHeading =
+    (/PALAVRAS[- ]CHAVE:/.test(normalized) && !/^RESUMO$/m.test(normalized)) ||
+    (/KEYWORDS:/.test(normalized) && !/^ABSTRACT$/m.test(normalized));
+  const hasDisplacedPreTextual =
+    /INDICADORES DE IMPACTO|IMPACT INDICATORS|LISTA DE QUADROS|LISTA DE GRAFICOS|LISTA DE SIGLAS/.test(normalized);
+  return hasDelimiterWithoutHeading || (structure.images.length > 0 && hasDisplacedPreTextual);
 }
 
 function findIntroductionIndex(blocks: ImportedBlock[]): number {
@@ -510,8 +725,34 @@ function collectConclusion(blocks: ImportedBlock[]): string {
 }
 
 function collectReferences(blocks: ImportedBlock[]): string {
-  const start = findHeadingIndex(blocks, isReferenceHeading);
-  return collectAfterHeading(blocks, start, (block) => isAnnexHeading(block) || isAppendixHeading(block));
+  const referenceCandidates = blocks
+    .map((block, index) => ({ block, index }))
+    .filter(({ block }) => isReferenceHeading(block));
+
+  const introductionIndex = findIntroductionIndex(blocks);
+  const start = referenceCandidates
+    .filter(({ index }) => introductionIndex < 0 || index > introductionIndex)
+    .at(-1)?.index ?? -1;
+
+  const collected: string[] = [];
+
+  if (start >= 0) {
+    for (let index = start + 1; index < blocks.length; index += 1) {
+      const block = blocks[index];
+      if (isAnnexHeading(block) || isAppendixHeading(block)) break;
+      const normalized = normalizeForDetection(blockText(block));
+      if (/^1\s+INTRODUCAO$/i.test(normalized) || normalized === "INTRODUCAO") break;
+      if (/^(OBJETIVO GERAL|OBJETIVOS ESPECIFICOS|JUSTIFICATIVAS|ORGANIZACAO DO TRABALHO|REFERENCIAL TEORICO|METODOLOGIA|RESULTADOS E DISCUSSAO|CONCLUSAO|CONSIDERACOES FINAIS)\b/.test(normalized)) break;
+      if (/^(APENDICE|APÊNDICE|ANEXO)\b/i.test(normalized)) break;
+
+      const text = textFromBlockForSection(block).trim();
+      if (!text) continue;
+      if (isLikelyNoiseReferenceItem(text)) continue;
+      collected.push(text);
+    }
+  }
+
+  return collected.join("\n\n").trim();
 }
 
 function findPostReferencesHeadingIndex(
@@ -537,10 +778,205 @@ function collectPreTextualSection(blocks: ImportedBlock[], headings: string[]): 
   const start = findHeadingIndex(blocks, (block) => isPageHeading(block, headings));
   return collectAfterHeading(blocks, start, (block) => {
     if (block.type === "pageBreak") return false;
+    const text = blockText(block);
+    const normalizedText = normalizeForDetection(text);
+    if (
+      /^(A PRESENTE PESQUISA TEVE COMO OBJETIVO|THIS STUDY AIMED|PALAVRAS[- ]CHAVE|KEYWORDS)\b/.test(normalizedText)
+    ) {
+      return true;
+    }
     if (!looksLikePrimaryHeading(block)) return false;
     const normalized = headingBase(blockText(block));
-    return !headings.map(normalizeForDetection).includes(normalized);
+    const isTarget = headings.map(normalizeForDetection).includes(normalized);
+    if (isTarget) return false;
+    const isKnownPreTextual =
+      normalized === "RESUMO" ||
+      normalized === "ABSTRACT" ||
+      normalized === "AGRADECIMENTOS" ||
+      normalized === "DEDICATORIA" ||
+      normalized === "EPIGRAFE" ||
+      normalized === "SUMARIO" ||
+      normalized === "SUMÁRIO" ||
+      normalized === "LISTA DE ILUSTRACOES" ||
+      normalized === "LISTA DE TABELAS" ||
+      normalized === "LISTA DE QUADROS" ||
+      normalized === "LISTA DE GRAFICOS" ||
+      normalized === "LISTA DE SIGLAS" ||
+      normalized === "INDICADORES DE IMPACTO" ||
+      normalized === "IMPACT INDICATORS";
+    const isIntro = normalized === "INTRODUCAO" || /^1\s+INTRODUCAO$/i.test(normalized);
+    const isReference = normalized === "REFERENCIAS" || normalized === "ANEXOS" || normalized === "ANEXO" || normalized === "APENDICES" || normalized === "APENDICE";
+    return isKnownPreTextual || isIntro || isReference;
   });
+}
+
+function preTextualRecoveryNotice(): string {
+  return "Seção detectada no arquivo importado, mas o conteúdo não pôde ser preservado automaticamente. Revise manualmente.";
+}
+
+function cleanPreTextualList(value: string, labels: string[]): string {
+  const lines = splitLines(value);
+  const labelPattern = labels.map((label) => normalizeForDetection(label)).join("|");
+  const allowUnpagedTerminalEntry = labels.some((label) => normalizeForDetection(label) === "QUADRO");
+  const entryStart = new RegExp(`^(?:${labelPattern})\\s+\\d+\\b`, "i");
+  const entryNumber = new RegExp(`^(?:${labelPattern})\\s+(\\d+)\\b`, "i");
+  const stopPattern =
+    /^(LISTA DE GRAFICOS|LISTA DE GRÁFICOS|LISTA DE SIGLAS|LISTA DE QUADROS|LISTA DE TABELAS|SUMARIO|SUMÁRIO|INTRODUCAO|INTRODUÇÃO|CONCLUSÃO|REFERENCIAS)\b/i;
+
+  const kept: string[] = [];
+  let pending: { text: string; number: number } | null = null;
+  let highestNumber = 0;
+
+  const hasTrailingPage = (text: string): boolean => /\b\d{1,4}\s*$/.test(text.replace(/[.]+$/, "").trim());
+
+  const flushPending = (force = false): void => {
+    if (pending !== null) {
+      const text = pending.text.replace(/\s+/g, " ").trim();
+      if (force || hasTrailingPage(text)) {
+        kept.push(text);
+        highestNumber = Math.max(highestNumber, pending.number);
+      }
+      pending = null;
+    }
+  };
+
+  for (const line of lines) {
+    if (/^Fonte\s*:/i.test(line)) {
+      flushPending(allowUnpagedTerminalEntry && (pending?.number ?? 0) > highestNumber);
+      break;
+    }
+
+    const normalized = normalizeForDetection(line);
+    if (stopPattern.test(normalized)) {
+      flushPending(allowUnpagedTerminalEntry && (pending?.number ?? 0) > highestNumber);
+      break;
+    }
+
+    if (entryStart.test(normalized)) {
+      const number = Number(normalized.match(entryNumber)?.[1] ?? 0);
+      if (number > 0 && highestNumber > 1 && number <= highestNumber) {
+        flushPending();
+        break;
+      }
+      flushPending(true);
+      pending = { text: line, number };
+      continue;
+    }
+
+    if (pending !== null) {
+      pending.text = `${pending.text} ${line}`.replace(/\s+/g, " ").trim();
+      continue;
+    }
+  }
+
+  flushPending(allowUnpagedTerminalEntry && (pending?.number ?? 0) > highestNumber);
+
+  return kept.join("\n").trim();
+}
+
+function looksLikeThanksBlock(text: string): boolean {
+  const normalized = normalizeForDetection(text);
+  if (text.length < 25) return false;
+  const startsWithThanks = /^(agrade[çc]o|a\s+deus|aos\s+meus|ao\s+meu|a\s+minha|[àa]\s+minha|a\s+todos|aos\s+|[àa]\s+luiza|[àa]\s+universidade|ao\s+programa)/i.test(normalized);
+  if (!startsWithThanks) return false;
+  const hasThanksContent = /(esposo|filhos|pais|familiares|orientador|agradecimento|dedicatoria|amigos|colegas|equipe|trabalho|apoio|incentivo|carinho|paci[eê]ncia|universidade|programa|sustentar|guiar|caminhada|oportunidade|vivenciar|colabora[cç][aã]o|contribui[cç][aã]o|parceria|companheirismo|est[íi]mulo|acolhimento|qualidade|forma|processo|ensin[oa]|aprendizado|experi[eê]ncia)/i.test(normalized);
+  return hasThanksContent;
+}
+
+function collectPreTextualByContent(blocks: ImportedBlock[]): {
+  agradecimentos: string;
+  listaQuadros: string;
+  listaGraficos: string;
+  listaTabelas: string;
+  listaSiglas: string;
+} {
+  let agradecimentosStart = -1;
+  let agradecimentosEnd = -1;
+  const quadroEntries: string[] = [];
+  const graficoEntries: string[] = [];
+  const tabelaEntries: string[] = [];
+  const siglaEntries: string[] = [];
+
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    const text = blockText(block).trim();
+    if (!text) continue;
+
+    const normalized = normalizeForDetection(text);
+
+    if (agradecimentosStart < 0 && looksLikeThanksBlock(text)) {
+      agradecimentosStart = i;
+      continue;
+    }
+
+    if (agradecimentosStart >= 0 && agradecimentosEnd < 0) {
+      if (
+        /^(PALAVRAS[- ]CHAVE|KEYWORDS|RESUMO|ABSTRACT|INDICADORES DE IMPACTO|IMPACT INDICATORS|LISTA DE|SUMARIO|1\s+INTRODUCAO|INTRODUCAO|REFERENCIAS)/i.test(normalized) ||
+        /^(A PRESENTE PESQUISA TEVE COMO OBJETIVO|THIS STUDY AIMED)\b/.test(normalized)
+      ) {
+        agradecimentosEnd = i;
+      }
+      continue;
+    }
+
+    const quadroMatch = text.match(/^(Quadro|QUADRO)\s+(\d+)\s*[-–—]\s*(.+)$/);
+    if (quadroMatch) {
+      quadroEntries.push(`Quadro ${quadroMatch[2]} - ${cleanValue(quadroMatch[3])}`);
+      continue;
+    }
+
+    const graficoMatch = text.match(/^(Gr[aá]fico|GRAFICO)\s+(\d+)\s*[-–—]\s*(.+)$/);
+    if (graficoMatch) {
+      graficoEntries.push(`Gráfico ${graficoMatch[2]} - ${cleanValue(graficoMatch[3])}`);
+      continue;
+    }
+
+    const tabelaMatch = text.match(/^(Tabela|TABELA)\s+(\d+)\s*[-–—]\s*(.+)$/);
+    if (tabelaMatch) {
+      tabelaEntries.push(`Tabela ${tabelaMatch[2]} - ${cleanValue(tabelaMatch[3])}`);
+      continue;
+    }
+  }
+
+  const agradecimentos = agradecimentosStart >= 0 && agradecimentosEnd >= 0
+    ? joinLines(blocks.slice(agradecimentosStart, agradecimentosEnd).map(blockText).filter(Boolean))
+    : "";
+
+  return {
+    agradecimentos,
+    listaQuadros: quadroEntries.join("\n"),
+    listaGraficos: graficoEntries.join("\n"),
+    listaTabelas: tabelaEntries.join("\n"),
+    listaSiglas: siglaEntries.join("\n"),
+  };
+}
+
+function isLikelyNoiseReferenceItem(text: string): boolean {
+  const normalized = normalizeForDetection(text);
+  const looksLikeSentence = /^(O|A|Os|As|Um|Uma|Nest|Neste|Esta|Este|Conforme|Segundo|Para|Quanto|Esse|Essa|Esses|Essas|O panorama|Resultados|Portanto|Esse estudo|A necessidade|A universidade|O governo|A pesquisa|O atual|A atual|Um estudo|Estudos afirmam|O panorama da|Na Introdução|Na seção|Nos Resultados|Já na Conclusão|Apresenta-se uma contextualização|A presente pesquisa|O tema se enquadra|Os resultados desta pesquisa|Espera-se portanto|A importância|O panorama da pesquisa|A contribuições científicas|A necessidade de compreender|A implementação do PGD na Universidade|O teletrabalho|A implementação do Programa|Este trabalho|A atual crise|O sistema de gestão|Os dados foram|A análise dos dados|A pesquisa é de|Os participantes|Os servidores|Os gestores|A universidade é|O ambiente|O presente trabalho|A pesquisa qualitativa|A pesquisa quantitativa)\b/i.test(text.trim());
+  if (looksLikeSentence && !/^[A-Z][A-Z\s,;.\-]+$/.test(text.trim())) return true;
+  if (/^(APENDICE|APÊNDICE|ANEXO|TCLE|TERMO|CONVITE|PESQUISADOR|CARGO|FUNÇÃO|SIGILO|PRIVACIDADE|RESULTADOS|VOLUNTÁRIA|PARTICIPAR|UNIVERSIDADE FEDERAL|PREZADO|SENHOR|VOCÊ)\b/i.test(normalized)) return true;
+  if (/^(TÍTULO DO TRABALHO EXPERIMENTAL)/i.test(normalized)) return true;
+  return (
+    /^(APROVAD|DISSERTACAO|MESTRADO|BIBLIOGRAFIA|FICHA CATALOGRAFICA|FOLHA DE APROV|SUMARIO|LISTA|INDICADORES|IMPACT|AGRADECIMENTOS|DEDICATORIA|EPIGRAFE|REFERENCIAS|ANEXOS|APENDICES|INTRODUCAO|CONCLUSAO|RESUMO|ABSTRACT|PALAVRAS|KEYWORDS|OBJETIVO GERAL|OBJETIVOS ESPECIFICOS|JUSTIFICATIVAS|ORGANIZACAO DO TRABALHO|REFERENCIAL TEORICO|METODOLOGIA|RESULTADOS E DISCUSSAO)\b/.test(normalized) ||
+    /^(–|-|•|\*)/.test(text.trim()) ||
+    /^\d+$/.test(text.trim()) ||
+    /(aprimorar|modalidades|regimes|vedacoes|Gr[aá]fico\s+\d+|Quadro\s+\d+|Fonte:|percentual|4,4%|teletrabalho na administracao|as modalidades|roteiro preliminar|termo de consentimento|tc le|pesquisador responsável|cargo função|sigilo privacidade)/i.test(text)
+  );
+}
+
+function splitLines(value: string): string[] {
+  return value
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function cleanReferences(references: string): string {
+  return splitLines(references)
+    .filter((item) => !isLikelyNoiseReferenceItem(item))
+    .join("\n")
+    .trim();
 }
 
 function collectSectionByAlias(blocks: ImportedBlock[], key: AcademicFieldKey): string {
@@ -559,7 +995,6 @@ function blocksToEditorText(blocks: ImportedBlock[]): string {
   const lines: string[] = [];
   for (let index = start; index < blocks.length; index += 1) {
     const block = blocks[index];
-    if (isReferenceHeading(block) || isAnnexHeading(block) || isAppendixHeading(block)) break;
     if (block.type === "pageBreak") continue;
 
     if (block.type === "heading") {
@@ -687,9 +1122,10 @@ export function detectAcademicFieldsFromStructure(
   fields.year = coverYear.value;
   confidence.year = coverYear.confidence;
 
-  fields.advisor =
+  fields.advisor = stripAdvisorNoise(
     findByLabel(text, [/^\s*orientador(?:a)?\s*[:\-]\s*(.+)$/im]) ||
-    findFollowingLabel(lines, ["Orientador", "Orientadora"]);
+      findFollowingLabel(lines, ["Orientador", "Orientadora"]),
+  );
   fields.coadvisor =
     findByLabel(text, [/^\s*coorientador(?:a)?\s*[:\-]\s*(.+)$/im]) ||
     findFollowingLabel(lines, ["Coorientador", "Coorientadora"]);
@@ -700,17 +1136,39 @@ export function detectAcademicFieldsFromStructure(
       fields.workNature.match(/programa de p[óo]s-gradua[cç][aã]o em ([^,]+)/i)?.[1]?.trim() ?? "";
   }
 
+  const approval = detectApprovalSheet(lines);
+  fields.aprovalDate = approval.date;
+  fields.approvalMembers = approval.members;
+
   const resumo = splitResumo(structure.blocks);
   fields.resumo = resumo.resumo;
   fields.palavrasChave = resumo.palavrasChave;
+  const recoveredResumo = recoverResumoByDelimiter(structure.blocks);
+  if (!fields.resumo && recoveredResumo.resumo) {
+    fields.resumo = recoveredResumo.resumo;
+    confidence.resumo = recoveredResumo.confidence;
+  }
+  if (!fields.palavrasChave && recoveredResumo.palavrasChave) {
+    fields.palavrasChave = recoveredResumo.palavrasChave;
+    confidence.palavrasChave = recoveredResumo.confidence === "baixa" ? "media" : recoveredResumo.confidence;
+  }
 
   const abstract = splitAbstract(structure.blocks);
   fields.abstractText = abstract.abstractText;
   fields.keywords = abstract.keywords;
+  const recoveredAbstract = recoverAbstractByDelimiter(structure.blocks);
+  if (!fields.abstractText && recoveredAbstract.abstractText) {
+    fields.abstractText = recoveredAbstract.abstractText;
+    confidence.abstractText = recoveredAbstract.confidence;
+  }
+  if (!fields.keywords && recoveredAbstract.keywords) {
+    fields.keywords = recoveredAbstract.keywords;
+    confidence.keywords = recoveredAbstract.confidence === "baixa" ? "media" : recoveredAbstract.confidence;
+  }
 
   fields.introducao = collectIntroduction(structure.blocks);
   fields.conclusao = collectConclusion(structure.blocks);
-  fields.referencias = collectReferences(structure.blocks);
+  fields.referencias = cleanReferences(collectReferences(structure.blocks));
   fields.objetivoGeral = collectSectionByAlias(structure.blocks, "objetivoGeral");
   fields.objetivosEspecificos = collectSectionByAlias(structure.blocks, "objetivosEspecificos");
   fields.referencialTeorico = collectSectionByAlias(structure.blocks, "referencialTeorico");
@@ -720,14 +1178,81 @@ export function detectAcademicFieldsFromStructure(
   fields.anexos = collectAnnexes(structure.blocks);
   fields.apendices = collectAppendices(structure.blocks);
   fields.agradecimentos = collectPreTextualSection(structure.blocks, ["AGRADECIMENTOS"]);
+  fields.listaQuadros = collectPreTextualSection(structure.blocks, ["LISTA DE QUADROS"]);
+  fields.listaGraficos = collectPreTextualSection(structure.blocks, ["LISTA DE GRÁFICOS", "LISTA DE GRAFICOS"]);
+  fields.listaTabelas = collectPreTextualSection(structure.blocks, ["LISTA DE TABELAS"]);
+  fields.listaSiglas = collectPreTextualSection(structure.blocks, ["LISTA DE SIGLAS"]);
   fields.indicadoresImpacto = collectPreTextualSection(structure.blocks, [
     "INDICADORES DE IMPACTO",
   ]);
   fields.impactIndicators = collectPreTextualSection(structure.blocks, ["IMPACT INDICATORS"]);
+  fields.listaQuadros = cleanPreTextualList(fields.listaQuadros, ["Quadro"]);
+  fields.listaGraficos = cleanPreTextualList(fields.listaGraficos, ["GrÃ¡fico", "Grafico"]);
+  fields.listaTabelas = cleanPreTextualList(fields.listaTabelas, ["Tabela"]);
 
-  const imageBlocks = structure.blocks.filter((block) => block.type === "image");
+  if (!fields.agradecimentos || !fields.listaQuadros || !fields.listaGraficos || !fields.listaSiglas) {
+    const inferred = collectPreTextualByContent(structure.blocks);
+    if (!fields.agradecimentos && inferred.agradecimentos) {
+      fields.agradecimentos = inferred.agradecimentos;
+      messages.push("Agradecimentos detectados por inferência de conteúdo (sem heading explícito). Revise antes de gerar.");
+    }
+    if (!fields.listaQuadros && inferred.listaQuadros) {
+      fields.listaQuadros = inferred.listaQuadros;
+      messages.push("Lista de quadros inferida a partir dos títulos de quadro no texto. Revise antes de gerar.");
+    }
+    if (!fields.listaGraficos && inferred.listaGraficos) {
+      fields.listaGraficos = inferred.listaGraficos;
+      messages.push("Lista de gráficos inferida a partir dos títulos de gráfico no texto. Revise antes de gerar.");
+    }
+    if (!fields.listaTabelas && inferred.listaTabelas) {
+      fields.listaTabelas = inferred.listaTabelas;
+      messages.push("Lista de tabelas inferida a partir dos títulos de tabela no texto. Revise antes de gerar.");
+    }
+    if (!fields.listaSiglas && inferred.listaSiglas) {
+      fields.listaSiglas = inferred.listaSiglas;
+      messages.push("Lista de siglas inferida a partir do texto. Revise antes de gerar.");
+    }
+  }
+  fields.listaQuadros = cleanPreTextualList(fields.listaQuadros, ["Quadro"]);
+  fields.listaGraficos = cleanPreTextualList(fields.listaGraficos, ["GrÃ¡fico", "Grafico"]);
+  fields.listaTabelas = cleanPreTextualList(fields.listaTabelas, ["Tabela"]);
+  const convertedPdfLikely = looksLikePdfConvertedDocx(structure, lines);
+  if (convertedPdfLikely && (fields.workType === "dissertacao" || fields.workType === "tese")) {
+    if (!fields.indicadoresImpacto) {
+      fields.indicadoresImpacto = preTextualRecoveryNotice();
+      messages.push("Indicadores de impacto parecem existir no documento convertido, mas nÃ£o foram preservados como texto editÃ¡vel.");
+    }
+    if (!fields.impactIndicators) {
+      fields.impactIndicators = preTextualRecoveryNotice();
+      messages.push("Impact indicators parecem existir no documento convertido, mas nÃ£o foram preservados como texto editÃ¡vel.");
+    }
+    if (!fields.listaSiglas) {
+      fields.listaSiglas = preTextualRecoveryNotice();
+      messages.push("Lista de siglas parece existir no documento convertido, mas nÃ£o foi preservada como texto editÃ¡vel.");
+    }
+  }
+
+  if (hasCatalogCard(lines)) {
+    messages.push("Ficha catalografica detectada no documento importado; preserve os dados reais e revise antes de gerar.");
+  }
+  if (hasApprovalSheet(lines)) {
+    messages.push("Folha de aprovacao detectada no documento importado; preserve os dados reais e revise antes de gerar.");
+  }
+  if (fields.indicadoresImpacto || fields.impactIndicators) {
+    messages.push("Indicadores de impacto detectados no documento importado.");
+  }
+  if (hasPreTextualLists(lines)) {
+    messages.push("Listas pre-textuais detectadas no documento importado.");
+  }
+  if (convertedPdfLikely) {
+    messages.push(
+      "Este DOCX parece ter sido convertido de PDF. Alguns títulos, caixas de texto, imagens, quadros e elementos pré-textuais podem ter sido deslocados para cabeçalhos, rodapés ou objetos ancorados. Revise os campos extraídos antes de gerar o DOCX.",
+    );
+  }
+
+  const imageBlocks = structure.blocks.filter((block) => block.type === "image" && !block.isDecorative);
   if (imageBlocks.length) {
-    fields.imageWarnings = `${imageBlocks.length} imagem(ns) detectada(s). O sistema registra a presenca de imagens, mas nao garante preservacao visual; confira ou reinsira manualmente cada imagem no DOCX final e revise legendas e posicao.`;
+    fields.imageWarnings = `${imageBlocks.length} imagem(ns) detectada(s), mas nem todas puderam ser preservadas automaticamente. Reinsira manualmente as imagens ausentes e confira legendas e fontes.`;
     messages.push(fields.imageWarnings);
   }
 

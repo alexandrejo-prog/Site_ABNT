@@ -27,7 +27,7 @@ function structureFromBlocks(blocks: ImportedBlock[]): DocxStructure {
     text: blocks
       .flatMap((block) => {
         if (block.type === "pageBreak") return [];
-        if (block.type === "image") return [`[Imagem detectada: ${block.relationshipId ?? "sem relacao"}]`];
+        if (block.type === "image") return [];
         if (block.type === "table") return block.rows.map((row) => row.join("\t"));
         return [block.text];
       })
@@ -162,7 +162,7 @@ REFERÊNCIAS
     const result = await detectTemplate();
     expect(result.fields.anexos).toContain("ANEXO A");
     expect(result.fields.apendices).toContain("APÊNDICE A");
-    expect(result.fields.apendices).toContain("[Imagem detectada:");
+    expect(result.fields.apendices).not.toContain("[Imagem detectada:");
   });
 
   it("detecta documento CPG com título, autores, afiliação, abstract, resumo e introdução", async () => {

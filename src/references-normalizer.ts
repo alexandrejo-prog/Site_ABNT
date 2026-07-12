@@ -113,12 +113,62 @@ function isReferenceTitleNoise(value: string): boolean {
   return noiseTitles.includes(text);
 }
 
+function isYearLeadingFragment(value: string): boolean {
+  return /^(?:19|20)\d{2}\.?\s+/u.test(value);
+}
+
+function fragmentYear(value: string): string | undefined {
+  return value.match(/^((?:19|20)\d{2})\.?\s+/u)?.[1];
+}
+
+function isInstitutionalNormativePrefix(value: string): boolean {
+  const text = fold(value);
+  return /^(brasil|minas gerais|lavras)\.\s+/.test(text) && /\b(lei|decreto|portaria|resolucao|instrucao normativa)\b/u.test(text);
+}
+
+function mergeNormativeYearFragment(prefix: string, fragment: string): string {
+  const year = fragmentYear(fragment);
+  if (!year) return `${prefix} ${fragment}`;
+  if (!new RegExp(`\\b${year}\\b`, "u").test(prefix)) return `${prefix} ${fragment}`;
+  const withoutRepeatedYear = fragment.replace(/^(?:19|20)\d{2}\.?\s*/u, "").trim();
+  return withoutRepeatedYear ? `${prefix} ${withoutRepeatedYear}` : prefix;
+}
+
+function isOrphanYearFragment(value: string): boolean {
+  return isYearLeadingFragment(value) && value.length < 120 && !/\p{Lu}{2,}[,.;]/u.test(value);
+}
+
 function splitItems(value: string): string[] {
-  return value
+  const items = value
     .split(/\n+/)
     .map(clean)
     .filter(Boolean)
     .filter((item) => !isReferenceTitleNoise(item));
+
+  const merged: string[] = [];
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    const next = items[index + 1];
+    if (isYearLeadingFragment(item) && next && isInstitutionalNormativePrefix(next)) {
+      merged.push(mergeNormativeYearFragment(next, item));
+      index += 1;
+      continue;
+    }
+    const previous = merged[merged.length - 1];
+    if (
+      previous &&
+      isYearLeadingFragment(item) &&
+      item.length < 100 &&
+      !/^[A-ZÀ-Ú]/.test(item)
+    ) {
+      merged[merged.length - 1] = mergeNormativeYearFragment(previous, item);
+      continue;
+    }
+    if (isOrphanYearFragment(item)) continue;
+    merged.push(item);
+  }
+
+  return merged;
 }
 
 function hasYear(value: string): boolean {
@@ -328,5 +378,5 @@ export function normalizeReferencesText(value: string): NormalizedReference[] {
 }
 
 export function normalizeReferences(references: string[]): NormalizedReference[] {
-  return references.flatMap((reference) => normalizeReferencesText(reference));
+  return normalizeReferencesText(references.join("\n"));
 }

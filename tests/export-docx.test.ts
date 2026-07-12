@@ -253,7 +253,7 @@ describe("DOCX export", () => {
     expect(documentXml).toContain("1 INTRODUCAO");
     expect(documentXml).not.toMatch(/SUM[\s\S]{0,80}RIO/);
     expect(documentXml).not.toContain("FICHA CATALOGR");
-    expect(documentXml).not.toContain("Aprovado em:");
+    expect(documentXml).not.toContain("APROVADO EM:");
     expect(documentXml).not.toContain("Programa:");
     expect(documentXml).not.toContain("Trabalho acad");
   });
@@ -328,24 +328,43 @@ describe("DOCX export", () => {
 
   it("keeps dissertation and thesis complete UFLA structure", async () => {
     for (const workType of ["dissertacao", "tese"] as const) {
+      const workNature =
+        workType === "tese"
+          ? "Tese apresentada para obtencao do titulo de Doutor."
+          : "Dissertacao apresentada para obtencao do titulo de Mestre.";
       const documentXml = await generatedXml("# 1 Introducao\nTexto comum.", {
         ...fields,
         workType,
-        workNature:
-          workType === "tese"
-            ? "Dissertacao apresentada para obtencao do titulo de Mestre em Ciencias."
-            : "Tese apresentada para obtencao do titulo de Doutor em Ciencias.",
+        workNature,
         indicadoresImpacto: "Impacto social informado.",
         impactIndicators: "Social impact text.",
       });
 
       expect(documentXml).toContain("SUMÁRIO");
       expect(documentXml).toContain("FICHA CATALOGR");
-      expect(documentXml).toContain("Aprovado em:");
+      expect(documentXml).toContain("APROVADO EM:");
       expect(documentXml).toContain("INDICADORES DE IMPACTO");
       expect(documentXml).toContain("IMPACT INDICATORS");
-      expect(documentXml).toContain(workType === "tese" ? "Doutor em Ciencias" : "Mestre em Ciencias");
+      expect(documentXml).toContain(workNature);
     }
+  });
+
+  it("une titulo solto da banca ao membro seguinte na folha de aprovacao", async () => {
+    const documentXml = await generatedXml("# 1 Introducao\nTexto comum.", {
+      ...fields,
+      workType: "dissertacao",
+      aprovalDate: "APROVADA em 08 de julho de 2025.",
+      approvalMembers: [
+        "Dra. Suzanne Erica Nobrega Correia UFCG",
+        "Dr. Rafael dos Santos Pereira UFMG",
+        "Prof.",
+        "Dr. Dany Flavio Tonelli Orientador",
+      ],
+    });
+    const paragraphs = paragraphsIn(documentXml).map(paragraphText);
+
+    expect(paragraphs).not.toContain("Prof.");
+    expect(paragraphs.some((text) => /Prof\.\s+Dr\.\s+Dany Flavio Tonelli.*Orientador/.test(text))).toBe(true);
   });
 
   it("keeps summary and pre-textual titles out of Word heading levels", async () => {

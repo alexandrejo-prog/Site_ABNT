@@ -46,6 +46,12 @@ export type ImportedBlock =
       caption?: string;
       source?: string;
       section?: ImportedSectionKind;
+      gridWidths?: number[];
+      tableWidthTwips?: number;
+      hasGridSpan?: boolean;
+      hasVerticalMerge?: boolean;
+      cellWidths?: number[][];
+      cellMerges?: Array<{ row: number; col: number; type: "vMerge-restart" | "vMerge-continue" | "gridSpan" }>;
     }
   | {
       type: "image";
@@ -57,6 +63,7 @@ export type ImportedBlock =
       caption?: string;
       source?: string;
       section?: ImportedSectionKind;
+      isDecorative?: boolean;
     }
   | { type: "pageBreak" };
 
@@ -444,6 +451,87 @@ function extractTableRows(tableXml: string): string[][] {
     .filter((row) => row.some((cell) => cell.trim()));
 }
 
+function twipValue(attrXml: string): number | undefined {
+  const match = attrXml.match(/w:w="(\d+)"/i);
+  if (!match) return undefined;
+  return Number(match[1]);
+}
+
+function extractTableGridWidths(tableXml: string): number[] {
+  const gridMatch = tableXml.match(/<w:tblGrid\b[^>]*>([\s\S]*?)<\/w:tblGrid>/);
+  if (!gridMatch) return [];
+  const widths: number[] = [];
+  const regex = /<w:gridCol\b[^>]*>/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(gridMatch[1])) !== null) {
+    const w = twipValue(match[0]);
+    if (w !== undefined) widths.push(w);
+  }
+  return widths;
+}
+
+function extractTableWidthTwips(tableXml: string): number | undefined {
+  const tblPrMatch = tableXml.match(/<w:tblPr\b[^>]*>([\s\S]*?)<\/w:tblPr>/);
+  if (!tblPrMatch) return undefined;
+  const tblWMatch = tblPrMatch[1].match(/<w:tblW\b[^>]*>/i);
+  if (!tblWMatch) return undefined;
+  return twipValue(tblWMatch[0]);
+}
+
+function extractCellProperties(tableXml: string): { hasGridSpan: boolean; hasVerticalMerge: boolean; cellWidths: number[][]; cellMerges: Array<{ row: number; col: number; type: "vMerge-restart" | "vMerge-continue" | "gridSpan" }> } {
+  const rows = [...tableXml.matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)];
+  let hasGridSpan = false;
+  let hasVerticalMerge = false;
+  const cellWidths: number[][] = [];
+  const cellMerges: Array<{ row: number; col: number; type: "vMerge-restart" | "vMerge-continue" | "gridSpan" }> = [];
+
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    const rowMatch = rows[rowIndex];
+    const rowWidths: number[] = [];
+    const cells = [...rowMatch[0].matchAll(/<w:tc\b[\s\S]*?<\/w:tc>/g)];
+    for (let colIndex = 0; colIndex < cells.length; colIndex++) {
+      const cellXml = cells[colIndex][0];
+      const gridSpanMatch = cellXml.match(/<w:gridSpan\b[^>]*w:val="(\d+)"[^>]*>/i);
+      if (gridSpanMatch) {
+        hasGridSpan = true;
+        cellMerges.push({ row: rowIndex, col: colIndex, type: "gridSpan" });
+      }
+      if (/<w:vMerge\b[^>]*>/i.test(cellXml)) {
+        hasVerticalMerge = true;
+        const vMergeVal = cellXml.match(/<w:vMerge\b[^>]*w:val="([^"]+)"[^>]*>/i)?.[1] ?? "restart";
+        const type = vMergeVal === "continue" ? "vMerge-continue" : "vMerge-restart";
+        cellMerges.push({ row: rowIndex, col: colIndex, type });
+      }
+      const tcPrMatch = cellXml.match(/<w:tcPr\b[^>]*>([\s\S]*?)<\/w:tcPr>/);
+      let w: number | undefined;
+      if (tcPrMatch) {
+        const tcWMatch = tcPrMatch[1].match(/<w:tcW\b[^>]*>/i);
+        if (tcWMatch) w = twipValue(tcWMatch[0]);
+      }
+      rowWidths.push(w ?? 0);
+    }
+    cellWidths.push(rowWidths);
+  }
+
+  return { hasGridSpan, hasVerticalMerge, cellWidths, cellMerges };
+}
+
+function parseTableBlock(tableXml: string): {
+  rows: string[][];
+  gridWidths: number[];
+  tableWidthTwips: number | undefined;
+  hasGridSpan: boolean;
+  hasVerticalMerge: boolean;
+  cellWidths: number[][];
+  cellMerges: Array<{ row: number; col: number; type: "vMerge-restart" | "vMerge-continue" | "gridSpan" }>;
+} {
+  const rows = extractTableRows(tableXml);
+  const gridWidths = extractTableGridWidths(tableXml);
+  const tableWidthTwips = extractTableWidthTwips(tableXml);
+  const { hasGridSpan, hasVerticalMerge, cellWidths, cellMerges } = extractCellProperties(tableXml);
+  return { rows, gridWidths, tableWidthTwips, hasGridSpan, hasVerticalMerge, cellWidths, cellMerges };
+}
+
 async function extractImages(
   zip: JSZip,
   relationships: Record<string, string>,
@@ -517,10 +605,18 @@ export async function extractDocxStructure(
     const xml = elementMatch[0];
 
     if (xml.startsWith("<w:tbl")) {
-      const rows = extractTableRows(xml);
-      if (rows.length) {
-        blocks.push({ type: "table", rows, section: currentSection });
-      }
+      const { rows, gridWidths, tableWidthTwips, hasGridSpan, hasVerticalMerge, cellWidths, cellMerges } = parseTableBlock(xml);
+      blocks.push({
+        type: "table",
+        rows,
+        section: currentSection,
+        gridWidths,
+        tableWidthTwips,
+        hasGridSpan,
+        hasVerticalMerge,
+        cellWidths,
+        cellMerges,
+      });
       continue;
     }
 
@@ -567,14 +663,33 @@ export async function extractDocxStructure(
           blocks.push(textBlock);
         }
 
-        for (const relationshipId of imageRelationshipIds) {
+      for (const relationshipId of imageRelationshipIds) {
+        const target = relationships[relationshipId];
+        const fileName = (target || "").split("/").at(-1) ?? "";
+        const isHeaderFooterImage =
+          Boolean(relationships[relationshipId]?.startsWith("media/")) &&
+          (target || "").startsWith("header") ||
+          (target || "").startsWith("footer") ||
+          /logo|ufla|fundo|moldura|capa/i.test(fileName);
+
+        if (isHeaderFooterImage) {
           blocks.push({
             type: "image",
             relationshipId,
-            target: relationships[relationshipId],
+            target,
             section: currentSection,
+            isDecorative: true,
           });
+          continue;
         }
+
+        blocks.push({
+          type: "image",
+          relationshipId,
+          target,
+          section: currentSection,
+        });
+      }
 
         paragraphIndex += 1;
       }
@@ -588,7 +703,7 @@ export async function extractDocxStructure(
   const text = blocks
     .flatMap((block) => {
       if (block.type === "pageBreak") return [];
-      if (block.type === "image") return [`[Imagem detectada: ${block.relationshipId ?? "sem relacao"}]`];
+      if (block.type === "image") return [];
       if (block.type === "table") return block.rows.map((row) => row.join("\t"));
       return [block.text];
     })

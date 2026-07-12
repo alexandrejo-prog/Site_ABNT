@@ -91,6 +91,8 @@ function escapeRegExp(value: string): string {
 function cleanText(value: string): string {
   return value
     .replace(/\uFFFE|\uFEFF/g, "")
+    .replace(/\[Imagem detectada:\s*[^\]]+\]/gi, "")
+    .replace(/\[Imagem:\s*[^\]]+\]/gi, "")
     .replace(/\s+/g, " ")
     .trim();
 }

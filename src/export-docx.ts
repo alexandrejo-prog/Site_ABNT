@@ -1,5 +1,6 @@
 import {
   AlignmentType,
+  BorderStyle,
   Document,
   HeadingLevel,
   Header,
@@ -25,6 +26,8 @@ import { normalizeReferences, type ReferenceRun } from "./references-normalizer"
 import { buildFlowingImpactText } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
 import { captionParagraph, cleanMojibakeText, detectCaption, tabbedTableBlock } from "./docx-render-core";
+import { ImportedDocumentImage, IMPORTED_IMAGE_MARKER_PATTERN } from "./imported-images";
+import { ImportedTable, IMPORTED_TABLE_MARKER_PATTERN, buildStructuredTextFromTable } from "./imported-tables";
 
 export type EditorBlockType =
   | "paragraph"
@@ -36,6 +39,8 @@ export type EditorBlockType =
   | "markdownTable"
   | "plainScheduleTable"
   | "tabbedTable"
+  | "importedImage"
+  | "importedTable"
   | "reference";
 
 export interface EditorBlock {
@@ -53,6 +58,8 @@ export interface DocxGenerationInput {
   fields: AcademicFields;
   editorText: string;
   logo?: DocxLogoAsset;
+  importedImages?: ImportedDocumentImage[];
+  importedTables?: ImportedTable[];
 }
 
 interface ScheduleRow {
@@ -356,6 +363,18 @@ export function parseEditorContent(editorText: string): EditorBlock[] {
 
     if (/^\[REF\]\s+/i.test(trimmed)) {
       blocks.push({ type: "reference", text: trimmed.replace(/^\[REF\]\s+/i, "") });
+      continue;
+    }
+
+    const importedImageMatch = trimmed.match(IMPORTED_IMAGE_MARKER_PATTERN);
+    if (importedImageMatch?.[1]) {
+      blocks.push({ type: "importedImage", text: importedImageMatch[1] });
+      continue;
+    }
+
+    const importedTableMatch = trimmed.match(IMPORTED_TABLE_MARKER_PATTERN);
+    if (importedTableMatch?.[1]) {
+      blocks.push({ type: "importedTable", text: importedTableMatch[1] });
       continue;
     }
 
@@ -744,9 +763,378 @@ function scheduleTableBlock(text: string): Array<Paragraph | Table> {
   ];
 }
 
+function importedImageParagraph(image: ImportedDocumentImage | undefined): Paragraph[] {
+  if (!image) return [];
+
+  if (image.data?.byteLength) {
+    return [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 120, after: 120, line: SINGLE_LINE },
+        children: [
+          new ImageRun({
+            data: image.data,
+            transformation: {
+              width: image.width ?? 420,
+              height: image.height ?? 260,
+            },
+            altText: {
+              title: image.caption || image.fileName || image.id,
+              description: image.source || "Imagem importada do DOCX original",
+              name: image.fileName || image.id,
+            },
+          }),
+        ],
+      }),
+    ];
+  }
+
+  return [
+    simpleParagraph(
+      `[IMAGEM DETECTADA] ${image.caption ? image.caption + ". " : ""}Reinsira manualmente esta imagem no documento final.`,
+    ),
+  ];
+}
+
+function normalizeConsecutiveRestarts(
+  merges: ImportedTable["cellMerges"],
+): ImportedTable["cellMerges"] {
+  if (!merges?.length) return merges;
+
+  const byColumn = new Map<number, Array<{ row: number; type: string }>>();
+  for (const m of merges) {
+    if (m.type !== "vMerge-restart") continue;
+    const list = byColumn.get(m.col) || [];
+    list.push({ row: m.row, type: m.type });
+    byColumn.set(m.col, list);
+  }
+
+  const result = [...merges];
+  for (const [col, restarts] of byColumn) {
+    if (restarts.length <= 1) continue;
+    restarts.sort((a, b) => a.row - b.row);
+    for (let i = 1; i < restarts.length; i++) {
+      const idx = result.findIndex((m) => m.row === restarts[i].row && m.col === col && m.type === "vMerge-restart");
+      if (idx >= 0) {
+        result[idx] = { ...result[idx], type: "vMerge-continue" };
+      }
+    }
+  }
+
+  return result;
+}
+
+function reconstructedColumnWidths(table: ImportedTable): number[] {
+  const reconstructed = table.reconstructedTable;
+  const count = reconstructed?.headers.length ?? 1;
+  if (reconstructed?.pattern === "grouped-with-authors" || reconstructed?.pattern === "advantages-disadvantages" || reconstructed?.pattern === "critical-points" || reconstructed?.pattern === "generic-academic") {
+    return count === 3 ? [20, 50, 30] : Array.from({ length: count }, () => Math.floor(100 / count));
+  }
+  if (reconstructed?.pattern === "chronological") {
+    return count === 3 ? [15, 30, 55] : Array.from({ length: count }, () => Math.floor(100 / count));
+  }
+  return Array.from({ length: count }, () => Math.floor(100 / count));
+}
+
+function semanticReconstructedTableParagraph(table: ImportedTable): Array<Paragraph | Table> {
+  const reconstructed = table.reconstructedTable;
+  if (!reconstructed || !reconstructed.rows.length) return [];
+
+  const widths = reconstructedColumnWidths(table);
+  const result: Array<Paragraph | Table> = [];
+
+  if (table.caption || reconstructed.caption) {
+    result.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 120, after: 120, line: SINGLE_LINE },
+        children: [
+          new TextRun({
+            text: cleanMojibakeText(table.caption || reconstructed.caption || ""),
+            bold: true,
+            font: "Times New Roman",
+            size: BODY_SIZE,
+            color: BLACK,
+          }),
+        ],
+      }),
+    );
+  }
+
+  const headerRow = new TableRow({
+    children: reconstructed.headers.map((header, index) => new TableCell({
+      width: { size: widths[index] ?? Math.floor(100 / reconstructed.headers.length), type: WidthType.PERCENTAGE },
+      margins: { top: 40, bottom: 40, left: 80, right: 80 },
+      children: [
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { line: SINGLE_LINE, after: 0 },
+          children: [new TextRun({ text: cleanMojibakeText(header), bold: true, font: "Times New Roman", size: BODY_SIZE, color: BLACK })],
+        }),
+      ],
+    })),
+  });
+
+  const bodyRows = reconstructed.rows.map((row, rowIndex) => {
+    const cells = Array.from({ length: reconstructed.headers.length }, (_, index) => row.cells[index] ?? "");
+    return new TableRow({
+      children: cells.map((cellText, columnIndex) => {
+        let displayText = cellText;
+        if (columnIndex === 0 && rowIndex > 0 && cellText && reconstructed.rows[rowIndex - 1]?.cells[0] === cellText) {
+          displayText = "";
+        }
+        return new TableCell({
+          width: { size: widths[columnIndex] ?? Math.floor(100 / reconstructed.headers.length), type: WidthType.PERCENTAGE },
+          margins: { top: 40, bottom: 40, left: 80, right: 80 },
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.LEFT,
+              spacing: { line: SINGLE_LINE, after: 0 },
+              children: [new TextRun({ text: cleanMojibakeText(displayText), font: "Times New Roman", size: BODY_SIZE, color: BLACK })],
+            }),
+          ],
+        });
+      }),
+    });
+  });
+
+  result.push(
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        bottom: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        left: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        right: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        insideVertical: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+      },
+      rows: [headerRow, ...bodyRows],
+    }),
+  );
+
+  if (table.source || reconstructed.source) {
+    result.push(
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        spacing: { before: 120, after: 120, line: SINGLE_LINE },
+        children: [new TextRun({ text: cleanMojibakeText(table.source || reconstructed.source || ""), font: "Times New Roman", size: BODY_SIZE, color: BLACK })],
+      }),
+    );
+  }
+
+  const warning = reconstructed.warnings[0] || table.layoutWarning;
+  if (warning) {
+    result.push(
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        spacing: { before: 120, after: 120, line: SINGLE_LINE },
+        children: [new TextRun({ text: cleanMojibakeText(warning), italics: true, font: "Times New Roman", size: BODY_SIZE, color: BLACK })],
+      }),
+    );
+  }
+
+  return result;
+}
+
+function importedTableParagraph(table: ImportedTable | undefined): Array<Paragraph | Table> {
+  if (!table || !table.rows.length) return [];
+
+  if (table.renderMode === "semantic-reconstructed-table") {
+    return semanticReconstructedTableParagraph(table);
+  }
+
+  if (table.status === "rendered-as-structured-text") {
+    const result: Array<Paragraph | Table> = [];
+    if (table.caption) {
+      result.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 120, after: 120, line: SINGLE_LINE },
+          children: [
+            new TextRun({
+              text: cleanMojibakeText(table.caption),
+              bold: true,
+              font: "Times New Roman",
+              size: BODY_SIZE,
+              color: BLACK,
+            }),
+          ],
+        }),
+      );
+    }
+
+    const structuredText = buildStructuredTextFromTable(table);
+    for (const line of structuredText.split("\n")) {
+      if (!line.trim()) continue;
+      result.push(
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { line: SINGLE_LINE, after: 120 },
+          children: [
+            new TextRun({
+              text: cleanMojibakeText(line),
+              font: "Times New Roman",
+              size: BODY_SIZE,
+              color: BLACK,
+            }),
+          ],
+        }),
+      );
+    }
+
+    if (table.source) {
+      result.push(
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { before: 120, after: 120, line: SINGLE_LINE },
+          children: [
+            new TextRun({
+              text: cleanMojibakeText(table.source),
+              font: "Times New Roman",
+              size: BODY_SIZE,
+              color: BLACK,
+            }),
+          ],
+        }),
+      );
+    }
+
+    if (table.layoutWarning) {
+      result.push(
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { before: 120, after: 120, line: SINGLE_LINE },
+          children: [
+            new TextRun({
+              text: cleanMojibakeText(table.layoutWarning),
+              italics: true,
+              font: "Times New Roman",
+              size: BODY_SIZE,
+              color: BLACK,
+            }),
+          ],
+        }),
+      );
+    }
+
+    return result;
+  }
+
+  const columnCount = Math.max(table.columnCount, 1);
+  const widths = table.estimatedColumnWidths ?? Array.from({ length: columnCount }, () => Math.floor(100 / columnCount));
+  const safeWidths = widths.map((w) => Math.max(5, w));
+  const widthTotal = safeWidths.reduce((sum, w) => sum + w, 0);
+  const normalizedWidths = safeWidths.map((w) => Math.round((w / widthTotal) * 100));
+
+  const normalizedMerges = normalizeConsecutiveRestarts(table.cellMerges);
+
+  const tableRows = table.rows.map((cells, rowIndex) => {
+    const padded = Array.from({ length: columnCount }, (_, i) => (cells[i]?.text ?? "").trim());
+    return new TableRow({
+      children: padded.map((cellText, columnIndex) => {
+        const originalMerge = normalizedMerges?.find(
+          (m) => m.row === rowIndex && m.col === columnIndex,
+        );
+        let verticalMerge: "continue" | "restart" | undefined;
+        if (originalMerge) {
+          if (originalMerge.type === "vMerge-restart") verticalMerge = "restart";
+          else if (originalMerge.type === "vMerge-continue") verticalMerge = "continue";
+        } else if (
+          table.groupColumnIndex === 0 &&
+          columnIndex === 0 &&
+          table.groupSpans &&
+          table.hasReconstructedVerticalMerge
+        ) {
+          const inSpan = table.groupSpans.find((s) => rowIndex >= s.rowStart && rowIndex <= s.rowEnd);
+          if (inSpan) {
+            verticalMerge = rowIndex === inSpan.rowStart ? "restart" : "continue";
+          }
+        }
+
+        return new TableCell({
+          width: { size: normalizedWidths[columnIndex] ?? Math.floor(100 / columnCount), type: WidthType.PERCENTAGE },
+          margins: { top: 40, bottom: 40, left: 80, right: 80 },
+          ...(verticalMerge ? { verticalMerge } : {}),
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.LEFT,
+              spacing: { line: SINGLE_LINE, after: 0 },
+              children: [
+                new TextRun({
+                  text: cleanMojibakeText(cellText),
+                  bold: rowIndex === 0,
+                  font: "Times New Roman",
+                  size: BODY_SIZE,
+                  color: BLACK,
+                }),
+              ],
+            }),
+          ],
+        });
+      }),
+    });
+  });
+
+  const result: Array<Paragraph | Table> = [];
+  if (table.caption) {
+    result.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 120, after: 120, line: SINGLE_LINE },
+        children: [
+          new TextRun({
+            text: cleanMojibakeText(table.caption),
+            bold: true,
+            font: "Times New Roman",
+            size: BODY_SIZE,
+            color: BLACK,
+          }),
+        ],
+      }),
+    );
+  }
+
+  result.push(
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        bottom: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        left: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        right: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        insideVertical: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+      },
+      rows: tableRows,
+    }),
+  );
+
+  if (table.source) {
+    result.push(
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        spacing: { before: 120, after: 120, line: SINGLE_LINE },
+        children: [
+          new TextRun({
+            text: cleanMojibakeText(table.source),
+            font: "Times New Roman",
+            size: BODY_SIZE,
+            color: BLACK,
+          }),
+        ],
+      }),
+    );
+  }
+
+  return result;
+}
+
 function blockToParagraph(
   block: EditorBlock,
   isFirstTextualBlock: boolean = false,
+  importedImages: ImportedDocumentImage[] = [],
+  importedTables: ImportedTable[] = [],
 ): Array<Paragraph | Table> {
   if (block.type === "heading1") {
     const title = new Paragraph({
@@ -827,6 +1215,15 @@ function blockToParagraph(
 
   if (block.type === "tabbedTable") {
     return tabbedTableBlock(block.text);
+  }
+
+  if (block.type === "importedImage") {
+    return importedImageParagraph(importedImages.find((image) => image.id === block.text));
+  }
+
+  if (block.type === "importedTable") {
+    const table = importedTables.find((item) => item.id === block.text);
+    return importedTableParagraph(table);
   }
 
   const cleanedText = cleanMojibakeText(block.text);
@@ -1116,25 +1513,11 @@ function natureParagraph(text: string): Paragraph {
 }
 
 function normalizeNatureForWorkType(nature: string, fields: AcademicFields): string {
-  if (fields.workType === "tese") {
-    return nature
-      .replace(/obtenção do título de Mestre/gi, "obtenção do título de Doutor")
-      .replace(/título de Mestre/gi, "título de Doutor")
-      .replace(/Mestre em/gi, "Doutor em")
-      .replace(/Mestrado/gi, "Doutorado")
-      .replace(/dissertação/gi, "tese");
+  const provided = cleanMojibakeText(nature).trim();
+  if (!provided || isInternalWorkNature(provided)) {
+    return fallbackWorkNature(fields);
   }
-
-  if (fields.workType === "dissertacao") {
-    return nature
-      .replace(/obtenção do título de Doutor/gi, "obtenção do título de Mestre")
-      .replace(/título de Doutor/gi, "título de Mestre")
-      .replace(/Doutor em/gi, "Mestre em")
-      .replace(/Doutorado/gi, "Mestrado")
-      .replace(/tese/gi, "dissertação");
-  }
-
-  return nature;
+  return provided;
 }
 
 function coverChildren(fields: AcademicFields, logo?: DocxLogoAsset): Paragraph[] {
@@ -1195,6 +1578,38 @@ function isInternalWorkNature(value: string): boolean {
   );
 }
 
+function stripTrailingAdvisorLocationYear(value: string): string {
+  const cleaned = cleanMojibakeText(value).trim();
+  if (!cleaned) return cleaned;
+
+  const normalized = normalizeForDetection(cleaned);
+  const advisorPatterns = [
+    /prof\.?\s*dr\.?\s+[a-zà-úç\s]+orientador(?:a)?(?:\s*uf)?(?:\s*-?\s*ufla)?/i,
+    /dra\.?\s+[a-zà-úç\s]+uf(?:c?g|mg)/i,
+    /dr\.?\s+[a-zà-úç\s]+uf(?:c?g|mg)/i,
+    /orientador(?:a)?\s*[:\-]?\s*[a-zà-úç\s]+/i,
+    /lavras\s*-\s*mg\s*\d{4}/i,
+    /\b(?:19|20)\d{2}\b/,
+  ];
+
+  let earliestMatch: number | undefined;
+  for (const pattern of advisorPatterns) {
+    const match = normalized.match(pattern);
+    if (match && match.index !== undefined) {
+      const startIndex = cleaned.slice(0, match.index).trim().length;
+      if (earliestMatch === undefined || startIndex < earliestMatch) {
+        earliestMatch = startIndex;
+      }
+    }
+  }
+
+  if (earliestMatch !== undefined && earliestMatch > 20) {
+    return cleaned.slice(0, earliestMatch).trim();
+  }
+
+  return cleaned;
+}
+
 function fallbackWorkNature(fields: AcademicFields): string {
   if (fields.workType === "projeto_pesquisa") {
     return "Projeto de pesquisa apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis.";
@@ -1205,8 +1620,9 @@ function fallbackWorkNature(fields: AcademicFields): string {
 function workNature(fields: AcademicFields): string {
   const providedNature = cleanMojibakeText(fields.workNature).trim();
   const safeNature = providedNature && !isInternalWorkNature(providedNature) ? providedNature : fallbackWorkNature(fields);
+  const cleaned = stripTrailingAdvisorLocationYear(safeNature);
 
-  return cleanMojibakeText(normalizeNatureForWorkType(safeNature, fields));
+  return cleanMojibakeText(normalizeNatureForWorkType(cleaned || safeNature, fields));
 }
 
 function titlePageChildren(fields: AcademicFields): Paragraph[] {
@@ -1248,6 +1664,101 @@ function titlePageChildren(fields: AcademicFields): Paragraph[] {
   ];
 }
 
+function formatApprovalDate(value: string): string {
+  const cleaned = cleanMojibakeText(value).trim();
+  if (!cleaned) return "";
+  return cleaned.replace(/^Aprovad[ao]\s+em\s*/i, "").replace(/\.$/, "").trim();
+}
+
+function splitApprovalMembers(members: string[]): string[] {
+  const split: string[] = [];
+  for (const member of members) {
+    const cleaned = cleanMojibakeText(member).trim();
+    if (!cleaned) continue;
+    const parts = extractMembersFromString(cleaned);
+    if (parts.length > 0) {
+      split.push(...parts);
+    } else {
+      split.push(cleaned);
+    }
+  }
+  return mergeLooseApprovalTitles(split);
+}
+
+function isLooseApprovalTitle(value: string): boolean {
+  return /^(Prof|Profa|Dr|Dra)\.$/i.test(cleanMojibakeText(value).trim());
+}
+
+function mergeLooseApprovalTitles(members: string[]): string[] {
+  const merged: string[] = [];
+
+  for (let index = 0; index < members.length; index += 1) {
+    const current = cleanMojibakeText(members[index]).trim();
+    const next = cleanMojibakeText(members[index + 1] ?? "").trim();
+
+    if (isLooseApprovalTitle(current) && next) {
+      merged.push(`${current} ${next}`.trim());
+      index += 1;
+      continue;
+    }
+
+    if (current) merged.push(current);
+  }
+
+  return merged.filter((member) => !isLooseApprovalTitle(member));
+}
+
+function extractMembersFromString(text: string): string[] {
+  const results: string[] = [];
+  const titleRegex = /((?:Prof|Dra|Dr)\.(?:\s+(?:Prof|Dra|Dr)\.)?)/gi;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let currentTitle = "";
+
+  while ((match = titleRegex.exec(text)) !== null) {
+    if (currentTitle && match.index > lastIndex) {
+      const name = text.slice(lastIndex, match.index).trim();
+      results.push(`${currentTitle}${name ? " " + name : ""}`.trim());
+    }
+    currentTitle = match[1].trim();
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (currentTitle || lastIndex < text.length) {
+    const name = text.slice(lastIndex).trim();
+    results.push(`${currentTitle}${name ? " " + name : ""}`.trim());
+  }
+
+  return results.filter(Boolean);
+}
+
+function normalizeApprovalMember(member: string): string {
+  const cleaned = cleanMojibakeText(member).trim();
+  if (!cleaned) return "";
+
+  const titleMatch = cleaned.match(/^(Prof\.|Dra\.|Dr\.)(?:\s+(Prof\.|Dra\.|Dr\.))?\s*/i);
+  const titles = titleMatch ? titleMatch[0].trim() : "";
+  const rest = titleMatch ? cleaned.slice(titleMatch[0].length).trim() : cleaned;
+
+  const institutionMatch = rest.match(/\b(UFCG|UFMG|UFLA|UTFPR|UNESP|USP|UFRJ|UFRGS|UFSC|UFPE|UFPEL|UFPB|UFBA|UFC|UFMA|UFPA|UFRR|UFRN|UFAL|UFES|UFG|UFMT|UFRR|UnB|UTF|UNIFESP|FIOCRUZ|EMBRAPA|CNPEN|Instituto|Universidade|Centro|Faculdade|Escola)\b.*$/i);
+  const institution = institutionMatch ? institutionMatch[0].trim() : "";
+
+  let name = rest;
+  let role = "";
+  if (institution) {
+    name = rest.slice(0, institutionMatch!.index).trim();
+    role = institution;
+  } else if (/\bOrientador(a)?\b/i.test(rest)) {
+    role = rest.match(/\bOrientador(a)?\b/i)?.[0] ?? "";
+    name = rest.replace(new RegExp(`\\s*${role}\\s*`, "i"), "").trim();
+  }
+
+  if (role) {
+    return `${titles}${name ? " " + name : ""} — ${role}`;
+  }
+  return `${titles}${name ? " " + name : ""}`;
+}
+
 function approvalPageChildren(fields: AcademicFields): Paragraph[] {
   if (!hasApprovalPage(fields)) return [];
 
@@ -1258,29 +1769,40 @@ function approvalPageChildren(fields: AcademicFields): Paragraph[] {
       ]
     : [];
 
-  // Rascunho técnico: não finge aprovação final. Linhas editáveis para a banca.
+  const formattedDate = formatApprovalDate(fields.aprovalDate || "");
   const bancaLines: Paragraph[] = [
     new Paragraph({ spacing: { before: 360, after: 240, line: SINGLE_LINE } }),
-    centeredParagraph("Banca examinadora a ser preenchida na versão final.", true, BODY_SIZE, {
-      after: 360,
-      line: SINGLE_LINE,
-    }),
-    centeredParagraph("Prof.(a) Dr.(a) ______________________________", false, BODY_SIZE, {
-      after: 0,
-      line: SINGLE_LINE,
-    }),
-    centeredParagraph("Instituição: ________________________________", false, BODY_SIZE, {
-      after: 240,
-      line: SINGLE_LINE,
-    }),
-    centeredParagraph("Prof.(a) Dr.(a) ______________________________", false, BODY_SIZE, {
-      after: 0,
-      line: SINGLE_LINE,
-    }),
-    centeredParagraph("Instituição: ________________________________", false, BODY_SIZE, {
-      after: 0,
-      line: SINGLE_LINE,
-    }),
+    ...(formattedDate
+      ? [
+          centeredParagraph(
+            cleanMojibakeText(`APROVADO EM: ${formattedDate}.`),
+            false,
+            BODY_SIZE,
+            { after: 240, line: SINGLE_LINE },
+          ),
+        ]
+      : [
+          centeredParagraph(
+            "APROVADO EM: ____ de ____________________ de ______.",
+            false,
+            BODY_SIZE,
+            { after: 240, line: SINGLE_LINE },
+          ),
+        ]),
+    ...(fields.approvalMembers?.length
+      ? splitApprovalMembers(fields.approvalMembers).map((member) =>
+          centeredParagraph(cleanMojibakeText(normalizeApprovalMember(member)), false, BODY_SIZE, { after: 120, line: SINGLE_LINE }),
+        )
+      : [
+          centeredParagraph("Prof.(a) Dr.(a) ______________________________", false, BODY_SIZE, {
+            after: 0,
+            line: SINGLE_LINE,
+          }),
+          centeredParagraph("Instituição: ________________________________", false, BODY_SIZE, {
+            after: 240,
+            line: SINGLE_LINE,
+          }),
+        ]),
   ];
 
   return [
@@ -1295,10 +1817,6 @@ function approvalPageChildren(fields: AcademicFields): Paragraph[] {
       line: ONE_AND_HALF_LINE,
     }),
     natureParagraph(cleanMojibakeText(workNature(fields))),
-    simpleParagraph("Aprovado em: ____ de ____________________ de ______.", {
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 480, after: 240, line: SINGLE_LINE },
-    }),
     ...orientationLines,
     ...bancaLines,
   ];
@@ -1344,7 +1862,9 @@ function preTextualChildren(fields: AcademicFields): Paragraph[] {
       pageBreak(),
       unnumberedTitle("Ficha catalográfica"),
       simpleParagraph(
-        cleanMojibakeText("Inserir aqui a ficha catalográfica oficial gerada pela Biblioteca Universitária da UFLA. Não substitua por texto manual na versão final."),
+        cleanMojibakeText(
+          "Ficha catalográfica detectada no arquivo importado. Preserve ou substitua manualmente pela ficha oficial da Biblioteca Universitária da UFLA.",
+        ),
       ),
     );
   }
@@ -1369,6 +1889,28 @@ function preTextualChildren(fields: AcademicFields): Paragraph[] {
     ...optionalPage("Indicadores de impacto", cleanMojibakeText(indicadores)),
     ...optionalPage("Impact indicators", impactIndicators),
   );
+
+  if (
+    hasText(fields.listaQuadros) ||
+    hasText(fields.listaGraficos) ||
+    hasText(fields.listaTabelas) ||
+    hasText(fields.listaSiglas)
+  ) {
+    children.push(pageBreak());
+  }
+
+  if (hasText(fields.listaQuadros)) {
+    children.push(...optionalPage("Lista de quadros", cleanMojibakeText(fields.listaQuadros)));
+  }
+  if (hasText(fields.listaGraficos)) {
+    children.push(...optionalPage("Lista de gráficos", cleanMojibakeText(fields.listaGraficos)));
+  }
+  if (hasText(fields.listaTabelas)) {
+    children.push(...optionalPage("Lista de tabelas", cleanMojibakeText(fields.listaTabelas)));
+  }
+  if (hasText(fields.listaSiglas)) {
+    children.push(...optionalPage("Lista de siglas", cleanMojibakeText(fields.listaSiglas)));
+  }
 
   return children;
 }
@@ -1411,7 +1953,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   ];
 
   const textualAndPostTextualChildren: Array<Paragraph | Table> = [
-    ...bodyBlocks.flatMap((block, index) => blockToParagraph(block, index === 0)),
+    ...bodyBlocks.flatMap((block, index) => blockToParagraph(block, index === 0, input.importedImages ?? [], input.importedTables ?? [])),
     pageBreak(),
     sectionTitle("Referências"),
     ...buildReferences(references),
