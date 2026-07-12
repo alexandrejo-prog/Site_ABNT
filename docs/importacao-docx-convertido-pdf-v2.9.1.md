@@ -302,3 +302,19 @@ Esta etapa fecha os bloqueadores observados no fluxo real de Andrade (2025), man
 
 - Testes sintéticos cobrem isolamento de agradecimentos/resumo, limpeza de listas pré-textuais, aviso revisável para pré-textuais ausentes, diagnóstico honesto de imagens e normalização de banca.
 - Teste local opcional `tests/real-flow-audit-andrade-local.test.ts` audita o DOCX real quando `_diagnostico/andrade-2025/Andrade_2025.docx` existe, e pula sem falhar quando o arquivo não está no repositório.
+
+## Correção final — lista de quadros, imagens, tabelas e referências
+
+Esta rodada corrige os últimos bloqueadores aceitos para v2.9.1 sem declarar a importação de DOCX convertido de PDF como perfeita.
+
+- `LISTA DE QUADROS` deixou de exigir página na mesma linha para manter a entrada. O coletor agora aceita títulos longos, continuação em linha seguinte e número de página separado, preservando `Quadro 1` a `Quadro 16` quando essas entradas aparecem no DOCX convertido.
+- A limpeza da lista para quando encontra `Fonte:`, reinício da numeração de quadros no corpo, `LISTA DE GRÁFICOS`, `LISTA DE SIGLAS`, `SUMÁRIO` ou `INTRODUÇÃO`. Assim, a lista não incorpora fontes nem legendas duplicadas do corpo.
+- Auditoria local do Andrade: o importador detectou 57 mídias/imagens no DOCX original, 0 imagens acadêmicas preservadas automaticamente e 57 itens exigindo revisão manual. O logo/capa não é contado como gráfico acadêmico preservado.
+- Quando imagens/gráficos do corpo não podem ser posicionados com segurança, o aviso revisável informa detectadas/preservadas/revisão manual e orienta reinserção manual dos elementos deslocados pela conversão PDF-DOCX.
+- Tabelas preservadas continuam saindo como `w:tbl`, mas legendas/fontes consumidas pelo `ImportedTable` não são repetidas imediatamente como parágrafos comuns no `editorText`.
+- A primeira referência foi auditada contra o caso normativo `BRASIL. Decreto nº 1.590... 1995. Seção 1.`; o normalizador preserva o início institucional antes do ano quando a quebra de linha separa o ano do restante da referência.
+
+### Validação local desta rodada
+
+- Fixture sintética confirma `Quadro 1` a `Quadro 16` quando detectáveis, sem `Fonte:` e sem capturar `LISTA DE GRÁFICOS`.
+- Teste local opcional com `_diagnostico/andrade-2025/Andrade_2025.docx` confirma 16 entradas na lista de quadros, `w:tbl` no DOCX final, aviso revisável de imagens, ausência de marcadores internos e referências sem truncamento inicial evidente.

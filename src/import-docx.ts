@@ -124,7 +124,7 @@ function nearestText(
   direction: -1 | 1,
   predicate: (text: string) => boolean,
 ): string {
-  for (let offset = 1; offset <= 3; offset += 1) {
+  for (let offset = 1; offset <= 6; offset += 1) {
     const block = blocks[startIndex + offset * direction];
     if (!block || block.type === "pageBreak") break;
     const text = blockText(block);
@@ -292,6 +292,14 @@ function editorTextWithImageMarkers(
   });
   if (start < 0) return appendMissingPreserved(fallbackEditorText, new Set(), new Set());
 
+  const preservedTableTexts = new Set<string>();
+  for (const table of importedTables) {
+    if (table.status === "preserved") {
+      if (table.caption) preservedTableTexts.add(table.caption);
+      if (table.source) preservedTableTexts.add(table.source);
+    }
+  }
+
   const lines: string[] = [];
   const emittedImageIds = new Set<string>();
   const emittedTableIds = new Set<string>();
@@ -356,7 +364,7 @@ function editorTextWithImageMarkers(
     }
 
     const text = blockText(block);
-    if (text) lines.push(text);
+    if (text && !preservedTableTexts.has(text)) lines.push(text);
   }
 
   const output = lines.join("\n\n").trim() || fallbackEditorText;
@@ -394,7 +402,7 @@ function buildImportResult(
       ? `${missingImages} imagem(ns) detectada(s), mas nem todas puderam ser preservadas automaticamente. Reinsira manualmente as imagens ausentes e confira legendas e fontes.`
       : "",
     sourceImages
-      ? `${sourceImages} imagem(ns)/grafico(s) detectado(s) no DOCX original; ${preservedImages} preservado(s) automaticamente; ${reviewImages} exigem revisao manual.`
+      ? `${sourceImages} imagem(ns)/grafico(s) detectado(s) no DOCX original; ${preservedImages} preservado(s) automaticamente; ${reviewImages} exigem revisao manual. Graficos/imagens do corpo podem ter sido deslocados em decorrencia da conversao PDF-DOCX. Revise e reinsira manualmente os elementos ausentes.`
       : "",
   ].filter(Boolean);
   const tableMessages = [

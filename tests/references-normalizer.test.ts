@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeReference, type NormalizedReference } from "../src/references-normalizer";
+import { normalizeReference, normalizeReferencesText, type NormalizedReference } from "../src/references-normalizer";
 import { UFLA_MANUAL_REFERENCE } from "../src/ufla-rules";
 
 function boldRunFor(reference: NormalizedReference, text: string) {
@@ -90,6 +90,15 @@ describe("references normalizer", () => {
       "legislacao",
       "Lei nº 9.394, de 20 de dezembro de 1996",
     );
+  });
+
+  it("preserva inicio de referencia normativa quebrada antes do ano", () => {
+    const [normalized] = normalizeReferencesText(
+      "BRASIL. Decreto nº 1.590, de 10 de agosto de\n1995. Seção 1. Dispõe sobre a jornada de trabalho.",
+    );
+
+    expect(normalized.text).toContain("BRASIL. Decreto nº 1.590");
+    expect(normalized.text.indexOf("BRASIL.")).toBeLessThan(normalized.text.indexOf("1995. Seção 1."));
   });
 
   it("detecta legislacao com orgao intermediario e destaca a resolucao", () => {

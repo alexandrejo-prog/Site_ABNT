@@ -114,11 +114,28 @@ function isReferenceTitleNoise(value: string): boolean {
 }
 
 function splitItems(value: string): string[] {
-  return value
+  const items = value
     .split(/\n+/)
     .map(clean)
     .filter(Boolean)
     .filter((item) => !isReferenceTitleNoise(item));
+
+  const merged: string[] = [];
+  for (const item of items) {
+    const previous = merged[merged.length - 1];
+    if (
+      previous &&
+      /^\d{4}\.?\s/.test(item) &&
+      item.length < 100 &&
+      !/^[A-ZÀ-Ú]/.test(item)
+    ) {
+      merged[merged.length - 1] = `${previous} ${item}`;
+      continue;
+    }
+    merged.push(item);
+  }
+
+  return merged;
 }
 
 function hasYear(value: string): boolean {

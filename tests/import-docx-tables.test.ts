@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { generateDocxBlob } from "../src/export-docx";
 import { importDocumentFile } from "../src/import-docx";
 import { emptyAcademicFields } from "../src/ufla-rules";
+import { documentText } from "./test-utils/ooxml";
 
 function paragraphXml(text: string): string {
   return `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`;
@@ -159,6 +160,36 @@ describe("importacao de tabelas DOCX", () => {
     expect(documentXml).toContain("Coluna C");
     expect(documentXml).toContain("1");
     expect(documentXml).toContain("6");
+  });
+
+  it("DOCX final nao duplica legenda nem fonte consumidas pela tabela importada", async () => {
+    const result = await importSyntheticDocx(await makeSyntheticDocxWithTable());
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "monografia" as const,
+      author: "Autora Sintetica",
+      title: "Titulo Sintetico",
+      resumo: "Resumo sintetico.",
+      abstractText: "Synthetic abstract.",
+      palavrasChave: "teste.",
+      keywords: "test.",
+    };
+
+    const blob = await generateDocxBlob({
+      fields,
+      editorText: result.editorText,
+      importedImages: result.importedImages,
+      importedTables: result.importedTables,
+    });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const documentXml = await zip.file("word/document.xml")?.async("string");
+    const text = documentText(documentXml ?? "");
+
+    expect(documentXml).toContain("<w:tbl>");
+    expect((text.match(/Quadro 1 - Perfil dos participantes\./g) ?? []).length).toBe(1);
+    expect((text.match(/Fonte: elaboração própria \(2025\)\./g) ?? []).length).toBe(1);
+    expect(text).toContain("Coluna A");
+    expect(text).toContain("6");
   });
 
   it("tabela vazia e ignorada com segurança", async () => {

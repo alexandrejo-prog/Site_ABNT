@@ -132,3 +132,19 @@ A branch melhorou substancialmente a importação de dissertação convertida de
 - Pronto para merge: não.
 - Pronto para nova rodada local do agente: sim.
 - Principal bloqueador técnico: importação parcial de elementos visuais/lista de quadros e duplicações em tabelas.
+
+## Atualização desta rodada
+
+Correções aplicadas na branch local:
+
+- `LISTA DE QUADROS` agora preserva entradas detectáveis de `Quadro 1` a `Quadro 16`, inclusive títulos longos, continuação em linha seguinte e número de página separado.
+- A lista de quadros para antes de `Fonte:`, reinício da numeração de quadros no corpo, `LISTA DE GRÁFICOS`, `LISTA DE SIGLAS`, `SUMÁRIO` ou `INTRODUÇÃO`, evitando capturar fontes e legendas duplicadas do corpo.
+- Imagens/gráficos do corpo continuam sem preservação automática confiável no Andrade local: 57 mídias detectadas, 0 imagens acadêmicas preservadas automaticamente e 57 itens marcados para revisão manual. O logo/capa não é contado como gráfico preservado.
+- O aviso revisável de imagens foi ampliado para informar detectadas/preservadas/revisão manual e orientar reinserção manual quando a conversão PDF-DOCX desloca os elementos visuais.
+- Tabelas importadas permanecem como `w:tbl`, e legendas/fontes consumidas pela tabela deixam de ser repetidas imediatamente como parágrafos comuns.
+- A referência normativa quebrada antes de `1995. Seção 1.` foi coberta por teste para preservar `BRASIL. Decreto nº 1.590...` antes do ano.
+
+Itens que seguem como limitação conhecida:
+
+- Gráficos/imagens acadêmicos do corpo não são reinseridos automaticamente quando a posição não é confiável; exigem revisão manual.
+- A importação de DOCX convertido de PDF continua sujeita a ruído estrutural de conversão e deve ser revisada antes da versão final.

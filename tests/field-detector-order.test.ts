@@ -195,12 +195,54 @@ Texto do corpo.`);
 
     expect(result.fields.listaQuadros).toContain("Quadro 1 - Sintese teorica 31");
     expect(result.fields.listaQuadros).toContain("Quadro 2 - Matriz documental 44");
-    expect(result.fields.listaQuadros).not.toContain("Quadro 3 - Roteiro de entrevistas");
+    expect(result.fields.listaQuadros).toContain("Quadro 3 - Roteiro de entrevistas");
     expect(result.fields.listaQuadros).not.toContain("Fonte:");
     expect(result.fields.listaGraficos).toContain("Grafico 1 - Perfil dos respondentes 58");
     expect(result.fields.listaGraficos).toContain("Grafico 2 - Frequencia de respostas 62");
     expect(result.fields.listaGraficos).not.toContain("Grafico 3 - Resultado do corpo");
     expect(result.fields.listaGraficos).not.toContain("Fonte:");
+  });
+
+  it("lista de quadros preserva Quadro 1 a Quadro 16 mesmo com titulo longo e quebra", () => {
+    const result = detectAcademicFieldsFromText(`UNIVERSIDADE FEDERAL DE LAVRAS
+AUTORA SINTETICA
+Dissertacao apresentada a Universidade Federal de Lavras para obtencao do titulo de Mestre.
+
+LISTA DE QUADROS
+Quadro 1 - Pontos criticos do teletrabalho 24
+Quadro 2 - Modelo de implementacao do teletrabalho proposto por Nilles 26
+Quadro 3 - Linha do tempo dos principais marcos normativos do PGD 38
+Quadro 4 - Principais vantagens e desvantagens do teletrabalho na administracao publica
+42
+Quadro 5 - Vantagens do teletrabalho 44
+Quadro 6 - Pontos criticos do teletrabalho 45
+Quadro 7 - Perfil dos gestores 56
+Quadro 8 - Indicadores Estruturais 58
+Quadro 9 - Indicadores fisicos e de bem-estar 66
+Quadro 10 - Indicadores pessoais 68
+Quadro 11 - Indicadores pessoais 69
+Quadro 12 - Indicadores profissionais 71
+Quadro 13 - Indicadores psicologicos 74
+Quadro 14 - Aspectos positivos e negativos na visao dos servidores 76
+Quadro 15 - Sintese dos desafios na implementacao do teletrabalho relatados pelos gestores da UFLA em dialogo com a literatura 97
+Quadro 16 - Consideracoes dos gestores sobre o PGD 98
+Quadro 1 - Pontos criticos do teletrabalho.
+Fonte: Alves (2020, p. 61).
+
+LISTA DE GRAFICOS
+Grafico 1 - Sexo 80
+
+SUMARIO
+1 INTRODUCAO
+Texto do corpo.`);
+
+    for (let index = 1; index <= 16; index += 1) {
+      expect(result.fields.listaQuadros).toContain(`Quadro ${index} -`);
+    }
+    expect(result.fields.listaQuadros).toContain("Quadro 4 - Principais vantagens e desvantagens do teletrabalho na administracao publica 42");
+    expect(result.fields.listaQuadros).not.toContain("Fonte:");
+    expect(result.fields.listaQuadros).not.toContain("LISTA DE GRAFICOS");
+    expect((result.fields.listaQuadros.match(/Quadro 1 -/g) ?? []).length).toBe(1);
   });
 
   it("DOCX convertido provavel recebe aviso revisavel para pre-textuais ausentes", () => {

@@ -814,33 +814,62 @@ function preTextualRecoveryNotice(): string {
   return "Seção detectada no arquivo importado, mas o conteúdo não pôde ser preservado automaticamente. Revise manualmente.";
 }
 
-function isPagedListEntry(text: string, labels: string[]): boolean {
-  const normalized = normalizeForDetection(text.replace(/[.]+$/, ""));
-  const labelPattern = labels.map((label) => normalizeForDetection(label)).join("|");
-  return new RegExp(`^(?:${labelPattern})\\s+\\d+\\b.+\\s+\\d{1,4}$`).test(normalized);
-}
-
-function isUnpagedBodyCaption(text: string, labels: string[]): boolean {
-  const normalized = normalizeForDetection(text);
-  const labelPattern = labels.map((label) => normalizeForDetection(label)).join("|");
-  return new RegExp(`^(?:${labelPattern})\\s+\\d+\\b`).test(normalized) && !isPagedListEntry(text, labels);
-}
-
 function cleanPreTextualList(value: string, labels: string[]): string {
   const lines = splitLines(value);
+  const labelPattern = labels.map((label) => normalizeForDetection(label)).join("|");
+  const allowUnpagedTerminalEntry = labels.some((label) => normalizeForDetection(label) === "QUADRO");
+  const entryStart = new RegExp(`^(?:${labelPattern})\\s+\\d+\\b`, "i");
+  const entryNumber = new RegExp(`^(?:${labelPattern})\\s+(\\d+)\\b`, "i");
+  const stopPattern =
+    /^(LISTA DE GRAFICOS|LISTA DE GRÁFICOS|LISTA DE SIGLAS|LISTA DE QUADROS|LISTA DE TABELAS|SUMARIO|SUMÁRIO|INTRODUCAO|INTRODUÇÃO|CONCLUSÃO|REFERENCIAS)\b/i;
+
   const kept: string[] = [];
-  let sawPaged = false;
+  let pending: { text: string; number: number } | null = null;
+  let highestNumber = 0;
+
+  const hasTrailingPage = (text: string): boolean => /\b\d{1,4}\s*$/.test(text.replace(/[.]+$/, "").trim());
+
+  const flushPending = (force = false): void => {
+    if (pending !== null) {
+      const text = pending.text.replace(/\s+/g, " ").trim();
+      if (force || hasTrailingPage(text)) {
+        kept.push(text);
+        highestNumber = Math.max(highestNumber, pending.number);
+      }
+      pending = null;
+    }
+  };
 
   for (const line of lines) {
-    if (/^Fonte\s*:/i.test(line)) break;
-    if (isPagedListEntry(line, labels)) {
-      kept.push(line.replace(/[.]+$/, ""));
-      sawPaged = true;
+    if (/^Fonte\s*:/i.test(line)) {
+      flushPending(allowUnpagedTerminalEntry && (pending?.number ?? 0) > highestNumber);
+      break;
+    }
+
+    const normalized = normalizeForDetection(line);
+    if (stopPattern.test(normalized)) {
+      flushPending(allowUnpagedTerminalEntry && (pending?.number ?? 0) > highestNumber);
+      break;
+    }
+
+    if (entryStart.test(normalized)) {
+      const number = Number(normalized.match(entryNumber)?.[1] ?? 0);
+      if (number > 0 && highestNumber > 1 && number <= highestNumber) {
+        flushPending();
+        break;
+      }
+      flushPending(true);
+      pending = { text: line, number };
       continue;
     }
-    if (sawPaged && isUnpagedBodyCaption(line, labels)) break;
-    if (!sawPaged && !isUnpagedBodyCaption(line, labels)) kept.push(line);
+
+    if (pending !== null) {
+      pending.text = `${pending.text} ${line}`.replace(/\s+/g, " ").trim();
+      continue;
+    }
   }
+
+  flushPending(allowUnpagedTerminalEntry && (pending?.number ?? 0) > highestNumber);
 
   return kept.join("\n").trim();
 }

@@ -228,9 +228,14 @@ describe(" Auditoria do fluxo real com DOCX de Andrade (local)", () => {
     expect(result.fields.indicadoresImpacto).toContain("Revise manualmente");
     expect(result.fields.impactIndicators).toContain("Revise manualmente");
     expect(result.fields.listaSiglas).toContain("Revise manualmente");
+    const listEntries = result.fields.listaQuadros.split("\n").filter((line) => /^Quadro \d+/i.test(line));
+    expect(listEntries.length).toBeGreaterThanOrEqual(3);
+    expect(listEntries.some((line) => /^Quadro 1 -/.test(line))).toBe(true);
+    expect(listEntries.some((line) => /^Quadro 2 -/.test(line))).toBe(true);
+    expect(listEntries.some((line) => /^Quadro 3 -/.test(line))).toBe(true);
+    expect(listEntries.some((line) => /^Quadro 16 -/.test(line))).toBe(true);
     expect(result.fields.listaQuadros).not.toContain("Fonte:");
     expect(result.fields.listaGraficos).not.toContain("Fonte:");
-    expect(result.fields.listaQuadros).not.toContain("Quadro 4 -");
     expect(result.fields.listaGraficos).not.toContain("GrÃ¡fico 12 -");
     expect(result.fields.referencias).not.toContain("Fonte:");
     expect(result.fields.referencias).not.toContain("Quadro ");
