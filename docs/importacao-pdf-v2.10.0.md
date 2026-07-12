@@ -100,3 +100,44 @@ A v2.10.0 deve complementar essa base, permitindo que o site trate PDF diretamen
 ## Critério de qualidade
 
 A v2.10.0 deve ser tratada como evolução incremental. Não declarar 100% de importação PDF. O foco inicial é criar uma base testável e segura para leitura visual/textual de PDF.
+
+## Implementação inicial (primeira rodada)
+
+### O que foi feito
+
+- **Dependência instalada:** `pdfjs-dist` (v6.1.200). Foram alterados `package.json` e `package-lock.json`. Nenhuma outra dependência foi adicionada.
+- **Tipos internos:** `src/imported-pdf.ts` define `PdfImportSource`, `PdfTextItem`, `PdfPageText`, `PdfBlockKind`, `PdfDocumentBlock`, `PdfImportDiagnostic` e `ImportedPdfDocument`.
+- **Leitura PDF:** `src/import-pdf.ts` implementa `importPdfDocument(file, fileName?)`:
+  - usa `pdfjs-dist` carregado dinamicamente (lazy) para não onerar testes de funções puras;
+  - o worker do PDF.js é configurado via `import("pdfjs-dist/build/pdf.worker.min.mjs?url")` (padrão Vite, resolvido em tempo de build);
+  - carrega o PDF, detecta `pageCount` e `fingerprint`;
+  - extrai `textContent` por página com posição aproximada (`x`, `y`, `width`, `height`, `fontName`);
+  - normaliza o texto por página (`normalizedText`);
+  - gera `diagnostics` e o resumo de `quality` (textConfidence/layoutConfidence/requiresManualReview).
+- **Normalização de texto (puro, sem pdfjs):** `src/import-pdf-text.ts` com `normalizePdfTextItems`, `groupPdfTextIntoLines`, `buildPageNormalizedText`, `classifyPdfLine` e `detectPdfBlockCandidates`.
+- **Roteador por arquivo:** `src/import-file-router.ts` com `detectImportableFileKind` e `importAcademicFile`. O site decide o pipeline: `.docx/.txt/.md`/`MIME Word` → pipeline DOCX existente; `.pdf`/`application/pdf` → `importPdfDocument`; outro → `unknown`.
+- **UI mínima:** `src/components/ImportBlock.tsx` aceita `.pdf` e, ao receber PDF, chama o roteador e exibe um painel de diagnóstico (nome, páginas, confiança, avisos e texto extraído em `<details>`). O fluxo DOCX existente não foi alterado: PDF nesta rodada **não** gera DOCX final nem substitui os campos do editor.
+- **Testes:** `tests/import-file-router.test.ts` (detecção docx/pdf/unknown) e `tests/import-pdf.test.ts` (funções puras: ordenação por linha, junção de linha, caption/source/heading, table-candidate, image-candidate, sinal de revisão manual).
+
+### O que já funciona
+
+- Ler PDF no navegador e extrair texto por página com posição.
+- Detectar blocos prováveis: `heading` (caixa alta curta), `caption` (Quadro/Tabela), `source` (Fonte:), `table-candidate` (padrão de colunas), `image-candidate` (Figura/Gráfico).
+- Produzir diagnóstico honesto de que a importação PDF é experimental e pode exigir revisão manual.
+- O usuário envia DOCX **ou** PDF; o site identifica e decide o tratamento (o usuário não escolhe o pipeline).
+
+### O que ainda é experimental / não incluído nesta rodada
+
+- **Sem OCR.** O texto vem de `textContent` do PDF; PDFs só-imagem não terão texto.
+- **Sem renderização de canvas/recorte visual** nesta rodada (o plano prevê, mas foi adiado para manter a base leve e testável).
+- **Tabelas PDF não são prometidas como editáveis perfeitas.** Quando há padrão tabular, o bloco vira `table-candidate` com aviso de revisão manual; a reconstrução semântica das tabelas PDF (reuso do reconstrutor de `src/academic-table-reconstructor.ts`) fica para rodada posterior.
+- **PDF ainda não gera DOCX final automaticamente** pelo botão de importação; ele entrega diagnóstico e texto extraído. A geração DOCX a partir de PDF é complemento futuro.
+- A importação de PDF **não é 100%** e não deve ser declarada como tal.
+
+### Próximos passos
+
+1. Renderizar página/região em imagem (canvas) para recorte visual.
+2. Conectar blocos `table-candidate` ao reconstrutor semântico de tabelas da v2.9.1.
+3. Mapear blocos PDF para `ImportedTable`/`ImportedDocumentImage` e integrar ao `editorText`/geração de DOCX.
+4. Melhorar a confiança de layout e reduzir falsos positivos de `table-candidate`.
+5. Tratar PDFs só-imagem com aviso honesto (sem OCR nesta versão).
