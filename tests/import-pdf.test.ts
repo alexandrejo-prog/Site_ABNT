@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PdfTextItem } from "../src/imported-pdf";
+import type { ImportedPdfDocument, PdfTextItem } from "../src/imported-pdf";
 import type { PdfTextLine } from "../src/import-pdf-text";
 import {
   buildPageNormalizedText,
@@ -8,6 +8,7 @@ import {
   groupPdfTextIntoLines,
   normalizePdfTextItems,
 } from "../src/import-pdf-text";
+import { detectPdfVisualRegionCandidates } from "../src/pdf-region-renderer";
 
 function item(text: string, x: number, y: number, pageNumber = 1, width = text.length * 5): PdfTextItem {
   return { text, pageNumber, x, y, width, height: 10 };
@@ -132,5 +133,48 @@ describe("classifyPdfLine / detectPdfBlockCandidates", () => {
   it("classifyPdfLine reconhece tabular por presenca de colunas", () => {
     expect(classifyPdfLine("1.1    Fase A    Descrição")).toBe("table-candidate");
     expect(classifyPdfLine("Texto normal com palavras")).toBe("text");
+  });
+});
+
+describe("pipeline de regiões visuais (funções puras)", () => {
+  function documentFromTexts(texts: string[]): ImportedPdfDocument {
+    const lines = texts.map((text, i) => ({
+      pageNumber: 1,
+      y: (texts.length - i) * 20,
+      x: 10,
+      width: text.length * 5,
+      height: 10,
+      text,
+      items: [],
+    }));
+    const blocks = detectPdfBlockCandidates(lines);
+    return {
+      source: { fileName: "exemplo.pdf", pageCount: 1 },
+      pages: [{ pageNumber: 1, width: 800, height: 1000, items: [], normalizedText: texts.join("\n") }],
+      blocks,
+      diagnostics: [],
+      quality: { textConfidence: "high", layoutConfidence: "medium", requiresManualReview: false },
+    };
+  }
+
+  it("gera região visual a partir de legenda + fonte detectadas", () => {
+    const document = documentFromTexts([
+      "Quadro 1 – Dados de pesquisa.",
+      "Categoria    Valor    Percentual",
+      "A    10    20%",
+      "B    30    60%",
+      "Fonte: Autor (2025).",
+    ]);
+    const regions = detectPdfVisualRegionCandidates(document);
+    expect(regions.length).toBeGreaterThanOrEqual(1);
+    expect(regions[0].kind).toBe("table-visual");
+    expect(regions[0].source).toContain("Fonte:");
+  });
+
+  it("não gera região quando só há texto comum", () => {
+    const document = documentFromTexts([
+      "Este parágrafo descreve a metodologia adotada na pesquisa.", "Outro parágrafo de exemplo.",
+    ]);
+    expect(detectPdfVisualRegionCandidates(document)).toHaveLength(0);
   });
 });

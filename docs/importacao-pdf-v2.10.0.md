@@ -128,16 +128,47 @@ A v2.10.0 deve ser tratada como evolução incremental. Não declarar 100% de im
 
 ### O que ainda é experimental / não incluído nesta rodada
 
-- **Sem OCR.** O texto vem de `textContent` do PDF; PDFs só-imagem não terão texto.
-- **Sem renderização de canvas/recorte visual** nesta rodada (o plano prevê, mas foi adiado para manter a base leve e testável).
+- **Sem OCR.** O texto vem de `textContent` do PDF; PDFs só-imagem não terão texto nem regiões visuais.
 - **Tabelas PDF não são prometidas como editáveis perfeitas.** Quando há padrão tabular, o bloco vira `table-candidate` com aviso de revisão manual; a reconstrução semântica das tabelas PDF (reuso do reconstrutor de `src/academic-table-reconstructor.ts`) fica para rodada posterior.
-- **PDF ainda não gera DOCX final automaticamente** pelo botão de importação; ele entrega diagnóstico e texto extraído. A geração DOCX a partir de PDF é complemento futuro.
+- **PDF ainda não gera DOCX final automaticamente** pelo botão de importação; ele entrega diagnóstico, texto extraído e recortes visuais. A geração DOCX a partir de PDF é complemento futuro.
 - A importação de PDF **não é 100%** e não deve ser declarada como tal.
+
+## Implementação (segunda rodada — recorte visual de regiões)
+
+### O que foi feito
+
+- **Tipos de região:** `src/imported-pdf.ts` agora define `PdfRegionKind` (`table-visual` | `chart-visual` | `figure-visual`), `PdfRegion`, `RenderedPdfRegion` e `PdfRegionCropRect`.
+- **Detecção de regiões visuais (puro, sem pdfjs):** `src/pdf-region-renderer.ts` implementa `detectPdfVisualRegionCandidates(document)`:
+  - para cada legenda (`caption`/`image-candidate`) por página, procura a `Fonte:` mais próxima abaixo dela (no espaço PDF, y menor) e monta uma região retangular entre a legenda e a fonte, com margem de `10pt`;
+  - classifica o tipo a partir da legenda: `Quadro`/`Tabela` → `table-visual`; `Gráfico` → `chart-visual`; `Figura` → `figure-visual`;
+  - limita a região aos limites da página e emite `warnings` quando a região é muito grande (>`80%` da altura), muito pequena (`<20pt`) ou quando não há fonte abaixo;
+  - a confiança cai para `medium` sem fonte e para `low` em regiões fora do intervalo esperado.
+- **Cálculo puro de recorte:** `computeRegionCropRect(region, pageWidthPts, pageHeightPts, scale)` converte a região (em pontos, y medido do topo) em coordenadas de dispositivo para o canvas, sem depender de `document`/`canvas` (testável no Node).
+- **Renderização no navegador:** `renderPdfRegionToPng({ file, region, scale? })`:
+  - reusa o loader pdfjs já existente em `src/import-pdf.ts` (`loadPdfJs`, worker via `?url`);
+  - renderiza a página inteira num canvas e recorta a região com `drawImage`, devolvendo um `dataUrl` PNG (`RenderedPdfRegion`).
+- **UI:** `src/components/ImportBlock.tsx` lista as regiões detectadas no painel de diagnóstico (tipo, página, legenda, fonte, confiança, avisos) e oferece botão "Visualizar recorte" que chama `renderPdfRegionToPng` e mostra a imagem (`<img>`).
+- **Testes:** `tests/pdf-region-renderer.test.ts` (10 casos: Quadro→table-visual, Gráfico→chart-visual, Figura→figure-visual, margem/limites, região grande→low, sem fonte→medium, sem legenda, página vazia, `computeRegionCropRect`) e novos casos em `tests/import-pdf.test.ts` ligando `detectPdfBlockCandidates` → `detectPdfVisualRegionCandidates`.
+
+### Validação com PDF real (local, não commitado)
+
+Foi usado `Andrade_2025.pdf` (`_diagnostico/andrade-2025/`, 3,6 MB, 139 páginas) apenas para validação local. Resultado da extração: **10.673 itens de texto**, **36 legendas de Quadro**, **22 legendas de Figura/Gráfico** e **26 fontes ("Fonte:")** detectadas. A extração e a detecção de blocos funcionam ponta a ponta. O worker do pdfjs não pôde ser exercido em navegador headless neste ambiente; o padrão `?url` do Vite usado em `src/import-pdf.ts` é o recomendado e deve ser confirmado manualmente no navegador via `npm run dev`.
+
+### O que funciona agora
+
+- Detectar e listar regiões visuais (quadro/tabela, gráfico, figura) entre legenda e fonte.
+- Recortar e pré-visualizar a região como PNG no navegador, sob demanda.
+
+### O que continua fora desta rodada
+
+- Recorte automático inserido no DOCX (a região ainda é só visualização/diagnóstico).
+- Reconstrução semântica das tabelas PDF.
+- Confirmação visual do worker pdfjs em navegador real (pendente de teste manual).
 
 ### Próximos passos
 
-1. Renderizar página/região em imagem (canvas) para recorte visual.
-2. Conectar blocos `table-candidate` ao reconstrutor semântico de tabelas da v2.9.1.
-3. Mapear blocos PDF para `ImportedTable`/`ImportedDocumentImage` e integrar ao `editorText`/geração de DOCX.
-4. Melhorar a confiança de layout e reduzir falsos positivos de `table-candidate`.
-5. Tratar PDFs só-imagem com aviso honesto (sem OCR nesta versão).
+1. Conectar blocos `table-candidate` ao reconstrutor semântico de tabelas da v2.9.1.
+2. Mapear blocos PDF e regiões visuais para `ImportedTable`/`ImportedDocumentImage` e integrar ao `editorText`/geração de DOCX (inserir o recorte PNG e/ou a tabela reconstruída).
+3. Melhorar a confiança de layout e reduzir falsos positivos de `table-candidate`.
+4. Tratar PDFs só-imagem com aviso honesto (sem OCR nesta versão).
+5. Confirmar manualmente o worker do pdfjs no navegador (`npm run dev`).

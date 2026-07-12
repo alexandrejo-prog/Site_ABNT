@@ -10,7 +10,7 @@ import { groupPdfTextIntoLines, buildPageNormalizedText, detectPdfBlockCandidate
 
 // PDF.js é carregado dinamicamente (lazy) para que os testes de funções puras
 // não precisem inicializar o motor de PDF no ambiente Node/jsdom.
-async function loadPdfJs(): Promise<typeof import("pdfjs-dist") & { GlobalWorkerOptions: { workerSrc?: string } }> {
+export async function loadPdfJs(): Promise<typeof import("pdfjs-dist") & { GlobalWorkerOptions: { workerSrc?: string } }> {
   const pdfjsLib = (await import("pdfjs-dist")) as unknown as typeof import("pdfjs-dist") & {
     GlobalWorkerOptions: { workerSrc?: string };
   };

@@ -62,3 +62,34 @@ export type ImportedPdfDocument = {
     requiresManualReview: boolean;
   };
 };
+
+export type PdfRegionKind = "table-visual" | "chart-visual" | "figure-visual";
+
+export type PdfRegion = {
+  pageNumber: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  kind: PdfRegionKind;
+  caption: string;
+  source?: string;
+  confidence: "high" | "medium" | "low";
+  warnings?: string[];
+};
+
+export type RenderedPdfRegion = {
+  pageNumber: number;
+  region: PdfRegion;
+  mimeType: "image/png";
+  dataUrl: string;
+  widthPx: number;
+  heightPx: number;
+};
+
+export type PdfRegionCropRect = {
+  sx: number;
+  sy: number;
+  sw: number;
+  sh: number;
+};

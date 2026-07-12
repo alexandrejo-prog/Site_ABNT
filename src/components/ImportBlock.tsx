@@ -1,9 +1,10 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Upload, XCircle } from "lucide-react";
 import { importDocumentFile } from "../import-docx";
 import { importAcademicFile } from "../import-file-router";
 import type { ImportedDocumentImage } from "../imported-images";
-import type { ImportedPdfDocument } from "../imported-pdf";
+import type { ImportedPdfDocument, PdfRegion, RenderedPdfRegion } from "../imported-pdf";
+import { detectPdfVisualRegionCandidates, renderPdfRegionToPng } from "../pdf-region-renderer";
 import { emptyAcademicFields, emptyConfidenceMap, WORK_TYPE_LABELS } from "../ufla-rules";
 
 interface ImportBlockProps {
@@ -34,7 +35,15 @@ function buildPdfDiagnosticText(pdf: ImportedPdfDocument): string {
 export function ImportBlock({ onImport, onRemove, importedFileName, workType }: ImportBlockProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfDiagnostic, setPdfDiagnostic] = useState<ImportedPdfDocument | null>(null);
+  const [previews, setPreviews] = useState<Record<string, RenderedPdfRegion>>({});
+  const [previewErrors, setPreviewErrors] = useState<Record<string, string>>({});
+
+  const regionCandidates = useMemo(
+    () => (pdfDiagnostic ? detectPdfVisualRegionCandidates(pdfDiagnostic) : []),
+    [pdfDiagnostic],
+  );
 
   async function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -42,9 +51,13 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
     try {
       setStatus("Importando arquivo...");
       setPdfDiagnostic(null);
+      setPdfFile(null);
+      setPreviews({});
+      setPreviewErrors({});
       if (file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf") {
         const result = await importAcademicFile(file);
         if (result.kind === "pdf") {
+          setPdfFile(file);
           setPdfDiagnostic(result.document);
           setStatus(`PDF lido: ${result.document.source.fileName} (${result.document.source.pageCount} páginas). Integração com geração de DOCX ainda é experimental.`);
         } else if (result.kind === "unknown") {
@@ -67,7 +80,29 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
 
   function clearPdfDiagnostic() {
     setPdfDiagnostic(null);
+    setPdfFile(null);
+    setPreviews({});
+    setPreviewErrors({});
     setStatus(null);
+  }
+
+  async function handlePreviewRegion(region: PdfRegion) {
+    if (!pdfFile) return;
+    const key = `${region.pageNumber}:${region.caption}`;
+    try {
+      const rendered = await renderPdfRegionToPng({ file: pdfFile, region, scale: 2 });
+      setPreviews((prev) => ({ ...prev, [key]: rendered }));
+      setPreviewErrors((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    } catch (error) {
+      setPreviewErrors((prev) => ({
+        ...prev,
+        [key]: error instanceof Error ? error.message : "Falha ao renderizar a região.",
+      }));
+    }
   }
 
   return (
@@ -125,6 +160,45 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
             <summary>Texto extraído do PDF ({pdfDiagnostic.source.pageCount} páginas)</summary>
             <pre className="import-pdf-text">{buildPdfDiagnosticText(pdfDiagnostic)}</pre>
           </details>
+          <h4>Regiões visuais detectadas ({regionCandidates.length})</h4>
+          {regionCandidates.length === 0 ? (
+            <p className="import-note import-note-info">Nenhuma legenda de figura/quadro/gráfico detectada automaticamente.</p>
+          ) : (
+            <ul className="pdf-region-list">
+              {regionCandidates.map((region) => {
+                const key = `${region.pageNumber}:${region.caption}`;
+                const preview = previews[key];
+                const previewError = previewErrors[key];
+                return (
+                  <li key={key} className={`pdf-region-item pdf-region-${region.kind}`}>
+                    <div className="pdf-region-meta">
+                      <span className="pdf-region-kind">{region.kind}</span>
+                      <span className="pdf-region-page">página {region.pageNumber}</span>
+                      <span className={`pdf-region-confidence pdf-region-confidence-${region.confidence}`}>
+                        confiança: {region.confidence}
+                      </span>
+                    </div>
+                    <p className="pdf-region-caption">{region.caption}</p>
+                    {region.source ? <p className="pdf-region-source">{region.source}</p> : null}
+                    {region.warnings && region.warnings.length > 0 ? (
+                      <ul className="pdf-region-warnings">
+                        {region.warnings.map((w, wi) => (
+                          <li key={wi}>{w}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <button className="secondary-action" type="button" onClick={() => handlePreviewRegion(region)} title={`Visualizar recorte da página ${region.pageNumber}`}>
+                      <span>Visualizar recorte</span>
+                    </button>
+                    {previewError ? <p className="import-note import-note-error">{previewError}</p> : null}
+                    {preview ? (
+                      <img className="pdf-region-preview" src={preview.dataUrl} alt={`Recorte de ${region.kind} na página ${region.pageNumber}`} />
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
           <button className="secondary-action" type="button" onClick={clearPdfDiagnostic} title="Fechar diagnóstico de PDF">
             <XCircle size={18} aria-hidden="true" />
             <span>Fechar diagnóstico</span>
