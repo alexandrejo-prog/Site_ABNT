@@ -1,4 +1,5 @@
 import type { ImportedPdfDiagnostic, PdfBodyStartDiagnostic, PdfLineDiagnostic, PdfPageDiagnostic, PdfTextItemDiagnostic } from "./imported-pdf-diagnostic";
+import { reconstructPdfParagraphBlocks } from "./pdf-text-reconstruction-diagnostic";
 
 type PdfJsModule = typeof import("pdfjs-dist");
 type PdfViewportLike = {
@@ -220,11 +221,14 @@ export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagno
       warnings.push("Nenhum texto bruto extraível foi encontrado. O PDF pode estar digitalizado, protegido ou exigir OCR, que não é usado nesta etapa.");
     }
 
+    const reconstruction = reconstructPdfParagraphBlocks(pages);
+
     return {
       fileName: file.name,
       pageCount: pdf.numPages,
       pages,
-      bodyStart: detectPdfBodyStart(pages),
+      bodyStart: reconstruction.bodyStart,
+      reconstruction,
       warnings,
     };
   } catch {

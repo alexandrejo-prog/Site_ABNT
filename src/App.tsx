@@ -116,6 +116,7 @@ export default function App() {
   const [importedTables, setImportedTables] = useState<ImportedTable[]>([]);
   const [pdfDiagnostic, setPdfDiagnostic] = useState<ImportedPdfDiagnostic | null>(null);
   const [selectedPdfPageNumber, setSelectedPdfPageNumber] = useState(1);
+  const [pdfDiagnosticViewMode, setPdfDiagnosticViewMode] = useState<"lines" | "blocks">("lines");
   const [importedSourceKind, setImportedSourceKind] = useState<SourceKind | null>(null);
   const [importedDocumentMode, setImportedDocumentMode] = useState<DocumentMode | null>(null);
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
@@ -152,6 +153,12 @@ export default function App() {
   }, [pdfDiagnostic, selectedPdfPageNumber]);
   const pdfLineCount = useMemo(() => pdfDiagnostic?.pages.reduce((sum, page) => sum + page.lines.length, 0) ?? 0, [pdfDiagnostic]);
   const pdfPagesWithoutText = useMemo(() => pdfDiagnostic?.pages.filter((page) => page.textItemCount === 0).length ?? 0, [pdfDiagnostic]);
+  const selectedPdfBlocks = useMemo(() => {
+    if (!pdfDiagnostic) return [];
+    return pdfDiagnostic.reconstruction.blocks
+      .filter((block) => block.pageStart <= selectedPdfPageNumber && block.pageEnd >= selectedPdfPageNumber)
+      .slice(0, 30);
+  }, [pdfDiagnostic, selectedPdfPageNumber]);
 
   useEffect(() => installEditorScrollFix(), []);
 
@@ -305,6 +312,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       if (result.documentMode === "pdf-diagnostic") {
         setPdfDiagnostic(result.pdfDiagnostic ?? null);
         setSelectedPdfPageNumber(1);
+        setPdfDiagnosticViewMode("lines");
         setStatus("O PDF foi lido para diagnóstico. A conversão para DOCX ainda não está habilitada nesta etapa.");
         return;
       }
@@ -342,6 +350,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       setImportedDocumentMode(null);
       setPdfDiagnostic(null);
       setSelectedPdfPageNumber(1);
+      setPdfDiagnosticViewMode("lines");
       setStatus("Diagnóstico de PDF removido. O documento acadêmico anterior foi preservado.");
       return;
     }
@@ -355,6 +364,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setImportedTables([]);
     setPdfDiagnostic(null);
     setSelectedPdfPageNumber(1);
+    setPdfDiagnosticViewMode("lines");
     setImportedSourceKind(null);
     setImportedDocumentMode(null);
     setEditorMode("body");
@@ -379,6 +389,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setImportedTables([]);
     setPdfDiagnostic(null);
     setSelectedPdfPageNumber(1);
+    setPdfDiagnosticViewMode("lines");
     setImportedSourceKind(null);
     setImportedDocumentMode(null);
     setEditorMode("body");
@@ -537,10 +548,20 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                 <div><dt>Itens textuais</dt><dd>{pdfDiagnostic.pages.reduce((sum, page) => sum + page.textItemCount, 0)}</dd></div>
                 <div><dt>Linhas visuais</dt><dd>{pdfLineCount}</dd></div>
                 <div><dt>Páginas sem texto</dt><dd>{pdfPagesWithoutText}</dd></div>
+                <div><dt>Parágrafos</dt><dd>{pdfDiagnostic.reconstruction.statistics.paragraphCount}</dd></div>
+                <div><dt>Títulos</dt><dd>{pdfDiagnostic.reconstruction.statistics.headingCount}</dd></div>
+                <div><dt>Listas</dt><dd>{pdfDiagnostic.reconstruction.statistics.listItemCount}</dd></div>
+                <div><dt>Legendas</dt><dd>{pdfDiagnostic.reconstruction.statistics.captionCount}</dd></div>
+                <div><dt>Fontes</dt><dd>{pdfDiagnostic.reconstruction.statistics.sourceCount}</dd></div>
+                <div><dt>Blocos não resolvidos</dt><dd>{pdfDiagnostic.reconstruction.statistics.unresolvedCount}</dd></div>
+                <div><dt>Números de página ignorados</dt><dd>{pdfDiagnostic.reconstruction.statistics.removedPageNumberCount}</dd></div>
+                <div><dt>Cabeçalhos ignorados</dt><dd>{pdfDiagnostic.reconstruction.statistics.removedHeaderCount}</dd></div>
+                <div><dt>Rodapés ignorados</dt><dd>{pdfDiagnostic.reconstruction.statistics.removedFooterCount}</dd></div>
               </dl>
               {pdfDiagnostic.bodyStart.found && (
-                <p className="import-note">Candidato de início do corpo: página {pdfDiagnostic.bodyStart.pageNumber}, linha {(pdfDiagnostic.bodyStart.lineIndex ?? 0) + 1}: {pdfDiagnostic.bodyStart.text}</p>
+                <p className="import-note">Candidato de início do corpo: página {pdfDiagnostic.bodyStart.pageNumber}, linha {(pdfDiagnostic.bodyStart.lineIndex ?? 0) + 1}: {pdfDiagnostic.bodyStart.text}. {pdfDiagnostic.bodyStart.reason}</p>
               )}
+              <p className="import-note">Esta reconstrução é apenas diagnóstica. Nenhum DOCX é gerado e nenhum conteúdo original do PDF é apagado.</p>
               <div className="field-group">
                 <label htmlFor="pdf-page-selector">Página do PDF</label>
                 <input
@@ -555,6 +576,10 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                   }}
                 />
               </div>
+              <div className="toolbar editor-mode-toolbar" aria-label="Visualização do diagnóstico PDF">
+                <button className={`text-button ${pdfDiagnosticViewMode === "lines" ? "active" : ""}`} type="button" onClick={() => setPdfDiagnosticViewMode("lines")}>Linhas visuais</button>
+                <button className={`text-button ${pdfDiagnosticViewMode === "blocks" ? "active" : ""}`} type="button" onClick={() => setPdfDiagnosticViewMode("blocks")}>Blocos reconstruídos</button>
+              </div>
               {selectedPdfPage && (
                 <div className="pdf-diagnostic-preview">
                   <section>
@@ -565,12 +590,29 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                       <div><dt>Itens da página</dt><dd>{selectedPdfPage.textItemCount}</dd></div>
                       <div><dt>Linhas da página</dt><dd>{selectedPdfPage.lines.length}</dd></div>
                     </dl>
-                    <p className="import-note">As linhas abaixo representam linhas visuais do PDF, não parágrafos reconstruídos.</p>
-                    <ol className="pdf-line-preview">
-                      {selectedPdfPage.lines.slice(0, 30).map((line, index) => (
-                        <li key={`${selectedPdfPage.pageNumber}-${index}`}>{line.text || "[linha sem texto]"}</li>
-                      ))}
-                    </ol>
+                    {pdfDiagnosticViewMode === "lines" ? (
+                      <>
+                        <p className="import-note">As linhas abaixo representam linhas visuais do PDF, não parágrafos reconstruídos.</p>
+                        <ol className="pdf-line-preview">
+                          {selectedPdfPage.lines.slice(0, 30).map((line, index) => (
+                            <li key={`${selectedPdfPage.pageNumber}-${index}`}>{line.text || "[linha sem texto]"}</li>
+                          ))}
+                        </ol>
+                      </>
+                    ) : (
+                      <>
+                        <p className="import-note">Blocos que começam, terminam ou atravessam a página selecionada. A prévia é limitada aos primeiros 30 blocos relacionados.</p>
+                        <ol className="pdf-block-preview">
+                          {selectedPdfBlocks.map((block, index) => (
+                            <li key={`${block.pageStart}-${block.pageEnd}-${index}`}>
+                              <strong>{block.type}</strong> · páginas {block.pageStart}{block.pageEnd !== block.pageStart ? `-${block.pageEnd}` : ""} · confiança {block.confidence} · {block.sourceLines.length} linha(s)
+                              <p>{block.text}</p>
+                              {block.reasons.length > 0 && <small>{block.reasons.join(" ")}</small>}
+                            </li>
+                          ))}
+                        </ol>
+                      </>
+                    )}
                     <details>
                       <summary>Texto bruto da página</summary>
                       <p>{selectedPdfPage.rawText.slice(0, 1400) || "Nenhum texto bruto extraível foi encontrado nesta página."}</p>

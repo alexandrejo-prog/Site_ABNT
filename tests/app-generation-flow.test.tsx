@@ -75,6 +75,50 @@ function pdfDiagnosticResult(fileName = "diagnostico.pdf") {
           ],
         },
       ],
+      reconstruction: {
+        bodyStart: { found: true, pageNumber: 2, lineIndex: 0, text: "1 INTRODUÇÃO", matchType: "numbered-introduction", reason: "Título de introdução seguido por texto corrido." },
+        ignoredLines: [{ pageNumber: 2, lineIndex: 2, role: "page-number", text: "2" }],
+        statistics: {
+          paragraphCount: 1,
+          headingCount: 1,
+          listItemCount: 0,
+          captionCount: 0,
+          sourceCount: 0,
+          unresolvedCount: 1,
+          removedPageNumberCount: 1,
+          removedHeaderCount: 0,
+          removedFooterCount: 0,
+        },
+        blocks: [
+          {
+            type: "heading",
+            text: "1 INTRODUÇÃO",
+            pageStart: 2,
+            pageEnd: 2,
+            sourceLines: [{ pageNumber: 2, lineIndex: 0 }],
+            confidence: "high",
+            reasons: ["Padrão estrutural de título detectado."],
+          },
+          {
+            type: "paragraph",
+            text: "Texto bruto da pagina dois.",
+            pageStart: 2,
+            pageEnd: 3,
+            sourceLines: [{ pageNumber: 2, lineIndex: 1 }, { pageNumber: 3, lineIndex: 0 }],
+            confidence: "medium",
+            reasons: ["Linhas visuais compatíveis foram unidas como parágrafo diagnóstico."],
+          },
+          {
+            type: "unresolved",
+            text: "Conteúdo de quadro sensível a layout.",
+            pageStart: 1,
+            pageEnd: 1,
+            sourceLines: [{ pageNumber: 1, lineIndex: 0 }],
+            confidence: "low",
+            reasons: ["Conteúdo marcado como sensível a layout; não foi convertido em parágrafo."],
+          },
+        ],
+      },
       warnings: ["O PDF foi lido para diagnóstico. A conversão para DOCX ainda não está habilitada nesta etapa."],
     },
   };
@@ -360,13 +404,21 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     expect(await screen.findByText(/Leitura de PDF/i)).toBeInTheDocument();
     expect(screen.getByText("139")).toBeInTheDocument();
     expect(screen.getAllByText(/Texto bruto da pagina um/)).toHaveLength(2);
-    expect(screen.getByText("Linhas visuais")).toBeInTheDocument();
+    expect(screen.getAllByText("Linhas visuais").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Parágrafos")).toBeInTheDocument();
+    expect(screen.getByText("Números de página ignorados")).toBeInTheDocument();
     expect(screen.getByLabelText("Página do PDF")).toHaveValue(1);
     expect(screen.getByText(/As linhas abaixo representam linhas visuais do PDF/)).toBeInTheDocument();
     expect(screen.getByText(/Candidato de início do corpo: página 2/)).toBeInTheDocument();
+    expect(screen.getByText(/Esta reconstrução é apenas diagnóstica/)).toBeInTheDocument();
     expect(screen.queryByText(/O DOCX é rascunho técnico/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Texto bruto da pagina dois/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Blocos reconstruídos/i }));
+    expect(screen.getByText(/Conteúdo de quadro sensível a layout/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Página do PDF"), { target: { value: "2" } });
+    expect(screen.getAllByText(/Texto bruto da pagina dois/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/páginas 2-3/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Linhas visuais/i }));
     expect(screen.getByText("1 INTRODUÇÃO")).toBeInTheDocument();
     expect(screen.getAllByText(/Texto bruto da pagina dois/)).toHaveLength(2);
     expect(screen.queryByLabelText("Tipo de trabalho")).not.toBeInTheDocument();
