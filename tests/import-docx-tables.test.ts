@@ -107,9 +107,9 @@ describe("importacao de tabelas DOCX", () => {
     const result = await importSyntheticDocx(await makeSyntheticDocxWithTable());
     const table = result.importedTables[0];
 
-    expect(table.rows[0]).toEqual(["Coluna A", "Coluna B", "Coluna C"]);
-    expect(table.rows[1]).toEqual(["1", "2", "3"]);
-    expect(table.rows[2]).toEqual(["4", "5", "6"]);
+    expect(table.rows[0]).toEqual([{ text: "Coluna A" }, { text: "Coluna B" }, { text: "Coluna C" }]);
+    expect(table.rows[1]).toEqual([{ text: "1" }, { text: "2" }, { text: "3" }]);
+    expect(table.rows[2]).toEqual([{ text: "4" }, { text: "5" }, { text: "6" }]);
   });
 
   it("associa legenda proxima", async () => {
@@ -219,7 +219,7 @@ describe("importacao de tabelas DOCX", () => {
       importedTables: [
         {
           id: "tbl-broken",
-          rows: [["A", "B"]],
+          rows: [[{ text: "A" }, { text: "B" }]],
           rowCount: 1,
           columnCount: 2,
           caption: "Quadro 9 - Dados.",
@@ -227,6 +227,8 @@ describe("importacao de tabelas DOCX", () => {
           position: 0,
           origin: "docx-table",
           status: "detected-but-not-preserved",
+          hasGridSpan: false,
+          hasVerticalMerge: false,
         },
       ],
     });
@@ -238,40 +240,105 @@ describe("importacao de tabelas DOCX", () => {
     expect(documentXml).toContain("Fonte: autor.");
   });
 
-  it("tabelas em header nao sao duplicadas no corpo", async () => {
+function tableXmlWithGrid(rows: string[][], gridWidths?: number[]): string {
+  const gridCols = (gridWidths ?? rows[0]?.map(() => 2000) ?? []).map((w) => `<w:gridCol w:w="${w}" />`).join("");
+  const rowXmls = rows.map((cells) => {
+    const cellXmls = cells.map((cell) => `<w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa" /></w:tcPr><w:p><w:r><w:t>${cell}</w:t></w:r></w:p></w:tc>`).join("");
+    return `<w:tr>${cellXmls}</w:tr>`;
+  }).join("");
+  return `<w:tbl><w:tblGrid>${gridCols}</w:tblGrid>${rowXmls}</w:tbl>`;
+}
+
+function tableXmlWithMerge(rows: string[][]): string {
+  const rowXmls = rows.map((cells) => {
+    const cellXmls = cells.map((cell) => {
+      const merge = cell.startsWith("MERGE:") ? `<w:gridSpan w:val="2" />` : "";
+      return `<w:tc><w:tcPr>${merge}</w:tcPr><w:p><w:r><w:t>${cell.replace(/^MERGE:/, "")}</w:t></w:r></w:p></w:tc>`;
+    }).join("");
+    return `<w:tr>${cellXmls}</w:tr>`;
+  }).join("");
+  return `<w:tbl>${rowXmls}</w:tbl>`;
+}
+
+  it("detecta w:tblGrid e w:gridCol quando existem", async () => {
     const zip = new JSZip();
     const body = [
-      paragraphXml("UNIVERSIDADE FEDERAL DE LAVRAS"),
-      paragraphXml("AUTORA SINTETICA"),
-      paragraphXml("TITULO SINTETICO"),
       paragraphXml("1 INTRODUCAO"),
-      paragraphXml("Texto."),
+      tableXmlWithGrid([["A", "B"], ["C", "D"]], [1500, 2500]),
       paragraphXml("REFERENCIAS"),
-      paragraphXml("SILVA, A. Referencia sintetica."),
-    ].join("");
-    const headerBody = [
-      tableXml([["H1", "H2"], ["H3", "H4"]]),
     ].join("");
 
-    zip.file(
-      "word/document.xml",
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}</w:body></w:document>`,
-    );
-    zip.file(
-      "word/styles.xml",
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`,
-    );
-    zip.file(
-      "word/_rels/document.xml.rels",
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`,
-    );
-    zip.file(
-      "word/header1.xml",
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${headerBody}</w:body></w:hdr>`,
-    );
+    zip.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}</w:body></w:document>`);
+    zip.file("word/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`);
+    zip.file("word/_rels/document.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`);
 
-    const result = await importSyntheticDocx(await zip.generateAsync({ type: "arraybuffer" }), "header-tabela.docx");
+    const result = await importSyntheticDocx(await zip.generateAsync({ type: "arraybuffer" }));
+    expect(result.importedTables).toHaveLength(1);
+    expect(result.importedTables[0].originalGridWidths).toEqual([1500, 2500]);
+    expect(result.importedTables[0].estimatedColumnWidths).toEqual([38, 63]);
+  });
 
-    expect(result.importedTables).toHaveLength(0);
+  it("detecta gridSpan e gera layoutWarning", async () => {
+    const zip = new JSZip();
+    const body = [
+      paragraphXml("1 INTRODUCAO"),
+      tableXmlWithMerge([["MERGE:A", "B"], ["C", "D"]]),
+      paragraphXml("REFERENCIAS"),
+    ].join("");
+
+    zip.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}</w:body></w:document>`);
+    zip.file("word/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`);
+    zip.file("word/_rels/document.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`);
+
+    const result = await importSyntheticDocx(await zip.generateAsync({ type: "arraybuffer" }));
+    expect(result.importedTables).toHaveLength(1);
+    expect(result.importedTables[0].hasGridSpan).toBe(true);
+    expect(result.importedTables[0].status).toBe("preserved-with-layout-warning");
+    expect(result.importedTables[0].layoutWarning).toContain("revisao manual");
+  });
+
+  it("preserva texto mesmo com quebras artificiais na celula", async () => {
+    const zip = new JSZip();
+    const body = [
+      paragraphXml("1 INTRODUCAO"),
+      `<w:tbl><w:tblGrid><w:gridCol w:w="2000" /><w:gridCol w:w="2000" /></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>teletrabal\nho</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>implemen\ntação</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`,
+      paragraphXml("REFERENCIAS"),
+    ].join("");
+
+    zip.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}</w:body></w:document>`);
+    zip.file("word/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`);
+    zip.file("word/_rels/document.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`);
+
+    const result = await importSyntheticDocx(await zip.generateAsync({ type: "arraybuffer" }));
+    expect(result.importedTables[0].rows[0][0].text).toBe("teletrabalho");
+    expect(result.importedTables[0].rows[0][1].text).toBe("implementação");
+  });
+
+  it("DOCX final aplica largura de coluna quando disponivel", async () => {
+    const result = await importSyntheticDocx(await makeSyntheticDocxWithTable());
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "monografia" as const,
+      author: "Autora Sintetica",
+      title: "Titulo Sintetico",
+      resumo: "Resumo sintetico.",
+      abstractText: "Synthetic abstract.",
+      palavrasChave: "teste.",
+      keywords: "test.",
+    };
+
+    const blob = await generateDocxBlob({
+      fields,
+      editorText: result.editorText,
+      importedImages: result.importedImages,
+      importedTables: result.importedTables,
+    });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const documentXml = await zip.file("word/document.xml")?.async("string");
+
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toContain("Coluna A");
+    const hasTableStructure = (documentXml?.match(/<w:tr\b/g) ?? []).length >= 2;
+    expect(hasTableStructure).toBe(true);
   });
 });

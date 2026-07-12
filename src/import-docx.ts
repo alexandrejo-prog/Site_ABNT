@@ -21,6 +21,42 @@ import { sanitizeImportedTitle } from "./title-sanitizer";
 import { ImportedDocumentImage, importedImageMarker } from "./imported-images";
 import { ImportedTable, importedTableMarker } from "./imported-tables";
 
+function estimateColumnWidths(gridWidths: number[], columnCount: number): number[] {
+  if (gridWidths.length === columnCount && gridWidths.every((w) => Number.isFinite(w) && w > 0)) {
+    const total = gridWidths.reduce((sum, w) => sum + w, 0);
+    if (total > 0) {
+      return gridWidths.map((w) => Math.round((w / total) * 100));
+    }
+  }
+  if (gridWidths.length > 0) {
+    const total = gridWidths.reduce((sum, w) => sum + w, 0);
+    if (total > 0) {
+      return gridWidths.map((w) => Math.round((w / total) * 100));
+    }
+  }
+  return Array.from({ length: columnCount }, () => Math.floor(100 / columnCount));
+}
+
+const ARTIFICIAL_BREAK_PATTERN = /([a-zà-úç])\n([a-zà-úç])/gu;
+const PRESERVE_BREAK_BEFORE = /^(?:[-•*]\s|\d+[.)]\s|\.\s|:\s|—\s|–\s)/u;
+
+function cleanCellText(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+
+  let result = trimmed.replace(/\n{2,}/g, "\n");
+
+  result = result.replace(ARTIFICIAL_BREAK_PATTERN, (_, prev, next) => {
+    const before = prev;
+    const after = next;
+    if (PRESERVE_BREAK_BEFORE.test(after)) return `${before}\n${after}`;
+    return `${before}${after}`;
+  });
+
+  result = result.replace(/\s+/g, " ").trim();
+  return result;
+}
+
 export interface WorkTypeSuggestion {
   workType: WorkTypeValue;
   confidence: Confidence;
@@ -276,6 +312,8 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
         position: index,
         origin: "docx-table",
         status: "ignored-empty-table",
+        hasGridSpan: false,
+        hasVerticalMerge: false,
       });
       return;
     }
@@ -283,17 +321,34 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
     const columnCount = Math.max(...rows.map((row) => row.length), 1);
     const caption = nearestText(structure.blocks, index, -1, looksLikeTableCaption);
     const source = nearestText(structure.blocks, index, 1, looksLikeTableSource);
+    const estimatedColumnWidths = estimateColumnWidths(block.gridWidths ?? [], columnCount);
+    const hasFragileLayout = !block.tableWidthTwips && estimatedColumnWidths.some((w) => w < 5);
+    const hasComplexMerge = block.hasGridSpan || block.hasVerticalMerge;
+    const tooManyColumns = columnCount > 8;
+    const hasLayoutWarning = hasComplexMerge || tooManyColumns || hasFragileLayout;
+
+    const tableRows = rows.map((row) =>
+      row.map((cell) => ({ text: cleanCellText(cell) })),
+    );
 
     imported.push({
       id: `tbl-${imported.length + 1}`,
-      rows,
+      rows: tableRows,
       rowCount: rows.length,
       columnCount,
       caption: caption || undefined,
       source: source || undefined,
       position: index,
       origin: "docx-table",
-      status: "preserved",
+      status: hasLayoutWarning ? "preserved-with-layout-warning" : "preserved",
+      estimatedColumnWidths,
+      originalGridWidths: block.gridWidths,
+      tableWidthTwips: block.tableWidthTwips,
+      hasGridSpan: block.hasGridSpan ?? false,
+      hasVerticalMerge: block.hasVerticalMerge ?? false,
+      layoutWarning: hasLayoutWarning
+        ? "Tabelas/quadros importados de DOCX convertido de PDF podem exigir revisao manual de layout."
+        : undefined,
     });
   });
 
@@ -327,7 +382,7 @@ function editorTextWithImageMarkers(
       (image) => image.status === "preserved" && !emittedImageIds.has(image.id),
     );
     const missingPreservedTables = importedTables.filter(
-      (table) => table.status === "preserved" && !emittedTableIds.has(table.id),
+      (table) => (table.status === "preserved" || table.status === "preserved-with-layout-warning") && !emittedTableIds.has(table.id),
     );
 
     const appended: string[] = [];
@@ -360,7 +415,7 @@ function editorTextWithImageMarkers(
 
   const preservedTableTexts = new Set<string>();
   for (const table of importedTables) {
-    if (table.status === "preserved") {
+    if (table.status === "preserved" || table.status === "preserved-with-layout-warning") {
       if (table.caption) preservedTableTexts.add(table.caption);
       if (table.source) preservedTableTexts.add(table.source);
     }
@@ -412,7 +467,7 @@ function editorTextWithImageMarkers(
 
     if (block.type === "table") {
       const table = tablesByPosition.get(index);
-      if (table?.status === "preserved") {
+      if (table?.status === "preserved" || table?.status === "preserved-with-layout-warning") {
         lines.push(importedTableMarker(table.id));
         emittedTableIds.add(table.id);
       }
@@ -458,8 +513,9 @@ function buildImportResult(
   const preservedImages = importedImages.filter((image) => image.status === "preserved").length;
   const missingImages = importedImages.filter((image) => image.status === "detected-but-not-preserved").length;
   const reviewImages = Math.max(0, sourceImages - preservedImages);
-  const preservedTables = importedTables.filter((table) => table.status === "preserved").length;
+  const preservedTables = importedTables.filter((table) => table.status === "preserved" || table.status === "preserved-with-layout-warning").length;
   const missingTables = importedTables.filter((table) => table.status === "detected-but-not-preserved").length;
+  const layoutWarningTables = importedTables.filter((table) => table.layoutWarning).length;
   const imageMessages = [
     preservedImages
       ? `${preservedImages} imagem(ns) importada(s) e preservada(s) no rascunho. Revise posicao, legenda e fonte antes da versao final.`
@@ -477,6 +533,9 @@ function buildImportResult(
       : "",
     missingTables
       ? `${missingTables} tabela(s)/quadro(s) detectada(s), mas nao preservada(s) automaticamente. Reinsira manualmente as tabelas ausentes se necessario.`
+      : "",
+    layoutWarningTables
+      ? "Tabelas/quadros importados de DOCX convertido de PDF podem exigir revisao manual de layout."
       : "",
   ].filter(Boolean);
   if (sourceImages || preservedImages || missingImages) {

@@ -309,7 +309,7 @@ Esta rodada corrige os últimos bloqueadores aceitos para v2.9.1 sem declarar a 
 
 - `LISTA DE QUADROS` deixou de exigir página na mesma linha para manter a entrada. O coletor agora aceita títulos longos, continuação em linha seguinte e número de página separado, preservando `Quadro 1` a `Quadro 16` quando essas entradas aparecem no DOCX convertido.
 - A limpeza da lista para quando encontra `Fonte:`, reinício da numeração de quadros no corpo, `LISTA DE GRÁFICOS`, `LISTA DE SIGLAS`, `SUMÁRIO` ou `INTRODUÇÃO`. Assim, a lista não incorpora fontes nem legendas duplicadas do corpo.
-- Auditoria local do Andrade: o importador detectou 57 mídias/imagens no DOCX original, 11 imagens acadêmicas preservadas automaticamente (corpo, com legenda/fonte próximas) e 46 itens exigindo revisão manual (galeria de apêndice sem legenda/fonte individual). O logo/capa não é contado como gráfico acadêmico preservado.
+- Auditoria local do Andrade: o importador detectou 57 mídias/imagens no DOCX original, 11 imagens/gráficos acadêmicos do corpo com legenda e fonte próximas foram preservadas automaticamente como imagens reais (`w:drawing` + bytes em `word/media`). As demais 46 mídias — em grande parte a galeria de gráficos de apêndice sem legenda/fonte individual — exigem revisão manual. O logo/capa não é contado como gráfico acadêmico preservado.
 - Quando imagens/gráficos do corpo não podem ser posicionados com segurança, o aviso revisável informa detectadas/preservadas/revisão manual e orienta reinserção manual dos elementos deslocados pela conversão PDF-DOCX.
 - Tabelas preservadas continuam saindo como `w:tbl`, mas legendas/fontes consumidas pelo `ImportedTable` não são repetidas imediatamente como parágrafos comuns no `editorText`.
 - A primeira referência foi auditada contra o caso normativo `BRASIL. Decreto nº 1.590... 1995. Seção 1.`; o normalizador preserva o início institucional antes do ano quando a quebra de linha separa o ano do restante da referência.
@@ -317,7 +317,92 @@ Esta rodada corrige os últimos bloqueadores aceitos para v2.9.1 sem declarar a 
 ### Validação local desta rodada
 
 - Fixture sintética confirma `Quadro 1` a `Quadro 16` quando detectáveis, sem `Fonte:` e sem capturar `LISTA DE GRÁFICOS`.
+- Teste de integração (`tests/import-docx-tables.test.ts`) confirma leitura de `w:tblGrid`/`w:gridCol`, detecção de `gridSpan`, limpeza de quebras artificiais em células e não duplicação de legenda/fonte.
 - Teste local opcional com `_diagnostico/andrade-2025/Andrade_2025.docx` confirma 16 entradas na lista de quadros, `w:tbl` no DOCX final, aviso revisável de imagens, ausência de marcadores internos e referências sem truncamento inicial evidente.
+
+## Melhoria — layout de tabelas importadas de DOCX convertido de PDF
+
+### Problema original
+
+Tabelas e quadros extraídos de DOCX convertido de PDF chegavam visualmente pobres no DOCX final:
+- colunas ficavam estreitas;
+- texto quebrava em muitas linhas curtas;
+- células ficavam quase inutilizáveis;
+- não havia preservação de `w:tblGrid`, `w:gridCol`, `w:tcW`, `gridSpan` ou `vMerge`.
+
+### Correção aplicada
+
+1. **Extração de grid e larguras (`src/word-structure-extractor.ts`)**
+   - `w:tblGrid`/`w:gridCol` são lidos quando existem.
+   - `w:tblPr`/`w:tblW` é lido para largura total da tabela.
+   - `w:tcPr`/`w:tcW` é lido por célula quando disponível.
+   - `w:gridSpan` e `w:vMerge` são detectados e sinalizados.
+
+2. **Modelo rico de tabela (`src/imported-tables.ts`)**
+   - `ImportedTable` agora inclui:
+     - `estimatedColumnWidths`
+     - `originalGridWidths`
+     - `tableWidthTwips`
+     - `hasGridSpan`
+     - `hasVerticalMerge`
+     - `layoutWarning`
+     - `status` pode ser `preserved-with-layout-warning`
+
+3. **Estimativa de largura (`src/import-docx.ts`)**
+   - Quando `w:gridCol` existe, as larguras são convertidas para percentual proporcional.
+   - Quando não existe, estima-se por quantidade de colunas.
+   - Colunas são limitadas a mínimo de 5% para evitar larguras absurdas.
+
+4. **Exportação com largura e formatação (`src/export-docx.ts`)**
+   - `Table` é criada com `width: 100%`.
+   - `TableCell` recebe `width` em percentual quando `estimatedColumnWidths` está disponível.
+   - Bordas simples aplicadas.
+   - Margens internas mínimas.
+   - Fonte `Times New Roman`, tamanho 12.
+   - Texto de célula limpo de quebras artificiais (`teletrabalho`, `implementação`).
+
+5. **Limpeza de quebras artificiais (`src/import-docx.ts`)**
+   - Função conservadora `cleanCellText` junta linhas quebradas no meio de palavras quando a próxima linha começa com minúscula.
+   - Preserva quebras antes de bullets, números, ponto final, dois-pontos ou início de nova ideia.
+
+6. **Aviso de layout frágil**
+   - Tabelas com `gridSpan`, `vMerge`, muitas colunas (>8) ou layout sem largura recebem status `preserved-with-layout-warning`.
+   - Aviso revisável: "Tabelas/quadros importados de DOCX convertido de PDF podem exigir revisao manual de layout."
+   - O aviso aparece nas mensagens de importação, não dentro do corpo acadêmico.
+
+7. **Sem duplicação de legenda/fonte**
+   - Quando `ImportedTable` consome legenda e fonte próximas, o `editorText` não as reinsere como texto solto.
+   - O DOCX final renderiza legenda, tabela e fonte uma única vez.
+
+### Arquivos alterados (layout de tabelas)
+
+- `src/word-structure-extractor.ts`
+  - `parseTableBlock`: extrai `w:tblGrid`, `w:gridCol`, `w:tblW`, `w:tcW`, `gridSpan`, `vMerge`.
+  - `ImportedBlock` do tipo `table` ganhou metadados de largura e merge.
+- `src/imported-tables.ts`
+  - `ImportedTable` enriquecido com `estimatedColumnWidths`, `originalGridWidths`, `tableWidthTwips`, `hasGridSpan`, `hasVerticalMerge`, `layoutWarning`, `status` ampliado.
+- `src/import-docx.ts`
+  - `importedTablesFromStructure` agora converte `string[][]` para `ImportedTableCell[][]`, aplica `cleanCellText`, calcula `estimatedColumnWidths` e define `preserved-with-layout-warning`.
+  - `cleanCellText` remove quebras artificiais conservadoramente.
+  - `editorTextWithImageMarkers` e `buildImportResult` tratam tabelas com layout warning.
+- `src/export-docx.ts`
+  - `importedTableParagraph` aplica `estimatedColumnWidths`, bordas, margens e fonte `Times New Roman`.
+  - `TableCell` recebe `width` em percentual.
+- `tests/import-docx-tables.test.ts`
+  - Novos testes para grid, merge, limpeza de célula e estrutura de tabela no DOCX final.
+
+### Limitações conhecidas
+
+- Mesclagem complexa (`gridSpan`/`vMerge` avançados) não é reconstruída perfeitamente; o sistema avisa para revisão manual.
+- Quando o DOCX convertido de PDF não contém `w:tblGrid`, as larguras são estimadas e podem não refletir a intenção original.
+- Tabelas com muitas colunas ou largura total indefinida recebem aviso de layout frágil.
+
+### Validação
+
+- `npm test`: **874 passed** (116 arquivos, 1 skipped)
+- `npm run build`: **built in 5.10s** (sem erros TypeScript)
+- Testes sintéticos confirmam leitura de grid, detecção de merge, limpeza de quebras artificiais e não duplicação de legenda/fonte.
+- Teste local opcional com `_diagnostico/andrade-2025/Andrade_2025.docx` permanece válido.
 
 ## Correção final — primeira referência truncada
 

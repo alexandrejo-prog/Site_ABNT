@@ -800,13 +800,16 @@ function importedTableParagraph(table: ImportedTable | undefined): Array<Paragra
   if (!table || !table.rows.length) return [];
 
   const columnCount = Math.max(table.columnCount, 1);
-  const columnWidth = Math.max(1, Math.floor(100 / columnCount));
+  const widths = table.estimatedColumnWidths ?? Array.from({ length: columnCount }, () => Math.floor(100 / columnCount));
+  const safeWidths = widths.map((w) => Math.max(5, w));
+  const widthTotal = safeWidths.reduce((sum, w) => sum + w, 0);
+  const normalizedWidths = safeWidths.map((w) => Math.round((w / widthTotal) * 100));
 
   const tableRows = table.rows.map((cells, rowIndex) => {
-    const padded = Array.from({ length: columnCount }, (_, i) => (cells[i] ?? "").trim());
+    const padded = Array.from({ length: columnCount }, (_, i) => (cells[i]?.text ?? "").trim());
     return new TableRow({
-      children: padded.map((cellText) => new TableCell({
-        width: { size: columnWidth, type: WidthType.PERCENTAGE },
+      children: padded.map((cellText, columnIndex) => new TableCell({
+        width: { size: normalizedWidths[columnIndex] ?? Math.floor(100 / columnCount), type: WidthType.PERCENTAGE },
         margins: { top: 40, bottom: 40, left: 80, right: 80 },
         children: [
           new Paragraph({
@@ -816,7 +819,7 @@ function importedTableParagraph(table: ImportedTable | undefined): Array<Paragra
               new TextRun({
                 text: cleanMojibakeText(cellText),
                 bold: rowIndex === 0,
-                font: UFLA_RULES.typography.fontFamily,
+                font: "Times New Roman",
                 size: BODY_SIZE,
                 color: BLACK,
               }),
@@ -837,7 +840,7 @@ function importedTableParagraph(table: ImportedTable | undefined): Array<Paragra
           new TextRun({
             text: cleanMojibakeText(table.caption),
             bold: true,
-            font: UFLA_RULES.typography.fontFamily,
+            font: "Times New Roman",
             size: BODY_SIZE,
             color: BLACK,
           }),
@@ -869,7 +872,7 @@ function importedTableParagraph(table: ImportedTable | undefined): Array<Paragra
         children: [
           new TextRun({
             text: cleanMojibakeText(table.source),
-            font: UFLA_RULES.typography.fontFamily,
+            font: "Times New Roman",
             size: BODY_SIZE,
             color: BLACK,
           }),

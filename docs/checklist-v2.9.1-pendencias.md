@@ -72,11 +72,11 @@ A branch melhorou substancialmente a importação de dissertação convertida de
 
 ### 5. Formatação fina de tabelas convertidas de PDF
 
-**Situação atual:** tabelas são preservadas como `w:tbl`, mas células podem ficar quebradas em muitas linhas curtas por ruído da conversão PDF→DOCX.
+**Situação atual:** tabelas agora preservam `w:tblGrid`/`w:gridCol`, `w:tcW`, `gridSpan`/`vMerge`, e recebem larguras proporcionais e bordas simples. Células usam `Times New Roman` 12. Quebras artificiais dentro de células são limpas conservadoramente. Quando o layout é complexo ou sem largura definida, o sistema avisa para revisão manual.
 
-**Aceitável para v2.9.1:** parcialmente, desde que os dados não sejam perdidos e haja aviso de revisão.
+**Aceitável para v2.9.1:** sim, com aviso de layout frágil quando necessário.
 
-**Melhoria futura:** reconstrução de largura de colunas, mesclagem simples e limpeza de quebras artificiais.
+**Melhoria futura:** reconstrução perfeita de mesclagem complexa e largura exata quando o DOCX fonte não expõe metadados de tabela.
 
 ## Regressões que não podem voltar
 
