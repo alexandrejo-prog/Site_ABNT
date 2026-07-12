@@ -20,15 +20,21 @@ function imageParagraphXml(relationshipId: string): string {
   return `<w:p><w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:blipFill><a:blip r:embed="${relationshipId}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/></pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
 }
 
+function imageParagraphXmlAnchor(relationshipId: string): string {
+  return `<w:p><w:r><w:drawing><wp:anchor xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" relativeHeight="1" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:blipFill><a:blip r:embed="${relationshipId}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/></pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p>`;
+}
+
 async function makeSyntheticDocx(
   options: {
     duplicateBodyImage?: boolean;
     headerImage?: boolean;
     missingMedia?: boolean;
     noAcademicImageContext?: boolean;
+    anchor?: boolean;
   } = {},
 ): Promise<ArrayBuffer> {
   const zip = new JSZip();
+  const imageXml = options.anchor ? imageParagraphXmlAnchor("rId22") : imageParagraphXml("rId22");
   const body = [
     paragraphXml("UNIVERSIDADE FEDERAL DE LAVRAS"),
     paragraphXml("AUTORA SINTETICA"),
@@ -36,7 +42,7 @@ async function makeSyntheticDocx(
     paragraphXml("1 INTRODUCAO"),
     paragraphXml("Texto antes da imagem."),
     ...(options.noAcademicImageContext ? [] : [paragraphXml("Grafico 1 - Sexo.")]),
-    imageParagraphXml("rId22"),
+    imageXml,
     ...(options.duplicateBodyImage ? [imageParagraphXml("rId22")] : []),
     ...(options.noAcademicImageContext ? [] : [paragraphXml("Fonte: elaboracao propria (2025).")]),
     paragraphXml("Texto normal depois."),
@@ -80,6 +86,7 @@ async function importSyntheticDocx(options?: {
   headerImage?: boolean;
   missingMedia?: boolean;
   noAcademicImageContext?: boolean;
+  anchor?: boolean;
 }) {
   const docx = await makeSyntheticDocx(options);
   const file = new File([docx], "sintetico.docx", {
@@ -117,7 +124,7 @@ describe("importacao de imagens DOCX", () => {
       resumo: "Resumo sintetico.",
       abstractText: "Synthetic abstract.",
       palavrasChave: "imagem; teste.",
-      keywords: "image; test.",
+      keywords: "image; text.",
     };
 
     const blob = await generateDocxBlob({
@@ -127,12 +134,19 @@ describe("importacao de imagens DOCX", () => {
     });
     const zip = await JSZip.loadAsync(await blob.arrayBuffer());
     const documentXml = await zip.file("word/document.xml")?.async("string");
-    const mediaFiles = Object.keys(zip.files).filter((name) => name.startsWith("word/media/"));
+    const mediaFiles = Object.keys(zip.files).filter((name) => name.startsWith("word/media/") && !zip.files[name].dir);
+    const mediaBytes = await Promise.all(
+      mediaFiles.map(async (name) => Buffer.from(await zip.file(name)!.async("uint8array"))),
+    );
 
     expect(documentXml).toBeTruthy();
     expect(documentText(documentXml ?? "")).not.toContain("[Imagem detectada: rId");
     expect(documentText(documentXml ?? "")).not.toContain("[[Imagem importada preservada:");
+    // O grafico preservado vira w:drawing no document.xml.
+    expect((documentXml ?? "").includes("<w:drawing")).toBe(true);
+    // O arquivo de medio do grafico esta presente em word/media (alem do logo da capa).
     expect(mediaFiles.length).toBeGreaterThan(0);
+    expect(mediaBytes.some((bytes) => bytes.equals(Buffer.from(tinyPng)))).toBe(true);
   });
 
   it("omite marcador interno quando a imagem nao puder ser preservada", async () => {
@@ -159,6 +173,33 @@ describe("importacao de imagens DOCX", () => {
     expect(result.messages.join("\n")).toContain("imagem(ns) detectada(s), mas nem todas puderam ser preservadas automaticamente");
     expect(documentText(documentXml ?? "")).not.toContain("[Imagem detectada: rId");
     expect(documentText(documentXml ?? "")).not.toContain("[[Imagem importada preservada:");
+  });
+
+  it("preserva grafico em wp:anchor quando ha legenda e fonte proximas", async () => {
+    const result = await importSyntheticDocx({ anchor: true });
+
+    expect(result.importedImages).toHaveLength(1);
+    expect(result.importedImages[0]).toMatchObject({
+      relationshipId: "rId22",
+      fileName: "image1.png",
+      caption: "Grafico 1 - Sexo.",
+      source: "Fonte: elaboracao propria (2025).",
+      status: "preserved",
+    });
+    expect(result.importedImages[0].data?.byteLength).toBeGreaterThan(0);
+    expect(result.editorText).toContain("[[Imagem importada preservada: img-1]]");
+  });
+
+  it("nao considera o logo da capa como grafico academico preservado", async () => {
+    const result = await importSyntheticDocx({ headerImage: true });
+
+    // O logo de cabecalho nao entra em importedImages; apenas o grafico do corpo conta.
+    expect(result.importedImages).toHaveLength(1);
+    expect(result.importedImages[0].relationshipId).toBe("rId22");
+    const preserved = result.importedImages.filter((image) => image.status === "preserved").length;
+    expect(preserved).toBe(1);
+    expect(result.fields.imageWarnings).toContain("1 preservado(s) automaticamente");
+    expect(result.fields.imageWarnings).not.toContain("2 preservado(s) automaticamente");
   });
 
   it("nao duplica imagens repetidas pelo mesmo relationship id nem imagens de cabecalho", async () => {

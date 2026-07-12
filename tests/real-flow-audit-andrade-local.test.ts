@@ -258,11 +258,15 @@ describe(" Auditoria do fluxo real com DOCX de Andrade (local)", () => {
     expect(text).not.toContain("[[Imagem importada preservada");
     expect(text).not.toContain("[[Tabela importada preservada");
     expect(sourceStructure.images.length).toBeGreaterThan(0);
-    if (result.importedImages.length === 0) {
-      expect(result.fields.imageWarnings).toContain(`${sourceStructure.images.length} imagem(ns)/grafico(s) detectado(s)`);
-      expect(result.fields.imageWarnings).toContain("0 preservado(s) automaticamente");
-      expect(result.fields.imageWarnings).toContain("exigem revisao manual");
-      expect(result.fields.imageWarnings).toContain("Revise e reinsira manualmente");
-    }
+    // Aviso revisavel e obrigatorio quando nem todas as imagens do corpo foram
+    // preservadas com seguranca (o logo da capa nao conta como grafico).
+    const preservedCount = result.importedImages.filter((image) => image.status === "preserved").length;
+    expect(result.fields.imageWarnings).toContain(
+      `${sourceStructure.images.length} imagem(ns)/grafico(s) detectado(s) no DOCX original`,
+    );
+    expect(result.fields.imageWarnings).toContain(`${preservedCount} preservado(s) automaticamente`);
+    expect(result.fields.imageWarnings).toContain("exigem revisao manual");
+    expect(result.fields.imageWarnings).toContain("Revise e reinsira manualmente");
+    expect(result.fields.imageWarnings).toContain("Graficos/imagens do corpo podem ter sido deslocados");
   });
 });

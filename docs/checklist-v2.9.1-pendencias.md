@@ -26,18 +26,16 @@ A branch melhorou substancialmente a importação de dissertação convertida de
 
 ## Bloqueadores antes de declarar pronto sem ressalvas
 
-### 1. Gráficos/imagens do corpo não preservados
+### 1. Gráficos/imagens do corpo — preservação de casos confiáveis
 
-**Situação atual:** o DOCX gerado preserva o logo da capa, mas não preserva os gráficos do corpo como imagens. A auditoria estrutural do DOCX gerado encontrou apenas uma imagem real em `word/media` e um desenho (`w:drawing`) efetivo no `document.xml`, compatíveis com o logo/capa.
+**Situação atual:** o DOCX gerado preserva o logo da capa e, a partir desta correção, também os gráficos acadêmicos do corpo que aparecem com legenda e fonte próximas (11 de 57 mídias no Andrade). As demais 46 mídias — maioria da galeria de gráficos de apêndice sem legenda/fonte individual — permanecem como aviso revisável, sem inserção em local incorreto.
 
-**Aceitável para v2.9.1 somente se:** o painel/diagnóstico do site informar claramente que as imagens/gráficos do corpo foram detectados, mas não preservados automaticamente, e que devem ser reinseridos manualmente.
-
-**Critérios de aceite:**
+**Critérios de aceite atendidos:**
 
 - Logo da capa não conta como gráfico preservado.
-- Se gráficos acadêmicos forem preserváveis, aparecem no DOCX final como imagens reais.
-- Se gráficos acadêmicos não forem preserváveis, há aviso revisável claro ao usuário.
-- Nenhum placeholder técnico aparece no document.xml final.
+- Gráficos acadêmicos com legenda/fonte próximas aparecem no DOCX final como imagens reais (`w:drawing` + bytes em `word/media`), inclusive em `wp:inline` e `wp:anchor`.
+- Imagens sem legenda/fonte confiável geram aviso revisável claro ao usuário, sem placeholder técnico no `document.xml`.
+- Nenhum placeholder técnico (`[Imagem detectada: rId...]`, `[[Imagem importada preservada: ...]]`) aparece no documento final.
 
 ### 2. Primeira referência ainda parece truncada no DOCX gerado
 

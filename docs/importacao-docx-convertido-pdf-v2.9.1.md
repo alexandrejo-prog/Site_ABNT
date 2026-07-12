@@ -23,7 +23,7 @@ Quando a imagem for detectada, mas não puder ser preservada, ela deve gerar avi
 ## Correção crítica — ancoragem de imagens e elementos pré-textuais detectados
 
 - Imagens de capa, logotipo UFLA, header/footer ou sem legenda/fonte próximas não são mais reinseridas automaticamente no corpo. Elas geram aviso revisável e permanecem disponíveis no DOCX original.
-- Imagens acadêmicas são preservadas apenas quando estão após a introdução e próximas de legenda/fonte; caso contrário, são advertidas como `Imagem detectada, mas não inserida automaticamente por baixa confiança de posicionamento. Revise e reinsira manualmente se necessário.`
+- Imagens acadêmicas são preservadas quando estão na seção textual/pós-textual (após a introdução) e próximas de legenda/fonte, em qualquer ordem (legenda antes da imagem e fonte depois, imagem antes da legenda e fonte depois, ou legenda e fonte separadas por até 5 blocos). Quando não há legenda/fonte confiável nas proximidades, a imagem é advertida como `Imagem detectada, mas não inserida automaticamente por baixa confiança de posicionamento. Revise e reinsira manualmente se necessário.`
 - Não é gerado bloco artificial concentrando todas as imagens entre introdução e os demais capítulos. A ancoragem aproximada é respeitada sempre que possível; quando não for, a imagem fica como aviso.
 - Ficha catalográfica e folha de aprovação reais detectadas não são substituídas por placeholders provisórios. Mensagens revisáveis orientam a preservação do documento oficial.
 - Elementos pré-textuais adicionais (LISTA DE QUADROS, LISTA DE GRÁFICOS, LISTA DE TABELAS, LISTA DE SIGLAS) detectados são mantidos como páginas/seções textuais no fluxo pré-textual quando houver conteúdo.
@@ -295,7 +295,7 @@ Esta etapa fecha os bloqueadores observados no fluxo real de Andrade (2025), man
 - Quando `INDICADORES DE IMPACTO`, `IMPACT INDICATORS` e `LISTA DE SIGLAS` são esperados em DOCX convertido de PDF, mas o conteúdo não é extraível com segurança, o sistema insere aviso revisável em vez de criar texto artificial.
 - `LISTA DE QUADROS`, `LISTA DE GRÁFICOS` e `LISTA DE TABELAS` preservam apenas entradas com paginação e param antes de legendas/fontes do corpo, evitando que `Fonte:` e captions reais sejam misturados à lista pré-textual.
 - Tabelas extraídas continuam sendo exportadas como tabelas reais (`w:tbl`), com legenda/fonte associadas quando a posição é confiável, sem repetir grosseiramente caption e fonte como texto solto.
-- No DOCX local de Andrade foram detectadas 57 entradas de mídia no pacote OOXML e 0 imagens/gráficos acadêmicos do corpo preservados automaticamente; nenhuma pôde ser posicionada com confiabilidade. O importador agora informa a contagem detectada, quantas foram preservadas automaticamente e quantas exigem revisão manual, sem afirmar preservação inexistente.
+- No DOCX local de Andrade foram detectadas 57 entradas de mídia no pacote OOXML. Dessas, 11 imagens/gráficos acadêmicos do corpo com legenda e fonte próximas foram preservadas automaticamente como imagens reais (`w:drawing` + bytes em `word/media`). As demais 46 mídias — em grande parte a galeria de gráficos de apêndice sem legenda/fonte individual — exigem revisão manual. O logo/capa não é contado como gráfico acadêmico preservado.
 - Referências continuam filtradas de forma conservadora para não receber texto narrativo do corpo, legendas, fontes, quadros, gráficos ou materiais de anexo/apêndice.
 
 ### Validação (correção final)
@@ -309,7 +309,7 @@ Esta rodada corrige os últimos bloqueadores aceitos para v2.9.1 sem declarar a 
 
 - `LISTA DE QUADROS` deixou de exigir página na mesma linha para manter a entrada. O coletor agora aceita títulos longos, continuação em linha seguinte e número de página separado, preservando `Quadro 1` a `Quadro 16` quando essas entradas aparecem no DOCX convertido.
 - A limpeza da lista para quando encontra `Fonte:`, reinício da numeração de quadros no corpo, `LISTA DE GRÁFICOS`, `LISTA DE SIGLAS`, `SUMÁRIO` ou `INTRODUÇÃO`. Assim, a lista não incorpora fontes nem legendas duplicadas do corpo.
-- Auditoria local do Andrade: o importador detectou 57 mídias/imagens no DOCX original, 0 imagens acadêmicas preservadas automaticamente e 57 itens exigindo revisão manual. O logo/capa não é contado como gráfico acadêmico preservado.
+- Auditoria local do Andrade: o importador detectou 57 mídias/imagens no DOCX original, 11 imagens acadêmicas preservadas automaticamente (corpo, com legenda/fonte próximas) e 46 itens exigindo revisão manual (galeria de apêndice sem legenda/fonte individual). O logo/capa não é contado como gráfico acadêmico preservado.
 - Quando imagens/gráficos do corpo não podem ser posicionados com segurança, o aviso revisável informa detectadas/preservadas/revisão manual e orienta reinserção manual dos elementos deslocados pela conversão PDF-DOCX.
 - Tabelas preservadas continuam saindo como `w:tbl`, mas legendas/fontes consumidas pelo `ImportedTable` não são repetidas imediatamente como parágrafos comuns no `editorText`.
 - A primeira referência foi auditada contra o caso normativo `BRASIL. Decreto nº 1.590... 1995. Seção 1.`; o normalizador preserva o início institucional antes do ano quando a quebra de linha separa o ano do restante da referência.
@@ -333,7 +333,7 @@ Validação local:
 
 - O DOCX gerado a partir de `_diagnostico/andrade-2025/Andrade_2025.docx` não inicia `REFERÊNCIAS` com `1995. Seção 1.`.
 - A referência `BRASIL. Decreto nº 1.590, de 10 de agosto de 1995...` foi preservada antes do complemento de `1995. Seção 1.` quando detectada no DOCX fonte.
-- O aviso revisável de imagens/gráficos permanece no fluxo de importação: 57 mídias detectadas no DOCX original, 0 imagens acadêmicas preservadas automaticamente e 57 itens exigindo revisão manual; o logo/capa não conta como gráfico acadêmico preservado.
+- O aviso revisável de imagens/gráficos permanece no fluxo de importação: 57 mídias detectadas no DOCX original, 11 imagens acadêmicas preservadas automaticamente e 46 itens exigindo revisão manual; o logo/capa não conta como gráfico acadêmico preservado.
 - `LISTA DE QUADROS` segue preservando `Quadro 1` a `Quadro 16` quando detectável, sem incorporar `Fonte:`.
 - `LISTA DE GRÁFICOS` segue preservando `Gráfico 1` a `Gráfico 11`.
 - Tabelas continuam exportadas como tabelas reais (`w:tbl`).
@@ -341,6 +341,6 @@ Validação local:
 
 Pendências/limitações conhecidas:
 
-- Gráficos/imagens acadêmicas do corpo convertidas de PDF ainda não são reposicionadas automaticamente com confiança; o sistema emite aviso revisável para reinserção manual.
+- Gráficos/imagens acadêmicas do corpo com legenda e fonte próximas são preservados automaticamente como imagens reais; os demais (ex.: galeria de apêndice sem legenda/fonte individual) ainda exigem revisão manual. O sistema emite aviso revisável para reinserção manual dos elementos ausentes.
 - Ficha catalográfica, indicadores de impacto e lista de siglas podem permanecer como aviso revisável quando o DOCX convertido não expõe conteúdo textual confiável.
 - A importação de DOCX convertido de PDF continua sendo heurística e não deve ser descrita como perfeita.

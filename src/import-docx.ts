@@ -103,7 +103,11 @@ function blockText(block: ImportedBlock): string {
 }
 
 function looksLikeImageCaption(text: string): boolean {
-  return /^(Figura|Imagem|Graf|Grafico|Quadro|Tabela)\s+\d+\s*[-–—]/i.test(text.trim());
+  return /^(Figura|Imagem|Graf|Grafico|Quadro|Tabela)\s+\d+\s*[-–—:.]?/i.test(text.trim());
+}
+
+function looksLikeImageLabel(text: string): boolean {
+  return /^(Figura|Imagem|Graf|Grafico|Quadro|Tabela)\s+\d+/i.test(text.trim());
 }
 
 function looksLikeImageSource(text: string): boolean {
@@ -111,7 +115,7 @@ function looksLikeImageSource(text: string): boolean {
 }
 
 function looksLikeTableCaption(text: string): boolean {
-  return /^(Quadro|Tabela|Graf|Grafico)\s+\d+\s*[-–—]/i.test(text.trim());
+  return /^(Quadro|Tabela|Graf|Grafico)\s+\d+\s*[-–—:.]?/i.test(text.trim());
 }
 
 function looksLikeTableSource(text: string): boolean {
@@ -139,19 +143,80 @@ function isDecorativeImageBlock(block: ImportedBlock): boolean {
   return DECORATIVE_SECTION_NAMES.has(normalizeForDetection(block.section || "")) || target.includes("logo");
 }
 
+function findBodyStartIndex(blocks: ImportedBlock[]): number {
+  return blocks.findIndex(
+    (block) =>
+      block.type === "heading" &&
+      /^(\d+\s+)?INTRODU[ÇC][AÃ]O\b/i.test(block.text.trim()),
+  );
+}
+
+function findBodyEndIndex(blocks: ImportedBlock[]): number {
+  return blocks.findIndex((block) => {
+    const normalized = normalizeForDetection(blockText(block));
+    return /^(REFERENCIAS|APENDICES|APENDICE|ANEXOS|ANEXO)\b/.test(normalized);
+  });
+}
+
+// Busca, em ambas as direções (janela de até 7 blocos), o rótulo/legenda e a fonte
+// mais próximos da imagem. Cobre os padrões de DOCX convertido de PDF em que a
+// legenda pode vir antes ou depois da imagem e a fonte aparece em bloco vizinho.
+function nearestAcademicImageContext(
+  blocks: ImportedBlock[],
+  index: number,
+): { caption: string; source: string } {
+  const windowSize = 7;
+  let caption = "";
+  let source = "";
+
+  for (let offset = 1; offset <= windowSize; offset += 1) {
+    const before = blocks[index - offset];
+    const after = blocks[index + offset];
+
+    if (!caption) {
+      if (before && (looksLikeImageCaption(blockText(before)) || looksLikeImageLabel(blockText(before)))) {
+        caption = blockText(before);
+      } else if (after && (looksLikeImageCaption(blockText(after)) || looksLikeImageLabel(blockText(after)))) {
+        caption = blockText(after);
+      }
+    }
+
+    if (!source) {
+      if (before && looksLikeImageSource(blockText(before))) {
+        source = blockText(before);
+      } else if (after && looksLikeImageSource(blockText(after))) {
+        source = blockText(after);
+      }
+    }
+
+    if (caption && source) break;
+  }
+
+  return { caption, source };
+}
+
 function classifyAcademicImage(block: ImportedBlock, index: number, blocks: ImportedBlock[]): boolean {
   if (block.type !== "image") return false;
   if (isDecorativeImageBlock(block)) return false;
 
-  const caption = nearestText(blocks, index, -1, looksLikeImageCaption);
-  const source = nearestText(blocks, index, 1, looksLikeImageSource);
-  if (!caption && !source) return false;
+  // Imagens do corpo (textual/pós-textual) são candidatas; capa e pré-textuais
+  // (ex.: logo institucional) são descartadas. Quando a seção não está
+  // disponível (estrutura não normalizada), recorre à heurística de título.
+  const section = block.section;
+  let inBody: boolean;
+  if (section === "textual" || section === "post-textual") {
+    inBody = true;
+  } else if (section === "pre-textual") {
+    inBody = false;
+  } else {
+    const bodyStart = findBodyStartIndex(blocks);
+    const bodyEnd = findBodyEndIndex(blocks);
+    inBody = bodyStart >= 0 && index > bodyStart && (bodyEnd < 0 || index < bodyEnd);
+  }
+  if (!inBody) return false;
 
-  const bodyIndex = blocks.findIndex((b) => /1\s+INTRODUCAO/i.test(blockText(b)));
-  if (bodyIndex < 0) return false;
-  if (index < bodyIndex) return false;
-
-  return true;
+  const { caption, source } = nearestAcademicImageContext(blocks, index);
+  return Boolean(caption || source);
 }
 
 function importedImagesFromStructure(structure: DocxStructure): ImportedDocumentImage[] {
@@ -177,6 +242,7 @@ function importedImagesFromStructure(structure: DocxStructure): ImportedDocument
 
     const id = `img-${imported.length + 1}`;
     const data = asset?.data;
+    const { caption, source } = nearestAcademicImageContext(structure.blocks, index);
     imported.push({
       id,
       relationshipId: block.relationshipId,
@@ -184,8 +250,8 @@ function importedImagesFromStructure(structure: DocxStructure): ImportedDocument
       fileName: asset?.fileName,
       mimeType: asset?.mimeType,
       data,
-      caption: nearestText(structure.blocks, index, -1, looksLikeImageCaption),
-      source: nearestText(structure.blocks, index, 1, looksLikeImageSource),
+      caption,
+      source,
       position: index,
       status: data?.byteLength ? "preserved" : "detected-but-not-preserved",
     });
