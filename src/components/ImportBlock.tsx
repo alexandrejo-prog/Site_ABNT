@@ -5,6 +5,7 @@ import { importAcademicFile } from "../import-file-router";
 import type { ImportedDocumentImage } from "../imported-images";
 import type { ImportedPdfDocument, PdfRegion, RenderedPdfRegion } from "../imported-pdf";
 import { detectPdfVisualRegionCandidates, renderPdfRegionToPng } from "../pdf-region-renderer";
+import { buildPdfDraftInput, pdfDraftStatusMessage } from "../pdf-to-imported-blocks";
 import { emptyAcademicFields, emptyConfidenceMap, WORK_TYPE_LABELS } from "../ufla-rules";
 
 interface ImportBlockProps {
@@ -59,7 +60,9 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
         if (result.kind === "pdf") {
           setPdfFile(file);
           setPdfDiagnostic(result.document);
-          setStatus(`PDF lido: ${result.document.source.fileName} (${result.document.source.pageCount} páginas). Integração com geração de DOCX ainda é experimental.`);
+          const draft = buildPdfDraftInput(result.document, file.name, workType);
+          onImport(draft);
+          setStatus(pdfDraftStatusMessage(result.document.source.fileName, result.document.source.pageCount));
         } else if (result.kind === "unknown") {
           setStatus(result.error);
         } else {

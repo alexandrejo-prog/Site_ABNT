@@ -168,21 +168,36 @@ O que falta de validação estritamente manual (a ser feito pelo usuário com `n
 2. Confirmar que a lista de regiões visuais aparece (~36 Quadro, ~22 Figura/Gráfico como candidatos) e que o botão "Visualizar recorte" gera a imagem PNG sem ficar em branco.
 3. Conferir o console do navegador para garantir que não há erro de worker/canvas.
 
+### Integração de rascunho textual DOCX (terceira rodada)
+
+**Problema reportado:** o PDF era lido e o painel de diagnóstico aparecia, mas ao marcar "Gerar rascunho mesmo com pendências" o site não gerava DOCX. O motivo era que a importação de PDF só populava o painel de diagnóstico e **nunca** alimentava o pipeline de rascunho (`onImport`), deixando o `editorText` vazio.
+
+**Correção:** ao importar um PDF, o `ImportBlock` agora chama `onImport` com um rascunho textual construído por `buildPdfDraftInput` (`src/pdf-to-imported-blocks.ts`):
+
+- `editorText` = aviso de revisão + texto extraído normalizado de todas as páginas;
+- `fields` = campos acadêmicos vazios, preservando o **tipo de trabalho selecionado** na interface (sem inventar metadados);
+- `messages` = aviso de que o rascunho veio de PDF e exige revisão manual.
+
+O usuário pode então marcar "Gerar rascunho mesmo com pendências" e gerar um DOCX textual experimental. O aviso de revisão é incluído no próprio DOCX (no início do corpo) e no diagnóstico.
+
+**Validação manual confirmada pelo usuário:** o PDF `Andrade_2025.pdf` abriu no site, o painel apareceu, o texto foi extraído (139 páginas) e ~58 regiões visuais foram detectadas. Após a correção, o "Gerar rascunho mesmo com pendências" passa a gerar o DOCX.
+
 ### O que funciona agora
 
 - Detectar e listar regiões visuais (quadro/tabela, gráfico, figura) entre legenda e fonte.
 - Recortar e pré-visualizar a região como PNG no navegador, sob demanda.
+- Gerar um **rascunho DOCX textual experimental** a partir do PDF importado, mesmo com pendências, quando o usuário marca "Gerar rascunho mesmo com pendências".
 
 ### O que continua fora desta rodada
 
-- Recorte automático inserido no DOCX (a região ainda é só visualização/diagnóstico).
+- Inserção automática dos recortes visuais (PNG) no DOCX: as regiões detectadas seguem apenas como diagnóstico/pré-visualização. A inserção de recortes selecionados como fallback controlado é o próximo passo.
 - Reconstrução semântica das tabelas PDF.
-- Confirmação visual do worker pdfjs em navegador real (pendente de teste manual).
+- Confirmação visual do worker pdfjs em navegador real (pendente de teste manual do usuário).
 
 ### Próximos passos
 
-1. Conectar blocos `table-candidate` ao reconstrutor semântico de tabelas da v2.9.1.
-2. Mapear blocos PDF e regiões visuais para `ImportedTable`/`ImportedDocumentImage` e integrar ao `editorText`/geração de DOCX (inserir o recorte PNG e/ou a tabela reconstruída).
+1. Inserir recortes visuais PDF selecionados no DOCX como fallback controlado (legenda, imagem PNG, fonte, aviso), limitando a quantidade inicial de recortes para não gerar documento gigante.
+2. Conectar blocos `table-candidate` ao reconstrutor semântico de tabelas da v2.9.1.
 3. Melhorar a confiança de layout e reduzir falsos positivos de `table-candidate`.
 4. Tratar PDFs só-imagem com aviso honesto (sem OCR nesta versão).
 5. Confirmar manualmente o worker do pdfjs no navegador (`npm run dev`).

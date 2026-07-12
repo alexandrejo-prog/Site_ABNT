@@ -90,12 +90,12 @@ export async function importPdfDocument(
     visualBlocks > 0 ? "low" : "medium";
   const requiresManualReview = visualBlocks > 0 || textConfidence === "low";
 
-  diagnostics.push({
-    severity: "info",
-    code: "pdf-import-experimental",
-    message:
-      "Importação de PDF é experimental e não usa OCR. Tabelas, quadros e figuras podem exigir revisão manual.",
-  });
+    diagnostics.push({
+      severity: "info",
+      code: "pdf-import-experimental",
+      message:
+        "Importação de PDF é experimental e não usa OCR. Tabelas, quadros e figuras podem exigir revisão manual. Os recortes visuais detectados servem apenas para diagnóstico/preview e ainda não são inseridos automaticamente no DOCX.",
+    });
   if (requiresManualReview) {
     diagnostics.push({
       severity: "warning",
