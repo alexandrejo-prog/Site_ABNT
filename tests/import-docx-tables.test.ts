@@ -79,6 +79,44 @@ async function makeSyntheticDocxWithEmptyTable(): Promise<ArrayBuffer> {
   return zip.generateAsync({ type: "arraybuffer" });
 }
 
+async function makeSyntheticDocxWithGroupedAcademicTable(
+  caption = "Quadro 99 - Beneficios do trabalho remoto.",
+  contentHeader = "Vantagens",
+): Promise<ArrayBuffer> {
+  const zip = new JSZip();
+  const body = [
+    paragraphXml("UNIVERSIDADE FEDERAL DE LAVRAS"),
+    paragraphXml("AUTORA SINTETICA"),
+    paragraphXml("TITULO SINTETICO"),
+    paragraphXml("1 INTRODUCAO"),
+    paragraphXml(caption),
+    tableXml([
+      ["Categoria", contentHeader, "Autores", ""],
+      ["Organizacao", "Reducao de custos", "Goulart (2009)", ""],
+      ["", "Retencao de talentos", "Boonen (2012)", ""],
+      ["Trabalhadores", "Economia de recursos financeiros", "Goulart (2009)", ""],
+      ["", "Reducao do estresse", "Aderaldo et al. (2017)", ""],
+    ]),
+    paragraphXml("Fonte: elaboracao propria (2025)."),
+    paragraphXml("REFERENCIAS"),
+    paragraphXml("SILVA, A. Referencia sintetica."),
+  ].join("");
+
+  zip.file(
+    "word/document.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}</w:body></w:document>`,
+  );
+  zip.file(
+    "word/styles.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`,
+  );
+  zip.file(
+    "word/_rels/document.xml.rels",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`,
+  );
+  return zip.generateAsync({ type: "arraybuffer" });
+}
+
 async function importSyntheticDocx(buffer: ArrayBuffer, fileName = "sintetico.docx") {
   const file = new File([buffer], fileName, {
     type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -87,6 +125,65 @@ async function importSyntheticDocx(buffer: ArrayBuffer, fileName = "sintetico.do
 }
 
 describe("importacao de tabelas DOCX", () => {
+  it("reconstrói tabela acadêmica agrupada com autores sem depender do número do quadro", async () => {
+    const result = await importSyntheticDocx(await makeSyntheticDocxWithGroupedAcademicTable());
+    const table = result.importedTables[0];
+
+    expect(table.renderMode).toBe("semantic-reconstructed-table");
+    expect(table.reconstructedTable?.headers).toEqual(["Grupo", "Vantagens", "Autores"]);
+    expect(table.reconstructedTable?.rows).toHaveLength(4);
+    expect(table.reconstructedTable?.rows[0].cells).toEqual(["Organizacao", "Reducao de custos", "Goulart (2009)"]);
+    expect(table.reconstructedTable?.rows[1].cells).toEqual(["Organizacao", "Retencao de talentos", "Boonen (2012)"]);
+    expect(table.reconstructedTable?.rows[2].cells).toEqual(["Trabalhadores", "Economia de recursos financeiros", "Goulart (2009)"]);
+    expect(table.logicalColumnCount).toBe(3);
+    expect(table.originalColumnCount).toBe(4);
+  });
+
+  it("reconstrói tabela de pontos críticos com caption genérica de tabela", async () => {
+    const result = await importSyntheticDocx(
+      await makeSyntheticDocxWithGroupedAcademicTable("Tabela 12 - Desafios organizacionais.", "Pontos criticos"),
+    );
+    const table = result.importedTables[0];
+
+    expect(table.renderMode).toBe("semantic-reconstructed-table");
+    expect(table.reconstructedTable?.headers).toEqual(["Grupo", "Pontos críticos", "Autores"]);
+    expect(table.reconstructedTable?.rows.some((row) => row.cells.includes("Reducao de custos"))).toBe(true);
+  });
+
+  it("exporta tabela reconstruída com três colunas úteis, sem marcador interno nem coluna fantasma", async () => {
+    const result = await importSyntheticDocx(await makeSyntheticDocxWithGroupedAcademicTable());
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "monografia" as const,
+      author: "Autora Sintetica",
+      title: "Titulo Sintetico",
+      resumo: "Resumo sintetico.",
+      abstractText: "Synthetic abstract.",
+      palavrasChave: "teste.",
+      keywords: "test.",
+    };
+
+    const blob = await generateDocxBlob({
+      fields,
+      editorText: result.editorText,
+      importedImages: result.importedImages,
+      importedTables: result.importedTables,
+    });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const documentXml = await zip.file("word/document.xml")?.async("string");
+    const text = documentText(documentXml ?? "");
+
+    expect(documentXml).toContain("<w:tbl>");
+    expect(text).toContain("Grupo");
+    expect(text).toContain("Vantagens");
+    expect(text).toContain("Autores");
+    expect(text).toContain("Reducao de custos");
+    expect(text).toContain("Aderaldo et al. (2017)");
+    expect(text).not.toContain("[[Tabela importada preservada:");
+    expect((text.match(/Quadro 99 - Beneficios do trabalho remoto\./g) ?? []).length).toBe(1);
+    expect((text.match(/Fonte: elaboracao propria \(2025\)\./g) ?? []).length).toBe(1);
+  });
+
   it("detecta tabela real do DOCX", async () => {
     const result = await importSyntheticDocx(await makeSyntheticDocxWithTable());
 
@@ -447,7 +544,7 @@ function tableXmlWithPhantomColumns(rows: string[][]): string {
     expect((documentXml?.match(/<w:tc\b/g) ?? []).length).toBe(4);
   });
 
-  it("tabela ilegivel e renderizada como texto estruturado", async () => {
+  it("tabela com colunas fantasmas e padrao academico detectavel vira tabela semantica com aviso", async () => {
     const zip = new JSZip();
     const body = [
       paragraphXml("1 INTRODUCAO"),
@@ -479,8 +576,11 @@ function tableXmlWithPhantomColumns(rows: string[][]): string {
     const result = await importSyntheticDocx(await zip.generateAsync({ type: "arraybuffer" }));
     const table = result.importedTables[0];
 
-    expect(table.status).toBe("rendered-as-structured-text");
-    expect(table.layoutWarning).toContain("texto estruturado");
+    expect(table.renderMode).toBe("semantic-reconstructed-table");
+    expect(table.status).toBe("preserved-with-layout-warning");
+    expect(table.layoutWarning).toBeTruthy();
+    expect(table.reconstructedTable?.headers).toHaveLength(2);
+    expect(table.reconstructedTable?.headers[0]).toBe("Fase");
 
     const fields = {
       ...emptyAcademicFields(),
@@ -502,11 +602,10 @@ function tableXmlWithPhantomColumns(rows: string[][]): string {
     const outputZip = await JSZip.loadAsync(await blob.arrayBuffer());
     const documentXml = await outputZip.file("word/document.xml")?.async("string");
 
-    expect(documentXml).not.toContain("<w:tbl>");
+    expect(documentXml).toContain("<w:tbl>");
     expect(documentXml).toContain("Fase");
     expect(documentXml).toContain("Características");
     expect(documentXml).toContain("formação");
-    expect(documentXml).toContain("texto estruturado");
   });
 
   it("Quadro 5 com coluna fantasma final vira tabela de 3 colunas com grupo reconstruido", async () => {
@@ -552,7 +651,9 @@ function tableXmlWithPhantomColumns(rows: string[][]): string {
       { rowStart: 3, rowEnd: 4, text: "Trabalhadores" },
     ]);
     expect(table.hasReconstructedVerticalMerge).toBe(true);
-    expect(table.status).toBe("preserved");
+    expect(table.renderMode).toBe("semantic-reconstructed-table");
+    expect(table.status).toBe("preserved-with-layout-warning");
+    expect(table.reconstructedTable?.headers).toEqual(["Grupo", "Vantagens", "Autores"]);
 
     const fields = {
       ...emptyAcademicFields(),
@@ -580,8 +681,6 @@ function tableXmlWithPhantomColumns(rows: string[][]): string {
     expect(documentXml).toContain("Vantagens");
     expect(documentXml).toContain("Autores");
     expect(documentXml).toContain("Redução de custos");
-    expect(documentXml).toContain("<w:vMerge w:val=\"restart\"");
-    expect(documentXml).toContain("<w:vMerge w:val=\"continue\"");
     expect((documentXml?.match(/<w:tc\b/g) ?? []).length).toBe(15);
   });
 
@@ -625,7 +724,9 @@ function tableXmlWithPhantomColumns(rows: string[][]): string {
       { rowStart: 3, rowEnd: 4, text: "Trabalhadores" },
     ]);
     expect(table.hasReconstructedVerticalMerge).toBe(true);
-    expect(table.status).toBe("preserved");
+    expect(table.renderMode).toBe("semantic-reconstructed-table");
+    expect(table.status).toBe("preserved-with-layout-warning");
+    expect(table.reconstructedTable?.headers).toEqual(["Grupo", "Pontos críticos", "Autores"]);
 
     const fields = {
       ...emptyAcademicFields(),

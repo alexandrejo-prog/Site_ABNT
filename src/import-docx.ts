@@ -20,18 +20,20 @@ import { repairHeadingFragments, repairRecordHeadingFragments } from "./heading-
 import { sanitizeImportedTitle } from "./title-sanitizer";
 import { ImportedDocumentImage, importedImageMarker, looksLikeAcademicImageLabel, looksLikeAcademicImageCaption, looksLikeImageSource } from "./imported-images";
 import { ImportedTable, importedTableMarker, normalizePhantomColumns, isTableUnreadable, buildStructuredTextFromTable, removeTrailingEmptyColumn, detectGroupColumn, normalizeGroupColumn } from "./imported-tables";
+import { reconstructAcademicTable } from "./academic-table-reconstructor";
 
 function estimateColumnWidths(gridWidths: number[], columnCount: number): number[] {
-  if (gridWidths.length === columnCount && gridWidths.every((w) => Number.isFinite(w) && w > 0)) {
-    const total = gridWidths.reduce((sum, w) => sum + w, 0);
+  const safeWidths = gridWidths.slice(0, columnCount);
+  if (safeWidths.length === columnCount && safeWidths.every((w) => Number.isFinite(w) && w > 0)) {
+    const total = safeWidths.reduce((sum, w) => sum + w, 0);
     if (total > 0) {
-      return gridWidths.map((w) => Math.round((w / total) * 100));
+      return safeWidths.map((w) => Math.round((w / total) * 100));
     }
   }
-  if (gridWidths.length > 0) {
-    const total = gridWidths.reduce((sum, w) => sum + w, 0);
+  if (safeWidths.length > 0) {
+    const total = safeWidths.reduce((sum, w) => sum + w, 0);
     if (total > 0) {
-      return gridWidths.map((w) => Math.round((w / total) * 100));
+      return safeWidths.map((w) => Math.round((w / total) * 100));
     }
   }
   return Array.from({ length: columnCount }, () => Math.floor(100 / columnCount));
@@ -374,6 +376,72 @@ function importedImagesFromStructure(structure: DocxStructure): ImportedDocument
   return imported;
 }
 
+function tableNeedsSemanticDecision(table: ImportedTable): boolean {
+  return (
+    table.status === "preserved-with-layout-warning" ||
+    table.status === "rendered-as-structured-text" ||
+    isTableUnreadable(table) ||
+    Boolean(table.removedPhantomColumns?.length) ||
+    Boolean(table.hasGridSpan || table.hasVerticalMerge) ||
+    table.columnCount > 3
+  );
+}
+
+function chooseTableRenderMode(table: ImportedTable): ImportedTable {
+  if (!table.rows.length || table.status === "ignored-empty-table") {
+    return { ...table, renderMode: "manual-review" };
+  }
+
+  if (!tableNeedsSemanticDecision(table)) {
+    return { ...table, renderMode: "editable-table" };
+  }
+
+  const reconstructed = reconstructAcademicTable(table);
+  if (reconstructed.confidence === "high" || reconstructed.confidence === "medium") {
+    return {
+      ...table,
+      renderMode: "semantic-reconstructed-table",
+      reconstructedTable: reconstructed,
+      reconstructionConfidence: reconstructed.confidence,
+      reconstructionWarnings: reconstructed.warnings,
+      logicalColumnCount: reconstructed.headers.length,
+      status: "preserved-with-layout-warning",
+      layoutWarning: reconstructed.warnings[0] ?? table.layoutWarning,
+    };
+  }
+
+  const structuredText = buildStructuredTextFromTable(table);
+  if ((table.status === "rendered-as-structured-text" || isTableUnreadable(table)) && structuredText.trim()) {
+    return {
+      ...table,
+      renderMode: "structured-text",
+      status: "rendered-as-structured-text",
+      reconstructedTable: reconstructed,
+      reconstructionConfidence: "low",
+      reconstructionWarnings: reconstructed.warnings,
+      layoutWarning: "Quadro/tabela importado de DOCX convertido de PDF foi renderizado como texto estruturado para evitar tabela ilegível. Revise manualmente.",
+    };
+  }
+
+  if (structuredText.trim()) {
+    return {
+      ...table,
+      renderMode: "editable-table",
+      layoutWarning: table.layoutWarning || "Tabela importada com layout complexo. Revise manualmente.",
+    };
+  }
+
+  return {
+    ...table,
+    renderMode: "manual-review",
+    status: "detected-but-layout-fragile",
+    reconstructedTable: reconstructed,
+    reconstructionConfidence: "low",
+    reconstructionWarnings: reconstructed.warnings,
+    layoutWarning: "Tabela detectada, mas a estrutura não pôde ser reconstruída com confiança. Revise manualmente.",
+  };
+}
+
 function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] {
   const imported: ImportedTable[] = [];
 
@@ -456,7 +524,7 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
       finalTable.layoutWarning = "Quadro importado de DOCX convertido de PDF foi renderizado como texto estruturado para evitar tabela ilegível. Revise o layout manualmente.";
     }
 
-    imported.push(finalTable);
+    imported.push(chooseTableRenderMode(finalTable));
   });
 
   return imported;

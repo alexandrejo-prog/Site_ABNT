@@ -115,6 +115,7 @@ A branch melhorou substancialmente a importação de dissertação convertida de
 - Não voltar a inserir marcadores internos no DOCX final.
 - Não tocar em `src/docx-toc-field-patch.ts` sem necessidade real.
 - Não commitar `_diagnostico/`, PDFs/DOCXs reais, DOCXs gerados, `dist/`, `node_modules/`, `PR_BODY.md` ou `RELEASE_*.md`.
+- Não voltar a acoplar o teste de Quadro 5/6 ao número do quadro (usar regra geral por padrão estrutural).
 
 ## Próxima sequência recomendada
 
@@ -161,5 +162,7 @@ A branch melhorou substancialmente a importação de dissertação convertida de
 **Aceitável para v2.9.1:** sim, com aviso "Coluna de grupo reconstruída com mesclagem vertical lógica." quando aplicável.
 
 **Melhoria futura:** reconstrução perfeita de mesclagem complexa quando o DOCX fonte não expõe metadados de tabela.
+
+**Detalhe de validação atual:** o teste local `tests/real-flow-audit-andrade-local.test.ts` valida Quadro 5/6 por **regra geral (padrão estrutural)**, não por hardcode do número. Quadro 5 cai em `grouped-with-authors` (grupo "Organização"/"Trabalhador", `verticalMerge` reconstruído); Quadro 6 cai em `critical-points` (3 colunas, sem mesclagem de grupo). Ambos geram `w:tbl` com 3 colunas úteis e legenda/fonte aparecendo uma única vez. `npm test`: **891 passed** (116 arquivos, 1 skipped).
 
 

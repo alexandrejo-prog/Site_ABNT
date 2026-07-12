@@ -796,8 +796,153 @@ function importedImageParagraph(image: ImportedDocumentImage | undefined): Parag
   ];
 }
 
+function normalizeConsecutiveRestarts(
+  merges: ImportedTable["cellMerges"],
+): ImportedTable["cellMerges"] {
+  if (!merges?.length) return merges;
+
+  const byColumn = new Map<number, Array<{ row: number; type: string }>>();
+  for (const m of merges) {
+    if (m.type !== "vMerge-restart") continue;
+    const list = byColumn.get(m.col) || [];
+    list.push({ row: m.row, type: m.type });
+    byColumn.set(m.col, list);
+  }
+
+  const result = [...merges];
+  for (const [col, restarts] of byColumn) {
+    if (restarts.length <= 1) continue;
+    restarts.sort((a, b) => a.row - b.row);
+    for (let i = 1; i < restarts.length; i++) {
+      const idx = result.findIndex((m) => m.row === restarts[i].row && m.col === col && m.type === "vMerge-restart");
+      if (idx >= 0) {
+        result[idx] = { ...result[idx], type: "vMerge-continue" };
+      }
+    }
+  }
+
+  return result;
+}
+
+function reconstructedColumnWidths(table: ImportedTable): number[] {
+  const reconstructed = table.reconstructedTable;
+  const count = reconstructed?.headers.length ?? 1;
+  if (reconstructed?.pattern === "grouped-with-authors" || reconstructed?.pattern === "advantages-disadvantages" || reconstructed?.pattern === "critical-points" || reconstructed?.pattern === "generic-academic") {
+    return count === 3 ? [20, 50, 30] : Array.from({ length: count }, () => Math.floor(100 / count));
+  }
+  if (reconstructed?.pattern === "chronological") {
+    return count === 3 ? [15, 30, 55] : Array.from({ length: count }, () => Math.floor(100 / count));
+  }
+  return Array.from({ length: count }, () => Math.floor(100 / count));
+}
+
+function semanticReconstructedTableParagraph(table: ImportedTable): Array<Paragraph | Table> {
+  const reconstructed = table.reconstructedTable;
+  if (!reconstructed || !reconstructed.rows.length) return [];
+
+  const widths = reconstructedColumnWidths(table);
+  const result: Array<Paragraph | Table> = [];
+
+  if (table.caption || reconstructed.caption) {
+    result.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 120, after: 120, line: SINGLE_LINE },
+        children: [
+          new TextRun({
+            text: cleanMojibakeText(table.caption || reconstructed.caption || ""),
+            bold: true,
+            font: "Times New Roman",
+            size: BODY_SIZE,
+            color: BLACK,
+          }),
+        ],
+      }),
+    );
+  }
+
+  const headerRow = new TableRow({
+    children: reconstructed.headers.map((header, index) => new TableCell({
+      width: { size: widths[index] ?? Math.floor(100 / reconstructed.headers.length), type: WidthType.PERCENTAGE },
+      margins: { top: 40, bottom: 40, left: 80, right: 80 },
+      children: [
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { line: SINGLE_LINE, after: 0 },
+          children: [new TextRun({ text: cleanMojibakeText(header), bold: true, font: "Times New Roman", size: BODY_SIZE, color: BLACK })],
+        }),
+      ],
+    })),
+  });
+
+  const bodyRows = reconstructed.rows.map((row, rowIndex) => {
+    const cells = Array.from({ length: reconstructed.headers.length }, (_, index) => row.cells[index] ?? "");
+    return new TableRow({
+      children: cells.map((cellText, columnIndex) => {
+        let displayText = cellText;
+        if (columnIndex === 0 && rowIndex > 0 && cellText && reconstructed.rows[rowIndex - 1]?.cells[0] === cellText) {
+          displayText = "";
+        }
+        return new TableCell({
+          width: { size: widths[columnIndex] ?? Math.floor(100 / reconstructed.headers.length), type: WidthType.PERCENTAGE },
+          margins: { top: 40, bottom: 40, left: 80, right: 80 },
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.LEFT,
+              spacing: { line: SINGLE_LINE, after: 0 },
+              children: [new TextRun({ text: cleanMojibakeText(displayText), font: "Times New Roman", size: BODY_SIZE, color: BLACK })],
+            }),
+          ],
+        });
+      }),
+    });
+  });
+
+  result.push(
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        bottom: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        left: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        right: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        insideVertical: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+      },
+      rows: [headerRow, ...bodyRows],
+    }),
+  );
+
+  if (table.source || reconstructed.source) {
+    result.push(
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        spacing: { before: 120, after: 120, line: SINGLE_LINE },
+        children: [new TextRun({ text: cleanMojibakeText(table.source || reconstructed.source || ""), font: "Times New Roman", size: BODY_SIZE, color: BLACK })],
+      }),
+    );
+  }
+
+  const warning = reconstructed.warnings[0] || table.layoutWarning;
+  if (warning) {
+    result.push(
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        spacing: { before: 120, after: 120, line: SINGLE_LINE },
+        children: [new TextRun({ text: cleanMojibakeText(warning), italics: true, font: "Times New Roman", size: BODY_SIZE, color: BLACK })],
+      }),
+    );
+  }
+
+  return result;
+}
+
 function importedTableParagraph(table: ImportedTable | undefined): Array<Paragraph | Table> {
   if (!table || !table.rows.length) return [];
+
+  if (table.renderMode === "semantic-reconstructed-table") {
+    return semanticReconstructedTableParagraph(table);
+  }
 
   if (table.status === "rendered-as-structured-text") {
     const result: Array<Paragraph | Table> = [];
@@ -882,11 +1027,13 @@ function importedTableParagraph(table: ImportedTable | undefined): Array<Paragra
   const widthTotal = safeWidths.reduce((sum, w) => sum + w, 0);
   const normalizedWidths = safeWidths.map((w) => Math.round((w / widthTotal) * 100));
 
+  const normalizedMerges = normalizeConsecutiveRestarts(table.cellMerges);
+
   const tableRows = table.rows.map((cells, rowIndex) => {
     const padded = Array.from({ length: columnCount }, (_, i) => (cells[i]?.text ?? "").trim());
     return new TableRow({
       children: padded.map((cellText, columnIndex) => {
-        const originalMerge = table.cellMerges?.find(
+        const originalMerge = normalizedMerges?.find(
           (m) => m.row === rowIndex && m.col === columnIndex,
         );
         let verticalMerge: "continue" | "restart" | undefined;

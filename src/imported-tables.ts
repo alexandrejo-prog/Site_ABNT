@@ -1,3 +1,5 @@
+import type { ReconstructedAcademicTable } from "./academic-table-reconstructor";
+
 export type ImportedTableOrigin =
   | "docx-table"
   | "mammoth-table"
@@ -13,6 +15,12 @@ export type ImportedTableStatus =
   | "detected-but-not-preserved"
   | "inferred-from-text"
   | "ignored-empty-table";
+
+export type ImportedTableRenderMode =
+  | "editable-table"
+  | "semantic-reconstructed-table"
+  | "structured-text"
+  | "manual-review";
 
 export interface ImportedTableCell {
   text: string;
@@ -38,6 +46,10 @@ export interface ImportedTable {
   normalizedColumnCount?: number;
   logicalColumnCount?: number;
   removedPhantomColumns?: number[];
+  renderMode?: ImportedTableRenderMode;
+  reconstructedTable?: ReconstructedAcademicTable;
+  reconstructionConfidence?: "high" | "medium" | "low";
+  reconstructionWarnings?: string[];
   groupColumnIndex?: number;
   groupSpans?: Array<{ rowStart: number; rowEnd: number; text: string }>;
   hasReconstructedVerticalMerge?: boolean;
@@ -250,13 +262,14 @@ function isTrailingEmptyColumn(table: ImportedTable): boolean {
     const text = (row[lastCol]?.text || "").trim();
     if (!text) {
       emptyRows += 1;
-    } else if (text.length >= 3) {
+    } else if (text.length > 3) {
       meaningfulCells += 1;
     }
   }
 
-  if (emptyRows < table.rows.length * TRAILING_EMPTY_THRESHOLD) return false;
-  if (meaningfulCells > 0) return false;
+  const emptyRatio = emptyRows / table.rows.length;
+  if (emptyRatio < TRAILING_EMPTY_THRESHOLD) return false;
+  if (meaningfulCells > Math.max(1, Math.floor(table.rows.length * 0.1))) return false;
 
   return true;
 }
@@ -267,7 +280,11 @@ export function removeTrailingEmptyColumn(table: ImportedTable): ImportedTable {
   const lastCol = table.columnCount - 1;
   const newRows: ImportedTableCell[][] = [];
   for (const row of table.rows) {
+    const lastCellText = (row[lastCol]?.text || "").trim();
+    const prevText = (row[lastCol - 1]?.text || "").trim();
+    const mergedText = lastCellText ? (prevText ? `${prevText} ${lastCellText}` : lastCellText) : prevText;
     const newRow = row.slice(0, lastCol);
+    newRow[lastCol - 1] = { text: mergedText };
     newRows.push(newRow);
   }
 
@@ -294,11 +311,12 @@ export function detectGroupColumn(table: ImportedTable): { isGroup: boolean; gro
 
   const firstCol = table.rows.map((row) => (row[0]?.text || "").trim());
   const header = firstCol[0].toUpperCase();
-  const isGenericHeader = !header || header === "CATEGORIA" || header === "GRUPO" || header === "";
+  const isGenericHeader = !header || header === "CATEGORIA" || header === "GRUPO" || header === "" ||
+    ["ORGANIZACAO", "ORGANIZACOES", "TRABALHADORES", "TRABALHADOR", "EMPRESA", "GESTORES", "FUNCIONARIOS", "COLABORADORES"].includes(header);
 
   const dataRows = firstCol.slice(1);
   const uniqueValues = [...new Set(dataRows.filter((v) => v))];
-  const hasFewDistinct = uniqueValues.length <= 4 && uniqueValues.length >= 2;
+  const hasFewDistinct = uniqueValues.length <= 4 && uniqueValues.length >= 1;
 
   const otherColsHaveContent = table.rows.some((row) =>
     row.slice(1).some((cell) => (cell?.text || "").trim().length > 10),
@@ -353,4 +371,3 @@ export function normalizeGroupColumn(
       table.layoutWarning || "Coluna de grupo reconstruída com mesclagem vertical lógica.",
   };
 }
-

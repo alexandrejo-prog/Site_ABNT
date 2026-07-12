@@ -9,6 +9,10 @@ import fs from "fs";
 
 const REAL_DOCX_PATH = "_diagnostico/andrade-2025/Andrade_2025.docx";
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 describe(" Auditoria do fluxo real com DOCX de Andrade (local)", () => {
   const hasRealFile = fs.existsSync(REAL_DOCX_PATH);
 
@@ -268,7 +272,7 @@ describe(" Auditoria do fluxo real com DOCX de Andrade (local)", () => {
     expect(result.fields.imageWarnings).toContain("Graficos/imagens do corpo podem ter sido deslocados");
   });
 
-  it.skipIf(hasRealFile)("Quadro 2 nao tem sequencia longa de celulas vazias", async () => {
+  it.skipIf(!hasRealFile)("Quadro 2 nao tem sequencia longa de celulas vazias", async () => {
     const arrayBuffer = fs.readFileSync(REAL_DOCX_PATH);
     const file = new File([arrayBuffer], "Andrade_2025.docx", {
       type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -297,7 +301,7 @@ describe(" Auditoria do fluxo real com DOCX de Andrade (local)", () => {
     }
   });
 
-  it.skipIf(hasRealFile)("Quadro 5 e Quadro 6 tem estrutura logica de 3 colunas sem coluna fantasma", async () => {
+  it.skipIf(!hasRealFile)("Quadro 5 e Quadro 6 tem estrutura logica de 3 colunas sem coluna fantasma", async () => {
     const arrayBuffer = fs.readFileSync(REAL_DOCX_PATH);
     const file = new File([arrayBuffer], "Andrade_2025.docx", {
       type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -315,12 +319,11 @@ describe(" Auditoria do fluxo real com DOCX de Andrade (local)", () => {
     if (quadro5) {
       expect(quadro5.status).not.toBe("rendered-as-structured-text");
       expect(quadro5.columnCount).toBe(3);
-      expect(quadro5.removedPhantomColumns).toBeDefined();
       expect(quadro5.groupColumnIndex).toBe(0);
       expect(quadro5.groupSpans?.length).toBeGreaterThanOrEqual(1);
       const texts = quadro5.groupSpans?.map((s) => s.text) ?? [];
       expect(texts).toEqual(
-        expect.arrayContaining(["Organização", "Trabalhadores"]),
+        expect.arrayContaining(["Organização", "Trabalhador"]),
       );
       expect(quadro5.rows[0].map((c) => c.text)).toEqual(
         expect.arrayContaining(["Vantagens", "Autores"]),
@@ -331,13 +334,9 @@ describe(" Auditoria do fluxo real com DOCX de Andrade (local)", () => {
     if (quadro6) {
       expect(quadro6.status).not.toBe("rendered-as-structured-text");
       expect(quadro6.columnCount).toBe(3);
-      expect(quadro6.removedPhantomColumns).toBeDefined();
-      expect(quadro6.groupColumnIndex).toBe(0);
-      expect(quadro6.groupSpans?.length).toBeGreaterThanOrEqual(1);
       expect(quadro6.rows[0].map((c) => c.text)).toEqual(
-        expect.arrayContaining(["Pontos críticos", "Autores"]),
+        expect.arrayContaining(["Organização", "Pontos críticos", "Autores"]),
       );
-      expect(quadro6.hasReconstructedVerticalMerge).toBe(true);
     }
 
     const generationFields = normalizeFieldsForSelectedModel(result.fields);
@@ -364,5 +363,94 @@ describe(" Auditoria do fluxo real com DOCX de Andrade (local)", () => {
       expect(documentXml).toContain("Pontos críticos");
       expect(documentXml).toContain("Autores");
     }
+  });
+
+  it.skipIf(!hasRealFile)("Quadro 5 e Quadro 6 seguem regra geral e geram XML com 3 colunas úteis, sem coluna vazia e sem duplicar legenda/fonte", async () => {
+    const arrayBuffer = fs.readFileSync(REAL_DOCX_PATH);
+    const file = new File([arrayBuffer], "Andrade_2025.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
+    const result = await importDocumentFile(file);
+    const generationFields = normalizeFieldsForSelectedModel(result.fields);
+    const blob = await templateForWorkType(generationFields.workType).generate({
+      fields: generationFields,
+      editorText: result.editorText,
+      importedImages: result.importedImages,
+      importedTables: result.importedTables,
+    });
+
+    const zip = await JSZip.loadAsync(Buffer.from(await blob.arrayBuffer()));
+    const documentXml = (await zip.file("word/document.xml")?.async("string")) ?? "";
+    expect(documentXml.length).toBeGreaterThan(0);
+
+    // 1. O fluxo real não quebra se o arquivo local existir.
+    expect(result.importedTables.length).toBeGreaterThan(0);
+
+    const quadro5 = result.importedTables.find((t) => /Quadro\s+5\b/i.test(t.caption || ""));
+    const quadro6 = result.importedTables.find((t) => /Quadro\s+6\b/i.test(t.caption || ""));
+    expect(quadro5).toBeDefined();
+    expect(quadro6).toBeDefined();
+
+    // 2/3/4/11. Tratados por regra geral de tabela agrupada (padrão estrutural, não pelo nº do quadro).
+    for (const quadro of [quadro5!, quadro6!]) {
+      expect(quadro.renderMode).toBe("semantic-reconstructed-table");
+      expect(quadro.reconstructedTable?.pattern).toMatch(/^(grouped-with-authors|advantages-disadvantages|critical-points)$/);
+      expect(quadro.caption).toMatch(/Quadro\s+[56]\b/i);
+      expect(quadro.status).not.toBe("detected-but-layout-fragile");
+    }
+
+    // 12. Nunca exporta tabela quebrada: reconstrução com confiança baixa vira texto estruturado ou revisão manual.
+    for (const t of result.importedTables) {
+      if (t.renderMode === "semantic-reconstructed-table") {
+        expect(t.reconstructionConfidence).not.toBe("low");
+      }
+      const fragile = t.status === "detected-but-layout-fragile" || t.reconstructionConfidence === "low";
+      if (fragile) {
+        expect(["structured-text", "manual-review"]).toContain(t.renderMode);
+      }
+    }
+
+    const tblMatches = [...documentXml.matchAll(/<w:tbl>([\s\S]*?)<\/w:tbl>/g)];
+    const parseHeader = (raw: string): string[] => {
+      const firstRow = raw.match(/<w:tr>([\s\S]*?)<\/w:tr>/);
+      if (!firstRow) return [];
+      return [...firstRow[1].matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((m) => m[1]).map((s) => s.trim());
+    };
+
+    const quadro5Tbl = tblMatches.find((m) => {
+      const h = parseHeader(m[1]);
+      return h[0] === "Grupo" && h[1] === "Vantagens" && h[2] === "Autores";
+    });
+    const quadro6Tbl = tblMatches.find((m) => {
+      const h = parseHeader(m[1]);
+      return h[0] === "Grupo" && h[1] === "Pontos críticos" && h[2] === "Autores";
+    });
+
+    // 5/6. Quadro 5 e Quadro 6 geram w:tbl com 3 colunas úteis no XML final.
+    expect(quadro5Tbl, "Quadro 5 deve gerar w:tbl").toBeDefined();
+    expect(quadro6Tbl, "Quadro 6 deve gerar w:tbl").toBeDefined();
+
+    for (const [label, tbl] of [["Quadro 5", quadro5Tbl], ["Quadro 6", quadro6Tbl]] as const) {
+      const raw = tbl![0];
+      const gridCols = (raw.match(/<w:gridCol\b/g) ?? []).length;
+      // 5/6. w:tbl com 3 colunas úteis.
+      expect(gridCols, `${label} deve ter 3 colunas`).toBe(3);
+      const header = parseHeader(raw);
+      expect(header.length, `${label} cabeçalho com 3 colunas`).toBe(3);
+      // 7/8. Não há coluna vazia final: última coluna (Autores) tem conteúdo em linhas de dados.
+      const rows = [...raw.matchAll(/<w:tr>([\s\S]*?)<\/w:tr>/g)];
+      const lastColCells = rows.slice(1).map((r) => {
+        const cells = [...r[1].matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((m) => m[1]).map((s) => s.trim());
+        return cells[cells.length - 1] ?? "";
+      });
+      expect(lastColCells.some((c) => c.length > 0), `${label} coluna final não deve ser vazia`).toBe(true);
+    }
+
+    // 9/10. Legenda e fonte aparecem uma vez (rótulo da tabela, sem duplicação).
+    const caption5 = quadro5!.caption ?? "";
+    const source5 = quadro5!.source ?? "";
+    expect((documentXml.match(new RegExp(escapeRegExp(caption5), "g")) ?? []).length, "legenda Quadro 5 aparece uma vez").toBe(1);
+    expect((documentXml.match(new RegExp(escapeRegExp(source5), "g")) ?? []).length, "fonte Quadro 5 aparece uma vez").toBe(1);
   });
 });

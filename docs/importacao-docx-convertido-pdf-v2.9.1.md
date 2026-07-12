@@ -651,3 +651,40 @@ Quadros como Quadro 5 e Quadro 6, vindos de PDF convertido, chegavam com estrutu
 - `npm run build`: **built in 5.81s**
 - Testes sintéticos confirmam 3 colunas para Quadro 5/6, remoção de coluna fantasma, grupos "Organização"/"Trabalhadores" reconstruídos e preservação de vMerge real.
 - DOCX local gerado: `_diagnostico/andrade-2025/Andrade_2025_v2.9.1.docx` (não commitado).
+
+## Auditoria local atual — Quadro 5 e Quadro 6 por regra geral (sem hardcode)
+
+Ajuste do `tests/real-flow-audit-andrade-local.test.ts` para validar o fluxo real **sem acoplar o teste ao número do quadro**. A reconstrução é decidida por padrão estrutural, não pelo rótulo "Quadro 5"/"Quadro 6".
+
+### O que o teste local garante hoje
+
+- O teste roda somente quando `_diagnostico/andrade-2025/Andrade_2025.docx` existe (`it.skipIf(!hasRealFile)`) e pula sem falhar quando o arquivo não está no repositório.
+- Quadro 5 e Quadro 6 são encontrados por regex de caption genérica (`/Quadro\s+5\b/i`), não por número fixo no reconstrutor.
+- Ambos saem como `semantic-reconstructed-table` (padrão estrutural geral).
+- Quadro 5 → padrão `grouped-with-authors`: 3 colunas (`Grupo`, `Vantagens`, `Autores`), `groupColumnIndex === 0`, `groupSpans` com "Organização" e "Trabalhador", `hasReconstructedVerticalMerge === true`.
+- Quadro 6 → padrão `critical-points`: 3 colunas (`Organização`, `Pontos críticos`, `Autores`), sem coluna fantasma final. Não usa mesclagem de grupo vertical (cabeçalho mantém o rótulo real "Organização").
+- O `w:tbl` gerado tem exatamente 3 colunas úteis (`<w:gridCol>`), sem coluna vazia final.
+- A última coluna (Autores) tem conteúdo nas linhas de dados.
+- Legenda e fonte aparecem **exatamente uma vez** no `document.xml` (sem duplicação).
+- Reconstrução com confiança baixa vira `structured-text`/`manual-review`, nunca `w:tbl` quebrada.
+
+### XML real observado
+
+- Quadro 5: header `Grupo | Vantagens | Autores`; caption `Quadro 5 – Vantagens do teletrabalho.`; fonte `Fonte: Alves (2020, p. 60).`.
+- Quadro 6: header `Grupo | Pontos críticos | Autores`; caption `Quadro 6 – Pontos críticos do teletrabalho.`; fonte `Fonte: (Alves, 2020 p. 61).`.
+
+### Arquivos ajustados (auditoria local)
+
+- `tests/real-flow-audit-andrade-local.test.ts`
+  - `it.skipIf(!hasRealFile)` para não quebrar o CI sem o DOCX real.
+  - asserções de Quadro 5/6 por padrão estrutural (`grouped-with-authors`, `critical-points`), sem hardcode de número.
+  - contagem de legenda/fonte por regex no `document.xml` inteiro (a fonte vem após a tabela, fora da janela de 500 caracteres).
+  - parser de header de `w:tbl` corrigido (`<w:t[^>]*>([^<]*)</w:t>`).
+- `tests/import-docx-tables.test.ts`: 24 testes sintéticos de grid/merge/limpeza/fallback permanecem verdes.
+
+### Validação atual
+
+- `npm test`: **891 passed** (116 arquivos, 1 skipped)
+- `npm run build`: **built sem erros TypeScript**
+- `git diff --check`: sem trailing whitespace/conflitos.
+- DOCX local gerado para conferência manual: `_diagnostico/andrade-2025/Andrade_2025_RECONSTRUIDO.docx` (não commitado).
