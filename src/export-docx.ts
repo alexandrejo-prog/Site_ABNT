@@ -29,6 +29,12 @@ import { captionParagraph, cleanMojibakeText, detectCaption, tabbedTableBlock } 
 import { ImportedDocumentImage, IMPORTED_IMAGE_MARKER_PATTERN } from "./imported-images";
 import { ImportedTable, IMPORTED_TABLE_MARKER_PATTERN, buildStructuredTextFromTable } from "./imported-tables";
 import { PDF_DRAFT_WARNING } from "./pdf-to-imported-blocks";
+import type {
+  PdfSemanticBlock,
+  PdfHeadingBlock,
+  PdfVisualBlock,
+  RenderedPdfRegion,
+} from "./imported-pdf";
 
 export type EditorBlockType =
   | "paragraph"
@@ -63,6 +69,13 @@ export interface DocxGenerationInput {
   importedTables?: ImportedTable[];
   sourceKind?: "pdf" | "docx" | "txt" | "markdown";
   documentMode?: "ufla-structured" | "pdf-text-draft";
+  // Rascunho PDF: blocos semânticos reconstruídos e recortes visuais renderizados.
+  semanticBlocks?: PdfSemanticBlock[];
+  renderedRegions?: RenderedPdfRegion[];
+  pdfDraftOptions?: {
+    includeVisuals?: boolean;
+    includePreTextualPages?: boolean;
+  };
 }
 
 interface ScheduleRow {
@@ -2074,26 +2087,51 @@ export async function buildPdfTextDraftDocxBlob(input: DocxGenerationInput): Pro
   if (typeof Blob === "undefined") {
     throw new Error("A geração de DOCX requer um navegador (Blob indisponível).");
   }
-  const content = (input.editorText || PDF_DRAFT_WARNING).trim();
-  const rawLines = content.split("\n");
-  const children: Paragraph[] = rawLines.map((rawLine, index) => {
-    const line = rawLine.trim();
-    if (line.length === 0) return new Paragraph({});
-    const isFirst = index === 0;
-    return new Paragraph({
-      alignment: isFirst ? AlignmentType.CENTER : AlignmentType.JUSTIFIED,
-      spacing: { line: ONE_AND_HALF_LINE, after: 120 },
+
+  const includeVisuals = input.pdfDraftOptions?.includeVisuals ?? true;
+  const children: Paragraph[] = [];
+
+  children.push(
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { line: SINGLE_LINE, after: 240 },
       children: [
         new TextRun({
-          text: line,
+          text: PDF_DRAFT_WARNING,
           font: UFLA_RULES.typography.fontFamily,
-          size: isFirst ? COVER_TITLE_SIZE : BODY_SIZE,
-          bold: isFirst,
+          size: UFLA_RULES.typography.noteFontSizePt * 2,
+          italics: true,
           color: BLACK,
         }),
       ],
-    });
-  });
+    }),
+  );
+
+  if (input.semanticBlocks?.length) {
+    children.push(...buildPdfDraftBlockChildren(input.semanticBlocks, input.renderedRegions ?? [], includeVisuals));
+  } else {
+    // Fallback: uma linha por parágrafo (compatível com testes antigos).
+    const rawLines = (input.editorText || PDF_DRAFT_WARNING).trim().split("\n");
+    for (const rawLine of rawLines) {
+      const line = rawLine.trim();
+      if (line.length === 0) continue;
+      children.push(
+        new Paragraph({
+          alignment: AlignmentType.JUSTIFIED,
+          spacing: { line: ONE_AND_HALF_LINE, after: 120 },
+          indent: { firstLine: UFLA_RULES.typography.paragraphFirstLineTwip },
+          children: [
+            new TextRun({
+              text: line,
+              font: UFLA_RULES.typography.fontFamily,
+              size: BODY_SIZE,
+              color: BLACK,
+            }),
+          ],
+        }),
+      );
+    }
+  }
 
   const document = new Document({
     creator: "UFLA DOCX Acadêmico",
@@ -2117,4 +2155,166 @@ export async function buildPdfTextDraftDocxBlob(input: DocxGenerationInput): Pro
     ],
   });
   return Packer.toBlob(document);
+}
+
+const TWIP_PER_PX = 15;
+const PDF_DRAFT_USABLE_WIDTH_TWIP =
+  UFLA_RULES.page.widthTwip - UFLA_RULES.margins.leftTwip - UFLA_RULES.margins.rightTwip;
+
+function regionMatchKey(region: { pageNumber: number; caption?: string; x: number; y: number; width: number; height: number }): string {
+  return `${region.pageNumber}|${region.caption ?? ""}|${Math.round(region.x)}|${Math.round(region.y)}|${Math.round(region.width)}|${Math.round(region.height)}`;
+}
+
+function dataUrlToUint8Array(dataUrl: string): Uint8Array {
+  const base64 = dataUrl.split(",")[1] ?? "";
+  let binary: string;
+  if (typeof atob === "function") {
+    binary = atob(base64);
+  } else {
+    binary = Buffer.from(base64, "base64").toString("binary");
+  }
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function pdfDraftBodyParagraph(text: string): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.BOTH,
+    spacing: { line: ONE_AND_HALF_LINE, after: UFLA_RULES.spacing.afterParagraphTwip },
+    indent: { firstLine: UFLA_RULES.typography.paragraphFirstLineTwip },
+    children: [
+      new TextRun({ text: text || " ", font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK }),
+    ],
+  });
+}
+
+function pdfDraftHeading(block: PdfHeadingBlock): Paragraph {
+  const size = block.level <= 1 ? 28 : block.level === 2 ? 26 : 24;
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 240, after: 240, line: ONE_AND_HALF_LINE },
+    children: [
+      new TextRun({
+        text: block.text.toUpperCase(),
+        bold: true,
+        font: UFLA_RULES.typography.fontFamily,
+        size,
+        color: BLACK,
+      }),
+    ],
+  });
+}
+
+function pdfDraftCaption(text: string): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 120, after: 120, line: SINGLE_LINE },
+    children: [
+      new TextRun({ text: text, font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK }),
+    ],
+  });
+}
+
+function pdfDraftSource(text: string): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 0, after: 240, line: SINGLE_LINE },
+    children: [
+      new TextRun({
+        text: text,
+        font: UFLA_RULES.typography.fontFamily,
+        size: UFLA_RULES.typography.sourceFontSizePt * 2,
+        color: BLACK,
+      }),
+    ],
+  });
+}
+
+function pdfDraftListItem(text: string): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.BOTH,
+    spacing: { line: ONE_AND_HALF_LINE, after: 120 },
+    indent: { left: UFLA_RULES.typography.paragraphFirstLineTwip },
+    children: [
+      new TextRun({ text: text, font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK }),
+    ],
+  });
+}
+
+function pdfDraftVisualParagraph(
+  block: PdfVisualBlock,
+  renderedRegions: RenderedPdfRegion[],
+  includeVisuals: boolean,
+): Paragraph[] {
+  if (!includeVisuals || block.visualRegion.confidence === "low") {
+    const note = `[IMAGEM DETECTADA] ${block.visualRegion.caption || block.visualRegion.kind}. Reinsira manualmente esta imagem no documento final.`;
+    return [pdfDraftCaption(note)];
+  }
+  const key = regionMatchKey(block.visualRegion);
+  const rendered = renderedRegions.find((r) => regionMatchKey(r.region) === key);
+  if (!rendered) {
+    const note = `[IMAGEM DETECTADA] ${block.visualRegion.caption || block.visualRegion.kind}. Recorte visual indisponível; reinsira manualmente.`;
+    return [pdfDraftCaption(note)];
+  }
+  const maxWidthPx = Math.floor(PDF_DRAFT_USABLE_WIDTH_TWIP / TWIP_PER_PX);
+  let outWidth = rendered.widthPx;
+  let outHeight = rendered.heightPx;
+  if (outWidth > maxWidthPx) {
+    const scale = maxWidthPx / outWidth;
+    outWidth = maxWidthPx;
+    outHeight = Math.max(1, Math.round(rendered.heightPx * scale));
+  }
+  return [
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 120, after: 120, line: SINGLE_LINE },
+      children: [
+        new ImageRun({
+          data: dataUrlToUint8Array(rendered.dataUrl),
+          transformation: { width: outWidth, height: outHeight },
+          altText: {
+            title: block.visualRegion.caption || block.visualRegion.kind,
+            description: block.visualRegion.source || "Recorte visual do PDF original",
+            name: block.visualRegion.caption || block.visualRegion.kind,
+          },
+        }),
+      ],
+    }),
+  ];
+}
+
+function buildPdfDraftBlockChildren(
+  blocks: PdfSemanticBlock[],
+  renderedRegions: RenderedPdfRegion[],
+  includeVisuals: boolean,
+): Paragraph[] {
+  const children: Paragraph[] = [];
+  for (const block of blocks) {
+    switch (block.kind) {
+      case "heading":
+        children.push(pdfDraftHeading(block));
+        break;
+      case "caption":
+        children.push(pdfDraftCaption(block.text));
+        break;
+      case "source":
+        children.push(pdfDraftSource(block.text));
+        break;
+      case "list-item":
+        children.push(pdfDraftListItem(block.text));
+        break;
+      case "visual":
+        children.push(...pdfDraftVisualParagraph(block, renderedRegions, includeVisuals));
+        break;
+      case "review-note":
+        children.push(pdfDraftCaption(block.note));
+        break;
+      case "paragraph":
+      default:
+        children.push(pdfDraftBodyParagraph(block.text));
+        break;
+    }
+  }
+  return children;
 }

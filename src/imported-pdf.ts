@@ -93,3 +93,84 @@ export type PdfRegionCropRect = {
   sw: number;
   sh: number;
 };
+
+// Caixa delimitadora em pontos (espaço de coordenadas do PDF: origem no canto
+// inferior esquerdo, eixo y crescente para cima). Usada para posicionar linhas
+// e regiões visuais dentro da página.
+export interface PdfBoundingBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+// ----- Modelo semântico de reconstrução de texto de PDF ---------------------
+
+export type PdfSemanticBlockKind =
+  | "paragraph"
+  | "heading"
+  | "list-item"
+  | "caption"
+  | "source"
+  | "visual"
+  | "review-note";
+
+export interface PdfSemanticBlockBase {
+  id: string;
+  kind: PdfSemanticBlockKind;
+  pageNumber: number;
+  // Coordenada vertical (topo) em pontos — usada para ordenação e diagnóstico.
+  y: number;
+  text: string;
+  lines: import("./import-pdf-text").PdfTextLine[];
+  confidence: "high" | "medium" | "low";
+  warnings?: string[];
+}
+
+export interface PdfParagraphBlock extends PdfSemanticBlockBase {
+  kind: "paragraph";
+}
+
+export interface PdfHeadingBlock extends PdfSemanticBlockBase {
+  kind: "heading";
+  level: number;
+}
+
+export interface PdfListItemBlock extends PdfSemanticBlockBase {
+  kind: "list-item";
+  marker: string;
+}
+
+export interface PdfCaptionBlock extends PdfSemanticBlockBase {
+  kind: "caption";
+}
+
+export interface PdfSourceBlock extends PdfSemanticBlockBase {
+  kind: "source";
+}
+
+export interface PdfVisualBlock extends PdfSemanticBlockBase {
+  kind: "visual";
+  visualRegion: PdfRegion;
+}
+
+export interface PdfReviewNoteBlock extends PdfSemanticBlockBase {
+  kind: "review-note";
+  note: string;
+}
+
+export type PdfSemanticBlock =
+  | PdfParagraphBlock
+  | PdfHeadingBlock
+  | PdfListItemBlock
+  | PdfCaptionBlock
+  | PdfSourceBlock
+  | PdfVisualBlock
+  | PdfReviewNoteBlock;
+
+export interface PdfReconstructionOptions {
+  // Quando false (padrão), descarta blocos anteriores ao primeiro título de
+  // seção de nível 1 (ex.: "1 INTRODUÇÃO"). Quando true, mantém todo o texto,
+  // incluindo páginas pré-textuais.
+  includePreTextualPages?: boolean;
+}

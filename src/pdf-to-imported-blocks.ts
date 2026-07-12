@@ -1,14 +1,15 @@
-import type { ImportedPdfDocument, PdfDocumentBlock, PdfPageText } from "./imported-pdf";
+import type { ImportedPdfDocument, PdfDocumentBlock, PdfPageText, PdfSemanticBlock } from "./imported-pdf";
 import type { AcademicFields } from "./ufla-rules";
 import { emptyAcademicFields, emptyConfidenceMap } from "./ufla-rules";
 import { detectPdfVisualRegionCandidates, isListOrSummaryPage } from "./pdf-region-renderer";
+import { reconstructPdfSemanticBlocks, semanticBlocksToEditorText } from "./pdf-text-reconstruction";
 import type { ImportedDocumentPayload } from "./import-contract";
 
 export const PDF_DRAFT_WARNING =
   "Rascunho gerado a partir de PDF (experimental, sem OCR). Revise estrutura, tabelas, quadros, gráficos, imagens, paginação, sumário e referências antes de usar.";
 
 export const PDF_DRAFT_STATUS_NOTE =
-  "É possível gerar um rascunho textual experimental em DOCX, mas quadros, tabelas, gráficos e imagens exigem revisão manual. Os recortes visuais detectados ainda não são inseridos automaticamente no DOCX.";
+  "É possível gerar um rascunho experimental em DOCX. Quadros, tabelas, gráficos e figuras detectados podem ser inseridos como imagens (opcional); a formatação final exige revisão manual.";
 
 export function pdfDraftStatusMessage(fileName: string, pageCount: number): string {
   return `PDF lido: ${fileName} (${pageCount} páginas). ${PDF_DRAFT_STATUS_NOTE}`;
@@ -43,6 +44,7 @@ export function buildPdfDraftInput(
   document: ImportedPdfDocument,
   fileName: string,
   workType?: string,
+  options: { pdfFile?: File | ArrayBuffer } = {},
 ): PdfDraftInput {
   const baseFields = emptyAcademicFields();
   if (workType) baseFields.workType = workType as AcademicFields["workType"];
@@ -52,33 +54,22 @@ export function buildPdfDraftInput(
 
   // Texto bruto de todas as páginas (preservado para o diagnóstico).
   const rawPageText = document.pages.map((page) => page.normalizedText).join("\n\n").trim();
-  // Texto ordenado para exportação: páginas pré-textuais (lista/sumário) excluídas
-  // por padrão; o diagnóstico continua com o texto completo em rawPageText.
+  // Texto ordenado para exportação (sem pré-textuais), preservado para fallback.
   const orderedText = document.pages
     .filter((page) => !isPreTextualPage(page))
     .map((page) => page.normalizedText)
     .join("\n\n")
     .trim();
 
-  const bodyLines: string[] = [PDF_DRAFT_WARNING];
-  if (title) {
-    bodyLines.push("", `Título sugerido (verificar na capa): ${title}`);
-  }
-  bodyLines.push("", "Texto extraído do PDF (revisar e reorganizar):", "");
-  bodyLines.push(orderedText || "(sem texto extraível)");
+  // Blocos semânticos reconstruídos. Por padrão mantém TODAS as páginas; o
+  // filtro de pré-textuais é aplicado no momento da geração (conforme a opção
+  // escolhida pelo usuário), para que o rascunho possa ser reconfigurado.
+  const semanticBlocks: PdfSemanticBlock[] = reconstructPdfSemanticBlocks(document, {
+    includePreTextualPages: true,
+  });
 
-  if (regions.length > 0) {
-    bodyLines.push(
-      "",
-      "Elementos visuais detectados (revisão manual — não inseridos no DOCX):",
-    );
-    for (const region of regions) {
-      const source = region.source ? ` — ${region.source}` : "";
-      bodyLines.push(`- p.${region.pageNumber} | ${region.caption ?? region.kind}${source}`);
-    }
-  }
-
-  const editorText = bodyLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  const editorText =
+    semanticBlocksToEditorText(semanticBlocks, regions, title) || PDF_DRAFT_WARNING;
 
   return {
     sourceKind: "pdf",
@@ -91,6 +82,12 @@ export function buildPdfDraftInput(
     rawPageText,
     orderedText,
     regionDiagnostics: regions,
+    semanticBlocks,
+    pdfFile: options.pdfFile,
+    pdfDraftOptions: {
+      includeVisuals: true,
+      includePreTextualPages: false,
+    },
     importMetadata: {
       pageCount: document.source.pageCount,
       fingerprint: document.source.fingerprint,

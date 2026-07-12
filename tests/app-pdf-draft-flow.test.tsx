@@ -58,7 +58,7 @@ describe("fluxo de rascunho DOCX a partir de PDF importado", () => {
     const file = new File(["pdf-bytes"], "Andrade_2025.pdf", { type: "application/pdf" });
     await user.upload(screen.getByLabelText("Importar arquivo"), file);
 
-    await screen.findByText(/ainda não entram no DOCX/);
+    await screen.findByText(/revise antes de usar/i);
     expect(screen.queryByText(/Integração com geração de DOCX ainda é experimental/)).toBeNull();
 
     fireEvent.click(getGenerateAnywayCheckbox());
@@ -79,7 +79,7 @@ describe("fluxo de rascunho DOCX a partir de PDF importado", () => {
     const file = new File(["pdf-bytes"], "Andrade_2025.pdf", { type: "application/pdf" });
     await user.upload(screen.getByLabelText("Importar arquivo"), file);
 
-    await screen.findByText(/ainda não entram no DOCX/);
+    await screen.findByText(/revise antes de usar/i);
 
     fireEvent.click(getButtonByText(/Gerar DOCX/));
     expect(saveAsMock).not.toHaveBeenCalled();
@@ -94,7 +94,7 @@ describe("fluxo de rascunho DOCX a partir de PDF importado", () => {
     const file = new File(["pdf-bytes"], "Andrade_2025.pdf", { type: "application/pdf" });
     await user.upload(screen.getByLabelText("Importar arquivo"), file);
 
-    const status = await screen.findByText(/ainda não entram no DOCX/);
+    const status = await screen.findByText(/revise antes de usar/i);
     expect(status.textContent).toMatch(/revise|revisão/i);
     expect(status.textContent).not.toMatch(/100%|perfeita|perfeito/i);
   });

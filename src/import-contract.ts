@@ -1,7 +1,7 @@
 import type { AcademicFieldKey, AcademicFields, Confidence } from "./ufla-rules";
 import type { ImportedDocumentImage } from "./imported-images";
 import type { ImportedTable } from "./imported-tables";
-import type { ImportedPdfDocument, PdfRegion } from "./imported-pdf";
+import type { ImportedPdfDocument, PdfRegion, PdfSemanticBlock } from "./imported-pdf";
 
 // Discriminador explícito de origem do arquivo importado.
 export type SourceKind = "pdf" | "docx" | "txt" | "markdown";
@@ -35,4 +35,14 @@ export interface ImportedDocumentPayload {
   orderedText?: string; // texto ordenado para exportação (sem pré-textuais)
   regionDiagnostics?: PdfRegion[]; // diagnóstico de regiões visuais
   importMetadata?: ImportedDocumentMetadata; // metadados técnicos da importação
+  // Blocos semânticos reconstruídos (parágrafos, títulos, legendas, fontes,
+  // listas e regiões visuais). O DOCX de rascunho é gerado a partir deles.
+  semanticBlocks?: PdfSemanticBlock[];
+  // Arquivo PDF original (necessário para recortar imagens das regiões visuais).
+  pdfFile?: File | ArrayBuffer;
+  // Opções de reconstrução escolhidas pelo usuário no momento da importação.
+  pdfDraftOptions?: {
+    includeVisuals?: boolean;
+    includePreTextualPages?: boolean;
+  };
 }

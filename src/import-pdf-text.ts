@@ -1,4 +1,10 @@
-import type { PdfTextItem, PdfDocumentBlock, PdfBlockKind } from "./imported-pdf";
+import type {
+  PdfTextItem,
+  PdfDocumentBlock,
+  PdfBlockKind,
+  PdfBoundingBox,
+  PdfPageText,
+} from "./imported-pdf";
 
 export interface PdfTextLine {
   pageNumber: number;
@@ -8,6 +14,11 @@ export interface PdfTextLine {
   height: number;
   text: string;
   items: PdfTextItem[];
+  // Metadados de reconstrução (preenchidos por buildPageLines).
+  fontSize?: number;
+  fontName?: string;
+  isBold?: boolean;
+  bbox?: PdfBoundingBox;
 }
 
 function cleanWhitespace(value: string): string {
@@ -20,13 +31,29 @@ export function normalizePdfTextItems(items: PdfTextItem[]): PdfTextItem[] {
     .filter((item) => item.text.length > 0);
 }
 
+// Caixas delimitadoras em PDF compartilham a mesma origem (canto inferior
+// esquerdo, y crescente para cima). Dois itens iguais só são considerados
+// duplicados quando o texto coincide E as caixas se sobrepõem de fato.
+function boxesOverlap(a: PdfBoundingBox, b: PdfBoundingBox): boolean {
+  const ax2 = a.x + a.width;
+  const ay2 = a.y + a.height;
+  const bx2 = b.x + b.width;
+  const by2 = b.y + b.height;
+  const overlapX = Math.min(ax2, bx2) - Math.max(a.x, b.x);
+  const overlapY = Math.min(ay2, by2) - Math.max(a.y, b.y);
+  return overlapX > 0 && overlapY > 0;
+}
+
 function dedupePdfItems(items: PdfTextItem[]): PdfTextItem[] {
-  const seen = new Set<string>();
+  const seen: Array<{ text: string; box: PdfBoundingBox }> = [];
   const result: PdfTextItem[] = [];
   for (const item of items) {
-    const key = `${item.pageNumber}|${Math.round(item.x)}|${Math.round(item.y)}|${item.text}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    const box: PdfBoundingBox = { x: item.x, y: item.y, width: item.width, height: item.height };
+    const duplicate = seen.find(
+      (entry) => entry.text === item.text && boxesOverlap(entry.box, box),
+    );
+    if (duplicate) continue;
+    seen.push({ text: item.text, box });
     result.push(item);
   }
   return result;
@@ -49,6 +76,58 @@ function looksTabular(text: string): boolean {
 const CAPTION_PATTERN = /^(Quadro|Tabela|Figura|Gráfico)\s+\d+/i;
 const SOURCE_PATTERN = /^Fonte\s*:/i;
 const IMAGE_LABELS = /^(Figura|Gráfico)/i;
+
+function isBoldFontName(name?: string): boolean {
+  if (!name) return false;
+  return /(?:^|[-\s])(bold|black|heavy|semibold|medium)/i.test(name) || /\bb$/i.test(name);
+}
+
+function median(values: number[]): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+// Agrupa os itens de uma página em linhas visuais, enriquecendo cada linha com
+// metadados de fonte/tamanho/caixa para a reconstrução semântica. A tolerância
+// de linha é adaptativa (mediana da altura das letras), evitando quebras falsas
+// em documentos com espaçamento irregular.
+export function buildPageLines(page: PdfPageText): PdfTextLine[] {
+  const medianHeight = median(page.items.map((item) => item.height)) || 12;
+  const lineTolerance = Math.max(3, medianHeight * 0.6);
+  const minX = 0;
+  const maxX = page.width || Number.POSITIVE_INFINITY;
+  const lines = groupPdfTextIntoLines(page.items, lineTolerance);
+  return lines.map((line) => enrichLine(line, minX, maxX));
+}
+
+function enrichLine(line: PdfTextLine, minX: number, maxX: number): PdfTextLine {
+  const heights = line.items.map((item) => item.height).filter((h) => h > 0);
+  const fontSize = heights.length ? median(heights) : line.height;
+  const fontName = line.items.find((item) => item.fontName)?.fontName;
+  const isBold = isBoldFontName(fontName) || line.items.some((item) => isBoldFontName(item.fontName));
+  const lineMinX = Math.min(...line.items.map((item) => item.x));
+  const lineMaxX = Math.max(...line.items.map((item) => item.x + item.width));
+  const lineMinY = Math.min(...line.items.map((item) => item.y));
+  const lineMaxY = Math.max(...line.items.map((item) => item.y + item.height));
+  const bbox: PdfBoundingBox = {
+    x: lineMinX,
+    y: lineMinY,
+    width: lineMaxX - lineMinX,
+    height: lineMaxY - lineMinY,
+  };
+  return {
+    ...line,
+    fontSize,
+    fontName,
+    isBold,
+    bbox,
+    // Mantém x/width consistentes com a caixa real (recorte de margem).
+    x: Math.max(minX, lineMinX),
+    width: Math.min(maxX, lineMaxX) - Math.max(minX, lineMinX),
+  };
+}
 
 export function groupPdfTextIntoLines(items: PdfTextItem[], lineTolerance = 6): PdfTextLine[] {
   const cleaned = dedupePdfItems(normalizePdfTextItems(items));

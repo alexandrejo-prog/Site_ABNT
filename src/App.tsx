@@ -11,6 +11,9 @@ import { templateForWorkType } from "./document-template";
 import { buildPdfTextDraftDocxBlob } from "./export-docx";
 import { buildDownloadFileName } from "./download-filename";
 import type { DocumentMode, ImportedDocumentPayload, SourceKind } from "./import-contract";
+import type { PdfSemanticBlock, RenderedPdfRegion } from "./imported-pdf";
+import { applyPreTextualFilter } from "./pdf-text-reconstruction";
+import { renderPdfRegionToPng } from "./pdf-region-renderer";
 import { stripCpgForbiddenSections, hasCpgForbiddenSections } from "./cpg-content-filter";
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
 import { buildDraftFromFields, hasUnfilledPlaceholders, draftWorkTypeSupportsIndicators } from "./draft-builder";
@@ -121,6 +124,10 @@ export default function App() {
   const [importedFileName, setImportedFileName] = useState<string | null>(null);
 const [importedSourceKind, setImportedSourceKind] = useState<SourceKind | null>(null);
 const [importedDocumentMode, setImportedDocumentMode] = useState<DocumentMode | null>(null);
+const [importedSemanticBlocks, setImportedSemanticBlocks] = useState<PdfSemanticBlock[]>([]);
+const [importedPdfFile, setImportedPdfFile] = useState<File | ArrayBuffer | null>(null);
+const [pdfDraftIncludeVisuals, setPdfDraftIncludeVisuals] = useState(true);
+const [pdfDraftIncludePreTextualPages, setPdfDraftIncludePreTextualPages] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>("body");
   const [adherenceExpanded, setAdherenceExpanded] = useState(false);
   const [assistedMode, setAssistedMode] = useState(false);
@@ -288,6 +295,10 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       setGenerateAnyway(false);
       setImportedImages(result.importedImages ?? []);
       setImportedTables(result.importedTables ?? []);
+      setImportedSemanticBlocks(result.semanticBlocks ?? []);
+      setImportedPdfFile(result.pdfFile ?? null);
+      setPdfDraftIncludeVisuals(result.pdfDraftOptions?.includeVisuals ?? true);
+      setPdfDraftIncludePreTextualPages(result.pdfDraftOptions?.includePreTextualPages ?? false);
       const newEditorText = result.editorText || result.fields.introducao;
       setEditorText(newEditorText);
       if (editorRef.current) editorRef.current.innerHTML = editorMarkupToHtml(newEditorText);
@@ -312,6 +323,10 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setImportedDocumentMode(null);
     setImportedImages([]);
     setImportedTables([]);
+    setImportedSemanticBlocks([]);
+    setImportedPdfFile(null);
+    setPdfDraftIncludeVisuals(true);
+    setPdfDraftIncludePreTextualPages(false);
     setEditorMode("body");
     lastAppliedEditorTextRef.current = "";
     editorContentVersionRef.current += 1;
@@ -333,6 +348,10 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setImportedSourceKind(null);
     setImportedDocumentMode(null);
     setImportedImages([]);
+    setImportedSemanticBlocks([]);
+    setImportedPdfFile(null);
+    setPdfDraftIncludeVisuals(true);
+    setPdfDraftIncludePreTextualPages(false);
     setEditorMode("body");
     lastAppliedEditorTextRef.current = "";
     if (editorRef.current) editorRef.current.innerHTML = "";
@@ -423,7 +442,10 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
 
   async function handleGenerateDocx() {
     const generationFields = normalizeFieldsForSelectedModel(fields);
-    const nextIssues = runValidation(generationFields);
+    // No modo de rascunho de PDF não aplicamos a validação acadêmica estrutural
+    // (modelo UFLA), que não se aplica ao conteúdo extraído do PDF.
+    const nextIssues: ValidationIssue[] =
+      importedDocumentMode === "pdf-text-draft" ? [] : runValidation(generationFields);
     const nonOverridable = nextIssues.some((issue) => issue.severity === "error" && isNonOverridableError(issue));
     if (nonOverridable && !generateAnyway) {
       setStatus("Há pendências críticas que impedem a geração do DOCX. Corrija os campos obrigatórios e marcadores [PREENCHER: ...] antes de gerar.");
@@ -439,11 +461,33 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       setStatus("Gerando DOCX...");
       // O modo de saída é decidido pelo discriminador explícito, não pelo conteúdo.
       if (importedDocumentMode === "pdf-text-draft") {
+        const allBlocks = importedSemanticBlocks ?? [];
+        const blocks = pdfDraftIncludePreTextualPages
+          ? allBlocks
+          : applyPreTextualFilter(allBlocks);
+        const renderedRegions: RenderedPdfRegion[] = [];
+        if (pdfDraftIncludeVisuals && importedPdfFile) {
+          for (const block of blocks) {
+            if (block.kind === "visual" && block.visualRegion.confidence !== "low") {
+              try {
+                renderedRegions.push(await renderPdfRegionToPng({ file: importedPdfFile, region: block.visualRegion, scale: 2 }));
+              } catch {
+                // Região não renderizável vira nota de revisão no DOCX.
+              }
+            }
+          }
+        }
         const blob = await buildPdfTextDraftDocxBlob({
           fields: generationFields,
           editorText,
           sourceKind: importedSourceKind ?? undefined,
           documentMode: "pdf-text-draft",
+          semanticBlocks: blocks,
+          renderedRegions,
+          pdfDraftOptions: {
+            includeVisuals: pdfDraftIncludeVisuals,
+            includePreTextualPages: pdfDraftIncludePreTextualPages,
+          },
         });
         saveAs(blob, buildDownloadFileName({ workType: generationFields.workType, title: generationFields.title, importedFileName }));
         setStatus(
@@ -487,7 +531,18 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       <a href="#main-content" className="skip-link">Pular para o conte&uacute;do principal</a>
       <main id="main-content" className="workspace" tabIndex={-1} aria-busy={isGenerating}>
         <section className="metadata-pane" aria-label="Campos acadêmicos">
-          <ImportBlock onImport={handleImport} onRemove={handleRemoveImport} importedFileName={importedFileName} workType={fields.workType} />
+          <ImportBlock
+            onImport={handleImport}
+            onRemove={handleRemoveImport}
+            importedFileName={importedFileName}
+            workType={fields.workType}
+            includeVisuals={pdfDraftIncludeVisuals}
+            includePreTextualPages={pdfDraftIncludePreTextualPages}
+            onPdfDraftOptionsChange={(options) => {
+              setPdfDraftIncludeVisuals(options.includeVisuals);
+              setPdfDraftIncludePreTextualPages(options.includePreTextualPages);
+            }}
+          />
           <div className="work-type-section">
             <WorkTypeSelector value={fields.workType} onChange={updateWorkType} />
           </div>

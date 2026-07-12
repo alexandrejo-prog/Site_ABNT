@@ -3,12 +3,22 @@ import { describe, expect, it } from "vitest";
 import { generateDocxBlob } from "../src/export-docx";
 import { buildPdfDraftInput } from "../src/pdf-to-imported-blocks";
 import { emptyAcademicFields } from "../src/ufla-rules";
-import type { ImportedPdfDocument } from "../src/imported-pdf";
+import type { ImportedPdfDocument, PdfTextItem } from "../src/imported-pdf";
 
 function pdfDoc(normalizedText: string): ImportedPdfDocument {
+  const lines = normalizedText.split("\n").filter((l) => l.trim().length > 0);
+  const items: PdfTextItem[] = lines.map((text, index) => ({
+    text,
+    pageNumber: 1,
+    x: 72,
+    y: 900 - index * 14,
+    width: text.length * 6,
+    height: 12,
+    fontName: "Times",
+  }));
   return {
     source: { fileName: "exemplo.pdf", pageCount: 1 },
-    pages: [{ pageNumber: 1, width: 800, height: 1000, items: [], normalizedText }],
+    pages: [{ pageNumber: 1, width: 800, height: 1000, items, normalizedText }],
     blocks: [],
     diagnostics: [],
     quality: { textConfidence: "high", layoutConfidence: "medium", requiresManualReview: false },
@@ -50,7 +60,7 @@ function extractFileFromZip(buffer: Buffer, fileName: string): string {
 }
 
 describe("DOCX de rascunho a partir de PDF", () => {
-  it("gera DOCX contendo o aviso de revisão e o texto extraído", async () => {
+  it("gera DOCX contendo o aviso de revisão e o texto reconstruído", async () => {
     const doc = pdfDoc("Secao importante com texto extraido de exemplo para o rascunho.");
     const input = buildPdfDraftInput(doc, "exemplo.pdf", "monografia");
     const blob = await generateDocxBlob({
@@ -58,6 +68,7 @@ describe("DOCX de rascunho a partir de PDF", () => {
       editorText: input.editorText,
       sourceKind: input.sourceKind,
       documentMode: input.documentMode,
+      semanticBlocks: input.semanticBlocks,
     });
     const xml = extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
     expect(xml).toContain("Rascunho gerado a partir de PDF");
@@ -65,7 +76,7 @@ describe("DOCX de rascunho a partir de PDF", () => {
     expect(xml).not.toContain("[PREENCHER");
   });
 
-  it("não insere recortes visuais automaticamente (apenas texto)", async () => {
+  it("não insere recortes visuais automaticamente sem regiões (apenas texto)", async () => {
     const doc = pdfDoc("Conteudo unico de teste para rascunho textual.");
     const input = buildPdfDraftInput(doc, "exemplo.pdf", "monografia");
     expect(input.editorText).not.toMatch(/w:drawing/);
@@ -74,6 +85,7 @@ describe("DOCX de rascunho a partir de PDF", () => {
       editorText: input.editorText,
       sourceKind: input.sourceKind,
       documentMode: input.documentMode,
+      semanticBlocks: input.semanticBlocks,
     });
     const xml = extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
     expect(xml).not.toContain("<w:drawing>");
@@ -87,11 +99,12 @@ describe("DOCX de rascunho a partir de PDF", () => {
       editorText: input.editorText,
       sourceKind: input.sourceKind,
       documentMode: input.documentMode,
+      semanticBlocks: input.semanticBlocks,
     });
     const xml = extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
     expect(xml).not.toContain("AUTOR");
     expect(xml).not.toContain("TÍTULO DO TRABALHO");
-    expect(xml).toContain("Texto extraído do PDF");
+    expect(xml).toContain("Introducao com conteudo de exemplo");
   });
 
   it("gera DOCX mesmo com campos vazios (sem bloqueio de capa)", async () => {
@@ -102,6 +115,7 @@ describe("DOCX de rascunho a partir de PDF", () => {
       editorText: input.editorText,
       sourceKind: input.sourceKind,
       documentMode: input.documentMode,
+      semanticBlocks: input.semanticBlocks,
     });
     const xml = extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
     expect(xml).toContain("Rascunho gerado a partir de PDF");

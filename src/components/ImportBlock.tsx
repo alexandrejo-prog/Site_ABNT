@@ -13,6 +13,9 @@ interface ImportBlockProps {
   onRemove: () => void;
   importedFileName: string | null;
   workType: string;
+  includeVisuals?: boolean;
+  includePreTextualPages?: boolean;
+  onPdfDraftOptionsChange?: (options: { includeVisuals: boolean; includePreTextualPages: boolean }) => void;
 }
 
 function selectedWorkTypeLabel(workType: string): string {
@@ -34,7 +37,15 @@ function buildPdfDiagnosticText(pdf: ImportedPdfDocument): string {
     .slice(0, 4000);
 }
 
-export function ImportBlock({ onImport, onRemove, importedFileName, workType }: ImportBlockProps) {
+export function ImportBlock({
+  onImport,
+  onRemove,
+  importedFileName,
+  workType,
+  includeVisuals = true,
+  includePreTextualPages = false,
+  onPdfDraftOptionsChange,
+}: ImportBlockProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -72,10 +83,10 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
        if (file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf") {
          const result = await importAcademicFile(file);
         if (result.kind === "pdf") {
-          setPdfFile(file);
-          setPdfDiagnostic(result.document);
-          const draft = buildPdfDraftInput(result.document, file.name, workType);
-          onImport(draft);
+           setPdfFile(file);
+           setPdfDiagnostic(result.document);
+           const draft = buildPdfDraftInput(result.document, file.name, workType, { pdfFile: file });
+           onImport(draft);
           setStatus(
             `PDF lido (${result.document.source.pageCount} páginas). Um rascunho foi gerado abaixo — revise antes de usar.`,
           );
@@ -183,9 +194,38 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
         <div className="import-pdf-diagnostic">
           <h3>Leitura do PDF (experimental)</h3>
           <p className="import-note import-note-info">
-            Extraímos o texto e possíveis figuras/quadros. As imagens ainda não entram no DOCX —
-            revise o rascunho e ajuste manualmente antes de usar.
+            O texto é reconstruído em parágrafos, títulos, legendas e fontes. Ajuste as opções abaixo
+            antes de gerar o DOCX e revise o rascunho no Word/LibreOffice.
           </p>
+          <fieldset className="pdf-draft-options">
+            <legend>Opções do rascunho PDF</legend>
+            <label className="pdf-draft-option">
+              <input
+                type="checkbox"
+                checked={includeVisuals}
+                onChange={(event) =>
+                  onPdfDraftOptionsChange?.({
+                    includeVisuals: event.target.checked,
+                    includePreTextualPages,
+                  })
+                }
+              />
+              <span>Inserir figuras, quadros, gráficos e tabelas detectados como imagens no DOCX</span>
+            </label>
+            <label className="pdf-draft-option">
+              <input
+                type="checkbox"
+                checked={includePreTextualPages}
+                onChange={(event) =>
+                  onPdfDraftOptionsChange?.({
+                    includeVisuals,
+                    includePreTextualPages: event.target.checked,
+                  })
+                }
+              />
+              <span>Incluir páginas pré-textuais (capa, folha de rosto, sumário, listas) no rascunho</span>
+            </label>
+          </fieldset>
           <ul>
             <li><strong>Arquivo:</strong> {pdfDiagnostic.source.fileName}</li>
             <li><strong>Páginas:</strong> {pdfDiagnostic.source.pageCount}</li>
