@@ -424,7 +424,30 @@ Validação local:
 - Tabelas continuam exportadas como tabelas reais (`w:tbl`).
 - Resumo, abstract, agradecimentos, folha de rosto, folha de aprovação e sumário atualizável não regrediram na auditoria local.
 
-## Auditoria final (v2.9.1)
+## Status final real (pronto para revisão, não 100% finalizado)
+
+- folha de rosto corrigida: natureza, orientador, local e ano são preservados corretamente;
+- folha de aprovação corrigida: data, membros da banca e orientador normalizados, sem contaminação de resumo/agradecimentos;
+- AGRADECIMENTOS isolado: não captura mais texto do RESUMO;
+- RESUMO e ABSTRACT preservados: conteúdo, palavras-chave e keywords aparecem corretamente;
+- LISTA DE QUADROS preserva Quadro 1 a Quadro 16;
+- LISTA DE GRÁFICOS preserva Gráfico 1 a Gráfico 11;
+- LISTA DE SIGLAS aparece como conteúdo ou aviso revisável;
+- REFERÊNCIAS não começa mais com “1995. Seção 1.”;
+- tabelas são preservadas como `w:tbl` quando possível;
+- imagens acadêmicas preserváveis são importadas quando há posição confiável;
+- imagens/gráficos sem posição confiável geram aviso revisável;
+- logo da capa não conta como gráfico preservado;
+- `src/docx-toc-field-patch.ts` não foi alterado.
+
+### Limitações conhecidas
+
+- DOCX convertido de PDF continua ruidoso.
+- Imagens/gráficos sem âncora/posição confiável podem exigir reinserção manual.
+- Tabelas vindas de PDF convertido podem manter formatação imperfeita.
+- Ficha catalográfica pode continuar como aviso revisável se o layout real não for preservável.
+- Indicadores/lista de siglas podem aparecer como aviso quando o conteúdo não for extraível com segurança.
+- A versão não é 100% finalizada; é candidata a v2.9.1.
 
 Validação local completa a partir de `_diagnostico/andrade-2025/Andrade_2025.docx` (DOCX não versionado). Todos os pontos abaixo foram conferidos no `document.xml` gerado e no `editorText` importado. O status é **pronto para revisão**, não "concluído/perfeito".
 
