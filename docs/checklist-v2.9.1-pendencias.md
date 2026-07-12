@@ -78,6 +78,21 @@ A branch melhorou substancialmente a importação de dissertação convertida de
 
 **Melhoria futura:** reconstrução perfeita de mesclagem complexa e largura exata quando o DOCX fonte não expõe metadados de tabela.
 
+### 6. Colunas fantasmas em tabelas de PDF convertido
+
+**Situação atual:** tabelas simples (ex.: Quadro 2 com 2 colunas lógicas) podem chegar com 4 a 6 colunas artificiais estreitas e vazias após conversão PDF→DOCX. O sistema agora detecta e remove essas colunas antes da exportação.
+
+**Critérios de aceite atendidos:**
+- Colunas completamente vazias são removidas.
+- Colunas quase vazias (menos de 10% das linhas com texto significativo) são colapsadas na coluna anterior.
+- Texto das colunas fantasmas é preservado na coluna adjacente.
+- `columnCount` e `estimatedColumnWidths` são recalculados.
+- `w:tbl` e `TableCell` width são mantidos no DOCX final.
+
+**Aceitável para v2.9.1:** sim, com aviso "Colunas artificiais do PDF convertido foram colapsadas." quando aplicável.
+
+**Melhoria futura:** detectar palavras fragmentadas entre colunas artificiais sem perder o restante do texto.
+
 ## Regressões que não podem voltar
 
 - Não voltar a gerar `Mestre em Ciências` quando a fonte diz apenas `Mestre`.

@@ -260,6 +260,17 @@ function tableXmlWithMerge(rows: string[][]): string {
   return `<w:tbl>${rowXmls}</w:tbl>`;
 }
 
+function tableXmlWithPhantomColumns(rows: string[][]): string {
+  const rowXmls = rows.map((cells) => {
+    const cellXmls = cells.map((cell) => {
+      const width = cell ? ' w:w="2000" w:type="dxa"' : ' w:w="500" w:type="dxa"';
+      return `<w:tc><w:tcPr><w:tcW${width} /></w:tcPr><w:p><w:r><w:t>${cell}</w:t></w:r></w:p></w:tc>`;
+    }).join("");
+    return `<w:tr>${cellXmls}</w:tr>`;
+  }).join("");
+  return `<w:tbl>${rowXmls}</w:tbl>`;
+}
+
   it("detecta w:tblGrid e w:gridCol quando existem", async () => {
     const zip = new JSZip();
     const body = [
@@ -340,5 +351,99 @@ function tableXmlWithMerge(rows: string[][]): string {
     expect(documentXml).toContain("Coluna A");
     const hasTableStructure = (documentXml?.match(/<w:tr\b/g) ?? []).length >= 2;
     expect(hasTableStructure).toBe(true);
+  });
+
+  it("remove colunas fantasmas em tabela simulando PDF convertido", async () => {
+    const zip = new JSZip();
+    const body = [
+      paragraphXml("1 INTRODUCAO"),
+      `<w:tbl><w:tblGrid><w:gridCol w:w="3000" /><w:gridCol w:w="1000" /><w:gridCol w:w="1000" /><w:gridCol w:w="1000" /><w:gridCol w:w="1000" /><w:gridCol w:w="1000" /></w:tblGrid>` +
+        tableXmlWithPhantomColumns([
+          ["Fases", "Características", "", "", "", ""],
+          ["Projeto", "formação de um grupo de trabalho", "", "", "", ""],
+          ["Convencimento da alta administração", "apresentar o projeto", "", "", "", ""],
+        ]) +
+        `</w:tbl>`,
+      paragraphXml("REFERENCIAS"),
+    ].join("");
+
+    zip.file(
+      "word/document.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}</w:body></w:document>`,
+    );
+    zip.file(
+      "word/styles.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`,
+    );
+    zip.file(
+      "word/_rels/document.xml.rels",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`,
+    );
+
+    const result = await importSyntheticDocx(await zip.generateAsync({ type: "arraybuffer" }));
+    const table = result.importedTables[0];
+
+    expect(table.columnCount).toBe(2);
+    expect(table.rowCount).toBe(3);
+    expect(table.rows[0]).toEqual([{ text: "Fases" }, { text: "Características" }]);
+    expect(table.rows[1]).toEqual([{ text: "Projeto" }, { text: "formação de um grupo de trabalho" }]);
+    expect(table.rows[2]).toEqual([
+      { text: "Convencimento da alta administração" },
+      { text: "apresentar o projeto" },
+    ]);
+  });
+
+  it("colunas fantasmas removidas geram w:tbl com larguras recalculadas", async () => {
+    const zip = new JSZip();
+    const body = [
+      paragraphXml("1 INTRODUCAO"),
+      `<w:tbl><w:tblGrid><w:gridCol w:w="3000" /><w:gridCol w:w="1000" /><w:gridCol w:w="1000" /><w:gridCol w:w="1000" /><w:gridCol w:w="1000" /><w:gridCol w:w="1000" /></w:tblGrid>` +
+        tableXmlWithPhantomColumns([
+          ["Fases", "Características", "", "", "", ""],
+          ["Projeto", "formação de um grupo de trabalho", "", "", "", ""],
+        ]) +
+        `</w:tbl>`,
+      paragraphXml("REFERENCIAS"),
+    ].join("");
+
+    zip.file(
+      "word/document.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}</w:body></w:document>`,
+    );
+    zip.file(
+      "word/styles.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`,
+    );
+    zip.file(
+      "word/_rels/document.xml.rels",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`,
+    );
+
+    const result = await importSyntheticDocx(await zip.generateAsync({ type: "arraybuffer" }));
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "monografia" as const,
+      author: "Autora Sintetica",
+      title: "Titulo Sintetico",
+      resumo: "Resumo sintetico.",
+      abstractText: "Synthetic abstract.",
+      palavrasChave: "teste.",
+      keywords: "test.",
+    };
+
+    const blob = await generateDocxBlob({
+      fields,
+      editorText: result.editorText,
+      importedImages: result.importedImages,
+      importedTables: result.importedTables,
+    });
+    const outputZip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const documentXml = await outputZip.file("word/document.xml")?.async("string");
+
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toContain("Fases");
+    expect(documentXml).toContain("Características");
+    expect(documentXml).toContain("formação de um grupo de trabalho");
+    expect((documentXml?.match(/<w:tc\b/g) ?? []).length).toBe(4);
   });
 });

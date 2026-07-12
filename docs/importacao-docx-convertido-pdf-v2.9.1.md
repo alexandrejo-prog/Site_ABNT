@@ -388,8 +388,37 @@ Tabelas e quadros extraídos de DOCX convertido de PDF chegavam visualmente pobr
 - `src/export-docx.ts`
   - `importedTableParagraph` aplica `estimatedColumnWidths`, bordas, margens e fonte `Times New Roman`.
   - `TableCell` recebe `width` em percentual.
-- `tests/import-docx-tables.test.ts`
-  - Novos testes para grid, merge, limpeza de célula e estrutura de tabela no DOCX final.
+  - `tests/import-docx-tables.test.ts`
+    - Novos testes para grid, merge, limpeza de célula e estrutura de tabela no DOCX final.
+
+### Correção — colunas fantasmas em tabelas de PDF convertido
+
+Quando o DOCX é gerado a partir de PDF, tabelas simples podem ganhar colunas artificiais estreitas e vazias. O exemplo clássico é um quadro de 2 colunas lógicas (`Fases | Características`) que chega com 4 a 6 colunas fantasmas no meio, tornando a leitura ilegível.
+
+A normalização agora detecta e remove essas colunas antes da exportação:
+
+- **Critérios de detecção:**
+  - coluna quase sempre vazia (menos de 10% das linhas com texto significativo);
+  - coluna com apenas separadores, espaços ou fragmentos curtos;
+  - coluna com largura estimada menor que 5% e sem células com texto;
+  - coluna que divide artificialmente uma frase, identificada pela baixíssima ocupação.
+
+- **Ação:**
+  - colunas totalmente vazias são removidas;
+  - colunas quase vazias têm seu texto (se houver) mesclado à coluna anterior;
+  - `columnCount` e `estimatedColumnWidths` são recalculados;
+  - colunas com conteúdo significativo são preservadas.
+
+- **Resultado:**
+  - tabelas de PDF convertido voltam a ter colunas legíveis;
+  - `w:tbl` é mantido no DOCX final;
+  - `TableCell` recebe largura recalculada.
+
+Arquivos alterados:
+- `src/imported-tables.ts`: `detectPhantomColumns` e `normalizePhantomColumns` adicionadas.
+- `src/import-docx.ts`: `importedTablesFromStructure` agora aplica a normalização antes de exportar.
+- `tests/import-docx-tables.test.ts`: teste sintético com tabela simulando PDF convertido.
+- `tests/real-flow-audit-andrade-local.test.ts`: validação local opcional que impede sequência longa de células vazias no Quadro 2.
 
 ### Limitações conhecidas
 

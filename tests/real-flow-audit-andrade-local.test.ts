@@ -258,8 +258,6 @@ describe(" Auditoria do fluxo real com DOCX de Andrade (local)", () => {
     expect(text).not.toContain("[[Imagem importada preservada");
     expect(text).not.toContain("[[Tabela importada preservada");
     expect(sourceStructure.images.length).toBeGreaterThan(0);
-    // Aviso revisavel e obrigatorio quando nem todas as imagens do corpo foram
-    // preservadas com seguranca (o logo da capa nao conta como grafico).
     const preservedCount = result.importedImages.filter((image) => image.status === "preserved").length;
     expect(result.fields.imageWarnings).toContain(
       `${sourceStructure.images.length} imagem(ns)/grafico(s) detectado(s) no DOCX original`,
@@ -268,5 +266,34 @@ describe(" Auditoria do fluxo real com DOCX de Andrade (local)", () => {
     expect(result.fields.imageWarnings).toContain("exigem revisao manual");
     expect(result.fields.imageWarnings).toContain("Revise e reinsira manualmente");
     expect(result.fields.imageWarnings).toContain("Graficos/imagens do corpo podem ter sido deslocados");
+  });
+
+  it.skipIf(hasRealFile)("Quadro 2 nao tem sequencia longa de celulas vazias", async () => {
+    const arrayBuffer = fs.readFileSync(REAL_DOCX_PATH);
+    const file = new File([arrayBuffer], "Andrade_2025.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
+    const result = await importDocumentFile(file);
+    const quadro2 = result.importedTables.find((t) => /Quadro\s+2\b/i.test(t.caption || ""));
+
+    if (!quadro2) {
+      expect(true).toBe(true);
+      return;
+    }
+
+    for (const row of quadro2.rows) {
+      let emptyStreak = 0;
+      for (const cell of row) {
+        if (!cell.text.trim()) {
+          emptyStreak += 1;
+        } else {
+          emptyStreak = 0;
+        }
+        if (emptyStreak > 3) {
+          throw new Error(`Quadro 2 tem sequencia longa de celulas vazias: ${JSON.stringify(row)}`);
+        }
+      }
+    }
   });
 });

@@ -19,7 +19,7 @@ import {
 import { repairHeadingFragments, repairRecordHeadingFragments } from "./heading-fragment-repair";
 import { sanitizeImportedTitle } from "./title-sanitizer";
 import { ImportedDocumentImage, importedImageMarker } from "./imported-images";
-import { ImportedTable, importedTableMarker } from "./imported-tables";
+import { ImportedTable, importedTableMarker, normalizePhantomColumns } from "./imported-tables";
 
 function estimateColumnWidths(gridWidths: number[], columnCount: number): number[] {
   if (gridWidths.length === columnCount && gridWidths.every((w) => Number.isFinite(w) && w > 0)) {
@@ -35,6 +35,34 @@ function estimateColumnWidths(gridWidths: number[], columnCount: number): number
     }
   }
   return Array.from({ length: columnCount }, () => Math.floor(100 / columnCount));
+}
+
+function inferColumnCount(rows: string[][]): number {
+  if (!rows.length) return 1;
+
+  const lengths = rows.map((row) => row.length);
+  const maxLength = Math.max(...lengths);
+  if (maxLength <= 1) return 1;
+
+  const sorted = [...lengths].sort((a, b) => a - b);
+  const medianLength = sorted[Math.floor(sorted.length / 2)];
+
+  if (maxLength > medianLength * 1.5) {
+    return medianLength;
+  }
+
+  return maxLength;
+}
+
+function normalizeRowLength(row: string[], targetCount: number): string[] {
+  if (row.length <= targetCount) {
+    return Array.from({ length: targetCount }, (_, i) => row[i]?.trim() ?? "");
+  }
+
+  const result = Array.from({ length: targetCount }, (_, i) => (row[i]?.trim() ?? ""));
+  const extra = row.slice(targetCount).map((c) => c.trim()).filter(Boolean).join(" ");
+  result[targetCount - 1] = result[targetCount - 1] ? `${result[targetCount - 1]} ${extra}` : extra;
+  return result;
 }
 
 const ARTIFICIAL_BREAK_PATTERN = /([a-zà-úç])\n([a-zà-úç])/gu;
@@ -318,7 +346,7 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
       return;
     }
 
-    const columnCount = Math.max(...rows.map((row) => row.length), 1);
+    const columnCount = inferColumnCount(rows);
     const caption = nearestText(structure.blocks, index, -1, looksLikeTableCaption);
     const source = nearestText(structure.blocks, index, 1, looksLikeTableSource);
     const estimatedColumnWidths = estimateColumnWidths(block.gridWidths ?? [], columnCount);
@@ -328,10 +356,10 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
     const hasLayoutWarning = hasComplexMerge || tooManyColumns || hasFragileLayout;
 
     const tableRows = rows.map((row) =>
-      row.map((cell) => ({ text: cleanCellText(cell) })),
+      normalizeRowLength(row.map((cell) => cleanCellText(cell)), columnCount).map((text) => ({ text })),
     );
 
-    imported.push({
+    const rawTable: ImportedTable = {
       id: `tbl-${imported.length + 1}`,
       rows: tableRows,
       rowCount: rows.length,
@@ -349,7 +377,17 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
       layoutWarning: hasLayoutWarning
         ? "Tabelas/quadros importados de DOCX convertido de PDF podem exigir revisao manual de layout."
         : undefined,
-    });
+    };
+
+    const normalized = normalizePhantomColumns(rawTable);
+    const finalTable = normalized.columnCount < columnCount
+      ? {
+          ...normalized,
+          layoutWarning: (normalized.layoutWarning || rawTable.layoutWarning || "Colunas artificiais do PDF convertido foram colapsadas."),
+        }
+      : rawTable;
+
+    imported.push(finalTable);
   });
 
   return imported;
