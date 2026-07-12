@@ -494,6 +494,9 @@ Pendências/limitações conhecidas:
 - Gráficos/imagens acadêmicas do corpo com legenda e fonte próximas são preservados automaticamente como imagens reais; os demais (ex.: galeria de apêndice sem legenda/fonte individual) ainda exigem revisão manual. O sistema emite aviso revisável para reinserção manual dos elementos ausentes.
 - Ficha catalográfica, indicadores de impacto e lista de siglas podem permanecer como aviso revisável quando o DOCX convertido não expõe conteúdo textual confiável.
 - A importação de DOCX convertido de PDF continua sendo heurística e não deve ser descrita como perfeita.
+- Tabelas/quadros vindos de PDF convertido podem sair como `w:tbl` reconstruída semanticamente, como texto estruturado (fallback) ou como aviso de revisão manual, conforme a confiança da reconstrução.
+- Gráficos/imagens incertos (sem legenda/fonte confiável) exigem revisão manual e geram aviso revisável; não são inseridos em local incorreto.
+- `pdfjs-dist` (PDF.js) para extração mais fiel do PDF original fica planejado para a v2.10.0; não está incluído nesta release (v2.9.1).
 
 ## Fallback — tabela ilegível renderizada como texto estruturado
 

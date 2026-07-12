@@ -163,6 +163,8 @@ A branch melhorou substancialmente a importação de dissertação convertida de
 
 **Melhoria futura:** reconstrução perfeita de mesclagem complexa quando o DOCX fonte não expõe metadados de tabela.
 
+**Roadmap (fora desta release):** `pdfjs-dist` (PDF.js) para extração mais fiel do PDF original está planejado para a v2.10.0 e **não** está incluído na v2.9.1. Tabelas ruins podem virar reconstrução semântica, texto estruturado ou aviso de revisão manual; gráficos/imagens incertos podem exigir revisão manual.
+
 **Detalhe de validação atual:** o teste local `tests/real-flow-audit-andrade-local.test.ts` valida Quadro 5/6 por **regra geral (padrão estrutural)**, não por hardcode do número. Quadro 5 cai em `grouped-with-authors` (grupo "Organização"/"Trabalhador", `verticalMerge` reconstruído); Quadro 6 cai em `critical-points` (3 colunas, sem mesclagem de grupo). Ambos geram `w:tbl` com 3 colunas úteis e legenda/fonte aparecendo uma única vez. `npm test`: **891 passed** (116 arquivos, 1 skipped).
 
 
