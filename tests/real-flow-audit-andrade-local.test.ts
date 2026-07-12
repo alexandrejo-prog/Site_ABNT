@@ -241,14 +241,28 @@ describe(" Auditoria do fluxo real com DOCX de Andrade (local)", () => {
     expect(result.fields.referencias).not.toContain("Quadro ");
     expect(result.fields.referencias).not.toContain("GrÃ¡fico ");
 
+    const firstReferenceLine = result.fields.referencias.split(/\n+/).map((line) => line.trim()).find(Boolean) ?? "";
+    expect(firstReferenceLine).not.toMatch(/^1995\.\s+Se/);
+    expect(firstReferenceLine).not.toMatch(/^(Fonte:|Quadro|Grafico|â€“ aprimorar|â€“ as modalidades|\(4,4%\))/);
+    const sectionOneIndex = result.fields.referencias.indexOf("1995. Se");
+    if (sectionOneIndex >= 0) {
+      expect(result.fields.referencias.indexOf("BRASIL. Decreto")).toBeGreaterThanOrEqual(0);
+      expect(result.fields.referencias.indexOf("BRASIL. Decreto")).toBeLessThan(sectionOneIndex);
+    }
+    const textReferencesStart = text.lastIndexOf("REFERÃŠNCIAS");
+    const textReferencesSection = textReferencesStart >= 0 ? text.slice(textReferencesStart) : text;
+    expect(textReferencesSection).not.toMatch(/REFERÃŠNCIAS\s+1995\.\s+Se/);
+
     expect(documentXml).toContain("<w:tbl>");
     expect(text).not.toContain("[Imagem detectada: rId");
     expect(text).not.toContain("[[Imagem importada preservada");
+    expect(text).not.toContain("[[Tabela importada preservada");
     expect(sourceStructure.images.length).toBeGreaterThan(0);
     if (result.importedImages.length === 0) {
       expect(result.fields.imageWarnings).toContain(`${sourceStructure.images.length} imagem(ns)/grafico(s) detectado(s)`);
       expect(result.fields.imageWarnings).toContain("0 preservado(s) automaticamente");
       expect(result.fields.imageWarnings).toContain("exigem revisao manual");
+      expect(result.fields.imageWarnings).toContain("Revise e reinsira manualmente");
     }
   });
 });

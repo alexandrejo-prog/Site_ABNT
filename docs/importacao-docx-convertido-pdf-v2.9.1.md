@@ -318,3 +318,29 @@ Esta rodada corrige os últimos bloqueadores aceitos para v2.9.1 sem declarar a 
 
 - Fixture sintética confirma `Quadro 1` a `Quadro 16` quando detectáveis, sem `Fonte:` e sem capturar `LISTA DE GRÁFICOS`.
 - Teste local opcional com `_diagnostico/andrade-2025/Andrade_2025.docx` confirma 16 entradas na lista de quadros, `w:tbl` no DOCX final, aviso revisável de imagens, ausência de marcadores internos e referências sem truncamento inicial evidente.
+
+## Correção final — primeira referência truncada
+
+Auditoria local do fluxo real confirmou que o DOCX convertido de PDF separava a primeira referência normativa em blocos/parágrafos artificiais. O complemento `1995. Seção 1.` podia chegar como item independente e, durante a ordenação alfabética das referências, subia para o início da seção `REFERÊNCIAS`.
+
+Correção aplicada:
+
+- `references-normalizer` agora junta fragmentos iniciados por ano com o ato normativo institucional contíguo, inclusive quando as partes chegam em parágrafos separados.
+- Fragmentos órfãos iniciados por ano, como `1995. Seção 1.`, não são tratados como referência autônoma quando não houver autor/instituição associado.
+- A normalização continua conservadora: não reescreve a lista inteira, não inventa conteúdo e não altera referências normais de autores pessoais.
+
+Validação local:
+
+- O DOCX gerado a partir de `_diagnostico/andrade-2025/Andrade_2025.docx` não inicia `REFERÊNCIAS` com `1995. Seção 1.`.
+- A referência `BRASIL. Decreto nº 1.590, de 10 de agosto de 1995...` foi preservada antes do complemento de `1995. Seção 1.` quando detectada no DOCX fonte.
+- O aviso revisável de imagens/gráficos permanece no fluxo de importação: 57 mídias detectadas no DOCX original, 0 imagens acadêmicas preservadas automaticamente e 57 itens exigindo revisão manual; o logo/capa não conta como gráfico acadêmico preservado.
+- `LISTA DE QUADROS` segue preservando `Quadro 1` a `Quadro 16` quando detectável, sem incorporar `Fonte:`.
+- `LISTA DE GRÁFICOS` segue preservando `Gráfico 1` a `Gráfico 11`.
+- Tabelas continuam exportadas como tabelas reais (`w:tbl`).
+- Resumo, abstract, agradecimentos, folha de rosto, folha de aprovação e sumário atualizável não regrediram na auditoria local.
+
+Pendências/limitações conhecidas:
+
+- Gráficos/imagens acadêmicas do corpo convertidas de PDF ainda não são reposicionadas automaticamente com confiança; o sistema emite aviso revisável para reinserção manual.
+- Ficha catalográfica, indicadores de impacto e lista de siglas podem permanecer como aviso revisável quando o DOCX convertido não expõe conteúdo textual confiável.
+- A importação de DOCX convertido de PDF continua sendo heurística e não deve ser descrita como perfeita.

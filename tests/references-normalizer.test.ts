@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeReference, normalizeReferencesText, type NormalizedReference } from "../src/references-normalizer";
+import { normalizeReference, normalizeReferences, normalizeReferencesText, type NormalizedReference } from "../src/references-normalizer";
 import { UFLA_MANUAL_REFERENCE } from "../src/ufla-rules";
 
 function boldRunFor(reference: NormalizedReference, text: string) {
@@ -99,6 +99,48 @@ describe("references normalizer", () => {
 
     expect(normalized.text).toContain("BRASIL. Decreto nº 1.590");
     expect(normalized.text.indexOf("BRASIL.")).toBeLessThan(normalized.text.indexOf("1995. Seção 1."));
+  });
+
+  it("nao deixa fragmento de ano iniciar referencias quando ato normativo vem na linha seguinte", () => {
+    const normalized = normalizeReferencesText(
+      "1995. Secao 1.\nBRASIL. Decreto n. 1.590, de 10 de agosto de\nSILVA, M. Livro comum. Lavras: UFLA, 2024.",
+    );
+
+    expect(normalized[0].text).toBe("BRASIL. Decreto n. 1.590, de 10 de agosto de 1995. Secao 1.");
+    expect(normalized[0].text).not.toMatch(/^1995\. Secao 1\./);
+    expect(normalized[0].text.indexOf("BRASIL.")).toBeLessThan(normalized[0].text.indexOf("1995"));
+    expect(normalized[1].text).toBe("SILVA, M. Livro comum. Lavras: UFLA, 2024.");
+  });
+
+  it("mantem referencias normais com autores pessoais", () => {
+    const normalized = normalizeReferencesText(
+      "SILVA, M. Livro comum. Lavras: UFLA, 2024.\nSOUZA, A. Outro livro. Sao Paulo: Exemplo, 2020.",
+    );
+
+    expect(normalized.map((reference) => reference.text)).toEqual([
+      "SILVA, M. Livro comum. Lavras: UFLA, 2024.",
+      "SOUZA, A. Outro livro. Sao Paulo: Exemplo, 2020.",
+    ]);
+  });
+
+  it("descarta fragmento orfao iniciado por ano", () => {
+    const normalized = normalizeReferencesText(
+      "1995. Secao 1.\nSILVA, M. Livro comum. Lavras: UFLA, 2024.",
+    );
+
+    expect(normalized.map((reference) => reference.text)).toEqual([
+      "SILVA, M. Livro comum. Lavras: UFLA, 2024.",
+    ]);
+  });
+
+  it("mescla fragmento de ano mesmo quando referencias chegam em paragrafos separados", () => {
+    const normalized = normalizeReferences([
+      "BRASIL. Decreto n. 1.590, de 10 de agosto de",
+      "1995. Secao 1.",
+    ]);
+
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0].text).toBe("BRASIL. Decreto n. 1.590, de 10 de agosto de 1995. Secao 1.");
   });
 
   it("detecta legislacao com orgao intermediario e destaca a resolucao", () => {

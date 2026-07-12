@@ -104,3 +104,15 @@ A branch melhorou substancialmente a importação de dissertação convertida de
 - Pronto para merge: não.
 - Pronto para nova rodada local do agente: sim.
 - Principal bloqueador técnico atual: início truncado da seção REFERÊNCIAS.
+
+## Atualização desta rodada — primeira referência corrigida
+
+- Bloqueador `REFERÊNCIAS` corrigido: o DOCX final não inicia mais com `1995. Seção 1.`.
+- Causa confirmada: o DOCX convertido de PDF quebrava a primeira referência normativa em blocos/parágrafos artificiais; o fragmento iniciado por ano virava item independente e era ordenado antes das demais referências.
+- Correção: o normalizador junta fragmentos iniciados por ano com o ato normativo institucional contíguo, inclusive entre parágrafos separados, e descarta fragmentos órfãos iniciados por ano quando não há autor/instituição associado.
+- Auditoria local do DOCX de Andrade confirmou `BRASIL. Decreto nº 1.590...` preservado antes do complemento `1995. Seção 1.` quando detectado no DOCX fonte.
+- Aviso revisável de imagens/gráficos confirmado: 57 mídias detectadas, 0 imagens acadêmicas preservadas automaticamente e 57 exigindo revisão manual; logo/capa não conta como gráfico acadêmico preservado.
+- `LISTA DE QUADROS` segue preservando `Quadro 1` a `Quadro 16`; `LISTA DE GRÁFICOS` segue com `Gráfico 1` a `Gráfico 11`; tabelas seguem como `w:tbl`.
+- Resumo, abstract, agradecimentos, folha de rosto, folha de aprovação e sumário atualizável não regrediram na auditoria local.
+- Limitações conhecidas permanecem: gráficos/imagens acadêmicas do corpo exigem reinserção manual quando a conversão PDF-DOCX não permite posicionamento confiável; ficha, indicadores e siglas podem permanecer como aviso revisável.
+- Pronto para PR: sim, com limitações conhecidas documentadas, após `npm test`, `npm run build` e `git diff --check` passarem.
