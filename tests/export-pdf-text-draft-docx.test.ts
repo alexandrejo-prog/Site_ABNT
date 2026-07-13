@@ -1531,4 +1531,257 @@ describe("ativos visuais de regioes pdf", () => {
     expect(allXml).not.toContain("<w:tbl");
     expect(allXml).not.toContain("<w:numPr");
   });
+
+  describe("formatacao da secao de referencias do rascunho pdf", () => {
+    type Block = PdfTextDraftExportInput["reconstruction"]["blocks"][number];
+    type Region = PdfTextDraftExportInput["reconstruction"]["layoutRegions"][number];
+
+    const logoRef = readFileSync(join(process.cwd(), "public", "assets", "ufla-logo.jpeg"));
+
+    function asset(key: string, width = 170, height = 69): PdfTextDraftVisualAsset {
+      return { data: logoRef, width, height, altText: { title: `Imagem ${key}`, description: `Descrição ${key}`, name: key } };
+    }
+
+    function referencesInput(
+      blocks: Block[],
+      options: {
+        layoutRegions?: Region[];
+        visualAssets?: Record<string, PdfTextDraftVisualAsset>;
+        includeReconstructedPretextuals?: boolean;
+        statistics?: Partial<PdfTextDraftExportInput["reconstruction"]["statistics"]>;
+      } = {},
+    ): PdfTextDraftExportInput {
+      return baseInput({
+        reconstruction: {
+          ...baseInput().reconstruction,
+          blocks,
+          layoutRegions: options.layoutRegions ?? baseInput().reconstruction.layoutRegions,
+          statistics: { ...baseInput().reconstruction.statistics, ...options.statistics },
+        },
+        visualAssets: options.visualAssets,
+        includeReconstructedPretextuals: options.includeReconstructedPretextuals,
+      });
+    }
+
+    function paraWithText(documentXml: string, needle: string): string {
+      const seg = documentXml.split("</w:p>").find((s) => s.includes(needle));
+      return seg ? `${seg}</w:p>` : "";
+    }
+
+    function headingPara(documentXml: string, needle: string): string {
+      const seg = documentXml.split("</w:p>").find((s) => s.includes(needle) && s.includes("bookmarkStart"));
+      return seg ? `${seg}</w:p>` : "";
+    }
+
+    it("paragrafo normal antes de REFERENCIAS mantem justificado, primeira linha 1,5cm e espacamento 1,5", async () => {
+      const input = referencesInput([
+        { type: "paragraph", text: "Parágrafo antes de REFERÊNCIAS com formatação de corpo.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Autor, A. (2020). Obra uma. Editora.", pageStart: 111, pageEnd: 111, sourceLines: [{ pageNumber: 111, lineIndex: 1 }], confidence: "high", reasons: [] },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const para = paraWithText(documentXml, "Parágrafo antes de REFERÊNCIAS");
+      expect(para).toContain('w:jc w:val="both"');
+      expect(para).toContain('w:firstLine="850"');
+      expect(para).toContain('w:line="360"');
+    });
+
+    it("heading REFERENCIAS continua em negrito", async () => {
+      const input = referencesInput([
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Autor, A. (2020). Obra uma. Editora.", pageStart: 111, pageEnd: 111, sourceLines: [{ pageNumber: 111, lineIndex: 1 }], confidence: "high", reasons: [] },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const heading = headingPara(documentXml, "REFERÊNCIAS");
+      expect(heading).toMatch(/<w:b(?!ookmark)/);
+    });
+
+    it("primeiro paragrafo apos REFERENCIAS alinhado a esquerda, sem firstLine, espacamento simples e espaco pos", async () => {
+      const input = referencesInput([
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Autor, A. (2020). Obra uma. Editora.", pageStart: 111, pageEnd: 111, sourceLines: [{ pageNumber: 111, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Autor, B. (2019). Obra duas. Editora.", pageStart: 112, pageEnd: 112, sourceLines: [{ pageNumber: 112, lineIndex: 1 }], confidence: "high", reasons: [] },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const ref1 = paraWithText(documentXml, "Autor, A. (2020). Obra uma. Editora.");
+      expect(ref1).toContain('w:jc w:val="left"');
+      expect(ref1).not.toContain('w:firstLine="850"');
+      expect(ref1).toContain('w:after="240" w:line="240"');
+    });
+
+    it("segundo paragrafo de referencia recebe o mesmo formato", async () => {
+      const input = referencesInput([
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Autor, A. (2020). Obra uma. Editora.", pageStart: 111, pageEnd: 111, sourceLines: [{ pageNumber: 111, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Autor, B. (2019). Obra duas. Editora.", pageStart: 112, pageEnd: 112, sourceLines: [{ pageNumber: 112, lineIndex: 1 }], confidence: "high", reasons: [] },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const ref2 = paraWithText(documentXml, "Autor, B. (2019). Obra duas. Editora.");
+      expect(ref2).toContain('w:jc w:val="left"');
+      expect(ref2).not.toContain('w:firstLine="850"');
+      expect(ref2).toContain('w:after="240" w:line="240"');
+    });
+
+    it("list-item dentro de REFERENCIAS nao recebe hanging indent", async () => {
+      const input = referencesInput([
+        { type: "paragraph", text: "Parágrafo antes de REFERÊNCIAS para validação.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "list-item", text: "Autor, C. (2018). Obra classificada como item por engano. Editora.", pageStart: 113, pageEnd: 113, sourceLines: [{ pageNumber: 113, lineIndex: 1 }], confidence: "high", reasons: [] },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const ref = paraWithText(documentXml, "Autor, C. (2018). Obra classificada como item por engano. Editora.");
+      expect(ref).toContain('w:jc w:val="left"');
+      expect(ref).not.toContain("w:hanging");
+      expect(ref).not.toContain('w:left="850"');
+    });
+
+    it("APENDICE encerra o modo de referencias", async () => {
+      const input = referencesInput([
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Autor, A. (2020). Obra uma. Editora.", pageStart: 111, pageEnd: 111, sourceLines: [{ pageNumber: 111, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "heading", text: "APÊNDICE", pageStart: 120, pageEnd: 120, sourceLines: [{ pageNumber: 120, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Parágrafo após APÊNDICE volta ao corpo.", pageStart: 121, pageEnd: 121, sourceLines: [{ pageNumber: 121, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const ref = paraWithText(documentXml, "Autor, A. (2020). Obra uma. Editora.");
+      expect(ref).toContain('w:jc w:val="left"');
+      const after = paraWithText(documentXml, "Parágrafo após APÊNDICE volta ao corpo.");
+      expect(after).toContain('w:jc w:val="both"');
+      expect(after).toContain('w:firstLine="850"');
+    });
+
+    it("paragrafo apos APENDICE volta ao formato normal do corpo", async () => {
+      const input = referencesInput([
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Autor, A. (2020). Obra uma. Editora.", pageStart: 111, pageEnd: 111, sourceLines: [{ pageNumber: 111, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "heading", text: "APÊNDICE A", pageStart: 120, pageEnd: 120, sourceLines: [{ pageNumber: 120, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Texto de corpo normal após apêndice com recuo de primeira linha.", pageStart: 121, pageEnd: 121, sourceLines: [{ pageNumber: 121, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const after = paraWithText(documentXml, "Texto de corpo normal após apêndice com recuo de primeira linha.");
+      expect(after).toContain('w:jc w:val="both"');
+      expect(after).toContain('w:firstLine="850"');
+      expect(after).toContain('w:line="360"');
+    });
+
+    it("ANEXO tambem encerra o modo de referencias", async () => {
+      const input = referencesInput([
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Autor, A. (2020). Obra uma. Editora.", pageStart: 111, pageEnd: 111, sourceLines: [{ pageNumber: 111, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "heading", text: "ANEXO", pageStart: 130, pageEnd: 130, sourceLines: [{ pageNumber: 130, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Parágrafo após ANEXO volta ao corpo.", pageStart: 131, pageEnd: 131, sourceLines: [{ pageNumber: 131, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const ref = paraWithText(documentXml, "Autor, A. (2020). Obra uma. Editora.");
+      expect(ref).toContain('w:jc w:val="left"');
+      const after = paraWithText(documentXml, "Parágrafo após ANEXO volta ao corpo.");
+      expect(after).toContain('w:jc w:val="both"');
+      expect(after).toContain('w:firstLine="850"');
+    });
+
+    it("REFERENCIAS sem acento ativa o modo de referencias", async () => {
+      const input = referencesInput([
+        { type: "heading", text: "REFERENCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Autor, A. (2020). Obra uma. Editora.", pageStart: 111, pageEnd: 111, sourceLines: [{ pageNumber: 111, lineIndex: 1 }], confidence: "high", reasons: [] },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const ref = paraWithText(documentXml, "Autor, A. (2020). Obra uma. Editora.");
+      expect(ref).toContain('w:jc w:val="left"');
+      expect(ref).not.toContain('w:firstLine="850"');
+    });
+
+    it("texto com a palavra referencias no meio de paragrafo nao ativa o modo", async () => {
+      const input = referencesInput([
+        { type: "paragraph", text: "Veja as referências importantes listadas no final do documento.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+        { type: "paragraph", text: "Outro parágrafo de corpo que deve permanecer justificado.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const p2 = paraWithText(documentXml, "Outro parágrafo de corpo que deve permanecer justificado.");
+      expect(p2).toContain('w:jc w:val="both"');
+      expect(p2).toContain('w:firstLine="850"');
+    });
+
+    it("bookmark do heading REFERENCIAS permanece", async () => {
+      const input = referencesInput([
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Autor, A. (2020). Obra uma. Editora.", pageStart: 111, pageEnd: 111, sourceLines: [{ pageNumber: 111, lineIndex: 1 }], confidence: "high", reasons: [] },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const heading = headingPara(documentXml, "REFERÊNCIAS");
+      expect(heading).toContain("<w:bookmarkStart");
+      expect(heading).toContain("PDFBM");
+    });
+
+    it("PAGEREF do sumario permanece", async () => {
+      const input = referencesInput([
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Autor, A. (2020). Obra uma. Editora.", pageStart: 111, pageEnd: 111, sourceLines: [{ pageNumber: 111, lineIndex: 1 }], confidence: "high", reasons: [] },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      expect(documentXml).toContain("PAGEREF");
+    });
+
+    it("nao ha w:numPr criado", async () => {
+      const input = referencesInput([
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Autor, A. (2020). Obra uma. Editora.", pageStart: 111, pageEnd: 111, sourceLines: [{ pageNumber: 111, lineIndex: 1 }], confidence: "high", reasons: [] },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      expect(documentXml).not.toContain("<w:numPr");
+    });
+
+    it("nao ha w:tbl criado", async () => {
+      const input = referencesInput([
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Autor, A. (2020). Obra uma. Editora.", pageStart: 111, pageEnd: 111, sourceLines: [{ pageNumber: 111, lineIndex: 1 }], confidence: "high", reasons: [] },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      expect(documentXml).not.toContain("<w:tbl");
+    });
+
+    it("marcadores visuais continuam iguais com referencias", async () => {
+      const input = referencesInput([
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Autor, A. (2020). Obra uma. Editora.", pageStart: 111, pageEnd: 111, sourceLines: [{ pageNumber: 111, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "unresolved", text: "TEXTO INTERNO DO QUADRO", pageStart: 25, pageEnd: 25, sourceLines: [{ pageNumber: 25, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-25-1" },
+      ], {
+        statistics: { paragraphCount: 1, unresolvedCount: 1, layoutRegionCount: 1 },
+      });
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      expect(documentXml).toContain("Elemento visual não inserido");
+      const ref = paraWithText(documentXml, "Autor, A. (2020). Obra uma. Editora.");
+      expect(ref).toContain('w:jc w:val="left"');
+    });
+
+    it("ativos visuais continuam iguais com referencias", async () => {
+      const input = referencesInput([
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "Autor, A. (2020). Obra uma. Editora.", pageStart: 111, pageEnd: 111, sourceLines: [{ pageNumber: 111, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "caption", text: "Figura 1 – Exemplo.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-f" },
+        { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-f" },
+      ], {
+        layoutRegions: [{ id: "layout-11-f", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 3, kind: "figura", caption: "Figura 1 – Exemplo.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "figura-1-page-11" }],
+        visualAssets: { "figura-1-page-11": asset("figura-1-page-11") },
+        statistics: { paragraphCount: 1, captionCount: 1, sourceCount: 1, layoutRegionCount: 1 },
+      });
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      expect(documentXml).toContain("<w:drawing");
+      const ref = paraWithText(documentXml, "Autor, A. (2020). Obra uma. Editora.");
+      expect(ref).toContain('w:jc w:val="left"');
+    });
+
+    it("nenhum texto bibliografico e removido ou reescrito", async () => {
+      const input = referencesInput([
+        { type: "paragraph", text: "Parágrafo antes de REFERÊNCIAS com formatação de corpo.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "SOUZA, Maria de (2021). Título com acento e pontuação: subtítulo. Editora.", pageStart: 111, pageEnd: 111, sourceLines: [{ pageNumber: 111, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "PEREIRA, João (2017). Outra referência com DOI 10.1000/xyz. Editora.", pageStart: 112, pageEnd: 112, sourceLines: [{ pageNumber: 112, lineIndex: 1 }], confidence: "high", reasons: [] },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      expect(documentXml).toContain("Parágrafo antes de REFERÊNCIAS com formatação de corpo.");
+      expect(documentXml).toContain("SOUZA, Maria de (2021). Título com acento e pontuação: subtítulo. Editora.");
+      expect(documentXml).toContain("PEREIRA, João (2017). Outra referência com DOI 10.1000/xyz. Editora.");
+      expect(documentXml).toContain("REFERÊNCIAS");
+    });
+  });
 });
