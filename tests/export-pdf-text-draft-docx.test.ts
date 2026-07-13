@@ -548,3 +548,88 @@ describe("exportacao textual minima de PDF reconstruido", () => {
     expect(documentXml).toContain("A consulta ano. foi preservada.");
   });
 });
+
+describe("formatacao de itens de lista no rascunho textual pdf", () => {
+  function listInput(): PdfTextDraftExportInput {
+    return baseInput({
+      reconstruction: {
+        ...baseInput().reconstruction,
+        blocks: [
+          { type: "paragraph" as const, text: "Parágrafo comum antes da lista para validar recuo de primeira linha.", pageStart: 17, pageEnd: 17, sourceLines: [{ pageNumber: 17, lineIndex: 2 }], confidence: "medium" as const, reasons: [] },
+          { type: "list-item" as const, text: "a) Primeiro objetivo", pageStart: 19, pageEnd: 19, sourceLines: [{ pageNumber: 19, lineIndex: 3 }], confidence: "medium" as const, reasons: [] },
+          { type: "list-item" as const, text: "b) Segundo objetivo", pageStart: 19, pageEnd: 19, sourceLines: [{ pageNumber: 19, lineIndex: 4 }], confidence: "medium" as const, reasons: [] },
+          { type: "list-item" as const, text: "I – Item", pageStart: 19, pageEnd: 19, sourceLines: [{ pageNumber: 19, lineIndex: 5 }], confidence: "medium" as const, reasons: [] },
+          { type: "list-item" as const, text: "1. Item numerado", pageStart: 19, pageEnd: 19, sourceLines: [{ pageNumber: 19, lineIndex: 6 }], confidence: "medium" as const, reasons: [] },
+        ],
+        statistics: { ...baseInput().reconstruction.statistics, paragraphCount: 1, listItemCount: 4 },
+      },
+    });
+  }
+
+  function listItemParagraphsXml(documentXml: string): string[] {
+    return (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).filter((paragraph) =>
+      /a\) Primeiro objetivo|b\) Segundo objetivo|I – Item|1\. Item numerado/.test(paragraph),
+    );
+  }
+
+  it("preserva o marcador textual original no XML", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(listInput()));
+    const text = documentText(documentXml);
+    expect(text).toContain("a) Primeiro objetivo");
+    expect(text).toContain("b) Segundo objetivo");
+    expect(text).toContain("I – Item");
+    expect(text).toContain("1. Item numerado");
+  });
+
+  it("itens de lista contem recuo esquerdo 850 e recuo pendente 425", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(listInput()));
+    const items = listItemParagraphsXml(documentXml);
+    expect(items).toHaveLength(4);
+    for (const item of items) {
+      expect(item).toContain('<w:ind w:left="850"');
+      expect(item).toContain('w:hanging="425"');
+    }
+  });
+
+  it("itens de lista nao contem recuo de primeira linha", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(listInput()));
+    const items = listItemParagraphsXml(documentXml);
+    for (const item of items) {
+      expect(item).not.toContain('w:firstLine');
+    }
+  });
+
+  it("itens de lista usam espacamento 360 e zero antes/depois", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(listInput()));
+    const items = listItemParagraphsXml(documentXml);
+    for (const item of items) {
+      expect(item).toContain('<w:spacing w:before="0" w:after="0" w:line="360"');
+    }
+  });
+
+  it("paragrafo comum mantem recuo de primeira linha 850", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(listInput()));
+    const paragraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find((p) =>
+      p.includes("Parágrafo comum antes da lista para validar recuo de primeira linha"),
+    );
+    expect(paragraph).toBeDefined();
+    expect(paragraph).toContain('w:firstLine="850"');
+    expect(paragraph).not.toContain('w:hanging');
+  });
+
+  it("itens de lista nao usam numeracao automatica do Word", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(listInput()));
+    const items = listItemParagraphsXml(documentXml);
+    for (const item of items) {
+      expect(item).not.toContain("<w:numPr");
+    }
+  });
+
+  it("documento nao referencia numeracao automatica", async () => {
+    const blob = await buildPdfTextDraftDocxBlob(listInput());
+    const { documentXml, settingsXml, stylesXml } = await loadDocxParts(blob);
+    const allXml = `${documentXml}\n${settingsXml}\n${stylesXml}`;
+    expect(allXml).not.toContain("<w:numPr");
+    expect(allXml).not.toContain("numbering.xml");
+  });
+});

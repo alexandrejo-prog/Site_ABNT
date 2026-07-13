@@ -24,6 +24,7 @@ const A4_HEIGHT_TWIP = 16838;
 const CM_3_TWIP = 1701;
 const CM_2_TWIP = 1134;
 const BODY_FIRST_LINE_TWIP = 850;
+const LIST_HANGING_TWIP = 425;
 const ONE_AND_HALF_LINE_TWIP = 360;
 const SINGLE_LINE_TWIP = 240;
 const ZERO_SPACING = { before: 0, after: 0 };
@@ -72,6 +73,14 @@ function justified(text: string, firstLine = BODY_FIRST_LINE_TWIP): Paragraph {
   return paragraph([run(cleanText(text), 24)], {
     alignment: AlignmentType.JUSTIFIED,
     indent: { firstLine },
+    spacing: { ...ZERO_SPACING, line: ONE_AND_HALF_LINE_TWIP },
+  });
+}
+
+function listItem(text: string): Paragraph {
+  return paragraph([run(cleanText(text), 24)], {
+    alignment: AlignmentType.JUSTIFIED,
+    indent: { left: BODY_FIRST_LINE_TWIP, hanging: LIST_HANGING_TWIP },
     spacing: { ...ZERO_SPACING, line: ONE_AND_HALF_LINE_TWIP },
   });
 }
@@ -312,7 +321,7 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
     if (!text && block.type !== "unresolved") continue;
     if (block.type === "heading") paragraphs.push(bodyHeading(text, entryByTitle.get(text)));
     if (block.type === "paragraph") paragraphs.push(justified(text));
-    if (block.type === "list-item") paragraphs.push(justified(text));
+    if (block.type === "list-item") paragraphs.push(listItem(text));
     if (block.type === "caption") {
       const region = block.layoutRegionId ? regions.get(block.layoutRegionId) : undefined;
       const dedupKey = region?.logicalVisualId ?? block.layoutRegionId ?? `caption-${block.pageStart}`;
