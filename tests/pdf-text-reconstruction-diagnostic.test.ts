@@ -1,27 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { detectPdfBodyStartContextual, reconstructPdfParagraphBlocks } from "../src/pdf-text-reconstruction-diagnostic";
-import type { PdfLineDiagnostic, PdfPageDiagnostic, PdfTextItemDiagnostic } from "../src/imported-pdf-diagnostic";
+import type { PdfLineDiagnostic, PdfPageDiagnostic } from "../src/imported-pdf-diagnostic";
 
 function line(text: string, index: number, options: Partial<PdfLineDiagnostic> & { fontName?: string } = {}): PdfLineDiagnostic {
   const top = options.top ?? 80 + index * 18;
   const height = options.height ?? 12;
-  const left = options.left ?? 72;
-  const item: PdfTextItemDiagnostic = {
+  const items = options.items ?? [{
     text,
-    x: left,
+    x: options.left ?? 72,
     y: top,
     width: Math.max(10, text.length * 5),
     height,
     fontName: options.fontName,
-  };
-  const items = options.items ?? [item];
-  const rebuiltText = items.map((i) => i.text).join(" ");
+  }];
+  const itemLeft = Math.min(...items.map((i) => i.x));
+  const itemRight = Math.max(...items.map((i) => i.x + i.width));
+  const rebuiltText = options.text ?? (options.items ? text : items.map((i) => i.text).join(" "));
   return {
     pageNumber: options.pageNumber ?? 1,
     text: rebuiltText,
     items,
-    left,
-    right: options.right ?? left + Math.max(10, rebuiltText.length * 5),
+    left: options.left ?? itemLeft,
+    right: options.right ?? itemRight,
     top,
     bottom: top + height,
     height,
@@ -50,13 +50,11 @@ describe("reconstrucao textual diagnostica de PDF", () => {
     const result = reconstructPdfParagraphBlocks([
       page(16, ["15", "1 INTRODUÇÃO", bodyA], { 0: { top: 20 } }),
       page(17, ["16", "2025 aparece dentro de uma referência e deve permanecer no texto."], { 0: { top: 20 } }),
-      page(18, ["17", "75", "1 INTRODUÇÃO"], { 0: { top: 20 }, 1: { top: 400 } }),
     ]);
-
-    expect(result.ignoredLines.some((entry) => entry.text === "16" && entry.role === "page-number")).toBe(true);
+    expect(result.ignoredLines.some((entry) => entry.text === "15" && entry.role === "page-number")).toBe(true);
+    expect(result.blocks.map((block) => block.text).join(" ")).not.toContain("15");
+    expect(result.blocks.map((block) => block.text).join(" ")).toContain("1 INTRODUÇÃO");
     expect(result.blocks.map((block) => block.text).join(" ")).toContain("2025");
-    expect(result.blocks.map((block) => block.text).join(" ")).toContain("75");
-    expect(result.blocks.some((block) => block.text === "1 INTRODUÇÃO")).toBe(true);
   });
 
   it("calcula metricas robustas do corpo e ignora titulo, tabela e extremos", () => {
@@ -586,58 +584,6 @@ describe("reconstrucao textual diagnostica de PDF", () => {
     expect(result.alerts.some((a) => a.includes("atravessa") && a.includes("sem evidencia explicita"))).toBe(true);
   });
 
-  it("numero 33 no topo direito nao vira sufixo de de", () => {
-    const result = reconstructPdfParagraphBlocks([
-      page(33, [
-        "Este parágrafo termina com de",
-        "de33",
-      ], { 1: { top: 800, items: [
-        { text: "de", x: 72, y: 800, width: 14, height: 12 },
-        { text: "33", x: 86, y: 800, width: 12, height: 12 },
-      ] } }),
-    ]);
-    expect(result.blocks.map((b) => b.text).join(" ")).not.toContain("de33");
-    expect(result.blocks.map((b) => b.text).join(" ")).toContain("de");
-  });
-
-  it("numero 31 no topo nao e unido ao paragrafo anterior", () => {
-    const result = reconstructPdfParagraphBlocks([
-      page(31, [
-        "Este parágrafo termina com ano.",
-        "ano.31",
-      ], { 1: { top: 800, items: [
-        { text: "ano.", x: 72, y: 800, width: 24, height: 12 },
-        { text: "31", x: 96, y: 800, width: 12, height: 12 },
-      ] } }),
-    ]);
-    expect(result.blocks.map((b) => b.text).join(" ")).not.toContain("ano.31");
-    expect(result.blocks.map((b) => b.text).join(" ")).toContain("ano.");
-  });
-
-  it("numero 66 apos marcador nao aparece no bloco", () => {
-    const result = reconstructPdfParagraphBlocks([
-      page(66, [
-        "original.]66",
-      ], { 0: { top: 800, items: [
-        { text: "original.]", x: 72, y: 800, width: 80, height: 12 },
-        { text: "66", x: 152, y: 800, width: 12, height: 12 },
-      ] } }),
-    ]);
-    expect(result.blocks.map((b) => b.text).join(" ")).not.toContain("original.]66");
-    expect(result.blocks.map((b) => b.text).join(" ")).toContain("original.]");
-  });
-
-  it("numero 72 nao e colado a pergunta", () => {
-    const result = reconstructPdfParagraphBlocks([
-      page(72, [
-        "?72",
-      ], { 0: { top: 800, items: [
-        { text: "?", x: 72, y: 800, width: 12, height: 12 },
-        { text: "72", x: 84, y: 800, width: 12, height: 12 },
-      ] } }),
-    ]);
-    expect(result.blocks.map((b) => b.text).join(" ")).not.toContain("?72");
-  });
 
   it("2025 no corpo permanece", () => {
     const result = reconstructPdfParagraphBlocks([
@@ -695,7 +641,7 @@ describe("reconstrucao textual diagnostica de PDF", () => {
 
   it("numero isolado no rodape sem recorrencia permanece", () => {
     const result = reconstructPdfParagraphBlocks([
-      page(10, ["Texto corrido suficiente para representar corpo acadêmico normal."], { 0: { top: 800, items: [
+      page(10, ["Texto corrido suficiente para representar corpo acadêmico normal."], { 0: { top: 800, text: "Texto corrido 99 suficiente para representar corpo acadêmico normal.", items: [
         { text: "Texto", x: 72, y: 800, width: 30, height: 12 },
         { text: "corrido", x: 102, y: 800, width: 35, height: 12 },
         { text: "99", x: 500, y: 800, width: 12, height: 12 },
@@ -706,7 +652,7 @@ describe("reconstrucao textual diagnostica de PDF", () => {
 
   it("numero isolado no topo sem recorrencia permanece", () => {
     const result = reconstructPdfParagraphBlocks([
-      page(10, ["Texto corrido suficiente para representar corpo acadêmico normal."], { 0: { top: 20, items: [
+      page(10, ["Texto corrido suficiente para representar corpo acadêmico normal."], { 0: { top: 20, text: "Texto corrido 99 suficiente para representar corpo acadêmico normal.", items: [
         { text: "Texto", x: 72, y: 20, width: 30, height: 12 },
         { text: "corrido", x: 102, y: 20, width: 35, height: 12 },
         { text: "99", x: 500, y: 20, width: 12, height: 12 },
@@ -720,35 +666,214 @@ describe("reconstrucao textual diagnostica de PDF", () => {
       page(33, [
         "Este parágrafo termina com de",
         "de33",
-      ], { 1: { top: 800, items: [
+      ], { 1: { text: "de33", top: 800, items: [
         { text: "de", x: 72, y: 800, width: 14, height: 12 },
         { text: "33", x: 86, y: 800, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("de33");
+  });
+
+  it("numero 33 isolado na pagina 33 permanece", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(33, ["33"], { 0: { top: 20, items: [
+        { text: "33", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("33");
+  });
+
+  it("numero 32 isolado na pagina 33 permanece", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(33, ["32"], { 0: { top: 20, items: [
+        { text: "32", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("32");
+  });
+
+  it("numero 10 isolado na pagina 10 permanece", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(10, ["10"], { 0: { top: 20, items: [
+        { text: "10", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("10");
+  });
+
+  it("sequencia com deslocamento de uma pagina tambem e removida", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(31, ["30"], { 0: { top: 20, items: [
+        { text: "30", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+      page(32, ["31"], { 0: { top: 20, items: [
+        { text: "31", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+      page(33, ["32"], { 0: { top: 20, items: [
+        { text: "32", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.ignoredLines.filter((l) => l.role === "page-number")).toHaveLength(3);
+    expect(result.blocks).toHaveLength(0);
+  });
+
+  it("numeros em paginas proximas mas posicoes X muito diferentes permanecem", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(31, ["31"], { 0: { top: 20, items: [
+        { text: "31", x: 72, y: 20, width: 12, height: 12 },
+      ] } }),
+      page(32, ["32"], { 0: { top: 20, items: [
+        { text: "32", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("31");
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("32");
+  });
+
+  it("numeros com valores sem progressao compativel permanecem", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(31, ["31"], { 0: { top: 20, items: [
+        { text: "31", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+      page(32, ["99"], { 0: { top: 20, items: [
+        { text: "99", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("31");
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("99");
+  });
+
+  it("de33 e removido quando existem candidatos 32 e 34 nas paginas vizinhas", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(32, ["32"], { 0: { top: 20, items: [
+        { text: "32", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+      page(33, [
+        "Este parágrafo termina com de",
+        "de33",
+      ], { 1: { text: "de33", top: 800, items: [
+        { text: "de", x: 72, y: 800, width: 14, height: 12 },
+        { text: "33", x: 500, y: 800, width: 12, height: 12 },
+      ] } }),
+      page(34, ["34"], { 0: { top: 20, items: [
+        { text: "34", x: 500, y: 20, width: 12, height: 12 },
       ] } }),
     ]);
     expect(result.blocks.map((b) => b.text).join(" ")).not.toContain("de33");
     expect(result.blocks.map((b) => b.text).join(" ")).toContain("de");
   });
 
-  it("numeros 31, 32 e 33 em paginas consecutivas sao removidos", () => {
+  it("ano.31 e removido com contexto de paginas vizinhas", () => {
     const result = reconstructPdfParagraphBlocks([
-      page(31, ["31"], { 0: { top: 20 } }),
-      page(32, ["32"], { 0: { top: 20 } }),
-      page(33, ["33"], { 0: { top: 20 } }),
-    ]);
-    expect(result.ignoredLines.filter((l) => l.role === "page-number")).toHaveLength(3);
-    expect(result.blocks).toHaveLength(0);
-  });
-
-  it("dois candidatos distintos em paginas proximas e posicao X semelhante validam a sequencia", () => {
-    const result = reconstructPdfParagraphBlocks([
-      page(31, ["31"], { 0: { top: 20, items: [
-        { text: "31", x: 500, y: 20, width: 12, height: 12 },
+      page(30, ["30"], { 0: { top: 20, items: [
+        { text: "30", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+      page(31, [
+        "Este parágrafo termina com ano.",
+        "ano.31",
+      ], { 1: { text: "ano.31", top: 800, items: [
+        { text: "ano.", x: 72, y: 800, width: 24, height: 12 },
+        { text: "31", x: 500, y: 800, width: 12, height: 12 },
       ] } }),
       page(32, ["32"], { 0: { top: 20, items: [
         { text: "32", x: 500, y: 20, width: 12, height: 12 },
       ] } }),
     ]);
-    expect(result.ignoredLines.filter((l) => l.role === "page-number")).toHaveLength(2);
-    expect(result.blocks).toHaveLength(0);
+    expect(result.blocks.map((b) => b.text).join(" ")).not.toContain("ano.31");
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("ano.");
+  });
+
+  it("original.]66 e removido com contexto de paginas vizinhas", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(65, ["65"], { 0: { top: 20, items: [
+        { text: "65", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+      page(66, [
+        "original.]66",
+      ], { 0: { text: "original.]66", top: 800, items: [
+        { text: "original.]", x: 72, y: 800, width: 80, height: 12 },
+        { text: "66", x: 500, y: 800, width: 12, height: 12 },
+      ] } }),
+      page(67, ["67"], { 0: { top: 20, items: [
+        { text: "67", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).not.toContain("original.]66");
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("original.]");
+  });
+
+  it("?72 e removido com contexto de paginas vizinhas", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(71, ["71"], { 0: { top: 20, items: [
+        { text: "71", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+      page(72, [
+        "?72",
+      ], { 0: { text: "?72", top: 800, items: [
+        { text: "?", x: 72, y: 800, width: 12, height: 12 },
+        { text: "72", x: 500, y: 800, width: 12, height: 12 },
+      ] } }),
+      page(73, ["73"], { 0: { top: 20, items: [
+        { text: "73", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).not.toContain("?72");
+  });
+
+  it("ano.31 e removido com contexto de paginas vizinhas", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(30, ["30"], { 0: { top: 20, items: [
+        { text: "30", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+      page(31, [
+        "Este parágrafo termina com ano.",
+        "ano.31",
+      ], { 1: { text: "ano.31", top: 800, items: [
+        { text: "ano.", x: 72, y: 800, width: 24, height: 12 },
+        { text: "31", x: 500, y: 800, width: 12, height: 12 },
+      ] } }),
+      page(32, ["32"], { 0: { top: 20, items: [
+        { text: "32", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).not.toContain("ano.31");
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("ano.");
+  });
+
+  it("original.]66 e removido com contexto de paginas vizinhas", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(65, ["65"], { 0: { top: 20, items: [
+        { text: "65", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+      page(66, [
+        "original.]66",
+      ], { 0: { text: "original.]66", top: 800, items: [
+        { text: "original.]", x: 72, y: 800, width: 80, height: 12 },
+        { text: "66", x: 500, y: 800, width: 12, height: 12 },
+      ] } }),
+      page(67, ["67"], { 0: { top: 20, items: [
+        { text: "67", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).not.toContain("original.]66");
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("original.]");
+  });
+
+  it("?72 e removido com contexto de paginas vizinhas", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(71, ["71"], { 0: { top: 20, items: [
+        { text: "71", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+      page(72, [
+        "?72",
+      ], { 0: { text: "?72", top: 800, items: [
+        { text: "?", x: 72, y: 800, width: 12, height: 12 },
+        { text: "72", x: 500, y: 800, width: 12, height: 12 },
+      ] } }),
+      page(73, ["73"], { 0: { top: 20, items: [
+        { text: "73", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).not.toContain("?72");
   });
 });

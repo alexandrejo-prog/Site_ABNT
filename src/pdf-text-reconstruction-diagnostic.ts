@@ -105,14 +105,17 @@ function findPageNumberItemCandidates(pages: PdfPageDiagnostic[]): PageNumberIte
 function isPlausiblePageNumberItemSequence(candidate: PageNumberItemCandidate, allCandidates: PageNumberItemCandidate[]): boolean {
   const value = Number(candidate.item.text);
   if (!Number.isFinite(value)) return false;
-  if (Math.abs(value - candidate.pageNumber) <= 2 || Math.abs(value - (candidate.pageNumber - 1)) <= 2) return true;
   return allCandidates.some((other) => {
-    if (other.pageNumber === candidate.pageNumber && other.lineIndex === candidate.lineIndex && other.item === candidate.item) return false;
+    if (other.pageNumber === candidate.pageNumber) return false;
+    if (other.item === candidate.item) return false;
     if (Math.abs(other.pageNumber - candidate.pageNumber) > 2) return false;
     const otherValue = Number(other.item.text);
-    return Number.isFinite(otherValue)
-      && Math.abs(otherValue - value) <= 2
-      && Math.abs(other.item.x - candidate.item.x) <= 30;
+    if (!Number.isFinite(otherValue)) return false;
+    if (Math.abs(otherValue - value) > 2) return false;
+    if (Math.abs(other.item.x - candidate.item.x) > 30) return false;
+    const pageDelta = other.pageNumber - candidate.pageNumber;
+    const valueDelta = otherValue - value;
+    return Math.abs(valueDelta - pageDelta) <= 1;
   });
 }
 
@@ -181,14 +184,16 @@ function isPlausiblePageSequence(entry: LineRef, candidates: LineRef[]): boolean
   }
   const value = Number(entry.text);
   if (!Number.isFinite(value)) return false;
-  if (Math.abs(value - entry.pageNumber) <= 2 || Math.abs(value - (entry.pageNumber - 1)) <= 2) return true;
   return candidates.some((candidate) => {
+    if (candidate.pageNumber === entry.pageNumber) return false;
     const candidateValue = Number(candidate.text);
-    return Number.isFinite(candidateValue)
-      && candidate.pageNumber !== entry.pageNumber
-      && Math.abs(candidate.pageNumber - entry.pageNumber) <= 2
-      && Math.abs(candidateValue - value) <= 2
-      && Math.abs(candidate.line.left - entry.line.left) <= 18;
+    if (!Number.isFinite(candidateValue)) return false;
+    if (Math.abs(candidate.pageNumber - entry.pageNumber) > 2) return false;
+    if (Math.abs(candidateValue - value) > 2) return false;
+    if (Math.abs(candidate.line.left - entry.line.left) > 18) return false;
+    const pageDelta = candidate.pageNumber - entry.pageNumber;
+    const valueDelta = candidateValue - value;
+    return Math.abs(valueDelta - pageDelta) <= 1;
   });
 }
 
