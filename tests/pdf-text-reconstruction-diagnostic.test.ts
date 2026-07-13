@@ -877,3 +877,158 @@ describe("reconstrucao textual diagnostica de PDF", () => {
     expect(result.blocks.map((b) => b.text).join(" ")).not.toContain("?72");
   });
 });
+
+describe("reconstrução de continuações de títulos (heading continuation)", () => {
+  const para = "Este parágrafo possui texto corrido suficiente para representar corpo acadêmico normal.";
+  const TITLE_FONT = "SinteticoTitulo";
+
+  it("título dividido em duas linhas é reunido", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(1, [
+        "2.4 A importância da mudança organizacional para a implementação de novas",
+        "práticas de gestão",
+        para,
+      ], { 0: { fontName: TITLE_FONT }, 1: { fontName: TITLE_FONT }, 2: { left: 96, right: 520 } }),
+    ]);
+    const heading = result.blocks.find((b) => b.type === "heading");
+    expect(heading?.text).toBe("2.4 A importância da mudança organizacional para a implementação de novas práticas de gestão");
+    expect(heading?.text).not.toContain("corpo acadêmico");
+  });
+
+  it("título dividido em três linhas é reunido", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(1, [
+        "4.5.2 Fatores que facilitaram o processo de implementação do teletrabalho na",
+        "instituição",
+        para,
+      ], { 0: { fontName: TITLE_FONT }, 1: { fontName: TITLE_FONT }, 2: { left: 96, right: 520 } }),
+    ]);
+    const heading = result.blocks.find((b) => b.type === "heading");
+    expect(heading?.text).toBe("4.5.2 Fatores que facilitaram o processo de implementação do teletrabalho na instituição");
+    expect(heading?.text).not.toContain("corpo acadêmico");
+  });
+
+  it("continuação atravessando quebra de página é reunida quando geometricamente segura", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(1, ["7.1 Título que termina aqui"], { 0: { top: 660, fontName: TITLE_FONT } }),
+      page(2, [
+        "continuação do título dividido entre páginas",
+        para,
+      ], { 0: { top: 80, fontName: TITLE_FONT }, 1: { left: 96, right: 520 } }),
+    ]);
+    const heading = result.blocks.find((b) => b.type === "heading");
+    expect(heading?.text).toBe("7.1 Título que termina aqui continuação do título dividido entre páginas");
+    expect(heading?.pageStart).toBe(1);
+    expect(heading?.pageEnd).toBe(2);
+  });
+
+  it("primeiro parágrafo normal não é unido ao título", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(1, [
+        "3.1 Um título curto dividido em",
+        "duas linhas de exemplo",
+        para,
+      ], { 0: { fontName: TITLE_FONT }, 1: { fontName: TITLE_FONT }, 2: { left: 96, right: 520 } }),
+    ]);
+    const heading = result.blocks.find((b) => b.type === "heading");
+    expect(heading?.text).toBe("3.1 Um título curto dividido em duas linhas de exemplo");
+    expect(heading?.text).not.toContain("corpo acadêmico");
+    expect(result.blocks.some((b) => b.type === "paragraph" && b.text.includes("corpo acadêmico"))).toBe(true);
+  });
+
+  it("novo título numerado não é unido ao anterior", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(1, [
+        "2.4 A importância da mudança organizacional para a implementação de novas",
+        "práticas de gestão",
+        "2.5 Outro título numerado distinto",
+        para,
+      ], { 0: { fontName: TITLE_FONT }, 1: { fontName: TITLE_FONT }, 2: { fontName: TITLE_FONT }, 3: { left: 96, right: 520 } }),
+    ]);
+    const headings = result.blocks.filter((b) => b.type === "heading");
+    expect(headings).toHaveLength(2);
+    expect(headings[0].text).toBe("2.4 A importância da mudança organizacional para a implementação de novas práticas de gestão");
+    expect(headings[1].text).toBe("2.5 Outro título numerado distinto");
+    expect(headings[0].text).not.toContain("2.5");
+  });
+
+  it("legenda e fonte não são unidas ao título", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(1, [
+        "4.1 Um título que ocupa",
+        "mais de uma linha",
+        "Quadro 1 - Síntese de dados.",
+        "Fonte: elaboração própria.",
+        para,
+      ], { 0: { fontName: TITLE_FONT }, 1: { fontName: TITLE_FONT }, 2: { left: 96, right: 520 }, 3: { left: 96, right: 520 }, 4: { left: 96, right: 520 } }),
+    ]);
+    const heading = result.blocks.find((b) => b.type === "heading");
+    expect(heading?.text).toBe("4.1 Um título que ocupa mais de uma linha");
+    expect(heading?.text).not.toContain("Quadro");
+    expect(heading?.text).not.toContain("Fonte");
+    expect(result.blocks.some((b) => b.type === "caption")).toBe(true);
+    expect(result.blocks.some((b) => b.type === "source")).toBe(true);
+  });
+
+  it("texto completo do heading aparece uma vez", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(1, [
+        "2.4 A importância da mudança organizacional para a implementação de novas",
+        "práticas de gestão",
+        para,
+      ], { 0: { fontName: TITLE_FONT }, 1: { fontName: TITLE_FONT }, 2: { left: 96, right: 520 } }),
+    ]);
+    const full = "2.4 A importância da mudança organizacional para a implementação de novas práticas de gestão";
+    const joined = result.blocks.map((b) => b.text).join("\n@@@\n");
+    const occurrences = joined.match(/2\.4 A importância da mudança organizacional para a implementação de novas práticas de gestão/g) ?? [];
+    expect(occurrences.length).toBe(1);
+    expect(result.blocks.some((b) => b.type === "heading" && b.text === full)).toBe(true);
+  });
+
+  it("sourceLines do título reconstruído são preservadas", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(1, [
+        "4.3 Percepção dos(as) servidores(as) técnico-administrativos que aderiram ao",
+        "Programa de Gestão e Desempenho (PGD) na modalidade de teletrabalho,",
+        "integral ou parcial, quanto às suas vantagens e desvantagens.",
+        para,
+      ], { 0: { fontName: TITLE_FONT }, 1: { fontName: TITLE_FONT }, 2: { fontName: TITLE_FONT }, 3: { left: 96, right: 520 } }),
+    ]);
+    const heading = result.blocks.find((b) => b.type === "heading");
+    expect(heading?.text).toBe(
+      "4.3 Percepção dos(as) servidores(as) técnico-administrativos que aderiram ao Programa de Gestão e Desempenho (PGD) na modalidade de teletrabalho, integral ou parcial, quanto às suas vantagens e desvantagens.",
+    );
+    expect(heading?.sourceLines).toHaveLength(3);
+  });
+
+  it("casos sintéticos do Andrade ficam com os títulos completos", () => {
+    const titles: Array<[string, string[]]> = [
+      ["2.4 A importância da mudança organizacional para a implementação de novas", ["práticas de gestão"]],
+      ["4.3 Percepção dos(as) servidores(as) técnico-administrativos que aderiram ao", [
+        "Programa de Gestão e Desempenho (PGD) na modalidade de teletrabalho,",
+        "integral ou parcial, quanto às suas vantagens e desvantagens.",
+      ]],
+      ["4.4 Metodologia de análise dos dados coletados junto aos", ["servidores da instituição"]],
+      ["4.5.2 Fatores que facilitaram o processo de implementação do teletrabalho na", ["instituição"]],
+      ["4.6 Desafios na implementação do programa de gestão e desempenho (PGD) na", ["modalidade de teletrabalho na UFLA"]],
+      ["4.6.13 Considerações sobre a adoção do teletrabalho em", ["órgãos públicos federais"]],
+      ["4.7 Conclusões e recomendações sobre o", ["programa de gestão e desempenho"]],
+    ];
+    const texts: string[] = [];
+    const overrideIndices: Record<number, Partial<PdfLineDiagnostic> & { fontName?: string }> = {};
+    for (const [first, rest] of titles) {
+      const start = texts.length;
+      texts.push(first, ...rest, para);
+      overrideIndices[start] = { fontName: TITLE_FONT };
+      for (let index = 0; index < rest.length; index += 1) {
+        overrideIndices[start + 1 + index] = { fontName: TITLE_FONT };
+      }
+      overrideIndices[start + 1 + rest.length] = { left: 96, right: 540 };
+    }
+    const result = reconstructPdfParagraphBlocks([page(1, texts, overrideIndices)]);
+    for (const [first, rest] of titles) {
+      const full = [first, ...rest].join(" ");
+      expect(result.blocks.some((b) => b.type === "heading" && b.text === full), `título completo: ${full}`).toBe(true);
+    }
+  });
+});
