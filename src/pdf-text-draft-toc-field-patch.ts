@@ -60,10 +60,18 @@ function bookmarkHeadingTitles(xml: string): Map<string, string> {
 function ensureTabRunBeforePageRef(paragraphXml: string): string {
   const tokenIndex = paragraphXml.indexOf("__PDF_PAGEREF_");
   if (tokenIndex < 0) return paragraphXml;
-  const beforeToken = paragraphXml.slice(0, tokenIndex);
-  if (/<w:tab\s*\/>/.test(beforeToken.slice(Math.max(0, beforeToken.length - 500)))) return paragraphXml;
+
+  // Wrap any orphan <w:tab/> (direct child of <w:p>) in <w:r>
+  let normalized = paragraphXml.replace(
+    /(<\/w:r>\s*)<w:tab\s*\/>\s*(?=<w:r>)/g,
+    "$1<w:r><w:tab/></w:r>",
+  );
+
+  const normalizedTokenIndex = normalized.indexOf("__PDF_PAGEREF_");
+  const beforeToken = normalized.slice(0, normalizedTokenIndex);
+  if (/<w:r>\s*<w:tab\s*\/>\s*<\/w:r>/.test(beforeToken.slice(Math.max(0, beforeToken.length - 500)))) return normalized;
   const tokenRunPattern = /(<w:r\b(?:(?!<\/w:r>)[\s\S])*?<w:t[^>]*>__PDF_PAGEREF_PDFBM\d{3}__<\/w:t>(?:(?!<\/w:r>)[\s\S])*?<\/w:r>)/;
-  return paragraphXml.replace(tokenRunPattern, "<w:r><w:tab/></w:r>$1");
+  return normalized.replace(tokenRunPattern, "<w:r><w:tab/></w:r>$1");
 }
 
 function replaceOrInsertParagraphProperty(paragraphXml: string, pattern: RegExp, replacement: string): string {

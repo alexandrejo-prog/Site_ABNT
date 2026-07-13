@@ -103,6 +103,105 @@ describe("regressoes dos pre-textuais reconstruidos do PDF", () => {
     expect(result.titlePage?.natureText).toContain("Dissertação apresentada");
   });
 
+  it("extrai orientador com nome antes da etiqueta", () => {
+    const result = detectPdfPretextual([
+      page(1, [
+        "UNIVERSIDADE FEDERAL DE LAVRAS",
+        "Alexandre Andrade",
+        "TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL",
+        "Lavras - MG",
+        "2025",
+      ]),
+      page(2, [
+        "Alexandre Andrade",
+        "TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL",
+        "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do Programa de Pós-Graduação em Administração Pública, para a obtenção do título de Mestre.",
+        "Prof. Dr. Dany Flavio Tonelli",
+        "Orientador:",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+    ], 3);
+
+    expect(result.titlePage?.advisor).toBe("Orientador: Prof. Dr. Dany Flavio Tonelli");
+    expect(result.titlePage?.natureText).not.toContain("Dany Flavio Tonelli");
+    expect(result.titlePage?.city).toBe("LAVRAS-MG");
+    expect(result.titlePage?.year).toBe("2025");
+  });
+
+  it("extrai orientador com nome depois da etiqueta", () => {
+    const result = detectPdfPretextual([
+      page(1, [
+        "UNIVERSIDADE FEDERAL DE LAVRAS",
+        "Alexandre Andrade",
+        "TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL",
+        "Lavras - MG",
+        "2025",
+      ]),
+      page(2, [
+        "Alexandre Andrade",
+        "TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL",
+        "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências para obtenção do título de Mestre.",
+        "Orientador:",
+        "Prof. Dr. Dany Flavio Tonelli",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+    ], 3);
+
+    expect(result.titlePage?.advisor).toBe("Orientador: Prof. Dr. Dany Flavio Tonelli");
+    expect(result.titlePage?.natureText).not.toContain("Dany Flavio Tonelli");
+    expect(result.titlePage?.city).toBe("LAVRAS-MG");
+  });
+
+  it("etiqueta Orientador: sem nome ao lado nao consome cidade ou ano", () => {
+    const result = detectPdfPretextual([
+      page(1, [
+        "UNIVERSIDADE FEDERAL DE LAVRAS",
+        "Alexandre Andrade",
+        "TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL",
+        "Lavras - MG",
+        "2025",
+      ]),
+      page(2, [
+        "Alexandre Andrade",
+        "TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL",
+        "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências para obtenção do título de Mestre.",
+        "Orientador:",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+    ], 3);
+
+    expect(result.titlePage?.advisor).toBe("Orientador:");
+    expect(result.titlePage?.city).toBe("LAVRAS-MG");
+    expect(result.titlePage?.year).toBe("2025");
+  });
+
+  it("natureText nao contem nome do orientador", () => {
+    const result = detectPdfPretextual([
+      page(1, [
+        "UNIVERSIDADE FEDERAL DE LAVRAS",
+        "Alexandre Andrade",
+        "TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL",
+        "Lavras - MG",
+        "2025",
+      ]),
+      page(2, [
+        "Alexandre Andrade",
+        "TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL",
+        "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do Programa de Pós-Graduação em Administração Pública, para a obtenção do título de Mestre.",
+        "Orientador:",
+        "Prof. Dr. Dany Flavio Tonelli",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+    ], 3);
+
+    expect(result.titlePage?.natureText).toMatch(/para a obtenção do título de Mestre\.?$/);
+    expect(result.titlePage?.natureText).not.toContain("Flavio Tonelli");
+  });
+
   it("remove repeticao parcial da natureza sem apagar informacao legitima", () => {
     const text = deduplicateNatureLines([
       "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do Programa de Pós-Graduação em Administração Pública, área de concentração em Gestão Pública, para obtenção do título de Mestre.",

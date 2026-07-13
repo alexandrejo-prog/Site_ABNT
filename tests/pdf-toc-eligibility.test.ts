@@ -33,6 +33,18 @@ describe("elegibilidade do sumario do rascunho PDF", () => {
     expect(pdfTocHeadingLevel("REFERÊNCIAS")).toBe(1);
   });
 
+  it("envolve w:tab orfao em w:r e mantem lider pontilhado e PAGEREF", () => {
+    const tocEntries = `<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="8500"/></w:tabs></w:pPr><w:r><w:t>1 INTRODUÇÃO</w:t></w:r></w:r><w:tab/><w:r><w:t>__PDF_PAGEREF_PDFBM001__</w:t></w:r></w:p>`;
+    const body = `<w:p><w:r><w:t>__PDF_BM_START_PDFBM001__</w:t></w:r><w:r><w:t>1 INTRODUÇÃO</w:t></w:r><w:r><w:t>__PDF_BM_END_PDFBM001__</w:t></w:r></w:p>`;
+    const patched = patchPdfTextDraftDocumentXml(`<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${tocEntries}${body}</w:body></w:document>`);
+
+    expect(patched).not.toContain("</w:r><w:tab/><w:r>");
+    expect(patched).toContain("<w:r><w:tab/></w:r>");
+    expect(patched).toContain("w:leader=\"dot\"");
+    expect(patched).toContain("PAGEREF PDFBM001 \\h");
+    expect(patched).not.toContain("w:outlineLvl");
+  });
+
   it("remove entradas inelegiveis e preserva tab, lider pontilhado e PAGEREF", () => {
     const tocEntries = [
       tocParagraph("1 INTRODUÇÃO", "PDFBM001"),

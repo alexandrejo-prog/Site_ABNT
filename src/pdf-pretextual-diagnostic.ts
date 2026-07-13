@@ -70,9 +70,13 @@ function isNatureAnchor(text: string): boolean {
     || /PARA (?:A )?OBTENCAO DO TITULO/u.test(normalized);
 }
 
+const HONORIFIC_ABBR = /\b(?:Prof|Dr|Dra|Sr|Sra|Srta)\./iu;
+
 function isLikelyPersonName(text: string): boolean {
   const value = clean(text);
-  if (!value || /\d/.test(value) || /[.:;!?]/.test(value)) return false;
+  if (!value || /\d/.test(value)) return false;
+  const withoutHonorifics = value.replace(/\b(?:Prof|Dr|Dra|Sr|Sra|Srta)\./giu, "");
+  if (/[.:;!?]/.test(withoutHonorifics)) return false;
   const words = value.split(/\s+/);
   if (words.length < 2 || words.length > 7) return false;
   const folded = fold(value);
@@ -81,10 +85,11 @@ function isLikelyPersonName(text: string): boolean {
   }
   const lexicalWords = words.filter((word) => !PERSON_CONNECTORS.has(fold(word)));
   if (lexicalWords.length < 2 || lexicalWords.length > 5) return false;
+  const namePattern = /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç'.-]+$/u;
   return words.every((word) => {
     if (PERSON_CONNECTORS.has(fold(word))) return true;
-    return /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç'-]+$/u.test(word)
-      || /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ]{2,}$/u.test(word);
+    if (HONORIFIC_ABBR.test(word)) return true;
+    return namePattern.test(word);
   });
 }
 
@@ -260,15 +265,34 @@ export function deduplicateNatureLines(lines: string[]): string {
   return clean(output.join(" "));
 }
 
+function isCityOrYear(line: LineRef): boolean {
+  return isYear(line.text) || /^(?:LAVRAS|LAVRAS-MG|[A-Z\s-]+)$/iu.test(clean(line.text));
+}
+
+function findAdvisorNameLine(lines: LineRef[], advisorLine: LineRef): LineRef | undefined {
+  const index = lines.indexOf(advisorLine);
+  const next = index < lines.length - 1 ? lines[index + 1] : undefined;
+  const prev = index > 0 ? lines[index - 1] : undefined;
+  if (next && isLikelyPersonName(next.text) && !isCityOrYear(next) && !isProgramLine(next.text) && !isAdvisorLine(next.text) && !isNatureAnchor(next.text)) return next;
+  if (prev && isLikelyPersonName(prev.text) && !isCityOrYear(prev) && !isProgramLine(prev.text) && !isAdvisorLine(prev.text) && !isNatureAnchor(prev.text)) return prev;
+  return undefined;
+}
+
 function extractAdvisor(lines: LineRef[], advisorLine: LineRef | undefined): string | undefined {
   if (!advisorLine) return undefined;
   const index = lines.indexOf(advisorLine);
   const text = clean(advisorLine.text);
   const afterColon = text.split(":").slice(1).join(":").trim();
   if (afterColon.length >= 3) return text;
+
   const next = lines[index + 1];
-  if (next && !isYear(next.text) && !isProgramLine(next.text) && !isAdvisorLine(next.text)) {
+  const prev = index > 0 ? lines[index - 1] : undefined;
+
+  if (next && isLikelyPersonName(next.text) && !isCityOrYear(next) && !isProgramLine(next.text) && !isAdvisorLine(next.text) && !isNatureAnchor(next.text)) {
     return `${text.replace(/\s*:?\s*$/, "")}: ${next.text}`;
+  }
+  if (prev && isLikelyPersonName(prev.text) && !isCityOrYear(prev) && !isProgramLine(prev.text) && !isAdvisorLine(prev.text) && !isNatureAnchor(prev.text)) {
+    return `${text.replace(/\s*:?\s*$/, "")}: ${prev.text}`;
   }
   return text;
 }
@@ -301,7 +325,10 @@ function detectTitlePage(pages: PdfPageDiagnostic[], coverPage?: number, bodyPag
   const cityLine = yearLine
     ? [...best.lines.slice(0, best.lines.indexOf(yearLine))].reverse().find((line) => isCentered(line) && !isNatureAnchor(line.text) && !isProgramLine(line.text) && !isAdvisorLine(line.text))
     : undefined;
-  const stopCandidates = [advisorLine, coadvisorLine, cityLine, yearLine]
+  const advisorNameLine = advisorLine
+    ? findAdvisorNameLine(best.lines, advisorLine)
+    : undefined;
+  const stopCandidates = [advisorLine, advisorNameLine, coadvisorLine, cityLine, yearLine]
     .filter((line): line is LineRef => Boolean(line))
     .map((line) => best.lines.indexOf(line))
     .filter((index) => index > natureStart);
