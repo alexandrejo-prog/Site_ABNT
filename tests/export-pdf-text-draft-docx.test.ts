@@ -1141,4 +1141,217 @@ describe("ativos visuais de regioes pdf", () => {
     expect(zip.file("word/document.xml")).toBeDefined();
     expect(await zip.file("word/document.xml")!.async("string")).toContain("<w:drawing");
   });
+
+  it("quadro com ativo insere imagem, mantem legenda e fonte, e nao insere marcador", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Parágrafo anterior.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Quadro 1 – Exemplo.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-q" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-q" },
+      { type: "paragraph", text: "Parágrafo posterior.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 1 }], confidence: "medium", reasons: [] },
+    ], [{
+      id: "layout-11-q", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 3, kind: "quadro",
+      caption: "Quadro 1 – Exemplo.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "quadro-1-page-11",
+    }], {
+      visualAssets: { "quadro-1-page-11": asset("quadro-1-page-11") },
+      statistics: { paragraphCount: 2, captionCount: 1, sourceCount: 1, layoutRegionCount: 1 },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("<w:drawing");
+    expect(documentXml).toContain("Quadro 1 – Exemplo.");
+    expect(documentXml).toContain("Fonte: Autor.");
+    expect(documentXml).not.toContain("Elemento visual não inserido");
+    expect(documentXml).toContain("Parágrafo anterior.");
+    expect(documentXml).toContain("Parágrafo posterior.");
+  });
+
+  it("quadro sem ativo mantem marcador textual", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Parágrafo anterior.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Quadro 2 – Sem ativo.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-q2" },
+      { type: "unresolved", text: "TEXTO INTERNO DO QUADRO", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-q2" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-q2" },
+    ], [{
+      id: "layout-11-q2", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 4, kind: "quadro",
+      caption: "Quadro 2 – Sem ativo.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "quadro-2-page-11",
+    }], {
+      logo: undefined,
+      statistics: { paragraphCount: 1, captionCount: 1, sourceCount: 1, layoutRegionCount: 1 },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("Elemento visual não inserido");
+    expect(documentXml).not.toContain("<w:drawing");
+  });
+
+  it("tabela com ativo insere imagem, mantem legenda e fonte, e nao insere marcador", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Parágrafo anterior.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Tabela 1 – Exemplo.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-t" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-t" },
+      { type: "paragraph", text: "Parágrafo posterior.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 1 }], confidence: "medium", reasons: [] },
+    ], [{
+      id: "layout-11-t", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 3, kind: "tabela",
+      caption: "Tabela 1 – Exemplo.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "tabela-1-page-11",
+    }], {
+      visualAssets: { "tabela-1-page-11": asset("tabela-1-page-11") },
+      statistics: { paragraphCount: 2, captionCount: 1, sourceCount: 1, layoutRegionCount: 1 },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("<w:drawing");
+    expect(documentXml).toContain("Tabela 1 – Exemplo.");
+    expect(documentXml).toContain("Fonte: Autor.");
+    expect(documentXml).not.toContain("Elemento visual não inserido");
+    expect(documentXml).toContain("Parágrafo anterior.");
+    expect(documentXml).toContain("Parágrafo posterior.");
+  });
+
+  it("tabela sem ativo mantem marcador textual", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Parágrafo anterior.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Tabela 2 – Sem ativo.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-t2" },
+      { type: "unresolved", text: "TEXTO INTERNO DA TABELA", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-t2" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-t2" },
+    ], [{
+      id: "layout-11-t2", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 4, kind: "tabela",
+      caption: "Tabela 2 – Sem ativo.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "tabela-2-page-11",
+    }], {
+      logo: undefined,
+      statistics: { paragraphCount: 1, captionCount: 1, sourceCount: 1, layoutRegionCount: 1 },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("Elemento visual não inserido");
+    expect(documentXml).not.toContain("<w:drawing");
+  });
+
+  it("multicolumn com ativo insere imagem e nao insere marcador", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Parágrafo anterior.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Conteúdo 1 – Exemplo.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-m" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-m" },
+      { type: "paragraph", text: "Parágrafo posterior.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 1 }], confidence: "medium", reasons: [] },
+    ], [{
+      id: "layout-11-m", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 3, kind: "multicolumn",
+      caption: "Conteúdo 1 – Exemplo.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "multicolumn-1-page-11",
+    }], {
+      visualAssets: { "multicolumn-1-page-11": asset("multicolumn-1-page-11") },
+      statistics: { paragraphCount: 2, captionCount: 1, sourceCount: 1, layoutRegionCount: 1 },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("<w:drawing");
+    expect(documentXml).not.toContain("Elemento visual não inserido");
+    expect(documentXml).toContain("Parágrafo anterior.");
+    expect(documentXml).toContain("Parágrafo posterior.");
+  });
+
+  it("multicolumn sem ativo mantem marcador textual", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Parágrafo anterior.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Conteúdo 2 – Sem ativo.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-m2" },
+      { type: "unresolved", text: "TEXTO INTERNO MULTICOLUMN", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-m2" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-m2" },
+    ], [{
+      id: "layout-11-m2", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 4, kind: "multicolumn",
+      caption: "Conteúdo 2 – Sem ativo.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "multicolumn-2-page-11",
+    }], {
+      logo: undefined,
+      statistics: { paragraphCount: 1, captionCount: 1, sourceCount: 1, layoutRegionCount: 1 },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("Elemento visual não inserido");
+    expect(documentXml).not.toContain("<w:drawing");
+  });
+
+  it("regiao com kind desconhecido e ativo insere imagem e nao insere marcador", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Parágrafo anterior.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Elemento 1 – Exemplo.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-u" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-u" },
+      { type: "paragraph", text: "Parágrafo posterior.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 1 }], confidence: "medium", reasons: [] },
+    ], [{
+      id: "layout-11-u", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 3, kind: "unknown",
+      caption: "Elemento 1 – Exemplo.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "unknown-1-page-11",
+    }], {
+      visualAssets: { "unknown-1-page-11": asset("unknown-1-page-11") },
+      statistics: { paragraphCount: 2, captionCount: 1, sourceCount: 1, layoutRegionCount: 1 },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("<w:drawing");
+    expect(documentXml).not.toContain("Elemento visual não inserido");
+    expect(documentXml).toContain("Parágrafo anterior.");
+    expect(documentXml).toContain("Parágrafo posterior.");
+  });
+
+  it("dois blocos de quadro com o mesmo logicalVisualId geram somente uma imagem", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Texto antes.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Quadro 3 – Continua.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-q3" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-q3" },
+      { type: "caption", text: "Quadro 3 – Continuação.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "layout-12-q3" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 1 }], confidence: "high", reasons: [], layoutRegionId: "layout-12-q3" },
+    ], [{
+      id: "layout-11-q3", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 3, kind: "quadro",
+      caption: "Quadro 3 – Continua.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "quadro-3-page-11",
+    }, {
+      id: "layout-12-q3", pageStart: 12, pageEnd: 12, startLineIndex: 0, endLineIndex: 1, kind: "quadro",
+      caption: "Quadro 3 – Continuação.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "quadro-3-page-11",
+    }], {
+      includeReconstructedPretextuals: false,
+      visualAssets: { "quadro-3-page-11": asset("quadro-3-page-11") },
+      statistics: { paragraphCount: 1, captionCount: 2, sourceCount: 2, layoutRegionCount: 2 },
+    });
+    const zip = await JSZip.loadAsync(await buildPdfTextDraftDocxBlob(input).then((blob) => blob.arrayBuffer()));
+    const mediaFiles = Object.keys(zip.files).filter((entry) => entry.startsWith("word/media/") && !entry.endsWith("/"));
+    expect(mediaFiles).toHaveLength(1);
+  });
+
+  it("contagem de marcadores considera ativo emitido e coincide com o documento", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Texto.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "unresolved", text: "INTERNO QUADRO", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-qt" },
+      { type: "unresolved", text: "INTERNO TABELA", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 2 }], confidence: "low", reasons: [], layoutRegionId: "layout-12-tt" },
+    ], [{
+      id: "layout-11-qt", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 2, kind: "quadro",
+      confidence: "high", reasons: [], logicalVisualId: "quadro-t-page-11",
+    }, {
+      id: "layout-12-tt", pageStart: 12, pageEnd: 12, startLineIndex: 2, endLineIndex: 2, kind: "tabela",
+      confidence: "high", reasons: [], logicalVisualId: "tabela-t-page-12",
+    }], {
+      includeReconstructedPretextuals: false,
+      visualAssets: { "quadro-t-page-11": asset("quadro-t-page-11") },
+      statistics: { paragraphCount: 1, unresolvedCount: 2, layoutRegionCount: 2 },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    const markerMatches = documentXml.match(/Elemento visual não inserido/g) ?? [];
+    const summaryMatch = documentXml.match(/Elementos visuais representados por marcadores: (\d+)/);
+    expect(summaryMatch).not.toBeNull();
+    const expected = Number(summaryMatch![1]);
+    expect(markerMatches.length).toBe(expected);
+    expect(expected).toBe(1);
+  });
+
+  it("imagem de quadro nao gera tabela nem numeracao e figura continua funcionando", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Texto antes.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Quadro 9 – Quadro.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-q9" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-q9" },
+      { type: "caption", text: "Figura 9 – Figura.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-12-f9" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 3 }], confidence: "high", reasons: [], layoutRegionId: "layout-12-f9" },
+    ], [{
+      id: "layout-11-q9", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 3, kind: "quadro",
+      caption: "Quadro 9 – Quadro.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "quadro-9-page-11",
+    }, {
+      id: "layout-12-f9", pageStart: 12, pageEnd: 12, startLineIndex: 2, endLineIndex: 3, kind: "figura",
+      caption: "Figura 9 – Figura.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "figura-9-page-12",
+    }], {
+      includeReconstructedPretextuals: false,
+      visualAssets: { "quadro-9-page-11": asset("quadro-9-page-11"), "figura-9-page-12": asset("figura-9-page-12") },
+      statistics: { paragraphCount: 1, captionCount: 2, sourceCount: 2, layoutRegionCount: 2 },
+    });
+    const { documentXml, settingsXml, stylesXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    const allXml = `${documentXml}\n${settingsXml}\n${stylesXml}`;
+    expect(allXml).toContain("<w:drawing");
+    expect(allXml).toContain("Quadro 9 – Quadro.");
+    expect(allXml).toContain("Figura 9 – Figura.");
+    expect(allXml).not.toContain("<w:tbl");
+    expect(allXml).not.toContain("<w:numPr");
+  });
 });

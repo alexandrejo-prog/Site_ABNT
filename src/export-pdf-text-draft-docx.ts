@@ -16,7 +16,7 @@ import {
 import type { IParagraphOptions } from "docx";
 import type { PdfAbstractDiagnostic, PdfLayoutSensitiveRegionDiagnostic, PdfReconstructedBlockDiagnostic } from "./imported-pdf-diagnostic";
 import { ensurePdfTextDraftTocFields } from "./pdf-text-draft-toc-field-patch";
-import type { PdfTextDraftExportInput, PdfTextDraftLogoAsset, PdfTextDraftValidation } from "./pdf-text-draft-contract";
+import type { PdfTextDraftExportInput, PdfTextDraftLogoAsset, PdfTextDraftValidation, PdfTextDraftVisualAsset } from "./pdf-text-draft-contract";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const A4_WIDTH_TWIP = 11906;
@@ -118,6 +118,12 @@ function bodyHeading(text: string, entry?: TocEntry): Paragraph {
 
 function isGraphicLikeKind(kind?: PdfLayoutSensitiveRegionDiagnostic["kind"]): boolean {
   return kind === "grafico" || kind === "figura" || kind === "imagem" || kind === "mapa" || kind === "ilustracao";
+}
+
+function hasVisualAssetForRegion(region: PdfLayoutSensitiveRegionDiagnostic | undefined, visualAssets: Record<string, PdfTextDraftVisualAsset>): boolean {
+  if (!region) return false;
+  const key = region.logicalVisualId ?? region.id;
+  return visualAssets[key] != null;
 }
 
 function visualKindLabel(kind?: PdfLayoutSensitiveRegionDiagnostic["kind"]): string {
@@ -409,13 +415,14 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
       const region = block.layoutRegionId ? regions.get(block.layoutRegionId) : undefined;
       const dedupKey = region?.logicalVisualId ?? block.layoutRegionId ?? `caption-${block.pageStart}`;
       paragraphs.push(left(text, { size: 22 }));
-      if (region && isGraphicLikeKind(region.kind) && !emittedKeys.has(dedupKey)) {
+      const captionHasAsset = region ? hasVisualAssetForRegion(region, visualAssets) : false;
+      if (region && (captionHasAsset || isGraphicLikeKind(region.kind)) && !emittedKeys.has(dedupKey)) {
         const hasUnresolved = input.reconstruction.blocks.some(
           (b) => b.type === "unresolved" && b.layoutRegionId === block.layoutRegionId
         );
         if (!hasUnresolved) {
-          const emitted = emitVisualImage(region);
-          if (!emitted) {
+          const emitted = captionHasAsset ? emitVisualImage(region) : false;
+          if (!emitted && !captionHasAsset) {
             const range = region.logicalVisualId ? logicalVisualRanges.get(region.logicalVisualId) : undefined;
             const reliableRange = range && region.logicalVisualId && !unreliableRanges.has(region.logicalVisualId) ? range : undefined;
             paragraphs.push(left(markerForBlock(block, regions, reliableRange), { size: 20, italics: true }));
@@ -433,11 +440,9 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
       emittedKeys.add(dedupKey);
       const range = logicalId ? logicalVisualRanges.get(logicalId) : undefined;
       const reliableRange = range && logicalId && !unreliableRanges.has(logicalId) ? range : undefined;
-      if (region && isGraphicLikeKind(region.kind)) {
-        const emitted = emitVisualImage(region);
-        if (!emitted) {
-          paragraphs.push(left(markerForBlock(block, regions, reliableRange), { size: 20, italics: true }));
-        }
+      const unresolvedHasAsset = region ? hasVisualAssetForRegion(region, visualAssets) : false;
+      if (region && unresolvedHasAsset) {
+        emitVisualImage(region);
       } else {
         paragraphs.push(left(markerForBlock(block, regions, reliableRange), { size: 20, italics: true }));
       }
