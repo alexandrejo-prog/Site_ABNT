@@ -1,0 +1,68 @@
+name: Validate PDF visual renderer once
+
+on:
+  push:
+    branches:
+      - feat/pdf-import-v2.10.0-rebuild
+    paths:
+      - .github/workflows/validate-pdf-visual-renderer-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/pdf-import-v2.10.0-rebuild
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Run validations and publish result
+        shell: bash
+        run: |
+          set +e
+          npm ci > /tmp/npm-ci.log 2>&1
+          CI_STATUS=$?
+          npx vitest run tests/pdf-visual-asset-renderer.test.ts > /tmp/focused.log 2>&1
+          FOCUSED_STATUS=$?
+          npm test > /tmp/tests.log 2>&1
+          TEST_STATUS=$?
+          npm run build > /tmp/build.log 2>&1
+          BUILD_STATUS=$?
+          git diff --check > /tmp/diff-check.log 2>&1
+          DIFF_STATUS=$?
+
+          {
+            echo "npm_ci=$CI_STATUS"
+            echo "focused_test=$FOCUSED_STATUS"
+            echo "full_test=$TEST_STATUS"
+            echo "build=$BUILD_STATUS"
+            echo "diff_check=$DIFF_STATUS"
+            echo
+            echo "=== focused tail ==="
+            tail -n 80 /tmp/focused.log
+            echo
+            echo "=== full test tail ==="
+            tail -n 80 /tmp/tests.log
+            echo
+            echo "=== build tail ==="
+            tail -n 80 /tmp/build.log
+            echo
+            echo "=== npm ci tail ==="
+            tail -n 40 /tmp/npm-ci.log
+            echo
+            echo "=== diff check ==="
+            cat /tmp/diff-check.log
+          } > REMOTE_RENDERER_VALIDATION.txt
+
+          rm .github/workflows/validate-pdf-visual-renderer-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add REMOTE_RENDERER_VALIDATION.txt .github/workflows/validate-pdf-visual-renderer-once.yml
+          git commit -m "chore: registrar validacao remota do renderizador pdf"
+          git push origin HEAD:feat/pdf-import-v2.10.0-rebuild
