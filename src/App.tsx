@@ -693,11 +693,16 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                     <span>Gerar com campos ausentes</span>
                   </label>
                 )}
+                <p id="pdf-text-draft-generation-status" className="import-note" role="status" aria-live="polite">
+                  {pdfTextDraftValidation?.canExport ? "Pronto para gerar" : "Revise os bloqueadores abaixo"}
+                </p>
                 <button
                   className="primary-action strong"
                   type="button"
                   onClick={handleTextDraftDocxFromPdf}
-                  disabled={isGenerating || !pdfTextDraftValidation?.canExport}
+                  disabled={isGenerating}
+                  title="Gerar rascunho textual DOCX a partir do PDF diagnosticado"
+                  aria-describedby="pdf-text-draft-generation-status"
                 >
                   <FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar rascunho textual DOCX"}
                 </button>

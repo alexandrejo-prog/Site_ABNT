@@ -576,7 +576,7 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     expect((screen.getByLabelText("Tipo de trabalho") as HTMLSelectElement).value).toBe("dissertacao");
   });
 
-  it("bloqueadores do rascunho textual PDF desabilitam o botao sem exigir campos academicos", async () => {
+  it("bloqueadores do rascunho textual PDF nao desabilitam o botao e aparecem visiveis", async () => {
     const user = userEvent.setup();
     pdfDraftValidateMock.mockReturnValue({
       canExport: false,
@@ -589,7 +589,8 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     await user.upload(screen.getByLabelText("Importar arquivo"), new File(["pdf"], "bloqueado.pdf", { type: "application/pdf" }));
 
     const button = await screen.findByRole("button", { name: /Gerar rascunho textual DOCX/i });
-    expect(button).toBeDisabled();
+    expect(button).not.toBeDisabled();
+    expect(screen.getByText("Revise os bloqueadores abaixo")).toBeInTheDocument();
     expect(screen.getByText("Nenhum parágrafo reconstruído foi encontrado.")).toBeInTheDocument();
     expect(screen.getByText("Há blocos de baixa confiança.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Tipo de trabalho")).not.toBeInTheDocument();
@@ -749,5 +750,80 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     expect(content).not.toContain("Página 1 de");
     expect(content).not.toContain("[PAGE]");
     expect(content).not.toContain("[QUEBRA DE PÁGINA]");
+  });
+
+  it("botao do rascunho textual PDF fica desabilitado somente durante geracao", async () => {
+    const user = userEvent.setup();
+    pdfDraftValidateMock.mockReturnValue({
+      canExport: true,
+      blockers: [] as string[],
+      warnings: [] as string[],
+    });
+    pdfDraftBuildMock.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return new Blob(["docx"], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    });
+    importDocumentFileMock.mockResolvedValue(pdfDiagnosticResult("ok.pdf"));
+
+    render(<App />);
+    await user.upload(screen.getByLabelText("Importar arquivo"), new File(["pdf"], "ok.pdf", { type: "application/pdf" }));
+
+    const button = await screen.findByRole("button", { name: /Gerar rascunho textual DOCX/i });
+    expect(button).not.toBeDisabled();
+
+    await user.click(button);
+    await waitFor(() => expect(button).toBeDisabled());
+    expect(button).toHaveTextContent("Gerando...");
+
+    await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveTextContent("Gerar rascunho textual DOCX");
+  });
+
+  it("botao do rascunho textual PDF retorna a ficar habilitado apos erro", async () => {
+    const user = userEvent.setup();
+    pdfDraftValidateMock.mockReturnValue({
+      canExport: true,
+      blockers: [] as string[],
+      warnings: [] as string[],
+    });
+    pdfDraftBuildMock.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      throw new Error("Falha simulada");
+    });
+    importDocumentFileMock.mockResolvedValue(pdfDiagnosticResult("erro.pdf"));
+
+    render(<App />);
+    await user.upload(screen.getByLabelText("Importar arquivo"), new File(["pdf"], "erro.pdf", { type: "application/pdf" }));
+
+    const button = await screen.findByRole("button", { name: /Gerar rascunho textual DOCX/i });
+    await user.click(button);
+    await waitFor(() => expect(button).toBeDisabled());
+
+    await waitFor(() => expect(button).not.toBeDisabled());
+    expect(screen.getByText(/Não foi possível gerar o rascunho textual do PDF/)).toBeInTheDocument();
+  });
+
+  it("clique no botao com bloqueadores nao chama exportador e mantem botao habilitado", async () => {
+    const user = userEvent.setup();
+    pdfDraftValidateMock.mockReturnValue({
+      canExport: false,
+      blockers: ["Bloqueio 1", "Bloqueio 2"] as string[],
+      warnings: [] as string[],
+    });
+    importDocumentFileMock.mockResolvedValue(pdfDiagnosticResult("bloqueado2.pdf"));
+
+    render(<App />);
+    await user.upload(screen.getByLabelText("Importar arquivo"), new File(["pdf"], "bloqueado2.pdf", { type: "application/pdf" }));
+
+    const button = await screen.findByRole("button", { name: /Gerar rascunho textual DOCX/i });
+    expect(button).not.toBeDisabled();
+
+    await user.click(button);
+    expect(pdfDraftBuildMock).not.toHaveBeenCalled();
+    expect(saveAsMock).not.toHaveBeenCalled();
+    expect(button).not.toBeDisabled();
+    expect(screen.getByText("Bloqueio 1")).toBeInTheDocument();
+    expect(screen.getByText("Bloqueio 2")).toBeInTheDocument();
   });
 });

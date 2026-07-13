@@ -154,6 +154,13 @@ function isGraphicLikeKind(kind: PdfLayoutSensitiveRegionDiagnostic["kind"]): bo
   return kind === "grafico" || kind === "figura" || kind === "imagem" || kind === "mapa" || kind === "ilustracao";
 }
 
+function pageHasSubstantialBodyText(page: PdfPageDiagnostic): boolean {
+  return page.lines.some((line) => {
+    const text = line.text.trim();
+    return text.length >= 80 && !CAPTION_RE.test(text) && !SOURCE_RE.test(text) && !/^\d+$/.test(text);
+  });
+}
+
 function bridgeMultiPageRegions(regions: PdfLayoutSensitiveRegionDiagnostic[], pages: PdfPageDiagnostic[]): PdfLayoutSensitiveRegionDiagnostic[] {
   const result = [...regions];
   const pageMap = new Map(pages.map((page) => [page.pageNumber, page]));
@@ -178,7 +185,9 @@ function bridgeMultiPageRegions(regions: PdfLayoutSensitiveRegionDiagnostic[], p
       const bridgeEnd = next.pageStart - 1;
       if (bridgeStart > bridgeEnd) continue;
       for (let bridgePage = bridgeStart; bridgePage <= bridgeEnd; bridgePage++) {
-        const lastLineIndex = (pageMap.get(bridgePage)?.lines.length ?? 1) - 1;
+        const page = pageMap.get(bridgePage);
+        if (page && pageHasSubstantialBodyText(page)) continue;
+        const lastLineIndex = (page?.lines.length ?? 1) - 1;
         result.push({
           id: `layout-${bridgePage}-bridge-${current.logicalVisualId}`,
           pageStart: bridgePage,
@@ -199,7 +208,7 @@ function bridgeMultiPageRegions(regions: PdfLayoutSensitiveRegionDiagnostic[], p
   return result;
 }
 
-function findLayoutRegions(pages: PdfPageDiagnostic[]): PdfLayoutSensitiveRegionDiagnostic[] {
+export function findLayoutRegions(pages: PdfPageDiagnostic[]): PdfLayoutSensitiveRegionDiagnostic[] {
   const regions: PdfLayoutSensitiveRegionDiagnostic[] = [];
   for (const page of pages) {
     let regionIndex = 0;
@@ -271,16 +280,20 @@ function findLayoutRegions(pages: PdfPageDiagnostic[]): PdfLayoutSensitiveRegion
     if (candidates.length >= 8 && distinctLefts.size >= 3 && !pageLooksPretextual(page) && !pageLooksReferences(page)) {
       const first = candidates[0].lineIndex;
       const last = candidates[candidates.length - 1].lineIndex;
-      regions.push({
-        id: `layout-${page.pageNumber}-multicolumn`,
-        pageStart: page.pageNumber,
-        pageEnd: page.pageNumber,
-        startLineIndex: first,
-        endLineIndex: last,
-        kind: "multicolumn",
-        confidence: "low",
-        reasons: ["Linhas curtas com multiplas margens sugerem regiao multicoluna."],
-      });
+      const range = last - first + 1;
+      const density = range > 0 ? candidates.length / range : 0;
+      if (density >= 0.6) {
+        regions.push({
+          id: `layout-${page.pageNumber}-multicolumn`,
+          pageStart: page.pageNumber,
+          pageEnd: page.pageNumber,
+          startLineIndex: first,
+          endLineIndex: last,
+          kind: "multicolumn",
+          confidence: "low",
+          reasons: ["Linhas curtas com multiplas margens sugerem regiao multicoluna."],
+        });
+      }
     }
   }
   return bridgeMultiPageRegions(regions, pages);
@@ -301,7 +314,7 @@ function isObviousHeadingText(text: string): boolean {
     && !/^\d+\s+\d{4}\b/.test(text);
 }
 
-function baseClassifyLines(pages: PdfPageDiagnostic[], regions: PdfLayoutSensitiveRegionDiagnostic[]): ClassifiedLine[] {
+export function baseClassifyLines(pages: PdfPageDiagnostic[], regions: PdfLayoutSensitiveRegionDiagnostic[]): ClassifiedLine[] {
   const lines = flattenPages(pages);
   const pageNumberCandidates = lines.filter(isIsolatedPageNumberCandidate);
   const repeatedRoles = repeatedEdgeRoles(lines);
