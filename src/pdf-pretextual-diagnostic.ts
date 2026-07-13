@@ -55,9 +55,7 @@ function isYear(text: string): boolean {
 
 function isLikelyInstitution(text: string): boolean {
   const normalized = fold(text);
-  return normalized.includes("UNIVERSIDADE FEDERAL DE LAVRAS")
-    || normalized === "UFLA"
-    || normalized.includes("INSTITUTO FEDERAL");
+  return normalized.includes("UNIVERSIDADE FEDERAL DE LAVRAS") || normalized === "UFLA";
 }
 
 function isNatureAnchor(text: string): boolean {

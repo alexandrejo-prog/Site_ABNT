@@ -462,17 +462,32 @@ describe("diagnóstico pretextual: instituição não duplicada na folha de rost
     expect(pre?.institution).toBe("UNIVERSIDADE FEDERAL DE LAVRAS");
   });
 
-  it("instituição diferente é preservada", () => {
+  it("instituição com informação adicional é preservada", () => {
     const pre = detectPdfPretextual(buildTitlePage([
       { text: "AUTOR", centered: true },
       { text: "TÍTULO", centered: true },
       { text: "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do título de Mestre." },
-      { text: "INSTITUTO FEDERAL DO SUL DE MINAS" },
+      { text: "UNIVERSIDADE FEDERAL DE LAVRAS — ESCOLA DE ENGENHARIA" },
       { text: "LAVRAS-MG", centered: true },
       { text: "2025", centered: true },
     ])).titlePage;
 
-    expect(pre?.institution).toBe("INSTITUTO FEDERAL DO SUL DE MINAS");
+    expect(pre?.institution).toBe("UNIVERSIDADE FEDERAL DE LAVRAS — ESCOLA DE ENGENHARIA");
+    expect(pre?.natureText).toContain("Universidade Federal de Lavras");
+  });
+
+  it("título contendo INSTITUTO FEDERAL não vira instituição", () => {
+    const pre = detectPdfPretextual(buildTitlePage([
+      { text: "AUTOR", centered: true },
+      { text: "GESTÃO DE PESSOAS NO INSTITUTO FEDERAL DO SUL DE MINAS", centered: true },
+      { text: "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do título de Mestre." },
+      { text: "UNIVERSIDADE FEDERAL DE LAVRAS" },
+      { text: "LAVRAS-MG", centered: true },
+      { text: "2025", centered: true },
+    ])).titlePage;
+
+    expect(pre?.institution).toBeUndefined();
+    expect(pre?.title).toBe("GESTÃO DE PESSOAS NO INSTITUTO FEDERAL DO SUL DE MINAS");
     expect(pre?.natureText).toContain("Universidade Federal de Lavras");
   });
 
