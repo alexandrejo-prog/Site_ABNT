@@ -746,3 +746,95 @@ describe("recuperação do título truncado da capa a partir da folha de rosto",
     expect(result.titlePage?.natureText).toContain("Universidade Federal de Lavras");
   });
 });
+
+describe("reconciliação estrita do prefixo do título da capa", () => {
+  const AUTHOR = "MARIANA RAQUEL DE OLIVEIRA ANDRADE";
+
+  it("prefixo parcial de palavra não substitui a capa", () => {
+    const result = detectPdfPretextual([
+      page(1, [
+        "UNIVERSIDADE FEDERAL DE LAVRAS",
+        AUTHOR,
+        "GESTÃO DO PROJETO",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+      page(2, [
+        AUTHOR,
+        "GESTÃO DO PROJETOZINHO DE TRABALHO",
+        "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do título de Mestre.",
+        "Orientador: Prof. Dr. Dany Flavio Tonelli",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+    ], 3);
+
+    expect(result.cover?.title).toBe("GESTÃO DO PROJETO");
+  });
+
+  it("diferença apenas de pontuação não substitui a capa", () => {
+    const result = detectPdfPretextual([
+      page(1, [
+        "UNIVERSIDADE FEDERAL DE LAVRAS",
+        AUTHOR,
+        "GESTÃO: TRABALHO",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+      page(2, [
+        AUTHOR,
+        "GESTÃO - TRABALHO",
+        "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do título de Mestre.",
+        "Orientador: Prof. Dr. Dany Flavio Tonelli",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+    ], 3);
+
+    expect(result.cover?.title).toBe("GESTÃO: TRABALHO");
+  });
+
+  it("acréscimo de palavra completa continua recuperando o título", () => {
+    const result = detectPdfPretextual([
+      page(1, [
+        "UNIVERSIDADE FEDERAL DE LAVRAS",
+        AUTHOR,
+        "GESTÃO DO TRABALHO",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+      page(2, [
+        AUTHOR,
+        "GESTÃO DO TRABALHO REMOTO",
+        "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do título de Mestre.",
+        "Orientador: Prof. Dr. Dany Flavio Tonelli",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+    ], 3);
+
+    expect(result.cover?.title).toBe("GESTÃO DO TRABALHO REMOTO");
+  });
+
+  it("caso Andrade continua recuperando o título completo", () => {
+    const result = detectPdfPretextual([
+      page(1, [
+        "UNIVERSIDADE FEDERAL DE LAVRAS",
+        AUTHOR,
+        "IMPLEMENTAÇÃO DO PROGRAMA DE GESTÃO E DESEMPENHO: ESTUDO EM UMA UNIVERSIDADE",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+      page(2, [
+        AUTHOR,
+        "IMPLEMENTAÇÃO DO PROGRAMA DE GESTÃO E DESEMPENHO: ESTUDO EM UMA UNIVERSIDADE FEDERAL NO ESTADO DE MINAS GERAIS",
+        "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do título de Mestre.",
+        "Orientador: Prof. Dr. Dany Flavio Tonelli",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+    ], 3);
+
+    expect(result.cover?.title).toBe("IMPLEMENTAÇÃO DO PROGRAMA DE GESTÃO E DESEMPENHO: ESTUDO EM UMA UNIVERSIDADE FEDERAL NO ESTADO DE MINAS GERAIS");
+  });
+});
