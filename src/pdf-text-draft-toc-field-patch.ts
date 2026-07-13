@@ -33,7 +33,9 @@ function decodeXmlText(text: string): string {
 }
 
 function tocTitleFromParagraph(paragraphXml: string): string {
-  return [...paragraphXml.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)]
+  const tokenIndex = paragraphXml.indexOf("__PDF_PAGEREF_");
+  const titleScope = tokenIndex >= 0 ? paragraphXml.slice(0, tokenIndex) : paragraphXml;
+  return [...titleScope.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)]
     .map((match) => decodeXmlText(match[1]))
     .filter((text) => !/^__PDF_(?:PAGEREF|BM_)/.test(text))
     .join("")
@@ -75,7 +77,7 @@ function filterAndFormatTocParagraphs(xml: string): string {
   return xml.replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraphXml) => {
     if (!paragraphXml.includes("__PDF_PAGEREF_PDFBM")) return paragraphXml;
     const title = tocTitleFromParagraph(paragraphXml);
-    if (!isPdfTocEligibleHeadingText(title)) return "";
+    if (!title || !isPdfTocEligibleHeadingText(title)) return "";
     return formatTocParagraph(paragraphXml, title);
   });
 }
