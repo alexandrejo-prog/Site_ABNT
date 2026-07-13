@@ -116,6 +116,21 @@ function bodyHeading(text: string, entry?: TocEntry): Paragraph {
   });
 }
 
+function normalizeHeadingKey(text: string): string {
+  return cleanText(text)
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
+function referenceParagraph(text: string): Paragraph {
+  return paragraph([run(cleanText(text), 24)], {
+    alignment: AlignmentType.LEFT,
+    indent: { firstLine: 0 },
+    spacing: { before: 0, after: SINGLE_LINE_TWIP, line: SINGLE_LINE_TWIP },
+  });
+}
+
 function isGraphicLikeKind(kind?: PdfLayoutSensitiveRegionDiagnostic["kind"]): boolean {
   return kind === "grafico" || kind === "figura" || kind === "imagem" || kind === "mapa" || kind === "ilustracao";
 }
@@ -400,17 +415,24 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
     return true;
   }
 
+  let inReferences = false;
+
   for (const block of input.reconstruction.blocks) {
     const text = cleanText(block.text);
     if (!text && block.type !== "unresolved") continue;
-    if (block.type === "heading") paragraphs.push(bodyHeading(text, entryByTitle.get(text)));
+    if (block.type === "heading") {
+      const headingKey = normalizeHeadingKey(text);
+      if (headingKey === "REFERENCIAS") inReferences = true;
+      else if (headingKey.startsWith("APENDICE") || headingKey.startsWith("ANEXO")) inReferences = false;
+      paragraphs.push(bodyHeading(text, entryByTitle.get(text)));
+    }
     if (block.type === "paragraph") {
       if (blockInsideVisualSpan(block, visualSpans, pagesWithBodyText)) continue;
-      paragraphs.push(justified(text));
+      paragraphs.push(inReferences ? referenceParagraph(text) : justified(text));
     }
     if (block.type === "list-item") {
       if (blockInsideVisualSpan(block, visualSpans, pagesWithBodyText)) continue;
-      paragraphs.push(listItem(text));
+      paragraphs.push(inReferences ? referenceParagraph(text) : listItem(text));
     }
     if (block.type === "caption") {
       const region = block.layoutRegionId ? regions.get(block.layoutRegionId) : undefined;
