@@ -147,16 +147,18 @@ function markerForBlock(block: PdfReconstructedBlockDiagnostic, regions: Map<str
 
 function computeMarkerCount(input: PdfTextDraftExportInput): number {
   const keys = new Set<string>();
+  const visualAssets = input.visualAssets ?? {};
   for (const block of input.reconstruction.blocks) {
     if (block.type !== "unresolved") continue;
     const region = block.layoutRegionId ? input.reconstruction.layoutRegions.find((r) => r.id === block.layoutRegionId) : undefined;
     const dedupKey = region?.logicalVisualId ?? block.layoutRegionId ?? `unresolved-${block.pageStart}-${block.sourceLines[0]?.lineIndex ?? 0}`;
-    keys.add(dedupKey);
+    if (!visualAssets[dedupKey]) keys.add(dedupKey);
   }
   for (const region of input.reconstruction.layoutRegions) {
     if (!isGraphicLikeKind(region.kind)) continue;
     const dedupKey = region.logicalVisualId ?? region.id;
     if (keys.has(dedupKey)) continue;
+    if (visualAssets[dedupKey]) continue;
     const hasUnresolved = input.reconstruction.blocks.some((b) => b.layoutRegionId === region.id && b.type === "unresolved");
     if (!hasUnresolved) keys.add(dedupKey);
   }
@@ -369,6 +371,28 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
     }
   }
 
+  const visualAssets = input.visualAssets ?? {};
+  const emittedVisualImages = new Set<string>();
+
+  function emitVisualImage(region: PdfLayoutSensitiveRegionDiagnostic): boolean {
+    const key = region.logicalVisualId ?? region.id;
+    if (emittedVisualImages.has(key)) return false;
+    const asset = visualAssets[key];
+    if (!asset) return false;
+    const altText = {
+      title: asset.altText?.title ?? visualKindLabel(region.kind),
+      description: asset.altText?.description ?? (region.caption ?? visualKindLabel(region.kind)),
+      name: asset.altText?.name ?? visualKindLabel(region.kind),
+    };
+    paragraphs.push(paragraph([new ImageRun({
+      data: asset.data,
+      transformation: { width: asset.width, height: asset.height },
+      altText,
+    })], { alignment: AlignmentType.CENTER, spacing: ZERO_SPACING }));
+    emittedVisualImages.add(key);
+    return true;
+  }
+
   for (const block of input.reconstruction.blocks) {
     const text = cleanText(block.text);
     if (!text && block.type !== "unresolved") continue;
@@ -390,9 +414,12 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
           (b) => b.type === "unresolved" && b.layoutRegionId === block.layoutRegionId
         );
         if (!hasUnresolved) {
-          const range = region.logicalVisualId ? logicalVisualRanges.get(region.logicalVisualId) : undefined;
-          const reliableRange = range && region.logicalVisualId && !unreliableRanges.has(region.logicalVisualId) ? range : undefined;
-          paragraphs.push(left(markerForBlock(block, regions, reliableRange), { size: 20, italics: true }));
+          const emitted = emitVisualImage(region);
+          if (!emitted) {
+            const range = region.logicalVisualId ? logicalVisualRanges.get(region.logicalVisualId) : undefined;
+            const reliableRange = range && region.logicalVisualId && !unreliableRanges.has(region.logicalVisualId) ? range : undefined;
+            paragraphs.push(left(markerForBlock(block, regions, reliableRange), { size: 20, italics: true }));
+          }
           emittedKeys.add(dedupKey);
         }
       }
@@ -406,7 +433,14 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
       emittedKeys.add(dedupKey);
       const range = logicalId ? logicalVisualRanges.get(logicalId) : undefined;
       const reliableRange = range && logicalId && !unreliableRanges.has(logicalId) ? range : undefined;
-      paragraphs.push(left(markerForBlock(block, regions, reliableRange), { size: 20, italics: true }));
+      if (region && isGraphicLikeKind(region.kind)) {
+        const emitted = emitVisualImage(region);
+        if (!emitted) {
+          paragraphs.push(left(markerForBlock(block, regions, reliableRange), { size: 20, italics: true }));
+        }
+      } else {
+        paragraphs.push(left(markerForBlock(block, regions, reliableRange), { size: 20, italics: true }));
+      }
     }
   }
   return paragraphs;

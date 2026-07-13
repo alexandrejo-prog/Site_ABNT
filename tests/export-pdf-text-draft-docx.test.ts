@@ -7,7 +7,7 @@ import {
   pdfTextDraftFileName,
   validatePdfTextDraftExport,
 } from "../src/export-pdf-text-draft-docx";
-import type { PdfTextDraftExportInput } from "../src/pdf-text-draft-contract";
+import type { PdfTextDraftExportInput, PdfTextDraftVisualAsset } from "../src/pdf-text-draft-contract";
 import { documentText, loadDocxParts, paragraphTexts } from "./test-utils/ooxml";
 
 function baseInput(overrides: Partial<PdfTextDraftExportInput> = {}): PdfTextDraftExportInput {
@@ -957,5 +957,188 @@ describe("span visual incompleto sem fonte no pdf", () => {
     expect((documentXml.match(new RegExp(MARKER, "g")) ?? []).length).toBe(0);
     expect((documentXml.match(/Figura 3 – Sem fonte nem marcador\./g) ?? []).length).toBe(1);
     expect(text).toContain("Texto normal após figura sem fonte que permanece.");
+  });
+});
+
+describe("ativos visuais de regioes pdf", () => {
+  type Block = PdfTextDraftExportInput["reconstruction"]["blocks"][number];
+  type Region = PdfTextDraftExportInput["reconstruction"]["layoutRegions"][number];
+
+  const logo = readFileSync(join(process.cwd(), "public", "assets", "ufla-logo.jpeg"));
+
+  function asset(key: string, width = 170, height = 69): PdfTextDraftVisualAsset {
+    return { data: logo, width, height, altText: { title: `Imagem ${key}`, description: `Descrição ${key}`, name: key } };
+  }
+
+  function visualInput(blocks: Block[], layoutRegions: Region[], overrides: Partial<PdfTextDraftExportInput> & { statistics?: Partial<PdfTextDraftExportInput["reconstruction"]["statistics"]> } = {}): PdfTextDraftExportInput {
+    return baseInput({
+      reconstruction: {
+        ...baseInput().reconstruction,
+        blocks,
+        layoutRegions,
+        statistics: { ...baseInput().reconstruction.statistics, ...overrides.statistics },
+      },
+      ...overrides,
+    });
+  }
+
+  it("regiao com ativo insere imagem, mantem legenda e fonte, e nao insere marcador", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Parágrafo anterior.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Figura 1 – Exemplo.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-1" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-1" },
+      { type: "paragraph", text: "Parágrafo posterior.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 1 }], confidence: "medium", reasons: [] },
+    ], [{
+      id: "layout-11-1", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 3, kind: "figura",
+      caption: "Figura 1 – Exemplo.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "figura-1-page-11",
+    }], {
+      visualAssets: { "figura-1-page-11": asset("figura-1-page-11") },
+      statistics: { paragraphCount: 2, captionCount: 1, sourceCount: 1, layoutRegionCount: 1 },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("<w:drawing");
+    expect(documentXml).toContain("Figura 1 – Exemplo.");
+    expect(documentXml).toContain("Fonte: Autor.");
+    expect(documentXml).not.toContain("Elemento visual não inserido");
+    expect(documentXml).toContain("Parágrafo anterior.");
+    expect(documentXml).toContain("Parágrafo posterior.");
+  });
+
+  it("regiao sem ativo mantem marcador textual", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Parágrafo anterior.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Figura 2 – Sem ativo.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-2" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-2" },
+    ], [{
+      id: "layout-11-2", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 3, kind: "figura",
+      caption: "Figura 2 – Sem ativo.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "figura-2-page-11",
+    }], {
+      logo: undefined,
+      statistics: { paragraphCount: 1, captionCount: 1, sourceCount: 1, layoutRegionCount: 1 },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("Elemento visual não inserido");
+    expect(documentXml).not.toContain("<w:drawing");
+  });
+
+  it("dois blocos com o mesmo logicalVisualId geram somente uma imagem", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Texto antes.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Figura 3 – Continua.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-3" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-3" },
+      { type: "caption", text: "Figura 3 – Continuação.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "layout-12-3" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 1 }], confidence: "high", reasons: [], layoutRegionId: "layout-12-3" },
+    ], [{
+      id: "layout-11-3", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 3, kind: "figura",
+      caption: "Figura 3 – Continua.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "figura-3-page-11",
+    }, {
+      id: "layout-12-3", pageStart: 12, pageEnd: 12, startLineIndex: 0, endLineIndex: 1, kind: "figura",
+      caption: "Figura 3 – Continuação.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "figura-3-page-11",
+    }], {
+      includeReconstructedPretextuals: false,
+      visualAssets: { "figura-3-page-11": asset("figura-3-page-11") },
+      statistics: { paragraphCount: 1, captionCount: 2, sourceCount: 2, layoutRegionCount: 2 },
+    });
+    const zip = await JSZip.loadAsync(await buildPdfTextDraftDocxBlob(input).then((blob) => blob.arrayBuffer()));
+    const mediaFiles = Object.keys(zip.files).filter((entry) => entry.startsWith("word/media/") && !entry.endsWith("/"));
+    expect(mediaFiles).toHaveLength(1);
+  });
+
+  it("duas regioes diferentes com ativos geram duas imagens", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Texto antes.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Figura 4 – Primeira.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-4" },
+      { type: "source", text: "Fonte: Autor A.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-4" },
+      { type: "caption", text: "Figura 5 – Segunda.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "layout-12-5" },
+      { type: "source", text: "Fonte: Autor B.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 1 }], confidence: "high", reasons: [], layoutRegionId: "layout-12-5" },
+    ], [{
+      id: "layout-11-4", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 3, kind: "figura",
+      caption: "Figura 4 – Primeira.", source: "Fonte: Autor A.", confidence: "high", reasons: [], logicalVisualId: "figura-4-page-11",
+    }, {
+      id: "layout-12-5", pageStart: 12, pageEnd: 12, startLineIndex: 0, endLineIndex: 1, kind: "figura",
+      caption: "Figura 5 – Segunda.", source: "Fonte: Autor B.", confidence: "high", reasons: [], logicalVisualId: "figura-5-page-12",
+    }], {
+      includeReconstructedPretextuals: false,
+      visualAssets: { "figura-4-page-11": asset("figura-4-page-11"), "figura-5-page-12": asset("figura-5-page-12", 80, 60) },
+      statistics: { paragraphCount: 1, captionCount: 2, sourceCount: 2, layoutRegionCount: 2 },
+    });
+    const zip = await JSZip.loadAsync(await buildPdfTextDraftDocxBlob(input).then((blob) => blob.arrayBuffer()));
+    const mediaFiles = Object.keys(zip.files).filter((entry) => entry.startsWith("word/media/") && !entry.endsWith("/"));
+    expect(mediaFiles).toHaveLength(2);
+  });
+
+  it("imagem visual e logotipo coexistem no mesmo documento", async () => {
+    const logo = readFileSync(join(process.cwd(), "public", "assets", "ufla-logo.jpeg"));
+    const input = visualInput([
+      { type: "paragraph", text: "Texto antes.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Figura 6 – Com logo.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-6" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-6" },
+    ], [{
+      id: "layout-11-6", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 3, kind: "figura",
+      caption: "Figura 6 – Com logo.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "figura-6-page-11",
+    }], {
+      logo: { data: logo, width: 170, height: 69 },
+      visualAssets: { "figura-6-page-11": asset("figura-6-page-11") },
+      statistics: { paragraphCount: 1, captionCount: 1, sourceCount: 1, layoutRegionCount: 1 },
+    });
+    const zip = await JSZip.loadAsync(await buildPdfTextDraftDocxBlob(input).then((blob) => blob.arrayBuffer()));
+    const mediaFiles = Object.keys(zip.files).filter((entry) => entry.startsWith("word/media/") && !entry.endsWith("/"));
+    expect(mediaFiles.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("texto anterior e posterior a imagem visual permanece", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Texto anterior que deve permanecer.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Figura 7 – Meio.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-7" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-7" },
+      { type: "paragraph", text: "Texto posterior que deve permanecer.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 1 }], confidence: "medium", reasons: [] },
+    ], [{
+      id: "layout-11-7", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 3, kind: "figura",
+      caption: "Figura 7 – Meio.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "figura-7-page-11",
+    }], {
+      visualAssets: { "figura-7-page-11": asset("figura-7-page-11") },
+      statistics: { paragraphCount: 2, captionCount: 1, sourceCount: 1, layoutRegionCount: 1 },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("Texto anterior que deve permanecer.");
+    expect(documentXml).toContain("Texto posterior que deve permanecer.");
+  });
+
+  it("documento com imagem visual nao contem w:tbl nem w:numPr", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Texto antes.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Figura 8 – Simples.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-8" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-8" },
+    ], [{
+      id: "layout-11-8", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 3, kind: "figura",
+      caption: "Figura 8 – Simples.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "figura-8-page-11",
+    }], {
+      includeReconstructedPretextuals: false,
+      visualAssets: { "figura-8-page-11": asset("figura-8-page-11") },
+      statistics: { paragraphCount: 1, captionCount: 1, sourceCount: 1, layoutRegionCount: 1 },
+    });
+    const { documentXml, settingsXml, stylesXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    const allXml = `${documentXml}\n${settingsXml}\n${stylesXml}`;
+    expect(allXml).not.toContain("<w:tbl");
+    expect(allXml).not.toContain("<w:numPr");
+  });
+
+  it("docx gerado com imagem visual e zip ooxml valido", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Texto antes.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Figura 9 – Validação.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-9" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-9" },
+    ], [{
+      id: "layout-11-9", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 3, kind: "figura",
+      caption: "Figura 9 – Validação.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "figura-9-page-11",
+    }], {
+      includeReconstructedPretextuals: false,
+      visualAssets: { "figura-9-page-11": asset("figura-9-page-11") },
+      statistics: { paragraphCount: 1, captionCount: 1, sourceCount: 1, layoutRegionCount: 1 },
+    });
+    const blob = await buildPdfTextDraftDocxBlob(input);
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    expect(zip.file("word/document.xml")).toBeDefined();
+    expect(await zip.file("word/document.xml")!.async("string")).toContain("<w:drawing");
   });
 });
