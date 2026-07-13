@@ -266,4 +266,52 @@ describe("exportacao textual minima de PDF reconstruido", () => {
     expect(pdfTextDraftFileName("Andrade_2025.pdf")).toBe("andrade-2025-rascunho-textual.docx");
     expect(pdfTextDraftFileName(" Meu Relatório Final.PDF")).toBe("meu-relatorio-final-rascunho-textual.docx");
   });
+
+  it("texto interno de regiao visual nao aparece como prosa no DOCX", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    expect(documentXml).not.toContain("TEXTO INTERNO DO QUADRO");
+    expect(documentXml).not.toContain("TEXTO INTERNO DA TABELA");
+  });
+
+  it("dois quadros diferentes geram dois marcadores mesmo com multiplos blocos unresolved", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const marker = "Elemento visual não inserido neste rascunho textual";
+    const matches = documentXml.match(new RegExp(marker, "g"));
+    expect(matches).toHaveLength(2);
+  });
+
+  it("quadro com mesma regiao logica em paginas diferentes gera um unico marcador", async () => {
+    const regions = [
+      { id: "layout-27-1", pageStart: 27, pageEnd: 27, startLineIndex: 1, endLineIndex: 3, kind: "quadro" as const, caption: "Quadro 2 – Síntese (continua).", confidence: "high" as const, reasons: [], logicalVisualId: "quadro-2" },
+      { id: "layout-28-1", pageStart: 28, pageEnd: 28, startLineIndex: 0, endLineIndex: 2, kind: "quadro" as const, caption: "Quadro 2 – Síntese (conclusão).", confidence: "high" as const, reasons: [], logicalVisualId: "quadro-2" },
+    ];
+    const blocks = [
+      { type: "unresolved" as const, text: "Linha A", pageStart: 27, pageEnd: 27, sourceLines: [{ pageNumber: 27, lineIndex: 1 }], confidence: "low" as const, reasons: [], layoutRegionId: "layout-27-1" },
+      { type: "unresolved" as const, text: "Linha B", pageStart: 27, pageEnd: 27, sourceLines: [{ pageNumber: 27, lineIndex: 2 }], confidence: "low" as const, reasons: [], layoutRegionId: "layout-27-1" },
+      { type: "unresolved" as const, text: "Linha C", pageStart: 28, pageEnd: 28, sourceLines: [{ pageNumber: 28, lineIndex: 0 }], confidence: "low" as const, reasons: [], layoutRegionId: "layout-28-1" },
+      { type: "paragraph" as const, text: "Texto normal depois do quadro.", pageStart: 28, pageEnd: 28, sourceLines: [{ pageNumber: 28, lineIndex: 4 }], confidence: "medium" as const, reasons: [] },
+    ];
+    const input = baseInput({
+      reconstruction: {
+        ...baseInput().reconstruction,
+        layoutRegions: regions,
+        blocks,
+        statistics: { ...baseInput().reconstruction.statistics, layoutRegionCount: 2, unresolvedCount: 3, paragraphCount: 1 },
+      },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    const marker = "Elemento visual não inserido neste rascunho textual";
+    const matches = documentXml.match(new RegExp(marker, "g"));
+    expect(matches).toHaveLength(1);
+    expect(documentXml).toContain("páginas originais 27-28");
+    expect(documentXml).not.toContain("Linha A");
+    expect(documentXml).not.toContain("Linha B");
+    expect(documentXml).not.toContain("Linha C");
+    expect(documentXml).toContain("Texto normal depois do quadro");
+  });
+
+  it("headings dentro de regiao visual nao aparecem como titulo", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    expect(documentXml).not.toContain("CONTEUDO VISUAL GENERICO");
+  });
 });

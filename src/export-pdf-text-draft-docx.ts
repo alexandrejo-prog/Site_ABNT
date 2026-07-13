@@ -120,11 +120,13 @@ function originalPagesLabel(pageStart: number, pageEnd: number): string {
   return pageStart === pageEnd ? `página original ${pageStart}` : `páginas originais ${pageStart}-${pageEnd}`;
 }
 
-function markerForBlock(block: PdfReconstructedBlockDiagnostic, regions: Map<string, PdfLayoutSensitiveRegionDiagnostic>): string {
+function markerForBlock(block: PdfReconstructedBlockDiagnostic, regions: Map<string, PdfLayoutSensitiveRegionDiagnostic>, logicalRange?: { pageStart: number; pageEnd: number }): string {
   if (!block.layoutRegionId) return `[Conteúdo com estrutura visual não resolvida, página original ${block.pageStart}. Consulte o PDF.]`;
   const region = regions.get(block.layoutRegionId);
   if (!region) return `[Conteúdo com estrutura visual não resolvida, página original ${block.pageStart}. Consulte o PDF.]`;
-  return `[Elemento visual não inserido neste rascunho textual - ${visualKindLabel(region.kind)}, ${originalPagesLabel(region.pageStart, region.pageEnd)}. Consulte o PDF original.]`;
+  const pageStart = logicalRange?.pageStart ?? region.pageStart;
+  const pageEnd = logicalRange?.pageEnd ?? region.pageEnd;
+  return `[Elemento visual não inserido neste rascunho textual - ${visualKindLabel(region.kind)}, ${originalPagesLabel(pageStart, pageEnd)}. Consulte o PDF original.]`;
 }
 
 function technicalSummary(input: PdfTextDraftExportInput): string[] {
@@ -254,10 +256,22 @@ function tocParagraphs(entries: TocEntry[]): Paragraph[] {
 }
 
 function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Paragraph[] {
-  const emittedRegions = new Set<string>();
+  const emittedKeys = new Set<string>();
   const regions = new Map(input.reconstruction.layoutRegions.map((region) => [region.id, region]));
   const entryByTitle = new Map(entries.map((entry) => [entry.title, entry]));
   const paragraphs: Paragraph[] = [];
+
+  const logicalVisualRanges = new Map<string, { pageStart: number; pageEnd: number }>();
+  for (const region of input.reconstruction.layoutRegions) {
+    if (!region.logicalVisualId) continue;
+    const existing = logicalVisualRanges.get(region.logicalVisualId);
+    if (existing) {
+      existing.pageStart = Math.min(existing.pageStart, region.pageStart);
+      existing.pageEnd = Math.max(existing.pageEnd, region.pageEnd);
+    } else {
+      logicalVisualRanges.set(region.logicalVisualId, { pageStart: region.pageStart, pageEnd: region.pageEnd });
+    }
+  }
 
   for (const block of input.reconstruction.blocks) {
     const text = cleanText(block.text);
@@ -268,10 +282,13 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
     if (block.type === "caption") paragraphs.push(left(text, { size: 22 }));
     if (block.type === "source") paragraphs.push(left(text, { size: 22 }));
     if (block.type === "unresolved") {
-      const key = block.layoutRegionId ?? `unresolved-${block.pageStart}-${block.sourceLines[0]?.lineIndex ?? paragraphs.length}`;
-      if (emittedRegions.has(key)) continue;
-      emittedRegions.add(key);
-      paragraphs.push(left(markerForBlock(block, regions), { size: 20, italics: true }));
+      const region = block.layoutRegionId ? regions.get(block.layoutRegionId) : undefined;
+      const logicalId = region?.logicalVisualId;
+      const dedupKey = logicalId ?? block.layoutRegionId ?? `unresolved-${block.pageStart}-${block.sourceLines[0]?.lineIndex ?? paragraphs.length}`;
+      if (emittedKeys.has(dedupKey)) continue;
+      emittedKeys.add(dedupKey);
+      const range = logicalId ? logicalVisualRanges.get(logicalId) : undefined;
+      paragraphs.push(left(markerForBlock(block, regions, range), { size: 20, italics: true }));
     }
   }
   return paragraphs;

@@ -150,6 +150,51 @@ function isContinuationCaption(text: string): boolean {
   return /\b(continua|continua[çc][ãa]o|conclus[ãa]o)\b/iu.test(text);
 }
 
+function bridgeMultiPageRegions(regions: PdfLayoutSensitiveRegionDiagnostic[], pages: PdfPageDiagnostic[]): PdfLayoutSensitiveRegionDiagnostic[] {
+  const result = [...regions];
+  const pageMap = new Map(pages.map((page) => [page.pageNumber, page]));
+
+  const groups = new Map<string, PdfLayoutSensitiveRegionDiagnostic[]>();
+  for (const region of regions) {
+    if (!region.logicalVisualId) continue;
+    const list = groups.get(region.logicalVisualId) ?? [];
+    list.push(region);
+    groups.set(region.logicalVisualId, list);
+  }
+
+
+
+  for (const [, group] of groups) {
+    if (group.length < 2) continue;
+    const sorted = [...group].sort((a, b) => a.pageStart - b.pageStart || a.startLineIndex - b.startLineIndex);
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const current = sorted[i];
+      const next = sorted[i + 1];
+      const bridgeStart = current.pageEnd + 1;
+      const bridgeEnd = next.pageStart - 1;
+      if (bridgeStart > bridgeEnd) continue;
+      for (let bridgePage = bridgeStart; bridgePage <= bridgeEnd; bridgePage++) {
+        const lastLineIndex = (pageMap.get(bridgePage)?.lines.length ?? 1) - 1;
+        result.push({
+          id: `layout-${bridgePage}-bridge-${current.logicalVisualId}`,
+          pageStart: bridgePage,
+          pageEnd: bridgePage,
+          startLineIndex: 0,
+          endLineIndex: lastLineIndex,
+          kind: current.kind,
+          caption: current.caption,
+          source: undefined,
+          confidence: "medium",
+          reasons: ["Pagina intermediaria de elemento visual multietapa."],
+          logicalVisualId: current.logicalVisualId,
+        });
+      }
+    }
+  }
+
+  return result;
+}
+
 function findLayoutRegions(pages: PdfPageDiagnostic[]): PdfLayoutSensitiveRegionDiagnostic[] {
   const regions: PdfLayoutSensitiveRegionDiagnostic[] = [];
   for (const page of pages) {
@@ -224,7 +269,7 @@ function findLayoutRegions(pages: PdfPageDiagnostic[]): PdfLayoutSensitiveRegion
       });
     }
   }
-  return regions;
+  return bridgeMultiPageRegions(regions, pages);
 }
 
 function regionForLine(entry: LineRef, regions: PdfLayoutSensitiveRegionDiagnostic[]): PdfLayoutSensitiveRegionDiagnostic | undefined {

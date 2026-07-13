@@ -393,4 +393,76 @@ describe("reconstrucao textual diagnostica de PDF", () => {
     expect(result.statistics.layoutRegionCount).toBeGreaterThan(0);
     expect(result.alerts.length).toBeGreaterThan(0);
   });
+
+  it("linhas dentro de quadro nao viram paragrafo mesmo quando parecem prosa", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(27, [
+        "Quadro 4 – Indicadores de desempenho.",
+        "Soares (1995) Flexibilidade de horários melhora a produtividade.",
+        "Tremblay (2002) aponta correlação positiva com engajamento.",
+        "1 funciona, funcionou, tem funcionado muito bem.",
+        "Fonte: elaboração própria.",
+        "Texto normal depois do quadro com corpo suficiente para parágrafo.",
+      ]),
+    ]);
+
+    const paragraphs = result.blocks.filter((b) => b.type === "paragraph").map((b) => b.text);
+    expect(paragraphs.filter((t) => t.includes("Soares (1995)"))).toHaveLength(0);
+    expect(paragraphs.filter((t) => t.includes("Tremblay (2002)"))).toHaveLength(0);
+    expect(paragraphs.filter((t) => t.includes("1 funciona, funcionou"))).toHaveLength(0);
+    expect(result.blocks.some((b) => b.type === "paragraph" && b.text.includes("depois do quadro"))).toBe(true);
+  });
+
+  it("linhas dentro de quadro nao viram heading mesmo com aparencia de titulo", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(28, [
+        "Quadro 5 – Critérios.",
+        "1 CRITÉRIO DE INCLUSÃO",
+        "4.2 descreve os resultados obtidos através da análise dos dados",
+        "RESULTADOS PARCIAIS",
+        "Fonte: Autor.",
+        "1 INTRODUÇÃO",
+        bodyA,
+      ]),
+    ]);
+
+    const headings = result.blocks.filter((b) => b.type === "heading").map((b) => b.text);
+    expect(headings).not.toContain("1 CRITÉRIO DE INCLUSÃO");
+    expect(headings).not.toContain("4.2 descreve os resultados");
+    expect(headings).not.toContain("RESULTADOS PARCIAIS");
+    expect(headings).toContain("1 INTRODUÇÃO");
+  });
+
+  it("quadro em duas paginas gera regiao ponte na pagina intermediaria", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(25, ["Quadro 1 – Síntese (continua).", "Linha A", "Linha B"]),
+      page(26, ["Texto intermediário que nao pode virar paragrafo."]),
+      page(27, ["Quadro 1 – Síntese (conclusão).", "Linha C", "Fonte: Autor.", bodyA]),
+    ]);
+
+    const bridgeId = `layout-26-bridge-quadro-1`;
+    const regionIds = result.layoutRegions.map((r) => r.id);
+    expect(result.layoutRegions.length, `found ${result.layoutRegions.length} regions: ${regionIds.join(", ")}`).toBeGreaterThan(2);
+    expect(result.layoutRegions.filter((r) => r.id === bridgeId).length, `bridge id ${bridgeId} not in [${regionIds.join(", ")}]`).toBe(1);
+    expect(result.blocks.some((b) => b.type === "paragraph" && b.text.includes("intermediário")), `block texts: ${result.blocks.map(b => `[${b.type}]${b.text.substring(0,40)}`).join(" ")}`).toBe(false);
+    expect(result.blocks.some((b) => b.type === "paragraph" && b.text.includes("corpo"))).toBe(true);
+  });
+
+  it("regiao ponte cobre todas as linhas da pagina intermediaria", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(30, ["Quadro 2 – Dados.", "Valor 1"]),
+      page(31, [
+        "Soares (1995) citação dentro do quadro não deve vazar.",
+        "1 TÍTULO APARENTE DENTRO DO QUADRO",
+        "Texto longo o bastante para ser parágrafo mas está dentro do quadro.",
+      ]),
+      page(32, ["Quadro 2 – Conclusão.", "Valor final", "Fonte: Autor.", bodyA]),
+    ]);
+
+    expect(result.statistics.layoutRegionCount).toBeGreaterThanOrEqual(3);
+    expect(result.blocks.some((b) => b.type === "paragraph" && b.text.includes("Soares"))).toBe(false);
+    expect(result.blocks.some((b) => b.type === "heading" && b.text.includes("TÍTULO APARENTE"))).toBe(false);
+    expect(result.blocks.some((b) => b.type === "paragraph" && b.text.includes("parágrafo mas está dentro"))).toBe(false);
+    expect(result.blocks.some((b) => b.type === "paragraph" && b.text.includes("corpo"))).toBe(true);
+  });
 });
