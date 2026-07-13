@@ -88,6 +88,7 @@ describe("importacao diagnostica de PDF", () => {
     expect(result.pdfDiagnostic?.pages[0].width).toBeGreaterThan(0);
     expect(result.pdfDiagnostic?.pages[0].height).toBeGreaterThan(0);
     expect(result.pdfDiagnostic?.bodyStart.found).toBe(false);
+    expect(result.pdfDiagnostic?.pretextual.warnings.length).toBeGreaterThan(0);
   });
 
   it("PDF invalido gera mensagem controlada", async () => {
@@ -106,6 +107,6 @@ describe("importacao diagnostica de PDF", () => {
     expect(result.editorText).toBe("");
     expect(result.importedImages).toEqual([]);
     expect(result.importedTables).toEqual([]);
-    expect(result.messages.join(" ")).toContain("conversão para DOCX ainda não está habilitada");
+    expect(result.messages.join(" ")).toContain("rascunho DOCX estruturado");
   });
 });

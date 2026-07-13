@@ -117,6 +117,8 @@ export default function App() {
   const [importedImages, setImportedImages] = useState<ImportedDocumentImage[]>([]);
   const [importedTables, setImportedTables] = useState<ImportedTable[]>([]);
   const [pdfDiagnostic, setPdfDiagnostic] = useState<ImportedPdfDiagnostic | null>(null);
+  const [includePdfPretextuals, setIncludePdfPretextuals] = useState(true);
+  const [allowMissingPdfPretextualFields, setAllowMissingPdfPretextualFields] = useState(false);
   const [selectedPdfPageNumber, setSelectedPdfPageNumber] = useState(1);
   const [pdfDiagnosticViewMode, setPdfDiagnosticViewMode] = useState<"lines" | "blocks">("lines");
   const [pdfBlockFilter, setPdfBlockFilter] = useState<"all" | "paragraphs" | "headings" | "unresolved" | "low-confidence">("all");
@@ -184,12 +186,25 @@ export default function App() {
       documentMode: "pdf-text-draft",
       fileName: pdfDiagnostic.fileName,
       pageCount: pdfDiagnostic.pageCount,
+      pretextual: pdfDiagnostic.pretextual,
       reconstruction: pdfDiagnostic.reconstruction,
+      includeReconstructedPretextuals: includePdfPretextuals,
+      allowMissingPretextualFields: allowMissingPdfPretextualFields,
     };
-  }, [pdfDiagnostic]);
+  }, [allowMissingPdfPretextualFields, includePdfPretextuals, pdfDiagnostic]);
   const pdfTextDraftValidation = useMemo(() => (
     pdfTextDraftInput ? validatePdfTextDraftExport(pdfTextDraftInput) : null
   ), [pdfTextDraftInput]);
+  const pdfPretextualStatus = useMemo(() => {
+    const pre = pdfDiagnostic?.pretextual;
+    const elementStatus = (found: boolean, confident: boolean) => (found ? (confident ? "encontrada" : "revisão necessária") : "ausente");
+    return {
+      cover: elementStatus(Boolean(pre?.cover), pre?.cover?.confidence === "high"),
+      titlePage: elementStatus(Boolean(pre?.titlePage), pre?.titlePage?.confidence === "high"),
+      resumo: elementStatus(Boolean(pre?.resumo), pre?.resumo?.confidence === "high"),
+      abstract: elementStatus(Boolean(pre?.abstract), pre?.abstract?.confidence === "high"),
+    };
+  }, [pdfDiagnostic]);
 
   useEffect(() => installEditorScrollFix(), []);
 
@@ -345,7 +360,9 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
         setSelectedPdfPageNumber(1);
         setPdfDiagnosticViewMode("lines");
         setPdfBlockFilter("all");
-        setStatus("O PDF foi lido para diagnóstico. A conversão para DOCX ainda não está habilitada nesta etapa.");
+        setIncludePdfPretextuals(true);
+        setAllowMissingPdfPretextualFields(false);
+        setStatus("O PDF foi lido para diagnóstico. O rascunho DOCX estruturado pode ser gerado para revisão.");
         return;
       }
 
@@ -599,7 +616,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
           {pdfDiagnostic && (
             <div className="pdf-diagnostic-panel" role="status" aria-live="polite">
               <h2>Leitura de PDF — diagnóstico experimental</h2>
-              <p>O PDF foi lido para diagnóstico. A conversão para DOCX ainda não está habilitada nesta etapa.</p>
+              <p>O PDF foi lido para diagnóstico. O rascunho DOCX estruturado pode ser gerado para revisão humana.</p>
               <dl>
                 <div><dt>Arquivo</dt><dd>{pdfDiagnostic.fileName}</dd></div>
                 <div><dt>Páginas</dt><dd>{pdfDiagnostic.pageCount}</dd></div>
@@ -647,9 +664,35 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
               {pdfDiagnostic.bodyStart.found && (
                 <p className="import-note">Candidato de início do corpo: página {pdfDiagnostic.bodyStart.pageNumber}, linha {(pdfDiagnostic.bodyStart.lineIndex ?? 0) + 1}: {pdfDiagnostic.bodyStart.text}. {pdfDiagnostic.bodyStart.reason}</p>
               )}
-              <p className="import-note">Esta reconstrução é apenas diagnóstica. Nenhum DOCX é gerado e nenhum conteúdo original do PDF é apagado.</p>
+              <p className="import-note">Esta reconstrução é diagnóstica. O DOCX gerado continua sendo rascunho de revisão e nenhum conteúdo original do PDF é apagado.</p>
               <p className="import-note" role="status" aria-live="polite">{status}</p>
               <div className="pdf-diagnostic-summary">
+                <label className="assisted-toggle">
+                  <input
+                    type="checkbox"
+                    checked={includePdfPretextuals}
+                    onChange={(event) => setIncludePdfPretextuals(event.target.checked)}
+                  />
+                  <span>Incluir elementos pré-textuais reconstruídos</span>
+                </label>
+                <dl>
+                  <div><dt>Capa</dt><dd>{pdfPretextualStatus.cover}</dd></div>
+                  <div><dt>Folha de rosto</dt><dd>{pdfPretextualStatus.titlePage}</dd></div>
+                  <div><dt>Resumo</dt><dd>{pdfPretextualStatus.resumo}</dd></div>
+                  <div><dt>Abstract</dt><dd>{pdfPretextualStatus.abstract}</dd></div>
+                  <div><dt>Sumário</dt><dd>será gerado a partir dos títulos reconstruídos</dd></div>
+                  <div><dt>Logo UFLA</dt><dd>será usada a identidade institucional do sistema</dd></div>
+                </dl>
+                {pdfTextDraftValidation?.blockers.some((blocker) => blocker.includes("campos essenciais ausentes")) && (
+                  <label className="assisted-toggle">
+                    <input
+                      type="checkbox"
+                      checked={allowMissingPdfPretextualFields}
+                      onChange={(event) => setAllowMissingPdfPretextualFields(event.target.checked)}
+                    />
+                    <span>Gerar com campos ausentes</span>
+                  </label>
+                )}
                 <button
                   className="primary-action strong"
                   type="button"
@@ -658,7 +701,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                 >
                   <FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar rascunho textual DOCX"}
                 </button>
-                <p className="import-note">Este arquivo terá apenas texto reconstruído. Quadros, tabelas, figuras e gráficos serão representados por marcadores de revisão.</p>
+                <p className="import-note">Este arquivo terá pré-textuais reconstruídos quando encontrados. Quadros, tabelas, figuras e gráficos do PDF serão representados por marcadores de revisão.</p>
                 {pdfTextDraftValidation && pdfTextDraftValidation.blockers.length > 0 && (
                   <div role="alert" aria-label="Bloqueadores do rascunho textual PDF">
                     <strong>Bloqueadores</strong>

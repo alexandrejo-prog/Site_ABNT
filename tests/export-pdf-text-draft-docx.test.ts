@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import JSZip from "jszip";
 import {
   buildPdfTextDraftDocxBlob,
@@ -9,11 +11,55 @@ import type { PdfTextDraftExportInput } from "../src/pdf-text-draft-contract";
 import { documentText, loadDocxParts, paragraphTexts } from "./test-utils/ooxml";
 
 function baseInput(overrides: Partial<PdfTextDraftExportInput> = {}): PdfTextDraftExportInput {
+  const logo = readFileSync(join(process.cwd(), "public", "assets", "ufla-logo.jpeg"));
   return {
     sourceKind: "pdf",
     documentMode: "pdf-text-draft",
     fileName: "Andrade_2025.pdf",
     pageCount: 139,
+    logo: { data: logo, width: 170, height: 69 },
+    pretextual: {
+      cover: {
+        institution: "UNIVERSIDADE FEDERAL DE LAVRAS",
+        author: "Alexandre Andrade",
+        title: "TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL",
+        city: "Lavras - MG",
+        year: "2025",
+        confidence: "high",
+        sourceLines: [{ pageNumber: 1, lineIndex: 0 }],
+      },
+      titlePage: {
+        author: "Alexandre Andrade",
+        title: "TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL",
+        natureText: "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do Programa de Pós-Graduação.",
+        program: "Programa de Pós-Graduação em Administração Pública",
+        institution: "Universidade Federal de Lavras",
+        advisor: "Orientador: Prof. João Silva",
+        city: "Lavras - MG",
+        year: "2025",
+        confidence: "high",
+        sourceLines: [{ pageNumber: 2, lineIndex: 0 }],
+      },
+      resumo: {
+        title: "RESUMO",
+        text: "Este resumo veio em várias linhas no PDF e foi reconstruído como um único parágrafo lógico preservado.",
+        keywordsLabel: "Palavras-chave:",
+        keywords: "Teletrabalho. Administração pública. UFLA",
+        pageNumber: 6,
+        confidence: "high",
+        sourceLines: [{ pageNumber: 6, lineIndex: 1 }],
+      },
+      abstract: {
+        title: "ABSTRACT",
+        text: "This abstract came from multiple PDF lines and was rebuilt as one logical paragraph.",
+        keywordsLabel: "Keywords:",
+        keywords: "Remote work. Public administration. UFLA",
+        pageNumber: 7,
+        confidence: "high",
+        sourceLines: [{ pageNumber: 7, lineIndex: 1 }],
+      },
+      warnings: [],
+    },
     reconstruction: {
       bodyStart: { found: true, pageNumber: 17, lineIndex: 1, text: "1 INTRODUÇÃO" },
       ignoredLines: [{ pageNumber: 17, lineIndex: 0, role: "page-number", text: "16" }],
@@ -83,6 +129,7 @@ function baseInput(overrides: Partial<PdfTextDraftExportInput> = {}): PdfTextDra
         { type: "heading", text: "1 INTRODUÇÃO", pageStart: 17, pageEnd: 17, sourceLines: [{ pageNumber: 17, lineIndex: 1 }], confidence: "high", reasons: [] },
         { type: "paragraph", text: "O teletrabalho na administração pública federal tem evoluído significativamente em um único parágrafo reconstruído.", pageStart: 17, pageEnd: 17, sourceLines: [{ pageNumber: 17, lineIndex: 2 }, { pageNumber: 17, lineIndex: 3 }], confidence: "medium", reasons: [] },
         { type: "paragraph", text: "O segundo parágrafo permanece separado e também deve receber formatação básica.", pageStart: 17, pageEnd: 17, sourceLines: [{ pageNumber: 17, lineIndex: 4 }], confidence: "medium", reasons: [] },
+        { type: "heading", text: "2 REFERENCIAL TEÓRICO", pageStart: 20, pageEnd: 20, sourceLines: [{ pageNumber: 20, lineIndex: 1 }], confidence: "high", reasons: [] },
         { type: "list-item", text: "a) item preservado como texto normal.", pageStart: 19, pageEnd: 19, sourceLines: [{ pageNumber: 19, lineIndex: 3 }], confidence: "medium", reasons: [] },
         { type: "caption", text: "Quadro 1 – Pontos críticos.", pageStart: 25, pageEnd: 25, sourceLines: [{ pageNumber: 25, lineIndex: 2 }], confidence: "high", reasons: [] },
         { type: "unresolved", text: "TEXTO INTERNO DO QUADRO QUE NAO PODE APARECER", pageStart: 25, pageEnd: 25, sourceLines: Array.from({ length: 10 }, (_, index) => ({ pageNumber: 25, lineIndex: index + 3 })), confidence: "low", reasons: [], layoutRegionId: "layout-25-1" },
@@ -90,6 +137,7 @@ function baseInput(overrides: Partial<PdfTextDraftExportInput> = {}): PdfTextDra
         { type: "source", text: "Fonte: Alves (2020).", pageStart: 25, pageEnd: 25, sourceLines: [{ pageNumber: 25, lineIndex: 14 }], confidence: "high", reasons: [] },
         { type: "unresolved", text: "TEXTO INTERNO DA TABELA QUE NAO PODE APARECER", pageStart: 26, pageEnd: 27, sourceLines: [{ pageNumber: 26, lineIndex: 2 }], confidence: "low", reasons: [], layoutRegionId: "layout-26-1" },
         { type: "unresolved", text: "CONTEUDO VISUAL GENERICO NAO DEVE ENTRAR", pageStart: 30, pageEnd: 30, sourceLines: [{ pageNumber: 30, lineIndex: 4 }], confidence: "low", reasons: [] },
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
       ],
     },
     ...overrides,
@@ -116,18 +164,36 @@ describe("exportacao textual minima de PDF reconstruido", () => {
     })).canExport).toBe(false);
   });
 
-  it("gera conteudo textual sem pre-textuais, numero original de pagina ou raw text", async () => {
+  it("gera capa, folha de rosto, nota, resumo, abstract, sumario e corpo sem numero antigo", async () => {
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
     const text = documentText(documentXml);
 
-    expect(text).toContain("Rascunho textual extraído de PDF");
-    expect(text).toContain("Este arquivo foi reconstruído automaticamente a partir de um PDF");
+    expect(text).not.toContain("Rascunho textual extraído de PDF");
+    expect(text.indexOf("UNIVERSIDADE FEDERAL DE LAVRAS")).toBeLessThan(text.indexOf("NOTA DE REVISÃO"));
+    expect(text).toContain("Alexandre Andrade");
+    expect(text).toContain("TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL");
+    expect(text).toContain("Dissertação apresentada à Universidade Federal de Lavras");
+    expect(text).toContain("NOTA DE REVISÃO");
+    expect(text).toContain("RESUMO");
+    expect(text).toContain("Palavras-chave:");
+    expect(text).toContain("ABSTRACT");
+    expect(text).toContain("Keywords:");
+    expect(text).toContain("SUMÁRIO");
     expect(text).toContain("1 INTRODUÇÃO");
+    expect(text).toContain("REFERÊNCIAS");
     expect(text).toContain("O teletrabalho na administração pública federal tem evoluído");
-    expect(text).not.toContain("CAPA");
-    expect(text).not.toContain("SUMÁRIO");
     expect(text).not.toContain("Ficha catalográfica");
     expect(text).not.toContain("16\n1 INTRODUÇÃO");
+  });
+
+  it("mantem resumo e abstract em um unico w:p e separa palavras-chave", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const paragraphs = paragraphTexts(documentXml);
+
+    expect(paragraphs.filter((text) => text.includes("Este resumo veio em várias linhas"))).toHaveLength(1);
+    expect(paragraphs.filter((text) => text.includes("This abstract came from multiple PDF lines"))).toHaveLength(1);
+    expect(paragraphs.some((text) => text.startsWith("Palavras-chave: Teletrabalho"))).toBe(true);
+    expect(paragraphs.some((text) => text.startsWith("Keywords: Remote work"))).toBe(true);
   });
 
   it("mantem paragrafo reconstruido como um unico w:p e nao por linha visual", async () => {
@@ -156,19 +222,32 @@ describe("exportacao textual minima de PDF reconstruido", () => {
     expect(text.indexOf(marker)).toBeLessThan(text.indexOf("Fonte: Alves (2020)."));
   });
 
-  it("nao cria tabelas, imagens, midia, TOC, outline ou listas multinivel", async () => {
+  it("insere somente a logo institucional e nao cria tabelas, outline ou listas multinivel", async () => {
     const blob = await buildPdfTextDraftDocxBlob(baseInput());
     const { documentXml, settingsXml } = await loadDocxParts(blob);
     const entries = await zipEntries(blob);
     const allXml = `${documentXml}\n${settingsXml}`;
 
-    expect(entries.some((entry) => entry.startsWith("word/media/"))).toBe(false);
+    expect(entries.filter((entry) => entry.startsWith("word/media/") && !entry.endsWith("/"))).toHaveLength(1);
     expect(allXml).not.toContain("<w:tbl");
-    expect(allXml).not.toContain("<w:drawing");
+    expect(allXml).toContain("<w:drawing");
     expect(allXml).not.toContain("<w:pict");
-    expect(allXml).not.toContain("TOC");
     expect(allXml).not.toContain("outlineLvl");
+    expect(allXml).not.toContain("HeadingLevel");
     expect(allXml).not.toContain("<w:numPr");
+  });
+
+  it("gera sumario visivel com bookmarks e campos PAGEREF atualizaveis", async () => {
+    const { documentXml, settingsXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const text = documentText(documentXml);
+
+    expect(text).toContain("SUMÁRIO");
+    expect(text).toContain("1 INTRODUÇÃO");
+    expect(text).toContain("2 REFERENCIAL TEÓRICO");
+    expect(text).toContain("REFERÊNCIAS");
+    expect(documentXml).toContain("PAGEREF PDFBM001");
+    expect(documentXml).toContain("<w:bookmarkStart");
+    expect(settingsXml).toContain("updateFields");
   });
 
   it("aplica formatacao basica de pagina e paragrafo", async () => {

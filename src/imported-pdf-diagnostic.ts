@@ -20,6 +20,55 @@ export interface PdfLineDiagnostic {
   height: number;
 }
 
+export interface PdfSourceLineReference {
+  pageNumber: number;
+  lineIndex: number;
+}
+
+export interface PdfCoverDiagnostic {
+  institution?: string;
+  author?: string;
+  title?: string;
+  subtitle?: string;
+  city?: string;
+  year?: string;
+  confidence: "high" | "medium" | "low";
+  sourceLines: PdfSourceLineReference[];
+}
+
+export interface PdfTitlePageDiagnostic {
+  author?: string;
+  title?: string;
+  subtitle?: string;
+  natureText?: string;
+  program?: string;
+  institution?: string;
+  advisor?: string;
+  coadvisor?: string;
+  city?: string;
+  year?: string;
+  confidence: "high" | "medium" | "low";
+  sourceLines: PdfSourceLineReference[];
+}
+
+export interface PdfAbstractDiagnostic {
+  title: "RESUMO" | "ABSTRACT";
+  text: string;
+  keywordsLabel?: string;
+  keywords?: string;
+  pageNumber?: number;
+  confidence: "high" | "medium" | "low";
+  sourceLines: PdfSourceLineReference[];
+}
+
+export interface PdfPretextualDiagnostic {
+  cover?: PdfCoverDiagnostic;
+  titlePage?: PdfTitlePageDiagnostic;
+  resumo?: PdfAbstractDiagnostic;
+  abstract?: PdfAbstractDiagnostic;
+  warnings: string[];
+}
+
 export interface PdfBodyStartDiagnostic {
   found: boolean;
   pageNumber?: number;
@@ -137,6 +186,7 @@ export type ImportedPdfDiagnostic = {
   fileName: string;
   pageCount: number;
   pages: PdfPageDiagnostic[];
+  pretextual: PdfPretextualDiagnostic;
   bodyStart: PdfBodyStartDiagnostic;
   reconstruction: PdfTextReconstructionDiagnostic;
   warnings: string[];

@@ -1,4 +1,5 @@
 import type { ImportedPdfDiagnostic, PdfBodyStartDiagnostic, PdfLineDiagnostic, PdfPageDiagnostic, PdfTextItemDiagnostic } from "./imported-pdf-diagnostic";
+import { detectPdfPretextual } from "./pdf-pretextual-diagnostic";
 import { reconstructPdfParagraphBlocks } from "./pdf-text-reconstruction-diagnostic";
 
 type PdfJsModule = typeof import("pdfjs-dist");
@@ -183,7 +184,7 @@ export function detectPdfBodyStart(pages: PdfPageDiagnostic[]): PdfBodyStartDiag
 
 export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagnostic> {
   const warnings = [
-    "O PDF foi lido para diagnóstico. A conversão para DOCX ainda não está habilitada nesta etapa.",
+    "O PDF foi lido para diagnóstico. O rascunho DOCX estruturado pode ser gerado para revisão humana.",
   ];
 
   try {
@@ -222,14 +223,16 @@ export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagno
     }
 
     const reconstruction = reconstructPdfParagraphBlocks(pages);
+    const pretextual = detectPdfPretextual(pages, reconstruction.bodyStart.pageNumber);
 
     return {
       fileName: file.name,
       pageCount: pdf.numPages,
       pages,
+      pretextual,
       bodyStart: reconstruction.bodyStart,
       reconstruction,
-      warnings,
+      warnings: [...warnings, ...pretextual.warnings],
     };
   } catch {
     throw new Error("Não foi possível ler o PDF. O arquivo pode estar inválido, protegido, corrompido ou ilegível sem OCR.");

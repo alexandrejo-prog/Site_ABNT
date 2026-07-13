@@ -58,6 +58,47 @@ function pdfDiagnosticResult(fileName = "diagnostico.pdf") {
     pdfDiagnostic: {
       fileName,
       pageCount: 139,
+      pretextual: {
+        cover: {
+          institution: "UNIVERSIDADE FEDERAL DE LAVRAS",
+          author: "Maria Silva",
+          title: "Titulo importado do PDF",
+          city: "Lavras - MG",
+          year: "2025",
+          confidence: "high",
+          sourceLines: [{ pageNumber: 1, lineIndex: 0 }],
+        },
+        titlePage: {
+          author: "Maria Silva",
+          title: "Titulo importado do PDF",
+          natureText: "Dissertacao apresentada a Universidade Federal de Lavras.",
+          program: "Programa de Pos-Graduacao",
+          advisor: "Orientador: Prof. Teste",
+          city: "Lavras - MG",
+          year: "2025",
+          confidence: "high",
+          sourceLines: [{ pageNumber: 1, lineIndex: 0 }],
+        },
+        resumo: {
+          title: "RESUMO",
+          text: "Resumo reconstruido.",
+          keywordsLabel: "Palavras-chave:",
+          keywords: "PDF. Teste",
+          pageNumber: 1,
+          confidence: "high",
+          sourceLines: [{ pageNumber: 1, lineIndex: 0 }],
+        },
+        abstract: {
+          title: "ABSTRACT",
+          text: "Abstract rebuilt.",
+          keywordsLabel: "Keywords:",
+          keywords: "PDF. Test",
+          pageNumber: 1,
+          confidence: "high",
+          sourceLines: [{ pageNumber: 1, lineIndex: 0 }],
+        },
+        warnings: [],
+      },
       bodyStart: { found: true, pageNumber: 2, lineIndex: 0, text: "1 INTRODUÇÃO", matchType: "numbered-introduction" },
       pages: [
         {
@@ -472,9 +513,9 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     expect(screen.getByLabelText("Página do PDF")).toHaveValue(1);
     expect(screen.getByText(/As linhas abaixo representam linhas visuais do PDF/)).toBeInTheDocument();
     expect(screen.getByText(/Candidato de início do corpo: página 2/)).toBeInTheDocument();
-    expect(screen.getByText(/Esta reconstrução é apenas diagnóstica/)).toBeInTheDocument();
+    expect(screen.getByText(/Esta reconstrução é diagnóstica/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Gerar rascunho textual DOCX/i })).toBeInTheDocument();
-    expect(screen.getByText(/Este arquivo terá apenas texto reconstruído/)).toBeInTheDocument();
+    expect(screen.getByText(/Este arquivo terá pré-textuais reconstruídos/)).toBeInTheDocument();
     expect(screen.getByText(/Há blocos visuais não resolvidos/)).toBeInTheDocument();
     expect(screen.queryByText(/O DOCX é rascunho técnico/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Texto bruto da pagina dois/)).not.toBeInTheDocument();
