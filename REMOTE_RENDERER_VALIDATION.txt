@@ -1,0 +1,197 @@
+npm_ci=0
+focused_test=1
+full_test=1
+build=0
+diff_check=0
+
+=== focused tail ===
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90m/home/runner/work/Site_ABNT/Site_ABNT[39m
+
+ [31m❯[39m tests/pdf-visual-asset-renderer.test.ts [2m([22m[2m20 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[90m 27[2mms[22m[39m
+[31m   [31m×[31m renderizador de recortes visuais pdf[2m > [22mlimita a largura da imagem de saida preservando proporcao[90m 7[2mms[22m[31m[39m
+[31m     → expected +0 to be 800 // Object.is equality[39m
+[31m   [31m×[31m renderizador de recortes visuais pdf[2m > [22mlimita a largura de exibicao no DOCX sem reduzir os bytes renderizados[90m 1[2mms[22m[31m[39m
+[31m     → expected +0 to be 1600 // Object.is equality[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[1m[7m Failed Tests 2 [27m[22m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[31m[1m[7m FAIL [27m[22m[39m tests/pdf-visual-asset-renderer.test.ts[2m > [22mrenderizador de recortes visuais pdf[2m > [22mlimita a largura da imagem de saida preservando proporcao
+[31m[1mAssertionError[22m: expected +0 to be 800 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 800[39m
+[31m+ 0[39m
+
+[36m [2m❯[22m tests/pdf-visual-asset-renderer.test.ts:[2m212:32[22m[39m
+    [90m210| [39m    }[33m,[39m h[33m.[39mdependencies)[33m;[39m
+    [90m211| [39m    [35mconst[39m outputCanvas [33m=[39m h[33m.[39mcanvases[[34m1[39m][33m;[39m
+    [90m212| [39m    [34mexpect[39m(outputCanvas[33m.[39mwidth)[33m.[39m[34mtoBe[39m([34m800[39m)[33m;[39m
+    [90m   | [39m                               [31m^[39m
+    [90m213| [39m    [34mexpect[39m(outputCanvas[33m.[39mheight)[33m.[39m[34mtoBe[39m([34m400[39m)[33m;[39m
+    [90m214| [39m  })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m tests/pdf-visual-asset-renderer.test.ts[2m > [22mrenderizador de recortes visuais pdf[2m > [22mlimita a largura de exibicao no DOCX sem reduzir os bytes renderizados
+[31m[1mAssertionError[22m: expected +0 to be 1600 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 1600[39m
+[31m+ 0[39m
+
+[36m [2m❯[22m tests/pdf-visual-asset-renderer.test.ts:[2m224:33[22m[39m
+    [90m222| [39m    }[33m,[39m h[33m.[39mdependencies)[33m;[39m
+    [90m223| [39m    [35mconst[39m asset [33m=[39m result[33m.[39massets[[34mpdfVisualCropKey[39m([34mcrop[39m())][33m;[39m
+    [90m224| [39m    [34mexpect[39m(h[33m.[39mcanvases[[34m1[39m][33m.[39mwidth)[33m.[39m[34mtoBe[39m([34m1600[39m)[33m;[39m
+    [90m   | [39m                                [31m^[39m
+    [90m225| [39m    [34mexpect[39m(asset[33m.[39mwidth)[33m.[39m[34mtoBe[39m([34m600[39m)[33m;[39m
+    [90m226| [39m    [34mexpect[39m(asset[33m.[39mheight)[33m.[39m[34mtoBe[39m([34m300[39m)[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m18 passed[39m[22m[90m (20)[39m
+[2m   Start at [22m 19:41:00
+[2m   Duration [22m 403ms[2m (transform 78ms, setup 65ms, collect 61ms, tests 27ms, environment 0ms, prepare 63ms)[22m
+
+
+::error file=/home/runner/work/Site_ABNT/Site_ABNT/tests/pdf-visual-asset-renderer.test.ts,title=tests/pdf-visual-asset-renderer.test.ts > renderizador de recortes visuais pdf > limita a largura da imagem de saida preservando proporcao,line=212,column=32::AssertionError: expected +0 to be 800 // Object.is equality%0A%0A- Expected%0A+ Received%0A%0A- 800%0A+ 0%0A%0A ❯ tests/pdf-visual-asset-renderer.test.ts:212:32%0A%0A
+
+::error file=/home/runner/work/Site_ABNT/Site_ABNT/tests/pdf-visual-asset-renderer.test.ts,title=tests/pdf-visual-asset-renderer.test.ts > renderizador de recortes visuais pdf > limita a largura de exibicao no DOCX sem reduzir os bytes renderizados,line=224,column=33::AssertionError: expected +0 to be 1600 // Object.is equality%0A%0A- Expected%0A+ Received%0A%0A- 1600%0A+ 0%0A%0A ❯ tests/pdf-visual-asset-renderer.test.ts:224:33%0A%0A
+
+=== full test tail ===
+ [32m✓[39m tests/accessibility-basic.test.ts [2m([22m[2m14 tests[22m[2m)[22m[90m 146[2mms[22m[39m
+ [32m✓[39m tests/app-autosave-flow.test.tsx [2m([22m[2m8 tests[22m[2m)[22m[33m 1926[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo de autosave e restauração (App)[2m > [22mpreenche campos e salva rascunho no localStorage após debounce [33m440[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo de autosave e restauração (App)[2m > [22mnão restaura rascunho por cima de dados já preenchidos [33m437[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo de autosave e restauração (App)[2m > [22mclique em Limpar rascunho remove localStorage imediatamente [33m358[2mms[22m[39m
+ [32m✓[39m tests/keyboard-accessibility.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 743[2mms[22m[39m
+   [33m[2m✓[22m[39m acessibilidade por teclado[2m > [22mpossui skip link para o conteudo principal [33m381[2mms[22m[39m
+ [32m✓[39m tests/accessibility-status-messages.test.tsx [2m([22m[2m7 tests[22m[2m)[22m[33m 1203[2mms[22m[39m
+   [33m[2m✓[22m[39m mensagens de status acessiveis[2m > [22mexpoe ao menos uma regiao de status informativo [33m335[2mms[22m[39m
+ [32m✓[39m tests/a11y-infrastructure.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 308[2mms[22m[39m
+   [33m[2m✓[22m[39m infraestrutura de acessibilidade automatizada[2m > [22mexecuta axe em HTML simples sem violacoes [33m306[2mms[22m[39m
+ [32m✓[39m tests/app-accessibility-axe.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 1590[2mms[22m[39m
+   [33m[2m✓[22m[39m auditoria axe do App principal[2m > [22mtela inicial sem violacoes critical/serious [33m1220[2mms[22m[39m
+ [32m✓[39m tests/app-generation-flow.test.tsx [2m([22m[2m32 tests[22m[2m)[22m[33m 10745[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo real de bloqueio de geração (App)[2m > [22mformulário vazio impede a geração do DOCX [33m386[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo real de bloqueio de geração (App)[2m > [22mdissertação sem orientador impede a geração [33m465[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo real de bloqueio de geração (App)[2m > [22mgera rascunho de artigo simples com título e autor preenchidos [33m555[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo real de bloqueio de geração (App)[2m > [22mnomeia DOCX pelo tipo selecionado e título atual [33m776[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo real de bloqueio de geração (App)[2m > [22mnomeia DOCX importado pelo arquivo importado, nao pelo titulo antigo [33m621[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo real de bloqueio de geração (App)[2m > [22mconflito programa/área não bloqueia rascunho com pendências [33m368[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo real de bloqueio de geração (App)[2m > [22martigo simples nao exibe conflito programa/area no diagnostico [33m354[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo real de bloqueio de geração (App)[2m > [22matualiza natureza generica de tese quando o programa muda [33m615[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo real de bloqueio de geração (App)[2m > [22mrascunho gera mesmo com indicadores de impacto ausentes [33m549[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo real de bloqueio de geração (App)[2m > [22mrascunho gera mesmo com aviso de imagem [33m358[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo real de bloqueio de geração (App)[2m > [22mbotão Gerar DOCX não fica disabled por pendências revisáveis [33m339[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo real de bloqueio de geração (App)[2m > [22mprojeto de pesquisa sem resumo impede a geracao [33m583[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo real de bloqueio de geração (App)[2m > [22mprojeto de pesquisa sem abstract impede a geracao [33m781[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo real de bloqueio de geração (App)[2m > [22mimporta arquivo com nome de outro tipo quando projeto_pesquisa esta selecionado e avisa [33m345[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo real de bloqueio de geração (App)[2m > [22mimportar PDF preserva campos e editor, oculta interface academica e restaura ao remover [33m712[2mms[22m[39m
+   [33m[2m✓[22m[39m fluxo real de bloqueio de geração (App)[2m > [22mmensagem pós-geração orienta atualizar sumário no Word/LibreOffice quando há pendências [33m355[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[1m[7m Failed Tests 2 [27m[22m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[31m[1m[7m FAIL [27m[22m[39m tests/pdf-visual-asset-renderer.test.ts[2m > [22mrenderizador de recortes visuais pdf[2m > [22mlimita a largura da imagem de saida preservando proporcao
+[31m[1mAssertionError[22m: expected +0 to be 800 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 800[39m
+[31m+ 0[39m
+
+[36m [2m❯[22m tests/pdf-visual-asset-renderer.test.ts:[2m212:32[22m[39m
+    [90m210| [39m    }[33m,[39m h[33m.[39mdependencies)[33m;[39m
+    [90m211| [39m    [35mconst[39m outputCanvas [33m=[39m h[33m.[39mcanvases[[34m1[39m][33m;[39m
+    [90m212| [39m    [34mexpect[39m(outputCanvas[33m.[39mwidth)[33m.[39m[34mtoBe[39m([34m800[39m)[33m;[39m
+    [90m   | [39m                               [31m^[39m
+    [90m213| [39m    [34mexpect[39m(outputCanvas[33m.[39mheight)[33m.[39m[34mtoBe[39m([34m400[39m)[33m;[39m
+    [90m214| [39m  })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m tests/pdf-visual-asset-renderer.test.ts[2m > [22mrenderizador de recortes visuais pdf[2m > [22mlimita a largura de exibicao no DOCX sem reduzir os bytes renderizados
+[31m[1mAssertionError[22m: expected +0 to be 1600 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 1600[39m
+[31m+ 0[39m
+
+[36m [2m❯[22m tests/pdf-visual-asset-renderer.test.ts:[2m224:33[22m[39m
+    [90m222| [39m    }[33m,[39m h[33m.[39mdependencies)[33m;[39m
+    [90m223| [39m    [35mconst[39m asset [33m=[39m result[33m.[39massets[[34mpdfVisualCropKey[39m([34mcrop[39m())][33m;[39m
+    [90m224| [39m    [34mexpect[39m(h[33m.[39mcanvases[[34m1[39m][33m.[39mwidth)[33m.[39m[34mtoBe[39m([34m1600[39m)[33m;[39m
+    [90m   | [39m                                [31m^[39m
+    [90m225| [39m    [34mexpect[39m(asset[33m.[39mwidth)[33m.[39m[34mtoBe[39m([34m600[39m)[33m;[39m
+    [90m226| [39m    [34mexpect[39m(asset[33m.[39mheight)[33m.[39m[34mtoBe[39m([34m300[39m)[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m123 passed[39m[22m[90m (124)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m1178 passed[39m[22m[2m | [22m[33m10 skipped[39m[90m (1190)[39m
+[2m   Start at [22m 19:41:01
+[2m   Duration [22m 32.88s[2m (transform 3.78s, setup 8.73s, collect 13.95s, tests 31.22s, environment 7.75s, prepare 9.76s)[22m
+
+
+::error file=/home/runner/work/Site_ABNT/Site_ABNT/tests/pdf-visual-asset-renderer.test.ts,title=tests/pdf-visual-asset-renderer.test.ts > renderizador de recortes visuais pdf > limita a largura da imagem de saida preservando proporcao,line=212,column=32::AssertionError: expected +0 to be 800 // Object.is equality%0A%0A- Expected%0A+ Received%0A%0A- 800%0A+ 0%0A%0A ❯ tests/pdf-visual-asset-renderer.test.ts:212:32%0A%0A
+
+::error file=/home/runner/work/Site_ABNT/Site_ABNT/tests/pdf-visual-asset-renderer.test.ts,title=tests/pdf-visual-asset-renderer.test.ts > renderizador de recortes visuais pdf > limita a largura de exibicao no DOCX sem reduzir os bytes renderizados,line=224,column=33::AssertionError: expected +0 to be 1600 // Object.is equality%0A%0A- Expected%0A+ Received%0A%0A- 1600%0A+ 0%0A%0A ❯ tests/pdf-visual-asset-renderer.test.ts:224:33%0A%0A
+
+=== build tail ===
+
+> site-normas-ufla@0.1.0 build
+> tsc -b && vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 1716 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[32mindex.html                                              [39m[1m[2m    1.50 kB[22m[1m[22m[2m │ gzip:   0.60 kB[22m
+[2mdist/[22m[2massets/[22m[32mpdf.worker.min-DEtVeC4l.mjs                      [39m[1m[2m1,255.07 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[35mAcademicTiptapEditor-gojR95uq.css                [39m[1m[2m    1.99 kB[22m[1m[22m[2m │ gzip:   0.75 kB[22m
+[2mdist/[22m[2massets/[22m[35mindex-CsAECm9f.css                               [39m[1m[2m   30.31 kB[22m[1m[22m[2m │ gzip:   6.64 kB[22m
+[2mdist/[22m[2massets/[22m[36mimport-libs-BnmDBjZP.js                          [39m[1m[2m    0.03 kB[22m[1m[22m[2m │ gzip:   0.05 kB[22m
+[2mdist/[22m[2massets/[22m[36mpdf.worker.min-BUZPQQf9.js                       [39m[1m[2m    0.07 kB[22m[1m[22m[2m │ gzip:   0.09 kB[22m
+[2mdist/[22m[2massets/[22m[36mexport-graduate-editable-draft-docx-CnYuAx05.js  [39m[1m[2m    1.18 kB[22m[1m[22m[2m │ gzip:   0.63 kB[22m
+[2mdist/[22m[2massets/[22m[36mexport-article-docx-SW_vF6jQ.js                  [39m[1m[2m    3.15 kB[22m[1m[22m[2m │ gzip:   1.41 kB[22m
+[2mdist/[22m[2massets/[22m[36mexport-cpg-docx-UqR0J9On.js                      [39m[1m[2m    6.66 kB[22m[1m[22m[2m │ gzip:   2.50 kB[22m
+[2mdist/[22m[2massets/[22m[36micons-BmNfHFlS.js                                [39m[1m[2m   10.39 kB[22m[1m[22m[2m │ gzip:   3.74 kB[22m
+[2mdist/[22m[2massets/[22m[36mexport-research-project-docx-D3NM-MI2.js         [39m[1m[2m   10.92 kB[22m[1m[22m[2m │ gzip:   4.43 kB[22m
+[2mdist/[22m[2massets/[22m[36mexport-docx-LJQ1UN_-.js                          [39m[1m[2m   31.27 kB[22m[1m[22m[2m │ gzip:   9.41 kB[22m
+[2mdist/[22m[2massets/[22m[36mreact-vendor-C5llX_35.js                         [39m[1m[2m  133.96 kB[22m[1m[22m[2m │ gzip:  43.14 kB[22m
+[2mdist/[22m[2massets/[22m[36mAcademicTiptapEditor-DZvAQb1u.js                 [39m[1m[2m  414.51 kB[22m[1m[22m[2m │ gzip: 132.09 kB[22m
+[2mdist/[22m[2massets/[22m[36mdocx-libs-Xx73wjuU.js                            [39m[1m[2m  434.03 kB[22m[1m[22m[2m │ gzip: 125.03 kB[22m
+[2mdist/[22m[2massets/[22m[36mpdf-D35c9CSk.js                                  [39m[1m[2m  476.82 kB[22m[1m[22m[2m │ gzip: 142.05 kB[22m
+[2mdist/[22m[2massets/[22m[36mpdf-DxNzWohf.js                                  [39m[1m[2m  532.22 kB[22m[1m[22m[2m │ gzip: 161.49 kB[22m
+[2mdist/[22m[2massets/[22m[36mindex-BG0_3fGA.js                                [39m[1m[2m  778.14 kB[22m[1m[22m[2m │ gzip: 212.03 kB[22m
+[32m✓ built in 10.09s[39m
+
+=== npm ci tail ===
+
+added 267 packages, and audited 268 packages in 5s
+
+60 packages are looking for funding
+  run `npm fund` for details
+
+5 vulnerabilities (3 moderate, 1 high, 1 critical)
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+npm warn allow-scripts 1 package has install scripts not yet covered by allowScripts:
+npm warn allow-scripts   esbuild@0.21.5 (postinstall: node install.js)
+npm warn allow-scripts
+npm warn allow-scripts Run `npm approve-scripts --allow-scripts-pending` to review, or `npm approve-scripts <pkg>` to allow.
+
+=== diff check ===
