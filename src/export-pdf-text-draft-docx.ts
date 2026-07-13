@@ -291,11 +291,70 @@ function tocParagraphs(entries: TocEntry[]): Paragraph[] {
   ];
 }
 
+const VISUAL_CAPTION_RE = /^(Quadro|Tabela|Figura|Gr[áa]fico|Imagem|Mapa|Ilustra[çc][ãa]o)\s+\d+\s*[-–—.:]/iu;
+
+type VisualSpan = { startKey: number; endKey: number; startPage: number; endPage: number };
+
+function lineOrderKey(pageNumber: number, lineIndex: number): number {
+  return pageNumber * 100000 + lineIndex;
+}
+
+function buildVisualElementSpans(blocks: PdfReconstructedBlockDiagnostic[]): VisualSpan[] {
+  const spans: VisualSpan[] = [];
+  let open: { page: number; line: number } | null = null;
+  for (const block of blocks) {
+    if (block.type === "caption" && VISUAL_CAPTION_RE.test(block.text)) {
+      const last = block.sourceLines[block.sourceLines.length - 1];
+      if (open) {
+        spans.push({ startKey: lineOrderKey(open.page, open.line), endKey: lineOrderKey(open.page, 99999), startPage: open.page, endPage: open.page });
+      }
+      open = { page: last.pageNumber, line: last.lineIndex };
+    } else if (block.type === "source" && open) {
+      const first = block.sourceLines[0];
+      spans.push({ startKey: lineOrderKey(open.page, open.line), endKey: lineOrderKey(first.pageNumber, first.lineIndex), startPage: open.page, endPage: first.pageNumber });
+      open = null;
+    }
+  }
+  if (open) {
+    spans.push({ startKey: lineOrderKey(open.page, open.line), endKey: lineOrderKey(open.page, 99999), startPage: open.page, endPage: open.page });
+  }
+  return spans;
+}
+
+function blockInsideVisualSpan(
+  block: PdfReconstructedBlockDiagnostic,
+  spans: VisualSpan[],
+  pagesWithBodyText: Set<number>,
+): boolean {
+  const lines = block.sourceLines;
+  if (lines.length === 0) return false;
+  for (const span of spans) {
+    const within = lines.every((line) => {
+      const key = lineOrderKey(line.pageNumber, line.lineIndex);
+      return key >= span.startKey && key <= span.endKey;
+    });
+    if (!within) continue;
+    if (span.endPage > span.startPage + 1 && lines.some((line) => line.pageNumber > span.startPage && line.pageNumber < span.endPage && pagesWithBodyText.has(line.pageNumber))) {
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
 function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Paragraph[] {
   const emittedKeys = new Set<string>();
   const regions = new Map(input.reconstruction.layoutRegions.map((region) => [region.id, region]));
   const entryByTitle = new Map(entries.map((entry) => [entry.title, entry]));
   const paragraphs: Paragraph[] = [];
+  const blocks = input.reconstruction.blocks;
+  const visualSpans = buildVisualElementSpans(blocks);
+  const pagesWithBodyText = new Set<number>();
+  for (const block of blocks) {
+    if ((block.type === "paragraph" || block.type === "list-item") && block.text.length >= 80 && block.sourceLines[0]) {
+      pagesWithBodyText.add(block.sourceLines[0].pageNumber);
+    }
+  }
 
   const logicalVisualRanges = new Map<string, { pageStart: number; pageEnd: number }>();
   for (const region of input.reconstruction.layoutRegions) {
@@ -320,8 +379,14 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
     const text = cleanText(block.text);
     if (!text && block.type !== "unresolved") continue;
     if (block.type === "heading") paragraphs.push(bodyHeading(text, entryByTitle.get(text)));
-    if (block.type === "paragraph") paragraphs.push(justified(text));
-    if (block.type === "list-item") paragraphs.push(listItem(text));
+    if (block.type === "paragraph") {
+      if (blockInsideVisualSpan(block, visualSpans, pagesWithBodyText)) continue;
+      paragraphs.push(justified(text));
+    }
+    if (block.type === "list-item") {
+      if (blockInsideVisualSpan(block, visualSpans, pagesWithBodyText)) continue;
+      paragraphs.push(listItem(text));
+    }
     if (block.type === "caption") {
       const region = block.layoutRegionId ? regions.get(block.layoutRegionId) : undefined;
       const dedupKey = region?.logicalVisualId ?? block.layoutRegionId ?? `caption-${block.pageStart}`;

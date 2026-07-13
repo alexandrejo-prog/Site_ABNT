@@ -633,3 +633,216 @@ describe("formatacao de itens de lista no rascunho textual pdf", () => {
     expect(allXml).not.toContain("numbering.xml");
   });
 });
+
+describe("supressao de conteudo interno de regioes visuais pdf", () => {
+  type Block = PdfTextDraftExportInput["reconstruction"]["blocks"][number];
+  type Region = PdfTextDraftExportInput["reconstruction"]["layoutRegions"][number];
+
+  function visualInput(blocks: Block[], layoutRegions: Region[], overrides: Partial<PdfTextDraftExportInput["reconstruction"]["statistics"]> = {}): PdfTextDraftExportInput {
+    return baseInput({
+      reconstruction: {
+        ...baseInput().reconstruction,
+        blocks,
+        layoutRegions,
+        statistics: { ...baseInput().reconstruction.statistics, ...overrides },
+      },
+    });
+  }
+
+  const MARKER = "Elemento visual não inserido";
+
+  it("legenda + marcador + linhas internas + fonte (linhas internas ausentes)", async () => {
+    const blocks: Block[] = [
+      { type: "paragraph", text: "Parágrafo anterior que deve permanecer no documento.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Quadro 1 – Exemplo sintético para validação.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Cabeçalho Coluna A Coluna B", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-1" },
+      { type: "paragraph", text: "Linha interna um conteúdo da célula esquerda e direita.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "medium", reasons: [] },
+      { type: "paragraph", text: "Linha interna dois conteúdo da célula esquerda e direita.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 5 }], confidence: "medium", reasons: [] },
+      { type: "source", text: "Fonte: Autor (2020).", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 6 }], confidence: "high", reasons: [] },
+      { type: "paragraph", text: "Parágrafo posterior que deve permanecer no documento.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 1 }], confidence: "medium", reasons: [] },
+    ];
+    const regions: Region[] = [{
+      id: "layout-11-1", pageStart: 11, pageEnd: 11, startLineIndex: 3, endLineIndex: 5, kind: "quadro",
+      caption: "Quadro 1 – Exemplo sintético para validação.", source: "Fonte: Autor (2020).", confidence: "high", reasons: [], logicalVisualId: "quadro-1-page-11",
+    }];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(visualInput(blocks, regions, { paragraphCount: 3, captionCount: 1, sourceCount: 1, unresolvedCount: 1 })));
+    const text = documentText(documentXml);
+
+    expect(text).toContain("Quadro 1 – Exemplo sintético para validação.");
+    expect(text).toContain(MARKER);
+    expect(text).toContain("Fonte: Autor (2020).");
+    expect(text).not.toContain("Linha interna um conteúdo");
+    expect(text).not.toContain("Linha interna dois conteúdo");
+    expect(text).not.toContain("Cabeçalho Coluna A Coluna B");
+  });
+
+  it("linhas internas nao aparecem no DOCX", async () => {
+    const blocks: Block[] = [
+      { type: "caption", text: "Quadro 1 – Exemplo sintético para validação.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Cabeçalho Coluna A Coluna B", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-1" },
+      { type: "paragraph", text: "Linha interna um conteúdo da célula esquerda e direita.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "medium", reasons: [] },
+      { type: "paragraph", text: "Linha interna dois conteúdo da célula esquerda e direita.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 5 }], confidence: "medium", reasons: [] },
+      { type: "source", text: "Fonte: Autor (2020).", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 6 }], confidence: "high", reasons: [] },
+    ];
+    const regions: Region[] = [{
+      id: "layout-11-1", pageStart: 11, pageEnd: 11, startLineIndex: 3, endLineIndex: 5, kind: "quadro",
+      caption: "Quadro 1 – Exemplo sintético para validação.", source: "Fonte: Autor (2020).", confidence: "high", reasons: [], logicalVisualId: "quadro-1-page-11",
+    }];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(visualInput(blocks, regions, { captionCount: 1, sourceCount: 1, unresolvedCount: 1 })));
+    expect(documentXml).not.toContain("Linha interna um");
+    expect(documentXml).not.toContain("Linha interna dois");
+  });
+
+  it("legenda aparece uma vez", async () => {
+    const blocks: Block[] = [
+      { type: "caption", text: "Quadro 1 – Exemplo sintético para validação.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Cabeçalho Coluna A Coluna B", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-1" },
+      { type: "paragraph", text: "Linha interna um conteúdo da célula esquerda e direita.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "medium", reasons: [] },
+      { type: "source", text: "Fonte: Autor (2020).", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 6 }], confidence: "high", reasons: [] },
+    ];
+    const regions: Region[] = [{
+      id: "layout-11-1", pageStart: 11, pageEnd: 11, startLineIndex: 3, endLineIndex: 5, kind: "quadro",
+      caption: "Quadro 1 – Exemplo sintético para validação.", source: "Fonte: Autor (2020).", confidence: "high", reasons: [], logicalVisualId: "quadro-1-page-11",
+    }];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(visualInput(blocks, regions, { captionCount: 1, sourceCount: 1, unresolvedCount: 1 })));
+    expect((documentXml.match(/Quadro 1 – Exemplo sintético para validação\./g) ?? []).length).toBe(1);
+  });
+
+  it("marcador aparece uma vez", async () => {
+    const blocks: Block[] = [
+      { type: "caption", text: "Quadro 1 – Exemplo sintético para validação.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Cabeçalho Coluna A Coluna B", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-1" },
+      { type: "paragraph", text: "Linha interna um conteúdo da célula esquerda e direita.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "medium", reasons: [] },
+      { type: "source", text: "Fonte: Autor (2020).", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 6 }], confidence: "high", reasons: [] },
+    ];
+    const regions: Region[] = [{
+      id: "layout-11-1", pageStart: 11, pageEnd: 11, startLineIndex: 3, endLineIndex: 5, kind: "quadro",
+      caption: "Quadro 1 – Exemplo sintético para validação.", source: "Fonte: Autor (2020).", confidence: "high", reasons: [], logicalVisualId: "quadro-1-page-11",
+    }];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(visualInput(blocks, regions, { captionCount: 1, sourceCount: 1, unresolvedCount: 1 })));
+    expect((documentXml.match(new RegExp(MARKER, "g")) ?? []).length).toBe(1);
+  });
+
+  it("fonte aparece uma vez", async () => {
+    const blocks: Block[] = [
+      { type: "caption", text: "Quadro 1 – Exemplo sintético para validação.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Cabeçalho Coluna A Coluna B", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-1" },
+      { type: "paragraph", text: "Linha interna um conteúdo da célula esquerda e direita.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "medium", reasons: [] },
+      { type: "source", text: "Fonte: Autor (2020).", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 6 }], confidence: "high", reasons: [] },
+    ];
+    const regions: Region[] = [{
+      id: "layout-11-1", pageStart: 11, pageEnd: 11, startLineIndex: 3, endLineIndex: 5, kind: "quadro",
+      caption: "Quadro 1 – Exemplo sintético para validação.", source: "Fonte: Autor (2020).", confidence: "high", reasons: [], logicalVisualId: "quadro-1-page-11",
+    }];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(visualInput(blocks, regions, { captionCount: 1, sourceCount: 1, unresolvedCount: 1 })));
+    expect((documentXml.match(/Fonte: Autor \(2020\)\./g) ?? []).length).toBe(1);
+  });
+
+  it("paragrafo anterior permanece", async () => {
+    const blocks: Block[] = [
+      { type: "paragraph", text: "Parágrafo anterior que deve permanecer no documento.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Quadro 1 – Exemplo sintético para validação.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Cabeçalho Coluna A Coluna B", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-1" },
+      { type: "paragraph", text: "Linha interna um conteúdo da célula esquerda e direita.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "medium", reasons: [] },
+      { type: "source", text: "Fonte: Autor (2020).", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 6 }], confidence: "high", reasons: [] },
+    ];
+    const regions: Region[] = [{
+      id: "layout-11-1", pageStart: 11, pageEnd: 11, startLineIndex: 3, endLineIndex: 5, kind: "quadro",
+      caption: "Quadro 1 – Exemplo sintético para validação.", source: "Fonte: Autor (2020).", confidence: "high", reasons: [], logicalVisualId: "quadro-1-page-11",
+    }];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(visualInput(blocks, regions, { paragraphCount: 2, captionCount: 1, sourceCount: 1, unresolvedCount: 1 })));
+    expect(documentText(documentXml)).toContain("Parágrafo anterior que deve permanecer no documento.");
+  });
+
+  it("paragrafo posterior permanece", async () => {
+    const blocks: Block[] = [
+      { type: "caption", text: "Quadro 1 – Exemplo sintético para validação.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Cabeçalho Coluna A Coluna B", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-1" },
+      { type: "paragraph", text: "Linha interna um conteúdo da célula esquerda e direita.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "medium", reasons: [] },
+      { type: "source", text: "Fonte: Autor (2020).", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 6 }], confidence: "high", reasons: [] },
+      { type: "paragraph", text: "Parágrafo posterior que deve permanecer no documento.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 1 }], confidence: "medium", reasons: [] },
+    ];
+    const regions: Region[] = [{
+      id: "layout-11-1", pageStart: 11, pageEnd: 11, startLineIndex: 3, endLineIndex: 5, kind: "quadro",
+      caption: "Quadro 1 – Exemplo sintético para validação.", source: "Fonte: Autor (2020).", confidence: "high", reasons: [], logicalVisualId: "quadro-1-page-11",
+    }];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(visualInput(blocks, regions, { paragraphCount: 2, captionCount: 1, sourceCount: 1, unresolvedCount: 1 })));
+    expect(documentText(documentXml)).toContain("Parágrafo posterior que deve permanecer no documento.");
+  });
+
+  it("texto normal na mesma pagina mas fora da regiao permanece", async () => {
+    const blocks: Block[] = [
+      { type: "paragraph", text: "Texto normal na mesma página fora da região visual que permanece.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 0 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Quadro 1 – Exemplo sintético para validação.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Cabeçalho Coluna A Coluna B", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-1" },
+      { type: "paragraph", text: "Linha interna um conteúdo da célula esquerda e direita.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "medium", reasons: [] },
+      { type: "source", text: "Fonte: Autor (2020).", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 6 }], confidence: "high", reasons: [] },
+    ];
+    const regions: Region[] = [{
+      id: "layout-11-1", pageStart: 11, pageEnd: 11, startLineIndex: 3, endLineIndex: 5, kind: "quadro",
+      caption: "Quadro 1 – Exemplo sintético para validação.", source: "Fonte: Autor (2020).", confidence: "high", reasons: [], logicalVisualId: "quadro-1-page-11",
+    }];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(visualInput(blocks, regions, { paragraphCount: 2, captionCount: 1, sourceCount: 1, unresolvedCount: 1 })));
+    const text = documentText(documentXml);
+    expect(text).toContain("Texto normal na mesma página fora da região visual que permanece.");
+    expect(text).not.toContain("Linha interna um");
+  });
+
+  it("duas regioes visuais na mesma pagina nao interferem entre si", async () => {
+    const blocks: Block[] = [
+      { type: "caption", text: "Quadro 1 – Primeiro quadro sintético.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Cabeçalho A", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-1" },
+      { type: "paragraph", text: "Linha interna do primeiro quadro sintético.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "medium", reasons: [] },
+      { type: "source", text: "Fonte: Autor (2020).", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 5 }], confidence: "high", reasons: [] },
+      { type: "caption", text: "Quadro 2 – Segundo quadro sintético.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 8 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Cabeçalho B", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 9 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-2" },
+      { type: "paragraph", text: "Linha interna do segundo quadro sintético.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 10 }], confidence: "medium", reasons: [] },
+      { type: "source", text: "Fonte: Autor (2021).", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 11 }], confidence: "high", reasons: [] },
+    ];
+    const regions: Region[] = [
+      { id: "layout-11-1", pageStart: 11, pageEnd: 11, startLineIndex: 3, endLineIndex: 4, kind: "quadro", caption: "Quadro 1 – Primeiro quadro sintético.", source: "Fonte: Autor (2020).", confidence: "high", reasons: [], logicalVisualId: "quadro-1-page-11" },
+      { id: "layout-11-2", pageStart: 11, pageEnd: 11, startLineIndex: 9, endLineIndex: 10, kind: "quadro", caption: "Quadro 2 – Segundo quadro sintético.", source: "Fonte: Autor (2021).", confidence: "high", reasons: [], logicalVisualId: "quadro-2-page-11" },
+    ];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(visualInput(blocks, regions, { paragraphCount: 2, captionCount: 2, sourceCount: 2, unresolvedCount: 2 })));
+    const text = documentText(documentXml);
+    expect(text).not.toContain("Linha interna do primeiro quadro");
+    expect(text).not.toContain("Linha interna do segundo quadro");
+    expect((documentXml.match(new RegExp(MARKER, "g")) ?? []).length).toBe(2);
+    expect((documentXml.match(/Quadro 1 – Primeiro quadro sintético\./g) ?? []).length).toBe(1);
+    expect((documentXml.match(/Quadro 2 – Segundo quadro sintético\./g) ?? []).length).toBe(1);
+    expect((documentXml.match(/Fonte: Autor \(2020\)\./g) ?? []).length).toBe(1);
+    expect((documentXml.match(/Fonte: Autor \(2021\)\./g) ?? []).length).toBe(1);
+  });
+
+  it("regiao multipagina nao elimina texto intermediario sem vinculo", async () => {
+    const blocks: Block[] = [
+      { type: "caption", text: "Quadro 9 – Quadro multipágina sintético.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Cabeçalho Quadro", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-9" },
+      { type: "paragraph", text: "Linha interna da primeira página do quadro.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "medium", reasons: [] },
+      { type: "paragraph", text: "Texto acadêmico normal intermediário que deve ser preservado porque não pertence ao quadro e possui conteúdo substancial longo.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 5 }], confidence: "medium", reasons: [] },
+      { type: "paragraph", text: "Linha interna da página final do quadro conclusão.", pageStart: 13, pageEnd: 13, sourceLines: [{ pageNumber: 13, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "source", text: "Fonte: Autor (2021).", pageStart: 13, pageEnd: 13, sourceLines: [{ pageNumber: 13, lineIndex: 2 }], confidence: "high", reasons: [] },
+    ];
+    const regions: Region[] = [{
+      id: "layout-11-9", pageStart: 11, pageEnd: 11, startLineIndex: 3, endLineIndex: 4, kind: "quadro",
+      caption: "Quadro 9 – Quadro multipágina sintético.", source: "Fonte: Autor (2021).", confidence: "high", reasons: [], logicalVisualId: "quadro-9-page-11",
+    }];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(visualInput(blocks, regions, { paragraphCount: 3, captionCount: 1, sourceCount: 1, unresolvedCount: 1 })));
+    const text = documentText(documentXml);
+    expect(text).not.toContain("Linha interna da primeira página do quadro.");
+    expect(text).not.toContain("Linha interna da página final do quadro conclusão.");
+    expect(text).toContain("Texto acadêmico normal intermediário que deve ser preservado porque não pertence ao quadro e possui conteúdo substancial longo.");
+    expect((documentXml.match(new RegExp(MARKER, "g")) ?? []).length).toBe(1);
+  });
+
+  it("blocos sem regiao visual continuam inalterados", async () => {
+    const blocks: Block[] = [
+      { type: "paragraph", text: "Parágrafo isolado sem região visual associada que deve aparecer no documento final.", pageStart: 20, pageEnd: 20, sourceLines: [{ pageNumber: 20, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "list-item", text: "a) Item de lista isolado sem região visual que deve aparecer.", pageStart: 20, pageEnd: 20, sourceLines: [{ pageNumber: 20, lineIndex: 2 }], confidence: "medium", reasons: [] },
+    ];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(visualInput(blocks, [], { paragraphCount: 1, listItemCount: 1 })));
+    const text = documentText(documentXml);
+    expect(text).toContain("Parágrafo isolado sem região visual associada que deve aparecer no documento final.");
+    expect(text).toContain("a) Item de lista isolado sem região visual que deve aparecer.");
+  });
+});
