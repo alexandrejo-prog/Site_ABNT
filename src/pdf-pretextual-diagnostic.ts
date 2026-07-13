@@ -476,12 +476,14 @@ function reconcileCoverTitle(
   const coverTitle = cover.title;
   const pageTitle = titlePage.title;
   if (!coverTitle || !pageTitle) return cover;
-  if (coverTitle === pageTitle) return cover;
 
   const coverNorm = normalizeForTitleCompare(coverTitle);
   const pageNorm = normalizeForTitleCompare(pageTitle);
   if (!coverNorm || !pageNorm) return cover;
-  if (!pageNorm.startsWith(coverNorm)) return cover;
+  if (pageNorm === coverNorm) return cover;
+  // Exige que o título da folha de rosto continue após um limite de palavra completo,
+  // impedindo prefixo parcial dentro de uma palavra e forçando ao menos uma palavra adicional.
+  if (!pageNorm.startsWith(`${coverNorm} `)) return cover;
 
   if (cover.author && titlePage.author
     && normalizeForTitleCompare(cover.author) !== normalizeForTitleCompare(titlePage.author)) {
