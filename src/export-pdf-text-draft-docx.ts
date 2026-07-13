@@ -305,18 +305,12 @@ function buildVisualElementSpans(blocks: PdfReconstructedBlockDiagnostic[]): Vis
   for (const block of blocks) {
     if (block.type === "caption" && VISUAL_CAPTION_RE.test(block.text)) {
       const last = block.sourceLines[block.sourceLines.length - 1];
-      if (open) {
-        spans.push({ startKey: lineOrderKey(open.page, open.line), endKey: lineOrderKey(open.page, 99999), startPage: open.page, endPage: open.page });
-      }
       open = { page: last.pageNumber, line: last.lineIndex };
     } else if (block.type === "source" && open) {
       const first = block.sourceLines[0];
       spans.push({ startKey: lineOrderKey(open.page, open.line), endKey: lineOrderKey(first.pageNumber, first.lineIndex), startPage: open.page, endPage: first.pageNumber });
       open = null;
     }
-  }
-  if (open) {
-    spans.push({ startKey: lineOrderKey(open.page, open.line), endKey: lineOrderKey(open.page, 99999), startPage: open.page, endPage: open.page });
   }
   return spans;
 }

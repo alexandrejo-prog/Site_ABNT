@@ -846,3 +846,116 @@ describe("supressao de conteudo interno de regioes visuais pdf", () => {
     expect(text).toContain("a) Item de lista isolado sem região visual que deve aparecer.");
   });
 });
+
+describe("span visual incompleto sem fonte no pdf", () => {
+  type Block = PdfTextDraftExportInput["reconstruction"]["blocks"][number];
+  type Region = PdfTextDraftExportInput["reconstruction"]["layoutRegions"][number];
+
+  function incompleteInput(blocks: Block[], layoutRegions: Region[] = [], overrides: Partial<PdfTextDraftExportInput["reconstruction"]["statistics"]> = {}): PdfTextDraftExportInput {
+    return baseInput({
+      reconstruction: {
+        ...baseInput().reconstruction,
+        blocks,
+        layoutRegions,
+        statistics: { ...baseInput().reconstruction.statistics, ...overrides },
+      },
+    });
+  }
+
+  const MARKER = "Elemento visual não inserido";
+
+  it("legenda sem fonte seguida de paragrafo normal mantem o paragrafo", async () => {
+    const blocks: Block[] = [
+      { type: "caption", text: "Figura 1 – Elemento sem fonte detectada.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "paragraph", text: "Parágrafo normal após figura sem fonte que deve permanecer no documento.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "medium", reasons: [] },
+    ];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(incompleteInput(blocks, [], { captionCount: 1, paragraphCount: 1 })));
+    const text = documentText(documentXml);
+    expect(text).toContain("Figura 1 – Elemento sem fonte detectada.");
+    expect(text).toContain("Parágrafo normal após figura sem fonte que deve permanecer no documento.");
+  });
+
+  it("legenda sem fonte no final do documento nao remove paragrafos anterior ou posterior", async () => {
+    const blocks: Block[] = [
+      { type: "paragraph", text: "Parágrafo antes da legenda final sem fonte que permanece.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Quadro 5 – Sem fonte no fim do documento.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "paragraph", text: "Parágrafo depois da legenda final sem fonte que permanece.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 1 }], confidence: "medium", reasons: [] },
+    ];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(incompleteInput(blocks, [], { captionCount: 1, paragraphCount: 2 })));
+    const text = documentText(documentXml);
+    expect(text).toContain("Parágrafo antes da legenda final sem fonte que permanece.");
+    expect(text).toContain("Parágrafo depois da legenda final sem fonte que permanece.");
+  });
+
+  it("duas legendas consecutivas com apenas a segunda seguida de fonte", async () => {
+    const blocks: Block[] = [
+      { type: "caption", text: "Quadro 6 – Sem fonte correspondente.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "paragraph", text: "Parágrafo entre as duas legendas que não deve ser suprimido.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Quadro 7 – Com fonte correspondente.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 6 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Cabeçalho Q7", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 7 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-7" },
+      { type: "paragraph", text: "Linha interna da segunda legenda que deve ser suprimida.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 8 }], confidence: "medium", reasons: [] },
+      { type: "source", text: "Fonte: Autor (2022).", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 9 }], confidence: "high", reasons: [] },
+      { type: "paragraph", text: "Parágrafo posterior às duas legendas que permanece.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 1 }], confidence: "medium", reasons: [] },
+    ];
+    const regions: Region[] = [{
+      id: "layout-11-7", pageStart: 11, pageEnd: 11, startLineIndex: 7, endLineIndex: 8, kind: "quadro",
+      caption: "Quadro 7 – Com fonte correspondente.", source: "Fonte: Autor (2022).", confidence: "high", reasons: [], logicalVisualId: "quadro-7-page-11",
+    }];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(incompleteInput(blocks, regions, { captionCount: 2, paragraphCount: 3, sourceCount: 1, unresolvedCount: 1 })));
+    const text = documentText(documentXml);
+    expect(text).toContain("Parágrafo entre as duas legendas que não deve ser suprimido.");
+    expect(text).not.toContain("Linha interna da segunda legenda que deve ser suprimida.");
+    expect(text).toContain("Parágrafo posterior às duas legendas que permanece.");
+    expect((documentXml.match(new RegExp(MARKER, "g")) ?? []).length).toBe(1);
+  });
+
+  it("legenda e fonte completas continuam suprimindo conteudo interno", async () => {
+    const blocks: Block[] = [
+      { type: "caption", text: "Quadro 1 – Completo com fonte.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Cabeçalho Completo", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-1" },
+      { type: "paragraph", text: "Linha interna completa que deve ser suprimida.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "medium", reasons: [] },
+      { type: "source", text: "Fonte: Autor (2020).", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 6 }], confidence: "high", reasons: [] },
+      { type: "paragraph", text: "Parágrafo após fonte completa que permanece.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 1 }], confidence: "medium", reasons: [] },
+    ];
+    const regions: Region[] = [{
+      id: "layout-11-1", pageStart: 11, pageEnd: 11, startLineIndex: 3, endLineIndex: 5, kind: "quadro",
+      caption: "Quadro 1 – Completo com fonte.", source: "Fonte: Autor (2020).", confidence: "high", reasons: [], logicalVisualId: "quadro-1-page-11",
+    }];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(incompleteInput(blocks, regions, { captionCount: 1, paragraphCount: 2, sourceCount: 1, unresolvedCount: 1 })));
+    const text = documentText(documentXml);
+    expect(text).not.toContain("Linha interna completa que deve ser suprimida.");
+    expect(text).toContain("Parágrafo após fonte completa que permanece.");
+    expect((documentXml.match(new RegExp(MARKER, "g")) ?? []).length).toBe(1);
+  });
+
+  it("caso sintetico existente de Quadro 1 continua passando", async () => {
+    const blocks: Block[] = [
+      { type: "caption", text: "Quadro 1 – Exemplo sintético para validação.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Cabeçalho Coluna A Coluna B", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-1" },
+      { type: "paragraph", text: "Linha interna um conteúdo da célula esquerda e direita.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "medium", reasons: [] },
+      { type: "source", text: "Fonte: Autor (2020).", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 6 }], confidence: "high", reasons: [] },
+    ];
+    const regions: Region[] = [{
+      id: "layout-11-1", pageStart: 11, pageEnd: 11, startLineIndex: 3, endLineIndex: 5, kind: "quadro",
+      caption: "Quadro 1 – Exemplo sintético para validação.", source: "Fonte: Autor (2020).", confidence: "high", reasons: [], logicalVisualId: "quadro-1-page-11",
+    }];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(incompleteInput(blocks, regions, { captionCount: 1, sourceCount: 1, unresolvedCount: 1 })));
+    const text = documentText(documentXml);
+    expect(text).toContain("Quadro 1 – Exemplo sintético para validação.");
+    expect(text).toContain(MARKER);
+    expect(text).toContain("Fonte: Autor (2020).");
+    expect(text).not.toContain("Linha interna um");
+  });
+
+  it("legenda sem fonte nao gera marcador duplicado nem altera a legenda", async () => {
+    const blocks: Block[] = [
+      { type: "caption", text: "Figura 3 – Sem fonte nem marcador.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "paragraph", text: "Texto normal após figura sem fonte que permanece.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "medium", reasons: [] },
+    ];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(incompleteInput(blocks, [], { captionCount: 1, paragraphCount: 1 })));
+    const text = documentText(documentXml);
+    expect((documentXml.match(new RegExp(MARKER, "g")) ?? []).length).toBe(0);
+    expect((documentXml.match(/Figura 3 – Sem fonte nem marcador\./g) ?? []).length).toBe(1);
+    expect(text).toContain("Texto normal após figura sem fonte que permanece.");
+  });
+});
