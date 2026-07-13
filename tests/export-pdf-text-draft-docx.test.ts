@@ -581,14 +581,95 @@ describe("estabilizacao de paginacao e folha de rosto", () => {
     expect(bodyParagraph).not.toContain("<w:keepLines/>");
   });
 
-  it("natureText possui recuo esperado, firstLine zero, espacamento simples e alinhamento justificado", async () => {
+  it("natureText possui recuo esperado, firstLine zero, espacamento simples, justificado e antes 900", async () => {
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
     const natureParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find((p) => p.includes("Dissertação apresentada à Universidade Federal de Lavras"));
     expect(natureParagraph).toBeDefined();
     expect(natureParagraph).toContain('<w:ind w:left="4535"');
     expect(natureParagraph).not.toContain('w:firstLine="');
-    expect(natureParagraph).toContain('<w:spacing w:before="0" w:after="0" w:line="240"');
+    expect(natureParagraph).toContain('<w:spacing w:before="900" w:after="0" w:line="240"');
     expect(natureParagraph).toContain('w:val="both"');
+    expect(natureParagraph).not.toContain("<w:b/>");
+  });
+
+  it("natureText, program e institution nao estao em negrito e usam justificado", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const paragraphs = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []);
+    const natureParagraph = paragraphs.find((p) => p.includes("Dissertação apresentada à Universidade Federal de Lavras"));
+    const programParagraph = paragraphs.find((p) => p.includes("Programa de Pós-Graduação em Administração Pública"));
+    const institutionParagraph = paragraphs.find((p) => p.includes("Universidade Federal de Lavras") && !p.includes("Dissertação apresentada") && !p.includes("Logo UFLA"));
+    expect(natureParagraph).toBeDefined();
+    expect(programParagraph).toBeDefined();
+    expect(institutionParagraph).toBeDefined();
+    expect(natureParagraph).not.toContain("<w:b/>");
+    expect(programParagraph).not.toContain("<w:b/>");
+    expect(institutionParagraph).not.toContain("<w:b/>");
+    expect(natureParagraph).toContain('w:val="both"');
+    expect(programParagraph).toContain('w:val="both"');
+    expect(institutionParagraph).toContain('w:val="both"');
+  });
+
+  it("program e institution possuem antes zero e mesmo recuo", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const paragraphs = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []);
+    const programParagraph = paragraphs.find((p) => p.includes("Programa de Pós-Graduação em Administração Pública"));
+    const institutionParagraph = paragraphs.find((p) => p.includes("Universidade Federal de Lavras") && !p.includes("Dissertação apresentada") && !p.includes("Logo UFLA"));
+    expect(programParagraph).toBeDefined();
+    expect(institutionParagraph).toBeDefined();
+    expect(programParagraph).toContain('<w:ind w:left="4535"');
+    expect(institutionParagraph).toContain('<w:ind w:left="4535"');
+    expect(programParagraph).toContain('<w:spacing w:before="0" w:after="0" w:line="240"');
+    expect(institutionParagraph).toContain('<w:spacing w:before="0" w:after="0" w:line="240"');
+  });
+
+  it("advisor possui antes 240 e alinhamento esquerdo", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const paragraphs = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []);
+    const advisorParagraph = paragraphs.find((p) => p.includes("Orientador: Prof. João Silva"));
+    expect(advisorParagraph).toBeDefined();
+    expect(advisorParagraph).toContain('<w:ind w:left="4535"');
+    expect(advisorParagraph).toContain('<w:spacing w:before="240" w:after="0" w:line="240"');
+    expect(advisorParagraph).toContain('w:val="left"');
+    expect(advisorParagraph).not.toContain("<w:b/>");
+  });
+
+  it("coadvisor possui antes zero, alinhamento esquerdo e nao esta em negrito", async () => {
+    const input = baseInput({
+      pretextual: {
+        ...baseInput().pretextual!,
+        titlePage: {
+          ...baseInput().pretextual!.titlePage!,
+          coadvisor: "Coorientador: Prof. Maria Souza",
+        },
+      },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    const paragraphs = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []);
+    const coadvisorParagraph = paragraphs.find((p) => p.includes("Coorientador: Prof. Maria Souza"));
+    expect(coadvisorParagraph).toBeDefined();
+    expect(coadvisorParagraph).toContain('<w:ind w:left="4535"');
+    expect(coadvisorParagraph).toContain('<w:spacing w:before="0" w:after="0" w:line="240"');
+    expect(coadvisorParagraph).toContain('w:val="left"');
+    expect(coadvisorParagraph).not.toContain("<w:b/>");
+  });
+
+  it("titulo principal da folha de rosto continua em negrito", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const titleParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find((p) => p.includes("TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL") && p.includes('w:val="center"'));
+    expect(titleParagraph).toBeDefined();
+    expect(titleParagraph).toContain("<w:b/>");
+  });
+
+  it("bloco de natureza nao usa tabela, caixa de texto nem recuo de primeira linha", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const paragraphs = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []);
+    for (const needle of ["Dissertação apresentada à Universidade Federal de Lavras", "Programa de Pós-Graduação em Administração Pública", "Universidade Federal de Lavras", "Orientador: Prof. João Silva"]) {
+      const p = paragraphs.find((x) => x.includes(needle));
+      expect(p).toBeDefined();
+      expect(p).not.toContain('w:firstLine="');
+      expect(p).not.toContain("<w:tbl");
+      expect(p).not.toContain("<w:txbxContent");
+    }
   });
 
   it("program e institution usam o mesmo recuo", async () => {

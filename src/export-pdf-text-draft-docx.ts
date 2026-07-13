@@ -246,10 +246,14 @@ function coverParagraphs(input: PdfTextDraftExportInput, logo?: PdfTextDraftLogo
   return paragraphs;
 }
 
-function titlePageNatureParagraph(text: string, bold = false): Paragraph {
-  return paragraph([run(cleanText(text) || " ", 24, { bold })], {
-    alignment: AlignmentType.JUSTIFIED,
-    spacing: { ...ZERO_SPACING, line: SINGLE_LINE_TWIP },
+function titlePageNatureParagraph(
+  text: string,
+  options: { before?: number; alignment?: IParagraphOptions["alignment"] } = {},
+): Paragraph {
+  const { before = 0, alignment = AlignmentType.JUSTIFIED } = options;
+  return paragraph([run(cleanText(text) || " ", 24)], {
+    alignment,
+    spacing: { before, after: 0, line: SINGLE_LINE_TWIP },
     indent: { left: TITLE_PAGE_NATURE_LEFT_TWIP },
   });
 }
@@ -261,18 +265,25 @@ function titlePageParagraphs(input: PdfTextDraftExportInput): Paragraph[] {
   const title = titlePage?.title ?? cover?.title ?? "[TÍTULO AUSENTE]";
   const city = titlePage?.city ?? cover?.city ?? "[LOCAL AUSENTE]";
   const year = titlePage?.year ?? cover?.year ?? "[ANO AUSENTE]";
-  const lines = [
-    titlePage?.natureText,
-    titlePage?.program,
-    titlePage?.institution,
-  ].filter((line): line is string => Boolean(line));
   return [
     centered(author),
     centered(title, { bold: true, before: 1200 }),
     ...(titlePage?.subtitle ? [centered(titlePage.subtitle, { bold: true })] : []),
-    ...lines.map((line, index) => titlePageNatureParagraph(line, index === 0)),
-    ...(titlePage?.advisor ? [titlePageNatureParagraph(titlePage.advisor, false)] : []),
-    ...(titlePage?.coadvisor ? [titlePageNatureParagraph(titlePage.coadvisor, false)] : []),
+    ...(titlePage?.natureText
+      ? [titlePageNatureParagraph(titlePage.natureText, { before: 900, alignment: AlignmentType.JUSTIFIED })]
+      : []),
+    ...(titlePage?.program
+      ? [titlePageNatureParagraph(titlePage.program, { before: 0, alignment: AlignmentType.JUSTIFIED })]
+      : []),
+    ...(titlePage?.institution
+      ? [titlePageNatureParagraph(titlePage.institution, { before: 0, alignment: AlignmentType.JUSTIFIED })]
+      : []),
+    ...(titlePage?.advisor
+      ? [titlePageNatureParagraph(titlePage.advisor, { before: 240, alignment: AlignmentType.LEFT })]
+      : []),
+    ...(titlePage?.coadvisor
+      ? [titlePageNatureParagraph(titlePage.coadvisor, { before: 0, alignment: AlignmentType.LEFT })]
+      : []),
     centered(city, { before: 3600 }),
     centered(year),
     pageBreak(),
