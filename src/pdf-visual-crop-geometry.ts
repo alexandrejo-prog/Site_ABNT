@@ -104,28 +104,27 @@ function selectedIndexRange(
   region: PdfLayoutSensitiveRegionDiagnostic,
   pageNumber: number,
   lineCount: number,
-): { start: number; end: number } {
-  const last = lineCount - 1;
-  let start: number;
-  let end: number;
+): { start: number; end: number } | null {
+  const lastLineIndex = lineCount - 1;
+  let rawStart: number;
+  let rawEnd: number;
   if (region.pageStart === region.pageEnd) {
-    start = region.startLineIndex;
-    end = region.endLineIndex;
+    rawStart = region.startLineIndex;
+    rawEnd = region.endLineIndex;
   } else if (pageNumber === region.pageStart) {
-    start = region.startLineIndex;
-    end = last;
+    rawStart = region.startLineIndex;
+    rawEnd = lastLineIndex;
   } else if (pageNumber === region.pageEnd) {
-    start = 0;
-    end = region.endLineIndex;
+    rawStart = 0;
+    rawEnd = region.endLineIndex;
   } else {
-    start = 0;
-    end = last;
+    rawStart = 0;
+    rawEnd = lastLineIndex;
   }
-  const safeLast = last >= 0 ? last : 0;
-  return {
-    start: clampRange(start, 0, safeLast),
-    end: clampRange(end, 0, safeLast),
-  };
+  const safeStart = Math.max(0, rawStart);
+  const safeEnd = Math.min(lastLineIndex, rawEnd);
+  if (safeStart > safeEnd) return null;
+  return { start: safeStart, end: safeEnd };
 }
 
 export function computePdfVisualCropGeometry(
@@ -136,9 +135,14 @@ export function computePdfVisualCropGeometry(
   const crops: PdfVisualCropGeometry[] = [];
   const skipped: PdfVisualCropSkip[] = [];
   const pageByNumber = new Map(pages.map((page) => [page.pageNumber, page]));
+  const regionStartLineById = new Map(regions.map((region) => [region.id, region.startLineIndex]));
 
   for (const region of regions) {
-    if (region.startLineIndex > region.endLineIndex) {
+    if (region.pageStart > region.pageEnd) {
+      skipped.push({ regionId: region.id, reason: "invalid-line-range" });
+      continue;
+    }
+    if (region.pageStart === region.pageEnd && region.startLineIndex > region.endLineIndex) {
       skipped.push({ regionId: region.id, reason: "invalid-line-range" });
       continue;
     }
@@ -159,6 +163,10 @@ export function computePdfVisualCropGeometry(
       }
 
       const indices = selectedIndexRange(region, pageNumber, page.lines.length);
+      if (!indices) {
+        skipped.push({ regionId: region.id, pageNumber, reason: "no-valid-lines" });
+        continue;
+      }
       const selected = page.lines.filter(
         (line, idx) => idx >= indices.start && idx <= indices.end && hasValidCoords(line),
       );
@@ -250,7 +258,15 @@ export function computePdfVisualCropGeometry(
   crops.sort(
     (a, b) =>
       a.pageNumber - b.pageNumber ||
+      (regionStartLineById.get(a.regionId) ?? 0) - (regionStartLineById.get(b.regionId) ?? 0) ||
       a.regionId.localeCompare(b.regionId),
+  );
+
+  skipped.sort(
+    (a, b) =>
+      (a.pageNumber ?? -1) - (b.pageNumber ?? -1) ||
+      a.regionId.localeCompare(b.regionId) ||
+      a.reason.localeCompare(b.reason),
   );
 
   return { crops, skipped };

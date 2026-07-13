@@ -447,4 +447,170 @@ describe("camada de geometria de recorte visual pdf", () => {
       expect(source.includes(token)).toBe(false);
     }
   });
+
+  const mk = (pn: number, tops: number[]) =>
+    tops.map((t) => line(pn, { left: 100, right: 900, top: t, bottom: t + 30, height: 30 }));
+
+  it("regiao multipagina com startLineIndex maior que endLineIndex continua valida", () => {
+    const pages = [
+      page(1, PAGE_W, PAGE_H, mk(1, [100, 150, 200, 250, 300])),
+      page(2, PAGE_W, PAGE_H, mk(2, [100, 150, 200, 250, 300])),
+      page(3, PAGE_W, PAGE_H, mk(3, [100, 150, 200, 250, 300])),
+    ];
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 3, startLineIndex: 20, endLineIndex: 3, kind: "figura" })];
+    const result = computePdfVisualCropGeometry(pages, regions);
+    expect(result.skipped.every((s) => s.reason !== "invalid-line-range")).toBe(true);
+    expect(result.crops.map((c) => c.pageNumber).sort((a, b) => a - b)).toEqual([2, 3]);
+  });
+
+  it("primeira pagina multipagina com start totalmente acima das linhas gera no-valid-lines somente nessa pagina", () => {
+    const pages = [
+      page(1, PAGE_W, PAGE_H, mk(1, [100, 150, 200, 250, 300])),
+      page(2, PAGE_W, PAGE_H, mk(2, [100, 150, 200, 250, 300])),
+      page(3, PAGE_W, PAGE_H, mk(3, [100, 150, 200, 250, 300])),
+    ];
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 3, startLineIndex: 100, endLineIndex: 4, kind: "figura" })];
+    const result = computePdfVisualCropGeometry(pages, regions);
+    expect(result.skipped).toEqual([{ regionId: "r1", pageNumber: 1, reason: "no-valid-lines" }]);
+    expect(result.crops.map((c) => c.pageNumber).sort((a, b) => a - b)).toEqual([2, 3]);
+  });
+
+  it("pagina intermediaria da mesma regiao multipagina ainda produz crop", () => {
+    const pages = [
+      page(1, PAGE_W, PAGE_H, mk(1, [100, 150, 200, 250, 300])),
+      page(2, PAGE_W, PAGE_H, mk(2, [100, 150, 200, 250, 300])),
+      page(3, PAGE_W, PAGE_H, mk(3, [100, 150, 200, 250, 300])),
+    ];
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 3, startLineIndex: 100, endLineIndex: 2, kind: "figura" })];
+    const result = computePdfVisualCropGeometry(pages, regions);
+    const middle = result.crops.find((c) => c.pageNumber === 2);
+    expect(middle).toBeDefined();
+  });
+
+  it("ultima pagina da mesma regiao multipagina produz crop usando 0 ate endLineIndex", () => {
+    const pages = [
+      page(1, PAGE_W, PAGE_H, mk(1, [100, 150, 200, 250, 300])),
+      page(2, PAGE_W, PAGE_H, mk(2, [100, 150, 200, 250, 300])),
+      page(3, PAGE_W, PAGE_H, mk(3, [100, 150, 200, 250, 300])),
+    ];
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 3, startLineIndex: 100, endLineIndex: 2, kind: "figura" })];
+    const result = computePdfVisualCropGeometry(pages, regions);
+    const last = result.crops.find((c) => c.pageNumber === 3)!;
+    // usa linhas 0..2 -> top 100, bottom 230, vPad 18
+    expect(last.sourceRect.y).toBe(82);
+    expect(last.sourceRect.height).toBe(166);
+  });
+
+  it("intervalo de pagina unica totalmente acima das linhas nao seleciona a ultima linha", () => {
+    const pages = [page(1, PAGE_W, PAGE_H, mk(1, [100, 120, 140, 160, 180, 200, 220, 240, 260, 280]))];
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 20, endLineIndex: 30, kind: "figura" })];
+    const result = computePdfVisualCropGeometry(pages, regions);
+    expect(result.crops).toHaveLength(0);
+    expect(result.skipped).toEqual([{ regionId: "r1", pageNumber: 1, reason: "no-valid-lines" }]);
+  });
+
+  it("intervalo de pagina unica totalmente abaixo de zero nao seleciona a primeira linha", () => {
+    const pages = [page(1, PAGE_W, PAGE_H, mk(1, [100, 120, 140, 160, 180, 200, 220, 240, 260, 280]))];
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: -10, endLineIndex: -2, kind: "figura" })];
+    const result = computePdfVisualCropGeometry(pages, regions);
+    expect(result.crops).toHaveLength(0);
+    expect(result.skipped).toEqual([{ regionId: "r1", pageNumber: 1, reason: "no-valid-lines" }]);
+  });
+
+  it("intervalo parcialmente acima da faixa usa apenas a intersecao valida", () => {
+    const pages = [page(1, PAGE_W, PAGE_H, mk(1, [100, 120, 140, 160, 180, 200, 220, 240, 260, 280]))];
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: -3, endLineIndex: 4, kind: "figura" })];
+    const result = computePdfVisualCropGeometry(pages, regions);
+    expect(result.crops).toHaveLength(1);
+    expect(result.crops[0].sourceRect.y).toBe(82); // linha 0 (top 100) - vPad 18
+    expect(result.crops[0].sourceRect.height).toBe(146); // ate linha 4 (bottom 210) + vPad 18
+  });
+
+  it("intervalo parcialmente abaixo de zero usa apenas a intersecao valida", () => {
+    const pages = [page(1, PAGE_W, PAGE_H, mk(1, [100, 120, 140, 160, 180, 200, 220, 240, 260, 280]))];
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 7, endLineIndex: 20, kind: "figura" })];
+    const result = computePdfVisualCropGeometry(pages, regions);
+    expect(result.crops).toHaveLength(1);
+    expect(result.crops[0].sourceRect.y).toBe(222); // linha 7 (top 240) - vPad 18
+    expect(result.crops[0].sourceRect.height).toBe(106); // ate linha 9 (bottom 310) + vPad 18
+  });
+
+  it("intervalo invertido em pagina unica gera invalid-line-range", () => {
+    const pages = [page(1, PAGE_W, PAGE_H, mk(1, [100, 120, 140]))];
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 8, endLineIndex: 3, kind: "figura" })];
+    const result = computePdfVisualCropGeometry(pages, regions);
+    expect(result.crops).toHaveLength(0);
+    expect(result.skipped).toEqual([{ regionId: "r1", reason: "invalid-line-range" }]);
+  });
+
+  it("pageStart maior que pageEnd gera invalid-line-range", () => {
+    const pages = [page(1, PAGE_W, PAGE_H, mk(1, [100, 120, 140]))];
+    const regions = [region({ id: "r1", pageStart: 5, pageEnd: 2, startLineIndex: 0, endLineIndex: 2, kind: "figura" })];
+    const result = computePdfVisualCropGeometry(pages, regions);
+    expect(result.crops).toHaveLength(0);
+    expect(result.skipped).toEqual([{ regionId: "r1", reason: "invalid-line-range" }]);
+  });
+
+  it("regiao multipagina com pagina sem linhas gera no-valid-lines nessa pagina", () => {
+    const pages = [
+      page(1, PAGE_W, PAGE_H, mk(1, [100, 150, 200])),
+      page(2, PAGE_W, PAGE_H, []),
+      page(3, PAGE_W, PAGE_H, mk(3, [100, 150, 200])),
+    ];
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 3, startLineIndex: 0, endLineIndex: 2, kind: "figura" })];
+    const result = computePdfVisualCropGeometry(pages, regions);
+    expect(result.skipped).toEqual([{ regionId: "r1", pageNumber: 2, reason: "no-valid-lines" }]);
+    expect(result.crops.map((c) => c.pageNumber).sort((a, b) => a - b)).toEqual([1, 3]);
+  });
+
+  it("ordenacao na mesma pagina considera startLineIndex antes do id", () => {
+    const pages = [page(1, PAGE_W, PAGE_H, mk(1, Array.from({ length: 13 }, (_, i) => 100 + i * 20)))];
+    const regions = [
+      region({ id: "z", pageStart: 1, pageEnd: 1, startLineIndex: 2, endLineIndex: 4, kind: "figura" }),
+      region({ id: "a", pageStart: 1, pageEnd: 1, startLineIndex: 10, endLineIndex: 12, kind: "figura" }),
+    ];
+    const { crops } = computePdfVisualCropGeometry(pages, regions);
+    expect(crops.map((c) => c.regionId)).toEqual(["z", "a"]);
+  });
+
+  it("id desempata duas regioes com o mesmo startLineIndex", () => {
+    const pages = [page(1, PAGE_W, PAGE_H, mk(1, Array.from({ length: 13 }, (_, i) => 100 + i * 20)))];
+    const regions = [
+      region({ id: "b", pageStart: 1, pageEnd: 1, startLineIndex: 5, endLineIndex: 7, kind: "figura" }),
+      region({ id: "a", pageStart: 1, pageEnd: 1, startLineIndex: 5, endLineIndex: 7, kind: "figura" }),
+    ];
+    const { crops } = computePdfVisualCropGeometry(pages, regions);
+    expect(crops.map((c) => c.regionId)).toEqual(["a", "b"]);
+  });
+
+  it("skipped possui ordem deterministica", () => {
+    const pages = [page(9, PAGE_W, PAGE_H, []), page(5, 0, 0, []), page(2, PAGE_W, PAGE_H, mk(2, [100]))];
+    const regions = [
+      region({ id: "r2", pageStart: 2, pageEnd: 2, startLineIndex: 5, endLineIndex: 1, kind: "figura" }),
+      region({ id: "r1", pageStart: 5, pageEnd: 5, startLineIndex: 0, endLineIndex: 0, kind: "figura" }),
+      region({ id: "r3", pageStart: 9, pageEnd: 9, startLineIndex: 0, endLineIndex: 0, kind: "figura" }),
+    ];
+    const { skipped } = computePdfVisualCropGeometry(pages, regions);
+    expect(skipped).toEqual([
+      { regionId: "r2", reason: "invalid-line-range" },
+      { regionId: "r1", pageNumber: 5, reason: "invalid-page-size" },
+      { regionId: "r3", pageNumber: 9, reason: "no-valid-lines" },
+    ]);
+  });
+
+  it("casos validos anteriores mantem sourceRect e normalizedRect inalterados", () => {
+    const pages = [page(1, PAGE_W, PAGE_H, [
+      line(1, { left: 100, right: 900, top: 200, bottom: 230, height: 30 }),
+      line(1, { left: 100, right: 900, top: 240, bottom: 270, height: 30 }),
+    ])];
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 1, kind: "figura" })];
+    const { crops } = computePdfVisualCropGeometry(pages, regions);
+    expect(crops[0].sourceRect).toEqual({ x: 90, y: 182, width: 820, height: 106 });
+    expect(crops[0].normalizedRect).toEqual({
+      x: 90 / PAGE_W,
+      y: 182 / PAGE_H,
+      width: 820 / PAGE_W,
+      height: 106 / PAGE_H,
+    });
+  });
 });
