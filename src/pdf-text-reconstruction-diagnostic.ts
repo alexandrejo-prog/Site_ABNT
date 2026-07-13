@@ -709,6 +709,35 @@ function appendLineText(current: string, next: string, entry: ClassifiedLine, hy
   return `${current}${next}`;
 }
 
+function isHeadingContinuation(previous: ClassifiedLine, next: ClassifiedLine, metrics: PdfBodyLayoutMetrics): boolean {
+  if (next.role !== "body") return false;
+  if (isObviousHeadingText(next.text)) return false;
+  if (CAPTION_RE.test(next.text) || SOURCE_RE.test(next.text) || LIST_ITEM_RE.test(next.text)) return false;
+  if (terminalPunctuation(previous.text)) return false;
+  // A continuação deve compartilhar exatamente a fonte do título (ex.: negrito do título
+  // vs. peso regular do parágrafo seguinte, que aparece na mesma margem). Linhas sem nome de
+  // fonte explícito são ambíguas e não são unidas (preserva o comportamento anterior).
+  const previousFont = lineFontName(previous);
+  const nextFont = lineFontName(next);
+  if (!previousFont || !nextFont || previousFont !== nextFont) return false;
+  if (Math.abs(previous.line.height - next.line.height) > Math.max(3, metrics.medianLineHeight * 0.35)) return false;
+
+  const samePage = previous.pageNumber === next.pageNumber;
+  if (samePage) {
+    const smallGap = lineGap(previous, next) <= Math.max(metrics.medianLineGap * 1.4, metrics.medianLineHeight * 1.4, 22);
+    if (!smallGap) return false;
+    if (Math.abs(previous.line.left - next.line.left) > Math.max(36, metrics.probableFirstLineIndent + 18)) return false;
+    return true;
+  }
+
+  // Continuação de título segura atravessando quebra de página: a linha anterior termina
+  // perto do rodapé, a seguinte começa perto do topo e a margem é compatível.
+  const previousNearEnd = previous.relativeBottom >= 0.78;
+  const nextNearStart = next.relativeTop <= 0.25;
+  const marginCompatible = Math.abs(previous.line.left - next.line.left) <= Math.max(24, metrics.probableFirstLineIndent + 12);
+  return previousNearEnd && nextNearStart && marginCompatible && !terminalPunctuation(next.text);
+}
+
 function combineHeadingLines(classified: ClassifiedLine[], startIndex: number, metrics: PdfBodyLayoutMetrics): { block: PdfReconstructedBlockDiagnostic; endIndex: number } {
   const first = classified[startIndex];
   const entries = [first];
@@ -718,17 +747,20 @@ function combineHeadingLines(classified: ClassifiedLine[], startIndex: number, m
     const previous = entries[entries.length - 1];
     const afterNext = classified.slice(index + 1).find((candidate) => !["page-number", "repeated-header", "repeated-footer"].includes(candidate.role));
     const smallGap = previous.pageNumber === next.pageNumber && lineGap(previous, next) <= Math.max(metrics.medianLineGap * 1.4, metrics.medianLineHeight * 1.4, 22);
-    const compatible = next.role === "heading"
+    const headingCompatible = next.role === "heading"
       && smallGap
       && Math.abs(previous.line.left - next.line.left) <= Math.max(36, metrics.probableFirstLineIndent + 18)
       && compatibleFont(previous, next, metrics)
       && !terminalPunctuation(previous.text)
       && !(NUMBERED_HEADING_RE.test(previous.text) && NUMBERED_HEADING_RE.test(next.text))
-      && (afterNext?.role === "body" || next.text.length <= 80);
-    if (!compatible) break;
+      && (afterNext?.role === "body" || next.text.length <= 80)
+      && !(entries.some((entry) => entry.role === "body") && next.role === "heading");
+    const continuationCompatible = next.role === "body" && isHeadingContinuation(previous, next, metrics);
+    if (!headingCompatible && !continuationCompatible) break;
     entries.push(next);
     index += 1;
   }
+  const hasContinuation = entries.some((entry) => entry.role === "body");
   return {
     block: {
       type: "heading",
@@ -739,7 +771,9 @@ function combineHeadingLines(classified: ClassifiedLine[], startIndex: number, m
       confidence: entries.some((entry) => entry.confidence === "high") ? "high" : "medium",
       reasons: [
         ...new Set(entries.flatMap((entry) => entry.reasons)),
-        entries.length > 1 ? "Titulo multilinha combinado por alinhamento, fonte e intervalo." : "",
+        entries.length > 1
+          ? (hasContinuation ? "heading-continuation-merged" : "Titulo multilinha combinado por alinhamento, fonte e intervalo.")
+          : "",
       ].filter(Boolean),
     },
     endIndex: index - 1,
