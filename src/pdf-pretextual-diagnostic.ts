@@ -383,21 +383,13 @@ function detectTitlePage(pages: PdfPageDiagnostic[], coverPage?: number, bodyPag
     natureText: natureText || undefined,
     program,
     institution,
-    advisor: stripAdvisorRole(extractedAdvisor),
-    coadvisor: stripAdvisorRole(extractAdvisor(best.lines, coadvisorLine)),
+    advisor: extractAdvisor(best.lines, advisorLine),
+    coadvisor: extractAdvisor(best.lines, coadvisorLine),
     city: cityLine && !isYear(cityLine.text) ? cityLine.text : undefined,
     year: yearLine?.text,
     confidence: confidence(best.score),
     sourceLines: best.lines.map((line) => ({ pageNumber: line.pageNumber, lineIndex: line.lineIndex })),
   };
-}
-
-// Removes a leading "Orientador(a):" / "Coorientador(a):" role label so the advisor
-// field stores only the person's name.
-function stripAdvisorRole(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  const stripped = clean(value).replace(/^(?:co)?orientador(?:a)?\s*:?\s*/iu, "").trim();
-  return stripped || undefined;
 }
 
 function paragraphFromLines(lines: LineRef[]): string {
