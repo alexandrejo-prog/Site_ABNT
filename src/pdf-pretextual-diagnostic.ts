@@ -1,4 +1,9 @@
-import type { PdfAbstractDiagnostic, PdfPageDiagnostic, PdfPretextualDiagnostic, PdfSourceLineReference } from "./imported-pdf-diagnostic";
+import type {
+  PdfAbstractDiagnostic,
+  PdfPageDiagnostic,
+  PdfPretextualDiagnostic,
+  PdfSourceLineReference,
+} from "./imported-pdf-diagnostic";
 
 type LineRef = PdfSourceLineReference & {
   text: string;
@@ -8,6 +13,11 @@ type LineRef = PdfSourceLineReference & {
   bottom: number;
   pageWidth: number;
 };
+
+const PERSON_CONNECTORS = new Set(["DA", "DAS", "DE", "DO", "DOS", "E"]);
+const TITLE_TERMS = /\b(?:ADMINISTRACAO|AMBIENTAL|ANALISE|BRASIL|DESAFIOS|DESEMPENHO|EDUCACAO|ESTUDO|GESTAO|IMPLEMENTACAO|INOVACAO|INSTITUICAO|ORGANIZACIONAL|ORGANIZACOES|PESQUISA|POLITICA|POLITICAS|PROGRAMA|PUBLICA|PUBLICAS|PUBLICO|PUBLICOS|SERVIDOR|SERVIDORES|TELETRABALHO|TRABALHO|UNIVERSIDADE)\b/u;
+const PROGRAM_RE = /PROGRAMA DE POS-GRADUACAO|PROGRAMA DE PÓS-GRADUAÇÃO/iu;
+const ADVISOR_RE = /\b(?:COORIENTADOR|ORIENTADOR)(?:A)?\b/iu;
 
 function clean(text: string): string {
   let normalized = text
@@ -20,7 +30,18 @@ function clean(text: string): string {
 }
 
 function fold(text: string): string {
-  return clean(text).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+  return clean(text)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+}
+
+function normalizedWords(text: string): string[] {
+  return fold(text)
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
 }
 
 function isCentered(line: LineRef): boolean {
@@ -37,16 +58,46 @@ function isLikelyInstitution(text: string): boolean {
   return normalized.includes("UNIVERSIDADE FEDERAL DE LAVRAS") || normalized === "UFLA";
 }
 
+function isNatureAnchor(text: string): boolean {
+  const normalized = fold(text);
+  const dissertationLike = /^(?:DISSERTACAO|TESE|MONOGRAFIA)\b/u.test(normalized)
+    && /(?:APRESENTAD|SUBMETID|COMO PARTE|EXIGENCIAS|OBTENCAO|TITULO)/u.test(normalized);
+  const workLike = /^TRABALHO\b/u.test(normalized)
+    && /(?:APRESENTAD|SUBMETID|CONCLUSAO|EXIGENCIAS|OBTENCAO|TITULO)/u.test(normalized);
+  return dissertationLike
+    || workLike
+    || /COMO PARTE DAS EXIGENCIAS/u.test(normalized)
+    || /PARA (?:A )?OBTENCAO DO TITULO/u.test(normalized);
+}
+
 function isLikelyPersonName(text: string): boolean {
-  if (clean(text) === fold(text) && clean(text).length > 45) return false;
-  const words = clean(text).split(/\s+/);
-  if (words.length < 2 || words.length > 8) return false;
-  if (/[.:;]/.test(text)) return false;
-  return words.every((word) => /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç'-]+$/.test(word));
+  const value = clean(text);
+  if (!value || /\d/.test(value) || /[.:;!?]/.test(value)) return false;
+  const words = value.split(/\s+/);
+  if (words.length < 2 || words.length > 7) return false;
+  const folded = fold(value);
+  if (TITLE_TERMS.test(folded) || isLikelyInstitution(value) || isNatureAnchor(value) || PROGRAM_RE.test(value) || ADVISOR_RE.test(value)) {
+    return false;
+  }
+  const lexicalWords = words.filter((word) => !PERSON_CONNECTORS.has(fold(word)));
+  if (lexicalWords.length < 2 || lexicalWords.length > 5) return false;
+  return words.every((word) => {
+    if (PERSON_CONNECTORS.has(fold(word))) return true;
+    return /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç'-]+$/u.test(word)
+      || /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ]{2,}$/u.test(word);
+  });
 }
 
 function isAdministrativeOrApproval(text: string): boolean {
-  return /(ficha catalografica|folha de aprovacao|banca examinadora|ata de defesa|catalogacao)/i.test(fold(text));
+  return /(FICHA CATALOGRAFICA|FOLHA DE APROVACAO|BANCA EXAMINADORA|ATA DE DEFESA|CATALOGACAO)/u.test(fold(text));
+}
+
+function isProgramLine(text: string): boolean {
+  return PROGRAM_RE.test(text);
+}
+
+function isAdvisorLine(text: string): boolean {
+  return ADVISOR_RE.test(text);
 }
 
 function linesBeforeBody(pages: PdfPageDiagnostic[], bodyPage?: number): LineRef[] {
@@ -79,9 +130,27 @@ function pageLineRefs(page: PdfPageDiagnostic): LineRef[] {
 }
 
 function confidence(score: number): "high" | "medium" | "low" {
-  if (score >= 4) return "high";
-  if (score >= 2) return "medium";
+  if (score >= 6) return "high";
+  if (score >= 3) return "medium";
   return "low";
+}
+
+function findLikelyAuthor(lines: LineRef[]): LineRef | undefined {
+  const scored = lines
+    .map((line, index) => {
+      if (!isLikelyPersonName(line.text)) return undefined;
+      const previous = lines[index - 1];
+      const next = lines[index + 1];
+      let score = 1;
+      if (isCentered(line)) score += 2;
+      if (previous && isLikelyInstitution(previous.text)) score += 1;
+      if (next && isCentered(next) && clean(next.text).length >= 18 && !isLikelyPersonName(next.text)) score += 1;
+      if (line.top < 330) score += 1;
+      return { line, score, index };
+    })
+    .filter((entry): entry is { line: LineRef; score: number; index: number } => Boolean(entry));
+  scored.sort((a, b) => b.score - a.score || a.index - b.index);
+  return scored[0]?.line;
 }
 
 function titleBlock(lines: LineRef[], afterIndex: number, beforeLine?: LineRef): string | undefined {
@@ -89,10 +158,16 @@ function titleBlock(lines: LineRef[], afterIndex: number, beforeLine?: LineRef):
   const beforeIndex = beforeLine ? lines.indexOf(beforeLine) : lines.length;
   const candidates = lines
     .slice(start, beforeIndex < 0 ? lines.length : beforeIndex)
-    .filter((line) => isCentered(line) && !isYear(line.text) && !isLikelyInstitution(line.text))
+    .filter((line) => isCentered(line))
+    .filter((line) => !isYear(line.text) && !isLikelyInstitution(line.text) && !isLikelyPersonName(line.text))
+    .filter((line) => !isNatureAnchor(line.text) && !isProgramLine(line.text) && !isAdvisorLine(line.text))
     .filter((line) => clean(line.text).length >= 12);
   if (!candidates.length) return undefined;
-  return candidates.map((line) => line.text).join(" ");
+  return clean(candidates.map((line) => line.text).join(" "));
+}
+
+function coverHasTitlePageSignals(lines: LineRef[]): boolean {
+  return lines.some((line) => isNatureAnchor(line.text) || isAdvisorLine(line.text) || isProgramLine(line.text));
 }
 
 function detectCover(pages: PdfPageDiagnostic[], bodyPage?: number): PdfPretextualDiagnostic["cover"] {
@@ -101,23 +176,36 @@ function detectCover(pages: PdfPageDiagnostic[], bodyPage?: number): PdfPretextu
 
   for (const page of candidates) {
     const lines = pageLineRefs(page);
-    if (lines.some((line) => isAdministrativeOrApproval(line.text))) continue;
+    if (lines.some((line) => isAdministrativeOrApproval(line.text)) || coverHasTitlePageSignals(lines)) continue;
     const centeredCount = lines.filter(isCentered).length;
     const hasInstitution = lines.some((line) => isLikelyInstitution(line.text));
-    const hasPerson = lines.some((line) => isLikelyPersonName(line.text));
+    const authorLine = findLikelyAuthor(lines);
     const hasYear = lines.some((line) => isYear(line.text));
     const verticalGaps = lines.slice(1).map((line, index) => line.top - lines[index].bottom).filter((gap) => gap > 0);
     const hasLargeGap = verticalGaps.some((gap) => gap > 38);
-    const score = (hasInstitution ? 1 : 0) + (hasPerson ? 1 : 0) + (hasYear ? 1 : 0) + (centeredCount >= Math.max(3, lines.length * 0.45) ? 1 : 0) + (hasLargeGap ? 1 : 0);
+    const yearLine = [...lines].reverse().find((line) => isYear(line.text));
+    const cityLine = yearLine
+      ? [...lines.slice(0, lines.indexOf(yearLine))].reverse().find((line) => isCentered(line) && !isLikelyInstitution(line.text) && !isLikelyPersonName(line.text))
+      : undefined;
+    const authorIndex = authorLine ? lines.indexOf(authorLine) : -1;
+    const probableTitle = titleBlock(lines, authorIndex, cityLine ?? yearLine);
+    const score = (hasInstitution ? 2 : 0)
+      + (authorLine ? 2 : 0)
+      + (hasYear ? 1 : 0)
+      + (centeredCount >= Math.max(3, lines.length * 0.45) ? 1 : 0)
+      + (hasLargeGap ? 1 : 0)
+      + (probableTitle ? 1 : 0);
     if (!best || score > best.score) best = { page, score, lines };
   }
 
-  if (!best || best.score < 2) return undefined;
+  if (!best || best.score < 5) return undefined;
   const institutionLine = best.lines.find((line) => isLikelyInstitution(line.text));
-  const authorLine = best.lines.find((line) => isLikelyPersonName(line.text));
+  const authorLine = findLikelyAuthor(best.lines);
   const authorIndex = authorLine ? best.lines.indexOf(authorLine) : -1;
   const yearLine = [...best.lines].reverse().find((line) => isYear(line.text));
-  const cityLine = yearLine ? [...best.lines.slice(0, best.lines.indexOf(yearLine))].reverse().find((line) => isCentered(line) && !isLikelyInstitution(line.text) && !isLikelyPersonName(line.text)) : undefined;
+  const cityLine = yearLine
+    ? [...best.lines.slice(0, best.lines.indexOf(yearLine))].reverse().find((line) => isCentered(line) && !isLikelyInstitution(line.text) && !isLikelyPersonName(line.text))
+    : undefined;
   const title = titleBlock(best.lines, authorIndex, cityLine ?? yearLine);
 
   return {
@@ -131,6 +219,60 @@ function detectCover(pages: PdfPageDiagnostic[], bodyPage?: number): PdfPretextu
   };
 }
 
+function overlapWordCount(left: string[], right: string[]): number {
+  const max = Math.min(left.length, right.length);
+  for (let size = max; size >= 1; size -= 1) {
+    if (left.slice(left.length - size).join(" ") === right.slice(0, size).join(" ")) return size;
+  }
+  return 0;
+}
+
+function containsNormalizedText(container: string, candidate: string): boolean {
+  const containerWords = normalizedWords(container);
+  const candidateWords = normalizedWords(candidate);
+  if (!candidateWords.length || candidateWords.length > containerWords.length) return false;
+  return containerWords.join(" ").includes(candidateWords.join(" "));
+}
+
+export function deduplicateNatureLines(lines: string[]): string {
+  const output: string[] = [];
+  for (const rawLine of lines) {
+    const line = clean(rawLine);
+    if (!line) continue;
+    const accumulated = clean(output.join(" "));
+    if (accumulated && containsNormalizedText(accumulated, line)) continue;
+    if (!accumulated) {
+      output.push(line);
+      continue;
+    }
+    const accumulatedWords = normalizedWords(accumulated);
+    const lineWords = normalizedWords(line);
+    const overlap = overlapWordCount(accumulatedWords, lineWords);
+    const overlapText = lineWords.slice(0, overlap).join(" ");
+    if (overlap >= 3 && overlapText.length >= 15) {
+      const originalWords = line.split(/\s+/);
+      const remainder = originalWords.slice(overlap).join(" ");
+      if (remainder) output.push(remainder);
+      continue;
+    }
+    output.push(line);
+  }
+  return clean(output.join(" "));
+}
+
+function extractAdvisor(lines: LineRef[], advisorLine: LineRef | undefined): string | undefined {
+  if (!advisorLine) return undefined;
+  const index = lines.indexOf(advisorLine);
+  const text = clean(advisorLine.text);
+  const afterColon = text.split(":").slice(1).join(":").trim();
+  if (afterColon.length >= 3) return text;
+  const next = lines[index + 1];
+  if (next && !isYear(next.text) && !isProgramLine(next.text) && !isAdvisorLine(next.text)) {
+    return `${text.replace(/\s*:?\s*$/, "")}: ${next.text}`;
+  }
+  return text;
+}
+
 function detectTitlePage(pages: PdfPageDiagnostic[], coverPage?: number, bodyPage?: number): PdfPretextualDiagnostic["titlePage"] {
   const candidates = pages.filter((page) => page.pageNumber !== coverPage && (!bodyPage || page.pageNumber < bodyPage)).slice(0, 8);
   let best: { page: PdfPageDiagnostic; score: number; lines: LineRef[] } | undefined;
@@ -138,47 +280,61 @@ function detectTitlePage(pages: PdfPageDiagnostic[], coverPage?: number, bodyPag
   for (const page of candidates) {
     const lines = pageLineRefs(page);
     if (lines.some((line) => isAdministrativeOrApproval(line.text))) continue;
-    const hasNature = lines.some((line) => /(DISSERTACAO|TESE|MONOGRAFIA|TRABALHO)/.test(fold(line.text)));
-    const hasAdvisor = lines.some((line) => /ORIENTADOR/.test(fold(line.text)));
-    const hasProgram = lines.some((line) => /PROGRAMA DE POS-GRADUACAO|PROGRAMA DE PÓS-GRADUAÇÃO/i.test(line.text));
+    const hasNature = lines.some((line) => isNatureAnchor(line.text));
+    const hasAdvisor = lines.some((line) => isAdvisorLine(line.text));
+    const hasProgram = lines.some((line) => isProgramLine(line.text));
     const hasYear = lines.some((line) => isYear(line.text));
-    const hasPerson = lines.some((line) => isLikelyPersonName(line.text));
-    const score = (hasNature ? 2 : 0) + (hasAdvisor ? 1 : 0) + (hasProgram ? 1 : 0) + (hasYear ? 1 : 0) + (hasPerson ? 1 : 0);
+    const hasPerson = Boolean(findLikelyAuthor(lines));
+    const score = (hasNature ? 4 : 0) + (hasAdvisor ? 2 : 0) + (hasProgram ? 2 : 0) + (hasYear ? 1 : 0) + (hasPerson ? 1 : 0);
     if (!best || score > best.score) best = { page, score, lines };
   }
 
-  if (!best || best.score < 2) return undefined;
-  const authorLine = best.lines.find((line) => isLikelyPersonName(line.text));
+  if (!best || best.score < 4) return undefined;
+  const authorLine = findLikelyAuthor(best.lines);
   const authorIndex = authorLine ? best.lines.indexOf(authorLine) : -1;
-  const natureLine = best.lines.find((line) => /(DISSERTACAO|TESE|MONOGRAFIA|TRABALHO)/.test(fold(line.text)));
-  const title = titleBlock(best.lines, authorIndex, natureLine);
+  const natureLine = best.lines.find((line) => isNatureAnchor(line.text));
   const natureStart = natureLine ? best.lines.indexOf(natureLine) : -1;
-  const advisorNameLine = best.lines.find((line, index) => index > natureStart && /PROF|DR|DRA/i.test(line.text));
-  const programLine = best.lines.find((line) => /PROGRAMA DE POS-GRADUACAO|PROGRAMA DE PÓS-GRADUAÇÃO/i.test(line.text));
-  const advisorLine = best.lines.find((line) => /ORIENTADOR/.test(fold(line.text)));
-  const coadvisorLine = best.lines.find((line) => /COORIENTADOR/.test(fold(line.text)));
-  const institutionLine = best.lines.find((line) => isLikelyInstitution(line.text));
+  const advisorLine = best.lines.find((line) => /\bORIENTADOR(?:A)?\b/iu.test(fold(line.text)));
+  const coadvisorLine = best.lines.find((line) => /\bCOORIENTADOR(?:A)?\b/iu.test(fold(line.text)));
+  const programLine = best.lines.find((line) => isProgramLine(line.text));
   const yearLine = [...best.lines].reverse().find((line) => isYear(line.text));
-  const cityLine = yearLine ? [...best.lines.slice(0, best.lines.indexOf(yearLine))].reverse().find((line) => isCentered(line)) : undefined;
+  const cityLine = yearLine
+    ? [...best.lines.slice(0, best.lines.indexOf(yearLine))].reverse().find((line) => isCentered(line) && !isNatureAnchor(line.text) && !isProgramLine(line.text) && !isAdvisorLine(line.text))
+    : undefined;
+  const stopCandidates = [advisorLine, coadvisorLine, cityLine, yearLine]
+    .filter((line): line is LineRef => Boolean(line))
+    .map((line) => best.lines.indexOf(line))
+    .filter((index) => index > natureStart);
+  const natureEnd = stopCandidates.length ? Math.min(...stopCandidates) : best.lines.length;
+  const natureLines = natureStart >= 0 ? best.lines.slice(natureStart, natureEnd).map((line) => line.text) : [];
+  const natureText = natureLines.length ? deduplicateNatureLines(natureLines) : undefined;
+  const title = titleBlock(best.lines, authorIndex, natureLine);
 
-  const advisorIndex = advisorLine ? best.lines.indexOf(advisorLine) : best.lines.length;
-  const natureText = natureStart >= 0
-    ? best.lines.slice(natureStart, Math.max(natureStart + 1, advisorNameLine ? best.lines.indexOf(advisorNameLine) : advisorIndex)).map((line) => line.text).join(" ")
+  let program: string | undefined;
+  if (programLine) {
+    const programIndex = best.lines.indexOf(programLine);
+    const programEnd = [advisorLine, coadvisorLine, cityLine, yearLine]
+      .filter((line): line is LineRef => Boolean(line))
+      .map((line) => best.lines.indexOf(line))
+      .filter((index) => index > programIndex)
+      .sort((a, b) => a - b)[0] ?? Math.min(programIndex + 2, best.lines.length);
+    const programText = deduplicateNatureLines(best.lines.slice(programIndex, programEnd).map((line) => line.text));
+    if (programText && !(natureText && containsNormalizedText(natureText, programText))) program = programText;
+  }
+
+  const institutionLine = best.lines.find((line) => isLikelyInstitution(line.text) && line !== natureLine);
+  const institution = institutionLine && !(natureText && containsNormalizedText(natureText, institutionLine.text))
+    ? institutionLine.text
     : undefined;
-  const programIndex = programLine ? best.lines.indexOf(programLine) : -1;
-  const program = programIndex >= 0
-    ? best.lines.slice(programIndex, Math.min(programIndex + 2, advisorNameLine ? best.lines.indexOf(advisorNameLine) : best.lines.length)).map((line) => line.text).join(" ")
-    : undefined;
-  const advisor = advisorNameLine && advisorLine ? `${advisorLine.text}: ${advisorNameLine.text}` : advisorLine?.text;
 
   return {
     author: authorLine?.text,
     title,
     natureText,
     program,
-    institution: institutionLine?.text,
-    advisor,
-    coadvisor: coadvisorLine?.text,
+    institution,
+    advisor: extractAdvisor(best.lines, advisorLine),
+    coadvisor: extractAdvisor(best.lines, coadvisorLine),
     city: cityLine && !isYear(cityLine.text) ? cityLine.text : undefined,
     year: yearLine?.text,
     confidence: confidence(best.score),
@@ -187,7 +343,7 @@ function detectTitlePage(pages: PdfPageDiagnostic[], coverPage?: number, bodyPag
 }
 
 function paragraphFromLines(lines: LineRef[]): string {
-  return lines.map((line) => line.text).join(" ").replace(/\s+/g, " ").trim();
+  return clean(lines.map((line) => line.text).join(" "));
 }
 
 function detectAbstract(lines: LineRef[], title: "RESUMO" | "ABSTRACT"): PdfAbstractDiagnostic | undefined {
