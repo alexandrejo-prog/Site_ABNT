@@ -300,6 +300,13 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
     }
   }
 
+  const unreliableRanges = new Set<string>();
+  for (const [id, range] of logicalVisualRanges) {
+    if (range.pageEnd - range.pageStart > 3) {
+      unreliableRanges.add(id);
+    }
+  }
+
   for (const block of input.reconstruction.blocks) {
     const text = cleanText(block.text);
     if (!text && block.type !== "unresolved") continue;
@@ -316,7 +323,8 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
         );
         if (!hasUnresolved) {
           const range = region.logicalVisualId ? logicalVisualRanges.get(region.logicalVisualId) : undefined;
-          paragraphs.push(left(markerForBlock(block, regions, range), { size: 20, italics: true }));
+          const reliableRange = range && region.logicalVisualId && !unreliableRanges.has(region.logicalVisualId) ? range : undefined;
+          paragraphs.push(left(markerForBlock(block, regions, reliableRange), { size: 20, italics: true }));
           emittedKeys.add(dedupKey);
         }
       }
@@ -329,7 +337,8 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
       if (emittedKeys.has(dedupKey)) continue;
       emittedKeys.add(dedupKey);
       const range = logicalId ? logicalVisualRanges.get(logicalId) : undefined;
-      paragraphs.push(left(markerForBlock(block, regions, range), { size: 20, italics: true }));
+      const reliableRange = range && logicalId && !unreliableRanges.has(logicalId) ? range : undefined;
+      paragraphs.push(left(markerForBlock(block, regions, reliableRange), { size: 20, italics: true }));
     }
   }
   return paragraphs;

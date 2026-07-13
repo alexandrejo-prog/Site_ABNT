@@ -83,7 +83,7 @@ function baseInput(overrides: Partial<PdfTextDraftExportInput> = {}): PdfTextDra
         source: "Fonte: Alves (2020).",
         confidence: "high",
         reasons: ["Legenda visual identificada."],
-        logicalVisualId: "quadro-1",
+        logicalVisualId: "quadro-1-page-25",
       }, {
         id: "layout-26-1",
         pageStart: 26,
@@ -94,7 +94,7 @@ function baseInput(overrides: Partial<PdfTextDraftExportInput> = {}): PdfTextDra
         caption: "Tabela 1 – Síntese.",
         confidence: "medium",
         reasons: ["Legenda visual identificada."],
-        logicalVisualId: "tabela-1",
+        logicalVisualId: "tabela-1-page-26",
       }],
       hyphenation: [{
         pageNumber: 17,
@@ -282,8 +282,8 @@ describe("exportacao textual minima de PDF reconstruido", () => {
 
   it("quadro com mesma regiao logica em paginas diferentes gera um unico marcador", async () => {
     const regions = [
-      { id: "layout-27-1", pageStart: 27, pageEnd: 27, startLineIndex: 1, endLineIndex: 3, kind: "quadro" as const, caption: "Quadro 2 – Síntese (continua).", confidence: "high" as const, reasons: [], logicalVisualId: "quadro-2" },
-      { id: "layout-28-1", pageStart: 28, pageEnd: 28, startLineIndex: 0, endLineIndex: 2, kind: "quadro" as const, caption: "Quadro 2 – Síntese (conclusão).", confidence: "high" as const, reasons: [], logicalVisualId: "quadro-2" },
+      { id: "layout-27-1", pageStart: 27, pageEnd: 27, startLineIndex: 1, endLineIndex: 3, kind: "quadro" as const, caption: "Quadro 2 – Síntese (continua).", confidence: "high" as const, reasons: [], logicalVisualId: "quadro-2-page-27" },
+      { id: "layout-28-1", pageStart: 28, pageEnd: 28, startLineIndex: 0, endLineIndex: 2, kind: "quadro" as const, caption: "Quadro 2 – Síntese (conclusão).", confidence: "high" as const, reasons: [], logicalVisualId: "quadro-2-page-27" },
     ];
     const blocks = [
       { type: "unresolved" as const, text: "Linha A", pageStart: 27, pageEnd: 27, sourceLines: [{ pageNumber: 27, lineIndex: 1 }], confidence: "low" as const, reasons: [], layoutRegionId: "layout-27-1" },
@@ -445,7 +445,7 @@ describe("exportacao textual minima de PDF reconstruido", () => {
           source: "Fonte: Autor.",
           confidence: "high",
           reasons: [],
-          logicalVisualId: "grafico-1",
+          logicalVisualId: "grafico-1-page-40",
         }, {
           id: "layout-42-1",
           pageStart: 42,
@@ -457,7 +457,7 @@ describe("exportacao textual minima de PDF reconstruido", () => {
           source: "Fonte: Autor.",
           confidence: "high",
           reasons: [],
-          logicalVisualId: "grafico-1",
+          logicalVisualId: "grafico-1-page-40",
         }],
         statistics: { ...baseInput().reconstruction.statistics, layoutRegionCount: 2, captionCount: 2, sourceCount: 2, unresolvedCount: 0, paragraphCount: 1 },
       },
@@ -501,5 +501,33 @@ describe("exportacao textual minima de PDF reconstruido", () => {
   it("nao existe w:tbl no documento", async () => {
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
     expect(documentXml).not.toContain("w:tbl");
+  });
+
+  it("marcador mostra pagina correta para regiao sem continuacao", async () => {
+    const input = baseInput({
+      reconstruction: {
+        ...baseInput().reconstruction,
+        layoutRegions: [{
+          id: "layout-50-1",
+          pageStart: 50,
+          pageEnd: 50,
+          startLineIndex: 0,
+          endLineIndex: 1,
+          kind: "grafico" as const,
+          caption: "Gráfico 5 – Isolado.",
+          source: "Fonte: Autor.",
+          confidence: "high" as const,
+          reasons: [],
+          logicalVisualId: "grafico-5-page-50",
+        }],
+        blocks: [
+          { type: "paragraph" as const, text: "Parágrafo válido para validação.", pageStart: 17, pageEnd: 17, sourceLines: [{ pageNumber: 17, lineIndex: 2 }], confidence: "medium" as const, reasons: [] },
+          { type: "unresolved" as const, text: "Conteúdo interno.", pageStart: 50, pageEnd: 50, sourceLines: [{ pageNumber: 50, lineIndex: 1 }], confidence: "low" as const, reasons: [], layoutRegionId: "layout-50-1" },
+        ],
+      },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("página original 50");
+    expect(documentXml).not.toContain("páginas originais");
   });
 });

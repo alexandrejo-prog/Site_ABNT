@@ -140,10 +140,22 @@ function kindFromCaption(text: string): PdfLayoutSensitiveRegionDiagnostic["kind
   return kind as PdfLayoutSensitiveRegionDiagnostic["kind"];
 }
 
-function logicalIdFromCaption(text: string): string | undefined {
+function logicalIdFromCaption(text: string, pageNumber: number, key: string, firstIdByKindNumber: Map<string, string>): string | undefined {
   const match = CAPTION_RE.exec(text);
   if (!match) return undefined;
-  return `${kindFromCaption(text)}-${match[2]}`;
+  const kind = kindFromCaption(text);
+  const number = match[2];
+  const continuation = isContinuationCaption(text) ? "-continued" : "";
+  const baseId = `${kind}-${number}-page-${pageNumber}`;
+  if (continuation) {
+    const firstId = firstIdByKindNumber.get(key);
+    if (firstId) return firstId;
+    firstIdByKindNumber.set(key, baseId);
+    return baseId;
+  }
+  const newId = `${kind}-${number}-page-${pageNumber}`;
+  firstIdByKindNumber.set(key, newId);
+  return newId;
 }
 
 function isContinuationCaption(text: string): boolean {
@@ -161,7 +173,12 @@ function pageHasSubstantialBodyText(page: PdfPageDiagnostic): boolean {
   });
 }
 
-function bridgeMultiPageRegions(regions: PdfLayoutSensitiveRegionDiagnostic[], pages: PdfPageDiagnostic[]): PdfLayoutSensitiveRegionDiagnostic[] {
+type BridgeResult = {
+  regions: PdfLayoutSensitiveRegionDiagnostic[];
+  alerts: string[];
+};
+
+function bridgeMultiPageRegions(regions: PdfLayoutSensitiveRegionDiagnostic[], pages: PdfPageDiagnostic[]): BridgeResult {
   const result = [...regions];
   const pageMap = new Map(pages.map((page) => [page.pageNumber, page]));
 
@@ -173,7 +190,7 @@ function bridgeMultiPageRegions(regions: PdfLayoutSensitiveRegionDiagnostic[], p
     groups.set(region.logicalVisualId, list);
   }
 
-
+  const alerts: string[] = [];
 
   for (const [, group] of groups) {
     if (group.length < 2) continue;
@@ -183,7 +200,21 @@ function bridgeMultiPageRegions(regions: PdfLayoutSensitiveRegionDiagnostic[], p
       const next = sorted[i + 1];
       const bridgeStart = current.pageEnd + 1;
       const bridgeEnd = next.pageStart - 1;
+      const distance = next.pageStart - current.pageEnd;
       if (bridgeStart > bridgeEnd) continue;
+      if (distance > 3) {
+        alerts.push(`Elemento visual ${current.logicalVisualId} atravessa ${distance} paginas sem evidencia explicita de continuacao.`);
+        continue;
+      }
+      let hasIndependentVisual = false;
+      for (let bridgePage = bridgeStart; bridgePage <= bridgeEnd; bridgePage++) {
+        const page = pageMap.get(bridgePage);
+        if (page && pageHasSubstantialBodyText(page)) {
+          hasIndependentVisual = true;
+          break;
+        }
+      }
+      if (hasIndependentVisual) continue;
       for (let bridgePage = bridgeStart; bridgePage <= bridgeEnd; bridgePage++) {
         const page = pageMap.get(bridgePage);
         if (page && pageHasSubstantialBodyText(page)) continue;
@@ -205,11 +236,12 @@ function bridgeMultiPageRegions(regions: PdfLayoutSensitiveRegionDiagnostic[], p
     }
   }
 
-  return result;
+  return { regions: result, alerts };
 }
 
-export function findLayoutRegions(pages: PdfPageDiagnostic[]): PdfLayoutSensitiveRegionDiagnostic[] {
+export function findLayoutRegions(pages: PdfPageDiagnostic[]): { regions: PdfLayoutSensitiveRegionDiagnostic[]; alerts: string[] } {
   const regions: PdfLayoutSensitiveRegionDiagnostic[] = [];
+  const firstIdByKindNumber = new Map<string, string>();
   for (const page of pages) {
     let regionIndex = 0;
     for (let index = 0; index < page.lines.length; index += 1) {
@@ -263,7 +295,7 @@ export function findLayoutRegions(pages: PdfPageDiagnostic[]): PdfLayoutSensitiv
           source ? "Fonte compativel encerra a regiao." : "Regiao encerrada antes de novo texto ou fim da pagina.",
           isContinuationCaption(line.text) ? "Legenda indica continuacao ou conclusao." : "",
         ].filter(Boolean),
-        logicalVisualId: logicalIdFromCaption(line.text),
+        logicalVisualId: logicalIdFromCaption(line.text, page.pageNumber, `${kind}-${CAPTION_RE.exec(line.text.trim())?.[2]}`, firstIdByKindNumber),
       });
       regionIndex += 1;
       if (nextCaptionIndex > -1 && nextCaptionIndex <= endLineIndex + 1) index = nextCaptionIndex - 1;
@@ -389,7 +421,7 @@ function bodyLikeAfter(lines: ClassifiedLine[], index: number): boolean {
 }
 
 export function detectPdfBodyStartContextual(pages: PdfPageDiagnostic[], classified?: ClassifiedLine[]): PdfBodyStartDiagnostic {
-  const effectiveClassified = classified ?? baseClassifyLines(pages, findLayoutRegions(pages));
+  const effectiveClassified = classified ?? baseClassifyLines(pages, findLayoutRegions(pages).regions);
   for (const [index, entry] of effectiveClassified.entries()) {
     const numbered = NUMBERED_INTRODUCTION.test(entry.text);
     const unnumbered = UNNUMBERED_INTRODUCTION.test(entry.text);
@@ -631,7 +663,7 @@ function buildAlerts(blocks: PdfReconstructedBlockDiagnostic[], statistics: PdfT
 }
 
 export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTextReconstructionDiagnostic {
-  const layoutRegions = findLayoutRegions(pages);
+  const { regions: layoutRegions, alerts: bridgeAlerts } = findLayoutRegions(pages);
   const baseClassified = baseClassifyLines(pages, layoutRegions);
   const initialMetrics = calculateBodyLayoutMetrics(baseClassified);
   const classified = classifyHeadingsWithMetrics(baseClassified, initialMetrics);
@@ -753,7 +785,7 @@ export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTe
     bodyLayoutMetrics,
     layoutRegions,
     hyphenation,
-    alerts: buildAlerts(blocks, statistics, pages.length),
+    alerts: [...bridgeAlerts, ...buildAlerts(blocks, statistics, pages.length)],
     statistics,
   };
 }

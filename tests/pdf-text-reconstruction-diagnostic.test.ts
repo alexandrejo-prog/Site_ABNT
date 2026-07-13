@@ -440,7 +440,7 @@ describe("reconstrucao textual diagnostica de PDF", () => {
       page(27, ["Quadro 1 – Síntese (conclusão).", "Linha C", "Fonte: Autor.", bodyA]),
     ]);
 
-    const bridgeId = `layout-26-bridge-quadro-1`;
+    const bridgeId = `layout-26-bridge-quadro-1-page-25`;
     const regionIds = result.layoutRegions.map((r) => r.id);
     expect(result.layoutRegions.length, `found ${result.layoutRegions.length} regions: ${regionIds.join(", ")}`).toBeGreaterThan(2);
     expect(result.layoutRegions.filter((r) => r.id === bridgeId).length, `bridge id ${bridgeId} not in [${regionIds.join(", ")}]`).toBe(1);
@@ -518,5 +518,76 @@ describe("reconstrucao textual diagnostica de PDF", () => {
     expect(caption?.layoutRegionId).toBeTruthy();
     expect(source?.layoutRegionId).toBeTruthy();
     expect(caption?.layoutRegionId).toBe(source?.layoutRegionId);
+  });
+
+  it("Grafico 1 e Grafico 2 na mesma pagina tem IDs diferentes", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(57, ["Gráfico 1 – Vendas.", "Fonte: Autor.", "Gráfico 2 – Custos.", "Fonte: Autor.", bodyA]),
+    ]);
+    const graphicRegions = result.layoutRegions.filter((r) => r.kind === "grafico");
+    expect(graphicRegions).toHaveLength(2);
+    expect(graphicRegions[0].logicalVisualId).not.toBe(graphicRegions[1].logicalVisualId);
+  });
+
+  it("Grafico 1 pagina 57 e Grafico 10 pagina 74 nao sao agrupados", () => {
+    const longBody = "Este parágrafo mais longo ajuda a evitar alertas de parágrafo de uma linha nos testes de diagnóstico.";
+    const result = reconstructPdfParagraphBlocks([
+      page(57, ["Gráfico 1 – Vendas.", "Fonte: Autor.", longBody]),
+      page(74, ["Gráfico 10 – Mercado.", "Fonte: Autor.", longBody]),
+    ]);
+    const graphicRegions = result.layoutRegions.filter((r) => r.kind === "grafico");
+    expect(graphicRegions).toHaveLength(2);
+    expect(graphicRegions[0].logicalVisualId).not.toBe(graphicRegions[1].logicalVisualId);
+    expect(result.layoutRegions.filter((r) => r.id.includes("bridge"))).toHaveLength(0);
+  });
+
+  it("Quadro 8 continua/conclusao nas paginas 63-64 compartilha ID", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(63, ["Quadro 8 – Dados (continua).", "Linha 1", bodyA]),
+      page(64, ["Quadro 8 – Dados (conclusão).", "Linha 2", "Fonte: Autor.", bodyA]),
+    ]);
+    const quadroRegions = result.layoutRegions.filter((r) => r.kind === "quadro");
+    expect(quadroRegions).toHaveLength(2);
+    expect(quadroRegions[0].logicalVisualId).toBe(quadroRegions[1].logicalVisualId);
+  });
+
+  it("Quadro 4 e Quadro 5 nao compartilham ID", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(60, ["Quadro 4 – Resumo.", "Valor 1", "Valor 2", "Fonte: Autor.", bodyA]),
+      page(61, ["Quadro 5 – Análise.", "Valor X", "Valor Y", "Fonte: Autor.", bodyA]),
+    ]);
+    const quadroRegions = result.layoutRegions.filter((r) => r.kind === "quadro");
+    expect(quadroRegions).toHaveLength(2);
+    expect(quadroRegions[0].logicalVisualId).not.toBe(quadroRegions[1].logicalVisualId);
+  });
+
+  it("regiao sem continuacao gera pagina unica", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(50, ["Gráfico 3 – Barras.", "Fonte: Autor.", bodyA]),
+    ]);
+    const graphicRegions = result.layoutRegions.filter((r) => r.kind === "grafico");
+    expect(graphicRegions).toHaveLength(1);
+    expect(graphicRegions[0].pageStart).toBe(50);
+    expect(graphicRegions[0].pageEnd).toBe(50);
+  });
+
+  it("nenhuma regiao sintetica atravessa mais de 3 paginas sem marcador explicito", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(10, ["Quadro 9 – Início.", "Linha 1", bodyA]),
+      page(11, ["Texto intermediário longo o suficiente para não ser ponte.", bodyA]),
+      page(12, ["Texto intermediário longo o suficiente para não ser ponte.", bodyA]),
+      page(13, ["Texto intermediário longo o suficiente para não ser ponte.", bodyA]),
+      page(14, ["Quadro 9 – Conclusão.", "Linha 2", "Fonte: Autor.", bodyA]),
+    ]);
+    const bridgeRegions = result.layoutRegions.filter((r) => r.id.startsWith("layout-") && r.id.includes("bridge"));
+    expect(bridgeRegions).toHaveLength(0);
+    expect(result.alerts.some((a) => a.includes("atravessa") && a.includes("sem evidencia explicita"))).toBe(true);
+  });
+
+  it("texto entre visuais independentes continua como paragraph", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(55, ["Gráfico 1 – Vendas.", "Fonte: Autor.", "Texto normal entre gráficos.", "Gráfico 2 – Custos.", "Fonte: Autor.", bodyA]),
+    ]);
+    expect(result.blocks.some((b) => b.type === "paragraph" && b.text.includes("Texto normal entre gráficos"))).toBe(true);
   });
 });

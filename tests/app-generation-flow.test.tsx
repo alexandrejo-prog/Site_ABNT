@@ -149,7 +149,7 @@ function pdfDiagnosticResult(fileName = "diagnostico.pdf") {
             source: "Fonte: teste.",
             confidence: "high",
             reasons: ["Legenda visual identificada."],
-            logicalVisualId: "quadro-1",
+            logicalVisualId: "quadro-1-page-1",
           },
         ],
         hyphenation: [
