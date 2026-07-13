@@ -32,15 +32,29 @@ function decodeXmlText(text: string): string {
     .replace(/&apos;/g, "'");
 }
 
-function tocTitleFromParagraph(paragraphXml: string): string {
-  const tokenIndex = paragraphXml.indexOf("__PDF_PAGEREF_");
-  const titleScope = tokenIndex >= 0 ? paragraphXml.slice(0, tokenIndex) : paragraphXml;
-  return [...titleScope.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)]
+function visibleTextFromXml(xml: string): string {
+  return [...xml.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)]
     .map((match) => decodeXmlText(match[1]))
     .filter((text) => !/^__PDF_(?:PAGEREF|BM_)/.test(text))
     .join("")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function tocTitleFromParagraph(paragraphXml: string): string {
+  const tokenIndex = paragraphXml.indexOf("__PDF_PAGEREF_");
+  const titleScope = tokenIndex >= 0 ? paragraphXml.slice(0, tokenIndex) : paragraphXml;
+  return visibleTextFromXml(titleScope);
+}
+
+function bookmarkHeadingTitles(xml: string): Map<string, string> {
+  const titles = new Map<string, string>();
+  const pattern = /__PDF_BM_START_(PDFBM\d{3})__([\s\S]*?)__PDF_BM_END_\1__/g;
+  for (const match of xml.matchAll(pattern)) {
+    const title = visibleTextFromXml(match[2]);
+    if (title) titles.set(match[1], title);
+  }
+  return titles;
 }
 
 function ensureTabRunBeforePageRef(paragraphXml: string): string {
@@ -73,17 +87,19 @@ function formatTocParagraph(paragraphXml: string, title: string): string {
   return ensureTabRunBeforePageRef(formatted);
 }
 
-function filterAndFormatTocParagraphs(xml: string): string {
+function filterAndFormatTocParagraphs(xml: string, headingTitles: Map<string, string>): string {
   return xml.replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraphXml) => {
-    if (!paragraphXml.includes("__PDF_PAGEREF_PDFBM")) return paragraphXml;
-    const title = tocTitleFromParagraph(paragraphXml);
+    const bookmark = paragraphXml.match(/__PDF_PAGEREF_(PDFBM\d{3})__/)?.[1];
+    if (!bookmark) return paragraphXml;
+    const title = headingTitles.get(bookmark) ?? tocTitleFromParagraph(paragraphXml);
     if (!title || !isPdfTocEligibleHeadingText(title)) return "";
     return formatTocParagraph(paragraphXml, title);
   });
 }
 
 export function patchPdfTextDraftDocumentXml(xml: string): string {
-  let patched = filterAndFormatTocParagraphs(xml);
+  const headingTitles = bookmarkHeadingTitles(xml);
+  let patched = filterAndFormatTocParagraphs(xml, headingTitles);
   const bookmarkStarts = [...patched.matchAll(/__PDF_BM_START_(PDFBM\d{3})__/g)].map((match, index) => ({
     token: match[0],
     name: match[1],
