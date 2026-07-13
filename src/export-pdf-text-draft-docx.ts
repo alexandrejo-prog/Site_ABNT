@@ -158,15 +158,16 @@ function computeMarkerCount(input: PdfTextDraftExportInput): number {
     if (block.type !== "unresolved") continue;
     const region = block.layoutRegionId ? input.reconstruction.layoutRegions.find((r) => r.id === block.layoutRegionId) : undefined;
     const dedupKey = region?.logicalVisualId ?? block.layoutRegionId ?? `unresolved-${block.pageStart}-${block.sourceLines[0]?.lineIndex ?? 0}`;
-    if (!visualAssets[dedupKey]) keys.add(dedupKey);
+    if (!hasVisualAssetForRegion(region, visualAssets)) keys.add(dedupKey);
   }
   for (const region of input.reconstruction.layoutRegions) {
     if (!isGraphicLikeKind(region.kind)) continue;
     const dedupKey = region.logicalVisualId ?? region.id;
     if (keys.has(dedupKey)) continue;
-    if (visualAssets[dedupKey]) continue;
-    const hasUnresolved = input.reconstruction.blocks.some((b) => b.layoutRegionId === region.id && b.type === "unresolved");
-    if (!hasUnresolved) keys.add(dedupKey);
+    if (!hasVisualAssetForRegion(region, visualAssets)) {
+      const hasUnresolved = input.reconstruction.blocks.some((b) => b.layoutRegionId === region.id && b.type === "unresolved");
+      if (!hasUnresolved) keys.add(dedupKey);
+    }
   }
   return keys.size;
 }

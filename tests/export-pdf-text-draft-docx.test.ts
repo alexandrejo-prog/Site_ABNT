@@ -1328,6 +1328,62 @@ describe("ativos visuais de regioes pdf", () => {
     expect(expected).toBe(1);
   });
 
+  it("unresolved com layoutRegionId sem região e com ativo gera marcador e contagem 1", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Texto.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "unresolved", text: "INTERNO SEM REGIAO", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "low", reasons: [], layoutRegionId: "missing-region" },
+    ], [], {
+      includeReconstructedPretextuals: false,
+      visualAssets: { "missing-region": asset("missing-region") },
+      statistics: { paragraphCount: 1, unresolvedCount: 1, layoutRegionCount: 0 },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    const markerMatches = documentXml.match(/Conteúdo com estrutura visual não resolvida/g) ?? [];
+    const summaryMatch = documentXml.match(/Elementos visuais representados por marcadores: (\d+)/);
+    expect(summaryMatch).not.toBeNull();
+    const expected = Number(summaryMatch![1]);
+    expect(markerMatches.length).toBe(expected);
+    expect(expected).toBe(1);
+  });
+
+  it("unresolved com região correspondente e ativo nao gera marcador e contagem 0", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Texto.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "unresolved", text: "INTERNO COM REGIAO E ATIVO", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-a" },
+    ], [{
+      id: "layout-11-a", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 2, kind: "figura",
+      confidence: "high", reasons: [], logicalVisualId: "figura-a-page-11",
+    }], {
+      includeReconstructedPretextuals: false,
+      visualAssets: { "figura-a-page-11": asset("figura-a-page-11") },
+      statistics: { paragraphCount: 1, unresolvedCount: 1, layoutRegionCount: 1 },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("<w:drawing");
+    expect(documentXml).not.toContain("Elemento visual não inserido");
+    expect(documentXml).not.toContain("Conteúdo com estrutura visual não resolvida");
+    const summaryMatch = documentXml.match(/Elementos visuais representados por marcadores: (\d+)/);
+    expect(summaryMatch).not.toBeNull();
+    expect(Number(summaryMatch![1])).toBe(0);
+  });
+
+  it("unresolved sem região e sem ativo gera marcador e contagem 1", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Texto.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "unresolved", text: "INTERNO SEM REGIAO NEM ATIVO", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "low", reasons: [], layoutRegionId: "missing-region-2" },
+    ], [], {
+      includeReconstructedPretextuals: false,
+      statistics: { paragraphCount: 1, unresolvedCount: 1, layoutRegionCount: 0 },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    const markerMatches = documentXml.match(/Conteúdo com estrutura visual não resolvida/g) ?? [];
+    const summaryMatch = documentXml.match(/Elementos visuais representados por marcadores: (\d+)/);
+    expect(summaryMatch).not.toBeNull();
+    const expected = Number(summaryMatch![1]);
+    expect(markerMatches.length).toBe(expected);
+    expect(expected).toBe(1);
+  });
+
   it("imagem de quadro nao gera tabela nem numeracao e figura continua funcionando", async () => {
     const input = visualInput([
       { type: "paragraph", text: "Texto antes.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
