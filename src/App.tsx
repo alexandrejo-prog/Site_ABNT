@@ -117,6 +117,7 @@ export default function App() {
   const [pdfDiagnostic, setPdfDiagnostic] = useState<ImportedPdfDiagnostic | null>(null);
   const [selectedPdfPageNumber, setSelectedPdfPageNumber] = useState(1);
   const [pdfDiagnosticViewMode, setPdfDiagnosticViewMode] = useState<"lines" | "blocks">("lines");
+  const [pdfBlockFilter, setPdfBlockFilter] = useState<"all" | "paragraphs" | "headings" | "unresolved" | "low-confidence">("all");
   const [importedSourceKind, setImportedSourceKind] = useState<SourceKind | null>(null);
   const [importedDocumentMode, setImportedDocumentMode] = useState<DocumentMode | null>(null);
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
@@ -157,7 +158,22 @@ export default function App() {
     if (!pdfDiagnostic) return [];
     return pdfDiagnostic.reconstruction.blocks
       .filter((block) => block.pageStart <= selectedPdfPageNumber && block.pageEnd >= selectedPdfPageNumber)
+      .filter((block) => {
+        if (pdfBlockFilter === "paragraphs") return block.type === "paragraph";
+        if (pdfBlockFilter === "headings") return block.type === "heading";
+        if (pdfBlockFilter === "unresolved") return block.type === "unresolved";
+        if (pdfBlockFilter === "low-confidence") return block.confidence === "low";
+        return true;
+      })
       .slice(0, 30);
+  }, [pdfBlockFilter, pdfDiagnostic, selectedPdfPageNumber]);
+  const selectedPdfLayoutRegions = useMemo(() => {
+    if (!pdfDiagnostic) return [];
+    return pdfDiagnostic.reconstruction.layoutRegions.filter((region) => region.pageStart <= selectedPdfPageNumber && region.pageEnd >= selectedPdfPageNumber);
+  }, [pdfDiagnostic, selectedPdfPageNumber]);
+  const selectedPdfHyphenation = useMemo(() => {
+    if (!pdfDiagnostic) return [];
+    return pdfDiagnostic.reconstruction.hyphenation.filter((entry) => entry.pageNumber === selectedPdfPageNumber);
   }, [pdfDiagnostic, selectedPdfPageNumber]);
 
   useEffect(() => installEditorScrollFix(), []);
@@ -313,6 +329,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
         setPdfDiagnostic(result.pdfDiagnostic ?? null);
         setSelectedPdfPageNumber(1);
         setPdfDiagnosticViewMode("lines");
+        setPdfBlockFilter("all");
         setStatus("O PDF foi lido para diagnóstico. A conversão para DOCX ainda não está habilitada nesta etapa.");
         return;
       }
@@ -351,6 +368,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       setPdfDiagnostic(null);
       setSelectedPdfPageNumber(1);
       setPdfDiagnosticViewMode("lines");
+      setPdfBlockFilter("all");
       setStatus("Diagnóstico de PDF removido. O documento acadêmico anterior foi preservado.");
       return;
     }
@@ -365,6 +383,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setPdfDiagnostic(null);
     setSelectedPdfPageNumber(1);
     setPdfDiagnosticViewMode("lines");
+    setPdfBlockFilter("all");
     setImportedSourceKind(null);
     setImportedDocumentMode(null);
     setEditorMode("body");
@@ -390,6 +409,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setPdfDiagnostic(null);
     setSelectedPdfPageNumber(1);
     setPdfDiagnosticViewMode("lines");
+    setPdfBlockFilter("all");
     setImportedSourceKind(null);
     setImportedDocumentMode(null);
     setEditorMode("body");
@@ -557,7 +577,35 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                 <div><dt>Números de página ignorados</dt><dd>{pdfDiagnostic.reconstruction.statistics.removedPageNumberCount}</dd></div>
                 <div><dt>Cabeçalhos ignorados</dt><dd>{pdfDiagnostic.reconstruction.statistics.removedHeaderCount}</dd></div>
                 <div><dt>Rodapés ignorados</dt><dd>{pdfDiagnostic.reconstruction.statistics.removedFooterCount}</dd></div>
+                <div><dt>Regiões de layout</dt><dd>{pdfDiagnostic.reconstruction.statistics.layoutRegionCount}</dd></div>
+                <div><dt>Média de linhas por parágrafo</dt><dd>{pdfDiagnostic.reconstruction.statistics.averageLinesPerParagraph}</dd></div>
+                <div><dt>Mediana de linhas por parágrafo</dt><dd>{pdfDiagnostic.reconstruction.statistics.medianLinesPerParagraph}</dd></div>
+                <div><dt>Parágrafos de uma linha</dt><dd>{pdfDiagnostic.reconstruction.statistics.singleLineParagraphCount}</dd></div>
+                <div><dt>Parágrafos multipágina</dt><dd>{pdfDiagnostic.reconstruction.statistics.multiPageParagraphCount}</dd></div>
+                <div><dt>Blocos de baixa confiança</dt><dd>{pdfDiagnostic.reconstruction.statistics.lowConfidenceBlockCount}</dd></div>
+                <div><dt>Hifenizações incertas</dt><dd>{pdfDiagnostic.reconstruction.statistics.uncertainHyphenationCount}</dd></div>
+                <div><dt>Títulos em caixa mista</dt><dd>{pdfDiagnostic.reconstruction.statistics.mixedCaseHeadingCount}</dd></div>
+                <div><dt>Títulos multilinha</dt><dd>{pdfDiagnostic.reconstruction.statistics.combinedHeadingCount}</dd></div>
               </dl>
+              <section className="pdf-diagnostic-summary" aria-label="Métricas do corpo do PDF">
+                <h3>Métricas do corpo</h3>
+                <dl>
+                  <div><dt>Margem esquerda dominante</dt><dd>{Math.round(pdfDiagnostic.reconstruction.bodyLayoutMetrics.dominantLeft)}</dd></div>
+                  <div><dt>Margem direita dominante</dt><dd>{Math.round(pdfDiagnostic.reconstruction.bodyLayoutMetrics.dominantRight)}</dd></div>
+                  <div><dt>Altura mediana da linha</dt><dd>{Number(pdfDiagnostic.reconstruction.bodyLayoutMetrics.medianLineHeight.toFixed(2))}</dd></div>
+                  <div><dt>Intervalo mediano</dt><dd>{Number(pdfDiagnostic.reconstruction.bodyLayoutMetrics.medianLineGap.toFixed(2))}</dd></div>
+                  <div><dt>Recuo provável da primeira linha</dt><dd>{Math.round(pdfDiagnostic.reconstruction.bodyLayoutMetrics.probableFirstLineIndent)}</dd></div>
+                  <div><dt>Confiança das métricas</dt><dd>{pdfDiagnostic.reconstruction.bodyLayoutMetrics.confidence}</dd></div>
+                </dl>
+              </section>
+              {pdfDiagnostic.reconstruction.alerts.length > 0 && (
+                <section className="pdf-diagnostic-summary" aria-label="Alertas da reconstrução PDF">
+                  <h3>Alertas diagnósticos</h3>
+                  <ul>
+                    {pdfDiagnostic.reconstruction.alerts.map((alert) => <li key={alert}>{alert}</li>)}
+                  </ul>
+                </section>
+              )}
               {pdfDiagnostic.bodyStart.found && (
                 <p className="import-note">Candidato de início do corpo: página {pdfDiagnostic.bodyStart.pageNumber}, linha {(pdfDiagnostic.bodyStart.lineIndex ?? 0) + 1}: {pdfDiagnostic.bodyStart.text}. {pdfDiagnostic.bodyStart.reason}</p>
               )}
@@ -580,6 +628,15 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                 <button className={`text-button ${pdfDiagnosticViewMode === "lines" ? "active" : ""}`} type="button" onClick={() => setPdfDiagnosticViewMode("lines")}>Linhas visuais</button>
                 <button className={`text-button ${pdfDiagnosticViewMode === "blocks" ? "active" : ""}`} type="button" onClick={() => setPdfDiagnosticViewMode("blocks")}>Blocos reconstruídos</button>
               </div>
+              {pdfDiagnosticViewMode === "blocks" && (
+                <div className="toolbar editor-mode-toolbar" aria-label="Filtro de blocos reconstruídos">
+                  <button className={`text-button ${pdfBlockFilter === "all" ? "active" : ""}`} type="button" onClick={() => setPdfBlockFilter("all")}>Todos</button>
+                  <button className={`text-button ${pdfBlockFilter === "paragraphs" ? "active" : ""}`} type="button" onClick={() => setPdfBlockFilter("paragraphs")}>Parágrafos</button>
+                  <button className={`text-button ${pdfBlockFilter === "headings" ? "active" : ""}`} type="button" onClick={() => setPdfBlockFilter("headings")}>Títulos</button>
+                  <button className={`text-button ${pdfBlockFilter === "unresolved" ? "active" : ""}`} type="button" onClick={() => setPdfBlockFilter("unresolved")}>Não resolvidos</button>
+                  <button className={`text-button ${pdfBlockFilter === "low-confidence" ? "active" : ""}`} type="button" onClick={() => setPdfBlockFilter("low-confidence")}>Baixa confiança</button>
+                </div>
+              )}
               {selectedPdfPage && (
                 <div className="pdf-diagnostic-preview">
                   <section>
@@ -602,15 +659,45 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                     ) : (
                       <>
                         <p className="import-note">Blocos que começam, terminam ou atravessam a página selecionada. A prévia é limitada aos primeiros 30 blocos relacionados.</p>
+                        {selectedPdfLayoutRegions.length > 0 && (
+                          <section className="pdf-diagnostic-summary" aria-label="Regiões de layout da página">
+                            <h4>Regiões de layout da página</h4>
+                            <ul>
+                              {selectedPdfLayoutRegions.map((region) => (
+                                <li key={region.id}>
+                                  <strong>{region.kind}</strong> · linhas {region.startLineIndex + 1}-{region.endLineIndex + 1} · confiança {region.confidence}
+                                  {region.logicalVisualId && <span> · grupo {region.logicalVisualId}</span>}
+                                  {region.caption && <p>{region.caption}</p>}
+                                  {region.source && <small>{region.source}</small>}
+                                  {region.reasons.length > 0 && <small>{region.reasons.join(" ")}</small>}
+                                </li>
+                              ))}
+                            </ul>
+                          </section>
+                        )}
                         <ol className="pdf-block-preview">
                           {selectedPdfBlocks.map((block, index) => (
                             <li key={`${block.pageStart}-${block.pageEnd}-${index}`}>
                               <strong>{block.type}</strong> · páginas {block.pageStart}{block.pageEnd !== block.pageStart ? `-${block.pageEnd}` : ""} · confiança {block.confidence} · {block.sourceLines.length} linha(s)
+                              {block.layoutRegionId && <span> · região {block.layoutRegionId}</span>}
                               <p>{block.text}</p>
                               {block.reasons.length > 0 && <small>{block.reasons.join(" ")}</small>}
                             </li>
                           ))}
                         </ol>
+                        {selectedPdfHyphenation.length > 0 && (
+                          <section className="pdf-diagnostic-summary" aria-label="Ações de hifenização da página">
+                            <h4>Hifenização da página</h4>
+                            <ul>
+                              {selectedPdfHyphenation.map((entry) => (
+                                <li key={`${entry.pageNumber}-${entry.lineIndex}-${entry.action}`}>
+                                  <strong>{entry.action}</strong> · linha {entry.lineIndex + 1}: {entry.originalEnd} / {entry.nextStart}
+                                  <small>{entry.reason}</small>
+                                </li>
+                              ))}
+                            </ul>
+                          </section>
+                        )}
                       </>
                     )}
                     <details>

@@ -1,23 +1,32 @@
 import { describe, expect, it } from "vitest";
 import { detectPdfBodyStartContextual, reconstructPdfParagraphBlocks } from "../src/pdf-text-reconstruction-diagnostic";
-import type { PdfLineDiagnostic, PdfPageDiagnostic } from "../src/imported-pdf-diagnostic";
+import type { PdfLineDiagnostic, PdfPageDiagnostic, PdfTextItemDiagnostic } from "../src/imported-pdf-diagnostic";
 
-function line(text: string, index: number, options: Partial<PdfLineDiagnostic> = {}): PdfLineDiagnostic {
+function line(text: string, index: number, options: Partial<PdfLineDiagnostic> & { fontName?: string } = {}): PdfLineDiagnostic {
   const top = options.top ?? 80 + index * 18;
   const height = options.height ?? 12;
+  const left = options.left ?? 72;
+  const item: PdfTextItemDiagnostic = {
+    text,
+    x: left,
+    y: top,
+    width: Math.max(10, text.length * 5),
+    height,
+    fontName: options.fontName,
+  };
   return {
     pageNumber: options.pageNumber ?? 1,
     text,
-    items: options.items ?? [{ text, x: options.left ?? 72, y: top, width: Math.max(10, text.length * 5), height }],
-    left: options.left ?? 72,
-    right: options.right ?? (options.left ?? 72) + Math.max(10, text.length * 5),
+    items: options.items ?? [item],
+    left,
+    right: options.right ?? left + Math.max(10, text.length * 5),
     top,
     bottom: top + height,
     height,
   };
 }
 
-function page(pageNumber: number, texts: string[], overrides: Record<number, Partial<PdfLineDiagnostic>> = {}): PdfPageDiagnostic {
+function page(pageNumber: number, texts: string[], overrides: Record<number, Partial<PdfLineDiagnostic> & { fontName?: string }> = {}): PdfPageDiagnostic {
   const lines = texts.map((text, index) => line(text, index, { ...overrides[index], pageNumber }));
   return {
     pageNumber,
@@ -31,10 +40,13 @@ function page(pageNumber: number, texts: string[], overrides: Record<number, Par
   };
 }
 
+const bodyA = "Este parágrafo possui texto corrido suficiente para representar corpo acadêmico normal.";
+const bodyB = "A linha seguinte mantém a margem do corpo e confirma a continuidade textual do parágrafo.";
+
 describe("reconstrucao textual diagnostica de PDF", () => {
-  it("remove numero de pagina isolado no topo quando pertence a sequencia e preserva numeros legitimos", () => {
+  it("remove numero de pagina isolado e preserva numeros legitimos", () => {
     const result = reconstructPdfParagraphBlocks([
-      page(16, ["15", "1 INTRODUÇÃO", "Este parágrafo inicial possui texto corrido suficiente para ser aceito."], { 0: { top: 20 } }),
+      page(16, ["15", "1 INTRODUÇÃO", bodyA], { 0: { top: 20 } }),
       page(17, ["16", "2025 aparece dentro de uma referência e deve permanecer no texto."], { 0: { top: 20 } }),
       page(18, ["17", "75", "1 INTRODUÇÃO"], { 0: { top: 20 }, 1: { top: 400 } }),
     ]);
@@ -45,106 +57,340 @@ describe("reconstrucao textual diagnostica de PDF", () => {
     expect(result.blocks.some((block) => block.text === "1 INTRODUÇÃO")).toBe(true);
   });
 
-  it("reconhece numeracao romana pre-textual recorrente em rodape", () => {
+  it("calcula metricas robustas do corpo e ignora titulo, tabela e extremos", () => {
     const result = reconstructPdfParagraphBlocks([
-      page(1, ["RESUMO", "i"], { 1: { top: 790 } }),
-      page(2, ["ABSTRACT", "ii"], { 1: { top: 790 } }),
-      page(3, ["SUMÁRIO", "iii"], { 1: { top: 790 } }),
+      page(17, [
+        "1 INTRODUÇÃO",
+        bodyA,
+        bodyB,
+        "Teletrabalho",
+        "Este texto vem depois do título e permite confirmar o contexto de corpo.",
+        "Quadro 1 – Síntese.",
+        "1 1995 Decreto nº 1.590/1995",
+        "Fonte: elaboração própria.",
+        "Outra linha de corpo com comprimento suficiente para apoiar a métrica global.",
+        "Linha extrema que não deve deslocar a mediana de altura do corpo.",
+      ], {
+        1: { left: 72, right: 500, height: 12 },
+        2: { left: 72, right: 498, height: 12 },
+        3: { left: 210, right: 330, height: 16, fontName: "Helvetica-Bold" },
+        6: { left: 250, right: 410 },
+        8: { left: 72, right: 505, height: 12 },
+        9: { left: 72, right: 900, height: 40 },
+      }),
     ]);
 
-    expect(result.statistics.removedPageNumberCount).toBeGreaterThan(0);
+    expect(result.bodyLayoutMetrics.dominantLeft).toBe(72);
+    expect(result.bodyLayoutMetrics.probableBodyFontHeight).toBe(12);
+    expect(result.statistics.layoutRegionCount).toBe(1);
+    expect(result.blocks.some((block) => block.type === "heading" && block.text === "Teletrabalho")).toBe(true);
   });
 
-  it("remove cabecalho e rodape repetidos, mas preserva frase igual no corpo", () => {
-    const pages = [1, 2, 3, 4, 5].map((pageNumber) => page(pageNumber, [
-      "UNIVERSIDADE FEDERAL DE LAVRAS",
-      `Texto do corpo repetido na página ${pageNumber}.`,
-      "Frase comum no corpo",
-      `Rodapé institucional ${pageNumber}`,
-    ], { 0: { top: 20 }, 3: { top: 790 } }));
+  it("identifica recuo provável de primeira linha diferente da margem normal", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(17, [
+        "1 INTRODUÇÃO",
+        "Primeira linha recuada de um parágrafo acadêmico suficientemente longo",
+        bodyB,
+        "Outra primeira linha recuada para sustentar a moda de indentação",
+        "continuação com margem normal e texto suficiente para o corpo.",
+      ], { 1: { left: 108 }, 2: { left: 72 }, 3: { left: 108 }, 4: { left: 72 } }),
+    ]);
 
-    const result = reconstructPdfParagraphBlocks(pages);
-    const text = result.blocks.map((block) => block.text).join(" ");
-
-    expect(result.statistics.removedHeaderCount).toBe(5);
-    expect(result.statistics.removedFooterCount).toBe(5);
-    expect(text).toContain("Frase comum no corpo");
+    expect(result.bodyLayoutMetrics.dominantLeft).toBe(72);
+    expect(result.bodyLayoutMetrics.probableFirstLineIndent).toBeGreaterThanOrEqual(32);
   });
 
-  it("ignora introducao em sumario dividido e aceita introducao seguida por paragrafo longo", () => {
-    const sumario = page(8, ["SUMÁRIO", "1 INTRODUÇÃO", "16"]);
-    const intro = page(17, ["16", "1 INTRODUÇÃO", "Este é um parágrafo longo de corpo textual que confirma o início real do texto."], { 0: { top: 20 } });
+  it("aceita introducao real e ignora entrada de sumario", () => {
+    const sumario = page(8, ["SUMÁRIO", "1 INTRODUÇÃO ........ 16", "Teletrabalho ........ 21"]);
+    const intro = page(17, ["16", "1 INTRODUÇÃO", bodyA], { 0: { top: 20 } });
     const result = detectPdfBodyStartContextual([sumario, intro]);
 
     expect(result.found).toBe(true);
     expect(result.pageNumber).toBe(17);
-    expect(detectPdfBodyStartContextual([page(1, ["1 INTRODUÇÃO ........ 16"])]).found).toBe(false);
-    expect(detectPdfBodyStartContextual([page(1, ["RESUMO", "AGRADECIMENTOS"])]).found).toBe(false);
+    expect(reconstructPdfParagraphBlocks([sumario]).blocks.some((block) => block.type === "heading" && block.text.includes("Teletrabalho"))).toBe(false);
   });
 
-  it("marca layout sensivel como unresolved e preserva legenda e fonte separadas", () => {
+  it("detecta titulos em caixa mista por geometria sem lista fixa", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(17, [
+        "1 INTRODUÇÃO",
+        bodyA,
+        "Teletrabalho",
+        bodyB,
+        "Implementação do teletrabalho",
+        "Este trecho inicia uma nova subseção e possui aparência clara de corpo textual.",
+        "2.1 Objetivo geral",
+        "Este objetivo é descrito em texto corrido após título numerado.",
+      ], {
+        2: { top: 160, left: 72, height: 15, fontName: "Times-Bold" },
+        4: { top: 230, left: 72, height: 15, fontName: "Times-Bold" },
+        6: { top: 300, left: 72, height: 15 },
+      }),
+    ]);
+    const headings = result.blocks.filter((block) => block.type === "heading").map((block) => block.text);
+
+    expect(headings).toContain("Teletrabalho");
+    expect(headings).toContain("Implementação do teletrabalho");
+    expect(headings).toContain("2.1 Objetivo geral");
+    expect(result.statistics.mixedCaseHeadingCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it("nao promove frase curta comum, linha de quadro, legenda, fonte ou norma iniciada por ano", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(17, [
+        "1 INTRODUÇÃO",
+        "Esta frase curta fica no meio",
+        "do mesmo parágrafo e não representa título estrutural.",
+        "Quadro 1 – Histórico legislativo.",
+        "1 1995 Decreto nº 1.590/1995",
+        "Fonte: Brasil (1995).",
+        "1995 Decreto nº 1.590/1995",
+        bodyA,
+      ], { 1: { left: 72 }, 2: { left: 72 }, 4: { left: 220 } }),
+    ]);
+    const headings = result.blocks.filter((block) => block.type === "heading").map((block) => block.text);
+
+    expect(headings).not.toContain("Esta frase curta fica no meio");
+    expect(headings).not.toContain("1 1995 Decreto nº 1.590/1995");
+    expect(headings).not.toContain("1995 Decreto nº 1.590/1995");
+  });
+
+  it("combina titulo multilinha e nao combina titulos distintos nem absorve paragrafo", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(17, [
+        "1 INTRODUÇÃO",
+        bodyA,
+        "A IMPLEMENTAÇÃO DO PROGRAMA DE GESTÃO E DESEMPENHO",
+        "E O TELETRABALHO NA",
+        "ADMINISTRAÇÃO PÚBLICA FEDERAL",
+        "Este parágrafo começa logo após o título multilinha e deve permanecer separado.",
+        "Objetivo geral",
+        "Objetivos específicos",
+        "Este trecho de corpo vem depois dos dois títulos separados.",
+      ], {
+        2: { top: 160, height: 15, fontName: "Times-Bold" },
+        3: { top: 178, height: 15, fontName: "Times-Bold" },
+        4: { top: 196, height: 15, fontName: "Times-Bold" },
+        6: { top: 300, height: 15, fontName: "Times-Bold" },
+        7: { top: 350, height: 15, fontName: "Times-Bold" },
+      }),
+    ]);
+    const combined = result.blocks.find((block) => block.type === "heading" && block.text.includes("PROGRAMA DE GESTÃO"));
+
+    expect(combined?.sourceLines).toHaveLength(3);
+    expect(combined?.text).not.toContain("Este parágrafo começa");
+    expect(result.blocks.filter((block) => block.type === "heading" && /Objetivo/.test(block.text))).toHaveLength(2);
+    expect(result.statistics.combinedHeadingCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("legenda quebrada permanece fora de heading e vira regiao visual", () => {
     const result = reconstructPdfParagraphBlocks([
       page(25, [
-        "Quadro 1 – Pontos críticos do teletrabalho.",
+        "Quadro 1 – Pontos críticos do teletrabalho",
+        "na administração pública federal.",
         "Organização Pontos Críticos Autores",
-        "Mudanças na estrutura Goulart (2009)",
-        "Queda de produção na fase inicial",
-        "Fonte: elaboração própria.",
-        "Depois do quadro, este parágrafo volta a ser texto corrido normal.",
-      ], { 1: { left: 72 }, 2: { left: 180 }, 3: { left: 300 } }),
+        "Fonte: Alves (2020).",
+        bodyA,
+      ]),
     ]);
 
-    expect(result.blocks.some((block) => block.type === "caption" && block.text.includes("Quadro 1"))).toBe(true);
-    expect(result.blocks.some((block) => block.type === "source" && block.text.startsWith("Fonte:"))).toBe(true);
-    expect(result.blocks.some((block) => block.type === "unresolved" && block.text.includes("Organização"))).toBe(true);
-    expect(result.blocks.some((block) => block.type === "paragraph" && block.text.includes("Depois do quadro"))).toBe(true);
+    expect(result.blocks.some((block) => block.type === "heading" && block.text.includes("Pontos críticos"))).toBe(false);
+    expect(result.layoutRegions).toHaveLength(1);
   });
 
-  it("reconstroi paragrafos, trata hifenizacao conservadora e preserva compostos", () => {
+  it("gera regioes separadas para dois quadros e preserva texto posterior como paragrafo", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(25, [
+        "1 INTRODUÇÃO",
+        bodyA,
+        "Quadro 1 – Primeiro quadro.",
+        "Organização Pontos Críticos Autores",
+        "Fonte: Autor (2025).",
+        "Texto normal depois do primeiro quadro com corpo suficiente para virar parágrafo.",
+        "Quadro 2 – Segundo quadro.",
+        "Etapa Responsável Resultado",
+        "Fonte: Autor (2025).",
+        "Texto posterior ao segundo quadro permanece elegível como parágrafo normal.",
+      ]),
+    ]);
+
+    expect(result.layoutRegions.filter((region) => region.kind === "quadro")).toHaveLength(2);
+    expect(result.blocks.some((block) => block.type === "paragraph" && block.text.includes("depois do primeiro quadro"))).toBe(true);
+    expect(result.blocks.some((block) => block.type === "paragraph" && block.text.includes("posterior ao segundo quadro"))).toBe(true);
+  });
+
+  it("quadro sem fonte termina antes do proximo paragrafo normal", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(25, [
+        "Quadro 1 – Síntese sem fonte.",
+        "Indicador Resultado Autor",
+        "Tempo Redução Oliveira",
+        "Este parágrafo normal depois do quadro não pode ser absorvido pela região visual.",
+      ]),
+    ]);
+
+    expect(result.layoutRegions[0].endLineIndex).toBe(2);
+    expect(result.blocks.some((block) => block.type === "paragraph" && block.text.includes("não pode ser absorvido"))).toBe(true);
+  });
+
+  it("grafico e quadro na mesma pagina ficam separados e pagina sem visual nao vira layout-sensitive", () => {
+    const withVisuals = reconstructPdfParagraphBlocks([
+      page(30, [
+        "Figura 1 – Fluxo de análise.",
+        "Entrada Saída",
+        "Fonte: Autor.",
+        "Quadro 1 – Síntese.",
+        "Coluna A Coluna B",
+        "Fonte: Autor.",
+      ]),
+    ]);
+    const withoutVisuals = reconstructPdfParagraphBlocks([page(31, ["1 INTRODUÇÃO", bodyA, bodyB])]);
+
+    expect(withVisuals.layoutRegions.map((region) => region.kind)).toEqual(["figura", "quadro"]);
+    expect(withoutVisuals.statistics.layoutRegionCount).toBe(0);
+  });
+
+  it("linhas multicoluna sem legenda geram regiao de baixa confianca", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(31, ["A1", "B1", "C1", "A2", "B2", "C2", "A3", "B3"], {
+        0: { left: 72 }, 1: { left: 190 }, 2: { left: 310 }, 3: { left: 72 },
+        4: { left: 190 }, 5: { left: 310 }, 6: { left: 72 }, 7: { left: 190 },
+      }),
+    ]);
+
+    expect(result.layoutRegions[0].kind).toBe("multicolumn");
+    expect(result.layoutRegions[0].confidence).toBe("low");
+  });
+
+  it("relaciona quadro em continuacao e conclusao sem duplicar fonte", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(36, ["Quadro 3 – Etapas do programa (continua).", "Etapa Resultado Autor"]),
+      page(37, ["Quadro 3 – Etapas do programa (conclusão).", "Etapa final Resultado", "Fonte: Autor (2025).", bodyA]),
+    ]);
+
+    expect(result.layoutRegions).toHaveLength(2);
+    expect(result.layoutRegions[0].logicalVisualId).toBe(result.layoutRegions[1].logicalVisualId);
+    expect(result.layoutRegions[0].source).toBeUndefined();
+    expect(result.layoutRegions[1].source).toContain("Fonte:");
+    expect(result.blocks.some((block) => block.type === "paragraph" && block.text.includes("Este parágrafo"))).toBe(true);
+  });
+
+  it("separa e une paragrafos usando metricas de corpo", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(17, [
+        "1 INTRODUÇÃO",
+        "Primeira linha recuada de um parágrafo acadêmico suficientemente longo",
+        "continua na margem normal mesmo após ponto. A geometria demonstra continuidade.",
+        "Novo parágrafo recuado permanece separado do anterior.",
+        "continuação do novo parágrafo na margem normal.",
+        "Parágrafo sem recuo aparece após intervalo vertical maior.",
+        "segunda linha desse parágrafo sem recuo mantém continuidade.",
+      ], {
+        1: { left: 108 },
+        2: { left: 72 },
+        3: { top: 150, left: 108 },
+        4: { top: 168, left: 72 },
+        5: { top: 230, left: 72 },
+        6: { top: 248, left: 72 },
+      }),
+    ]);
+    const paragraphs = result.blocks.filter((block) => block.type === "paragraph");
+
+    expect(paragraphs.some((paragraph) => paragraph.text.includes("longo continua na margem"))).toBe(true);
+    expect(paragraphs.some((paragraph) => paragraph.text.includes("Novo parágrafo recuado permanece separado"))).toBe(true);
+    expect(paragraphs.some((paragraph) => paragraph.text.includes("após intervalo vertical maior. segunda linha"))).toBe(true);
+    expect(result.blocks.flatMap((block) => block.reasons).join(" ")).toContain("Separado por intervalo vertical ampliado");
+  });
+
+  it("nao junta citacao longa recuada ao corpo e nao divide referencia por linha", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(17, [
+        "1 INTRODUÇÃO",
+        bodyA,
+        "Esta citação longa possui recuo próprio e não deve ser juntada ao corpo textual.",
+        "SILVA, João. Título da obra acadêmica: subtítulo explicativo.",
+        "Lavras: Editora Acadêmica, 2025.",
+      ], { 2: { left: 150 }, 3: { top: 180, left: 72 }, 4: { top: 198, left: 72 } }),
+    ]);
+
+    expect(result.blocks.some((block) => block.type === "paragraph" && block.text === "Esta citação longa possui recuo próprio e não deve ser juntada ao corpo textual.")).toBe(true);
+    expect(result.blocks.some((block) => block.type === "paragraph" && block.text.includes("SILVA, João") && block.text.includes("Lavras:"))).toBe(true);
+  });
+
+  it("controla continuidade entre paginas por posicao, estrutura e coluna", () => {
+    const joined = reconstructPdfParagraphBlocks([
+      page(17, ["1 INTRODUÇÃO", "Este parágrafo começa no fim da página"], { 1: { top: 760 } }),
+      page(18, ["17", "e continua na página seguinte sem quebra estrutural."], { 0: { top: 20 }, 1: { top: 80 } }),
+    ]);
+    const farFromFooter = reconstructPdfParagraphBlocks([
+      page(17, ["1 INTRODUÇÃO", "Texto termina longe do rodapé"], { 1: { top: 300 } }),
+      page(18, ["continuação não deve ocorrer porque a posição não confirma."]),
+    ]);
+    const withHeading = reconstructPdfParagraphBlocks([
+      page(17, ["1 INTRODUÇÃO", "Texto no fim da página"], { 1: { top: 760 } }),
+      page(18, ["2 REFERENCIAL TEÓRICO", bodyA]),
+    ]);
+    const withVisual = reconstructPdfParagraphBlocks([
+      page(17, ["1 INTRODUÇÃO", "Texto no fim da página"], { 1: { top: 760 } }),
+      page(18, ["Quadro 1 – Síntese.", "A B C", "Fonte: Autor."]),
+    ]);
+    const changedColumn = reconstructPdfParagraphBlocks([
+      page(17, ["1 INTRODUÇÃO", "Texto no fim da página"], { 1: { top: 760, left: 72 } }),
+      page(18, ["continuação deslocada em outra coluna."], { 0: { top: 80, left: 220 } }),
+    ]);
+
+    expect(joined.blocks.some((block) => block.type === "paragraph" && block.pageStart === 17 && block.pageEnd === 18)).toBe(true);
+    expect(farFromFooter.blocks.some((block) => block.type === "paragraph" && block.pageStart === 17 && block.pageEnd === 18)).toBe(false);
+    expect(withHeading.blocks.some((block) => block.type === "paragraph" && block.pageStart === 17 && block.pageEnd === 18)).toBe(false);
+    expect(withVisual.blocks.some((block) => block.type === "paragraph" && block.pageStart === 17 && block.pageEnd === 18)).toBe(false);
+    expect(changedColumn.blocks.some((block) => block.type === "paragraph" && block.pageStart === 17 && block.pageEnd === 18)).toBe(false);
+  });
+
+  it("registra acoes de hifenizacao e preserva casos incertos", () => {
     const result = reconstructPdfParagraphBlocks([
       page(17, [
         "1 INTRODUÇÃO",
         "A administra-",
-        "ção pública adotou o regime técnico-administrativo no período 2020-2024.",
-        "Novo parágrafo começa após um intervalo maior.",
-      ], { 3: { top: 180 } }),
+        "ção pública adotou novas práticas no período recente.",
+        "O pós-",
+        "pandemia exige cautela diagnóstica.",
+        "O técnico-",
+        "administrativo foi preservado.",
+        "O item 75-",
+        "A permanece com hífen.",
+        "A forma inter-",
+        "institucional foi preservada por incerteza.",
+      ]),
     ]);
+    const text = result.blocks.map((block) => block.text).join(" ");
 
-    const paragraphs = result.blocks.filter((block) => block.type === "paragraph");
-    expect(paragraphs[0].text).toContain("administração pública");
-    expect(paragraphs[0].text).toContain("técnico-administrativo");
-    expect(paragraphs[0].text).toContain("2020-2024");
-    expect(paragraphs).toHaveLength(2);
+    expect(text).toContain("administração pública");
+    expect(text).toContain("pós-pandemia");
+    expect(text).toContain("técnico-administrativo");
+    expect(text).toContain("75-A");
+    expect(text).toContain("inter-institucional");
+    expect(result.hyphenation.some((entry) => entry.action === "joined-without-hyphen")).toBe(true);
+    expect(result.hyphenation.some((entry) => entry.action === "preserved-hyphen")).toBe(true);
+    expect(result.hyphenation.some((entry) => entry.action === "uncertain")).toBe(true);
+    expect(result.statistics.uncertainHyphenationCount).toBeGreaterThan(0);
   });
 
-  it("une primeira linha recuada ao corpo sem colar linha encerrada por ponto", () => {
+  it("gera indicadores de qualidade e alertas diagnosticos", () => {
     const result = reconstructPdfParagraphBlocks([
       page(17, [
-        "1 INTRODUÃ‡ÃƒO",
-        "O teletrabalho na administraÃ§Ã£o pÃºblica federal",
-        "tem evoluÃ­do significativamente nos Ãºltimos anos e exige acompanhamento constante.",
-        "Esta linha jÃ¡ termina um parÃ¡grafo.",
-        "Novo parÃ¡grafo permanece separado.",
-      ], { 1: { left: 112 }, 2: { left: 72 }, 3: { top: 150, left: 112 }, 4: { top: 168, left: 72 } }),
+        "1 INTRODUÇÃO",
+        "Curto 1.",
+        "Curto 2.",
+        "Curto 3.",
+        "Quadro 1 – Região extensa.",
+        ...Array.from({ length: 48 }, (_, index) => `Linha visual ${index + 1}`),
+      ]),
     ]);
 
-    const paragraphs = result.blocks.filter((block) => block.type === "paragraph");
-    expect(paragraphs.some((paragraph) => paragraph.text.includes("federal tem evoluÃ­do"))).toBe(true);
-    expect(paragraphs.some((paragraph) => paragraph.text === "Esta linha jÃ¡ termina um parÃ¡grafo.")).toBe(true);
-    expect(paragraphs.some((paragraph) => paragraph.text === "Novo parÃ¡grafo permanece separado.")).toBe(true);
-  });
-
-  it("une paragrafo entre paginas quando nao ha encerramento e bloqueia quando a pagina seguinte comeca por heading ou lista", () => {
-    const joined = reconstructPdfParagraphBlocks([
-      page(17, ["1 INTRODUÇÃO", "Este parágrafo começa no fim da página"], { 1: { top: 760 } }),
-      page(18, ["17", "e continua na página seguinte sem quebra estrutural."], { 0: { top: 20 } }),
-    ]);
-    const blocked = reconstructPdfParagraphBlocks([
-      page(17, ["1 INTRODUÇÃO", "Texto encerrado."]),
-      page(18, ["2 REFERENCIAL TEÓRICO", "a) item de lista"]),
-    ]);
-
-    expect(joined.blocks.some((block) => block.type === "paragraph" && block.pageStart === 17 && block.pageEnd === 18)).toBe(true);
-    expect(blocked.blocks.some((block) => block.type === "paragraph" && block.pageStart === 17 && block.pageEnd === 18)).toBe(false);
+    expect(result.statistics.averageLinesPerParagraph).toBeGreaterThanOrEqual(1);
+    expect(result.statistics.lowConfidenceBlockCount).toBeGreaterThan(0);
+    expect(result.statistics.layoutRegionCount).toBeGreaterThan(0);
+    expect(result.alerts.length).toBeGreaterThan(0);
   });
 });

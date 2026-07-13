@@ -51,6 +51,40 @@ export interface PdfReconstructedBlockDiagnostic {
   }>;
   confidence: "high" | "medium" | "low";
   reasons: string[];
+  layoutRegionId?: string;
+}
+
+export interface PdfBodyLayoutMetrics {
+  dominantLeft: number;
+  dominantRight: number;
+  medianLineHeight: number;
+  medianLineGap: number;
+  probableFirstLineIndent: number;
+  probableBodyFontHeight: number;
+  confidence: "high" | "medium" | "low";
+}
+
+export interface PdfLayoutSensitiveRegionDiagnostic {
+  id: string;
+  pageStart: number;
+  pageEnd: number;
+  startLineIndex: number;
+  endLineIndex: number;
+  kind: "quadro" | "tabela" | "figura" | "grafico" | "multicolumn" | "unknown";
+  caption?: string;
+  source?: string;
+  confidence: "high" | "medium" | "low";
+  reasons: string[];
+  logicalVisualId?: string;
+}
+
+export interface PdfHyphenationDiagnostic {
+  pageNumber: number;
+  lineIndex: number;
+  originalEnd: string;
+  nextStart: string;
+  action: "joined-without-hyphen" | "preserved-hyphen" | "uncertain";
+  reason: string;
 }
 
 export interface PdfTextReconstructionDiagnostic {
@@ -62,6 +96,10 @@ export interface PdfTextReconstructionDiagnostic {
     text: string;
   }>;
   bodyStart: PdfBodyStartDiagnostic;
+  bodyLayoutMetrics: PdfBodyLayoutMetrics;
+  layoutRegions: PdfLayoutSensitiveRegionDiagnostic[];
+  hyphenation: PdfHyphenationDiagnostic[];
+  alerts: string[];
   statistics: {
     paragraphCount: number;
     headingCount: number;
@@ -72,6 +110,15 @@ export interface PdfTextReconstructionDiagnostic {
     removedPageNumberCount: number;
     removedHeaderCount: number;
     removedFooterCount: number;
+    averageLinesPerParagraph: number;
+    medianLinesPerParagraph: number;
+    singleLineParagraphCount: number;
+    multiPageParagraphCount: number;
+    lowConfidenceBlockCount: number;
+    uncertainHyphenationCount: number;
+    layoutRegionCount: number;
+    mixedCaseHeadingCount: number;
+    combinedHeadingCount: number;
   };
 }
 

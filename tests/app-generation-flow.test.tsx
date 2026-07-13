@@ -78,6 +78,41 @@ function pdfDiagnosticResult(fileName = "diagnostico.pdf") {
       reconstruction: {
         bodyStart: { found: true, pageNumber: 2, lineIndex: 0, text: "1 INTRODUÇÃO", matchType: "numbered-introduction", reason: "Título de introdução seguido por texto corrido." },
         ignoredLines: [{ pageNumber: 2, lineIndex: 2, role: "page-number", text: "2" }],
+        bodyLayoutMetrics: {
+          dominantLeft: 72,
+          dominantRight: 500,
+          medianLineHeight: 12,
+          medianLineGap: 6,
+          probableFirstLineIndent: 36,
+          probableBodyFontHeight: 12,
+          confidence: "medium",
+        },
+        layoutRegions: [
+          {
+            id: "layout-1-1",
+            pageStart: 1,
+            pageEnd: 1,
+            startLineIndex: 0,
+            endLineIndex: 0,
+            kind: "quadro",
+            caption: "Quadro 1 - Teste",
+            source: "Fonte: teste.",
+            confidence: "high",
+            reasons: ["Legenda visual identificada."],
+            logicalVisualId: "quadro-1",
+          },
+        ],
+        hyphenation: [
+          {
+            pageNumber: 2,
+            lineIndex: 1,
+            originalEnd: "administra-",
+            nextStart: "ção",
+            action: "joined-without-hyphen",
+            reason: "Quebra de palavra recomposta com proximo fragmento minusculo.",
+          },
+        ],
+        alerts: ["Quantidade elevada de paragrafos de uma linha."],
         statistics: {
           paragraphCount: 1,
           headingCount: 1,
@@ -88,6 +123,15 @@ function pdfDiagnosticResult(fileName = "diagnostico.pdf") {
           removedPageNumberCount: 1,
           removedHeaderCount: 0,
           removedFooterCount: 0,
+          averageLinesPerParagraph: 2,
+          medianLinesPerParagraph: 2,
+          singleLineParagraphCount: 0,
+          multiPageParagraphCount: 1,
+          lowConfidenceBlockCount: 1,
+          uncertainHyphenationCount: 0,
+          layoutRegionCount: 1,
+          mixedCaseHeadingCount: 0,
+          combinedHeadingCount: 0,
         },
         blocks: [
           {
@@ -116,6 +160,7 @@ function pdfDiagnosticResult(fileName = "diagnostico.pdf") {
             sourceLines: [{ pageNumber: 1, lineIndex: 0 }],
             confidence: "low",
             reasons: ["Conteúdo marcado como sensível a layout; não foi convertido em parágrafo."],
+            layoutRegionId: "layout-1-1",
           },
         ],
       },
@@ -407,6 +452,9 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     expect(screen.getAllByText("Linhas visuais").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("Parágrafos")).toBeInTheDocument();
     expect(screen.getByText("Números de página ignorados")).toBeInTheDocument();
+    expect(screen.getByText("Regiões de layout")).toBeInTheDocument();
+    expect(screen.getByText("Métricas do corpo")).toBeInTheDocument();
+    expect(screen.getByText("Alertas diagnósticos")).toBeInTheDocument();
     expect(screen.getByLabelText("Página do PDF")).toHaveValue(1);
     expect(screen.getByText(/As linhas abaixo representam linhas visuais do PDF/)).toBeInTheDocument();
     expect(screen.getByText(/Candidato de início do corpo: página 2/)).toBeInTheDocument();
@@ -414,10 +462,16 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     expect(screen.queryByText(/O DOCX é rascunho técnico/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Texto bruto da pagina dois/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Blocos reconstruídos/i }));
+    expect(screen.getByRole("button", { name: "Todos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Parágrafos" })).toBeInTheDocument();
+    expect(screen.getByText("Regiões de layout da página")).toBeInTheDocument();
     expect(screen.getByText(/Conteúdo de quadro sensível a layout/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Página do PDF"), { target: { value: "2" } });
     expect(screen.getAllByText(/Texto bruto da pagina dois/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/páginas 2-3/)).toBeInTheDocument();
+    expect(screen.getByText("Hifenização da página")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Parágrafos" }));
+    expect(screen.queryByText(/Conteúdo de quadro sensível a layout/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Linhas visuais/i }));
     expect(screen.getByText("1 INTRODUÇÃO")).toBeInTheDocument();
     expect(screen.getAllByText(/Texto bruto da pagina dois/)).toHaveLength(2);
