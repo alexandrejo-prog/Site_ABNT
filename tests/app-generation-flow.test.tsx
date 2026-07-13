@@ -3,16 +3,25 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const { generateMock, importDocumentFileMock, saveAsMock } = vi.hoisted(() => ({
+const { generateMock, importDocumentFileMock, pdfDraftBuildMock, pdfDraftFileNameMock, pdfDraftValidateMock, saveAsMock, templateForWorkTypeMock } = vi.hoisted(() => ({
   generateMock: vi.fn(async () => new Blob(["docx"], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })),
   importDocumentFileMock: vi.fn(),
+  pdfDraftBuildMock: vi.fn(async () => new Blob(["pdf-text-draft"], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })),
+  pdfDraftFileNameMock: vi.fn(() => "andrade-rascunho-textual.docx"),
+  pdfDraftValidateMock: vi.fn(() => ({ canExport: true, blockers: [] as string[], warnings: ["Há blocos visuais não resolvidos que serão representados por marcadores."] as string[] })),
   saveAsMock: vi.fn(),
+  templateForWorkTypeMock: vi.fn(() => ({ id: "mock-template", generate: generateMock })),
 }));
 
 vi.mock("file-saver", () => ({ saveAs: saveAsMock }));
 vi.mock("../src/import-docx", () => ({ importDocumentFile: importDocumentFileMock }));
 vi.mock("../src/document-template", () => ({
-  templateForWorkType: vi.fn(() => ({ id: "mock-template", generate: generateMock })),
+  templateForWorkType: templateForWorkTypeMock,
+}));
+vi.mock("../src/export-pdf-text-draft-docx", () => ({
+  buildPdfTextDraftDocxBlob: pdfDraftBuildMock,
+  pdfTextDraftFileName: pdfDraftFileNameMock,
+  validatePdfTextDraftExport: pdfDraftValidateMock,
 }));
 
 import App from "../src/App";
@@ -173,7 +182,12 @@ describe("fluxo real de bloqueio de geração (App)", () => {
   beforeEach(() => {
     generateMock.mockClear();
     importDocumentFileMock.mockReset();
+    pdfDraftBuildMock.mockClear();
+    pdfDraftFileNameMock.mockClear();
+    pdfDraftValidateMock.mockReset();
+    pdfDraftValidateMock.mockReturnValue({ canExport: true, blockers: [] as string[], warnings: ["Há blocos visuais não resolvidos que serão representados por marcadores."] as string[] });
     saveAsMock.mockClear();
+    templateForWorkTypeMock.mockClear();
   });
 
   afterEach(() => {
@@ -459,6 +473,9 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     expect(screen.getByText(/As linhas abaixo representam linhas visuais do PDF/)).toBeInTheDocument();
     expect(screen.getByText(/Candidato de início do corpo: página 2/)).toBeInTheDocument();
     expect(screen.getByText(/Esta reconstrução é apenas diagnóstica/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Gerar rascunho textual DOCX/i })).toBeInTheDocument();
+    expect(screen.getByText(/Este arquivo terá apenas texto reconstruído/)).toBeInTheDocument();
+    expect(screen.getByText(/Há blocos visuais não resolvidos/)).toBeInTheDocument();
     expect(screen.queryByText(/O DOCX é rascunho técnico/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Texto bruto da pagina dois/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Blocos reconstruídos/i }));
@@ -472,6 +489,14 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     expect(screen.getByText("Hifenização da página")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Parágrafos" }));
     expect(screen.queryByText(/Conteúdo de quadro sensível a layout/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Gerar rascunho textual DOCX/i }));
+    await waitFor(() => expect(pdfDraftBuildMock).toHaveBeenCalledTimes(1));
+    expect((pdfDraftBuildMock.mock.calls as unknown[][])[0][0]).toMatchObject({ sourceKind: "pdf", documentMode: "pdf-text-draft", fileName: "andrade.pdf" });
+    expect(pdfDraftFileNameMock).toHaveBeenCalledWith("andrade.pdf");
+    expect(saveAsMock).toHaveBeenCalledWith(expect.any(Blob), "andrade-rascunho-textual.docx");
+    expect(screen.getByText(/Rascunho textual DOCX gerado/)).toBeInTheDocument();
+    expect(templateForWorkTypeMock).not.toHaveBeenCalled();
+    expect(generateMock).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: /Linhas visuais/i }));
     expect(screen.getByText("1 INTRODUÇÃO")).toBeInTheDocument();
     expect(screen.getAllByText(/Texto bruto da pagina dois/)).toHaveLength(2);
@@ -479,7 +504,6 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     expect(screen.queryByText("Validar trabalho")).not.toBeInTheDocument();
     expect(screen.queryByText(/Gerar DOCX/)).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: /Editor do texto principal/i })).not.toBeInTheDocument();
-    expect(generateMock).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: /Remover importa/i }));
 
@@ -509,6 +533,27 @@ describe("fluxo real de bloqueio de geração (App)", () => {
 
     expect(screen.queryByText(/Leitura de PDF/i)).not.toBeInTheDocument();
     expect((screen.getByLabelText("Tipo de trabalho") as HTMLSelectElement).value).toBe("dissertacao");
+  });
+
+  it("bloqueadores do rascunho textual PDF desabilitam o botao sem exigir campos academicos", async () => {
+    const user = userEvent.setup();
+    pdfDraftValidateMock.mockReturnValue({
+      canExport: false,
+      blockers: ["Nenhum parágrafo reconstruído foi encontrado."] as string[],
+      warnings: ["Há blocos de baixa confiança."] as string[],
+    });
+    importDocumentFileMock.mockResolvedValue(pdfDiagnosticResult("bloqueado.pdf"));
+
+    render(<App />);
+    await user.upload(screen.getByLabelText("Importar arquivo"), new File(["pdf"], "bloqueado.pdf", { type: "application/pdf" }));
+
+    const button = await screen.findByRole("button", { name: /Gerar rascunho textual DOCX/i });
+    expect(button).toBeDisabled();
+    expect(screen.getByText("Nenhum parágrafo reconstruído foi encontrado.")).toBeInTheDocument();
+    expect(screen.getByText("Há blocos de baixa confiança.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Tipo de trabalho")).not.toBeInTheDocument();
+    expect(pdfDraftBuildMock).not.toHaveBeenCalled();
+    expect(templateForWorkTypeMock).not.toHaveBeenCalled();
   });
 
   it("importar DOCX depois de PDF volta ao fluxo estruturado normal", async () => {

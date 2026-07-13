@@ -9,6 +9,7 @@ import { UFLA_PPG_PROGRAMS } from "./ufla-ppg-programs";
 import { editorHtmlToMarkup, editorMarkupToHtml } from "./editor-markup";
 import { templateForWorkType } from "./document-template";
 import { buildDownloadFileName } from "./download-filename";
+import { buildPdfTextDraftDocxBlob, pdfTextDraftFileName, validatePdfTextDraftExport } from "./export-pdf-text-draft-docx";
 import { stripCpgForbiddenSections, hasCpgForbiddenSections } from "./cpg-content-filter";
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
 import { buildDraftFromFields, hasUnfilledPlaceholders, draftWorkTypeSupportsIndicators } from "./draft-builder";
@@ -28,6 +29,7 @@ import type { ImportedDocumentImage } from "./imported-images";
 import type { ImportedTable } from "./imported-tables";
 import type { DocumentMode, SourceKind } from "./import-contract";
 import type { ImportedPdfDiagnostic } from "./imported-pdf-diagnostic";
+import type { PdfTextDraftExportInput } from "./pdf-text-draft-contract";
 
 const FIELD_LABELS: Record<AcademicFieldKey, string> = {
   author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho", course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador", location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave", abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão", referencias: "Referências", anexos: "Anexos", apendices: "Apêndices", dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators", imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema", problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese", objetivoGeral: "Objetivo Geral", objetivosEspecificos: "Objetivos Específicos", justificativa: "Justificativa", referencialTeorico: "Referencial Teórico", metodologia: "Metodologia", cronograma: "Cronograma", recursosOrcamento: "Recursos/Orçamento", resultadosEsperados: "Resultados Esperados", corpusDados: "Corpus/Dados", contextoInstitucional: "Contexto Institucional", conclusaoProvisoria: "Conclusão Provisória", contribuicoesImpactos: "Contribuições/Impactos", impactoSocial: "Impacto social", impactoCientifico: "Impacto científico", impactoEducacional: "Impacto educacional", impactoAmbiental: "Impacto ambiental", impactoTecnologico: "Impacto tecnológico/econômico", publicoBeneficiado: "Público beneficiado", aderenciaOds: "Aderência a ODS/política institucional",
@@ -175,6 +177,19 @@ export default function App() {
     if (!pdfDiagnostic) return [];
     return pdfDiagnostic.reconstruction.hyphenation.filter((entry) => entry.pageNumber === selectedPdfPageNumber);
   }, [pdfDiagnostic, selectedPdfPageNumber]);
+  const pdfTextDraftInput = useMemo<PdfTextDraftExportInput | null>(() => {
+    if (!pdfDiagnostic) return null;
+    return {
+      sourceKind: "pdf",
+      documentMode: "pdf-text-draft",
+      fileName: pdfDiagnostic.fileName,
+      pageCount: pdfDiagnostic.pageCount,
+      reconstruction: pdfDiagnostic.reconstruction,
+    };
+  }, [pdfDiagnostic]);
+  const pdfTextDraftValidation = useMemo(() => (
+    pdfTextDraftInput ? validatePdfTextDraftExport(pdfTextDraftInput) : null
+  ), [pdfTextDraftInput]);
 
   useEffect(() => installEditorScrollFix(), []);
 
@@ -536,6 +551,29 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     }
   }
 
+  async function handleTextDraftDocxFromPdf() {
+    if (!pdfTextDraftInput) {
+      setStatus("Não foi possível gerar o rascunho textual do PDF.");
+      return;
+    }
+    const validation = validatePdfTextDraftExport(pdfTextDraftInput);
+    if (!validation.canExport) {
+      setStatus(`Não foi possível gerar o rascunho textual do PDF. ${validation.blockers.join(" ")}`);
+      return;
+    }
+    try {
+      setIsGenerating(true);
+      setStatus("Gerando rascunho textual do PDF...");
+      const blob = await buildPdfTextDraftDocxBlob(pdfTextDraftInput);
+      saveAs(blob, pdfTextDraftFileName(pdfTextDraftInput.fileName));
+      setStatus("Rascunho textual DOCX gerado. Revise o arquivo no Word ou LibreOffice.");
+    } catch {
+      setStatus("Não foi possível gerar o rascunho textual do PDF.");
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -610,6 +648,34 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                 <p className="import-note">Candidato de início do corpo: página {pdfDiagnostic.bodyStart.pageNumber}, linha {(pdfDiagnostic.bodyStart.lineIndex ?? 0) + 1}: {pdfDiagnostic.bodyStart.text}. {pdfDiagnostic.bodyStart.reason}</p>
               )}
               <p className="import-note">Esta reconstrução é apenas diagnóstica. Nenhum DOCX é gerado e nenhum conteúdo original do PDF é apagado.</p>
+              <p className="import-note" role="status" aria-live="polite">{status}</p>
+              <div className="pdf-diagnostic-summary">
+                <button
+                  className="primary-action strong"
+                  type="button"
+                  onClick={handleTextDraftDocxFromPdf}
+                  disabled={isGenerating || !pdfTextDraftValidation?.canExport}
+                >
+                  <FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar rascunho textual DOCX"}
+                </button>
+                <p className="import-note">Este arquivo terá apenas texto reconstruído. Quadros, tabelas, figuras e gráficos serão representados por marcadores de revisão.</p>
+                {pdfTextDraftValidation && pdfTextDraftValidation.blockers.length > 0 && (
+                  <div role="alert" aria-label="Bloqueadores do rascunho textual PDF">
+                    <strong>Bloqueadores</strong>
+                    <ul>
+                      {pdfTextDraftValidation.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {pdfTextDraftValidation && pdfTextDraftValidation.warnings.length > 0 && (
+                  <div role="status" aria-label="Avisos do rascunho textual PDF">
+                    <strong>Avisos</strong>
+                    <ul>
+                      {pdfTextDraftValidation.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
               <div className="field-group">
                 <label htmlFor="pdf-page-selector">Página do PDF</label>
                 <input
