@@ -25,6 +25,8 @@ function crop(
 class FakeCanvas {
   width: number;
   height: number;
+  readonly initialWidth: number;
+  readonly initialHeight: number;
   drawCalls: unknown[][] = [];
   blobType?: string;
   blobQuality?: number;
@@ -32,6 +34,8 @@ class FakeCanvas {
   constructor(width: number, height: number) {
     this.width = width;
     this.height = height;
+    this.initialWidth = width;
+    this.initialHeight = height;
   }
 
   getContext(type: "2d") {
@@ -209,8 +213,8 @@ describe("renderizador de recortes visuais pdf", () => {
       docxMaxWidth: 800,
     }, h.dependencies);
     const outputCanvas = h.canvases[1];
-    expect(outputCanvas.width).toBe(800);
-    expect(outputCanvas.height).toBe(400);
+    expect(outputCanvas.initialWidth).toBe(800);
+    expect(outputCanvas.initialHeight).toBe(400);
   });
 
   it("limita a largura de exibicao no DOCX sem reduzir os bytes renderizados", async () => {
@@ -221,7 +225,7 @@ describe("renderizador de recortes visuais pdf", () => {
       docxMaxWidth: 600,
     }, h.dependencies);
     const asset = result.assets[pdfVisualCropKey(crop())];
-    expect(h.canvases[1].width).toBe(1600);
+    expect(h.canvases[1].initialWidth).toBe(1600);
     expect(asset.width).toBe(600);
     expect(asset.height).toBe(300);
   });
