@@ -7,8 +7,10 @@ import type {
   PdfLineRole,
   PdfPageDiagnostic,
   PdfReconstructedBlockDiagnostic,
+  PdfTextItemDiagnostic,
   PdfTextReconstructionDiagnostic,
 } from "./imported-pdf-diagnostic";
+import { shouldInsertSpace } from "./import-pdf-diagnostic";
 
 interface LineRef {
   page: PdfPageDiagnostic;
@@ -18,6 +20,12 @@ interface LineRef {
   text: string;
   relativeTop: number;
   relativeBottom: number;
+}
+
+interface PageNumberItemCandidate {
+  pageNumber: number;
+  lineIndex: number;
+  item: PdfTextItemDiagnostic;
 }
 
 interface ClassifiedLine extends LineRef {
@@ -37,16 +45,26 @@ const HEADING_RE = /^((?:\d+(?:\.\d+)*\.?\s+)?[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ][A-
 const NUMBERED_HEADING_RE = /^\d+(?:\.\d+)*\.?\s+\S.{1,110}$/u;
 const COMPOUND_PREFIX_RE = /(?:^|\s)(p[óo]s|pr[ée]|ex|n[ãa]o|rec[ée]m|vice|t[ée]cnico|pol[íi]tico|hist[óo]rico)-$/iu;
 
-function flattenPages(pages: PdfPageDiagnostic[]): LineRef[] {
-  return pages.flatMap((page) => page.lines.map((line, lineIndex) => ({
-    page,
-    line,
-    pageNumber: page.pageNumber,
-    lineIndex,
-    text: line.text.trim(),
-    relativeTop: page.height ? line.top / page.height : 0,
-    relativeBottom: page.height ? line.bottom / page.height : 0,
-  }))).filter((entry) => entry.text.length > 0);
+function flattenPages(pages: PdfPageDiagnostic[], pageNumberItemCandidates: PageNumberItemCandidate[] = []): LineRef[] {
+  return pages.flatMap((page) => page.lines.map((line, lineIndex) => {
+    const cleanedText = cleanLineText(line, page, pageNumberItemCandidates);
+    const originalText = line.text.trim();
+    const relativeTop = page.height ? line.top / page.height : 0;
+    const relativeBottom = page.height ? line.bottom / page.height : 0;
+    const isEmptyAfterCleaning = cleanedText.length === 0;
+    const isOriginalPageNumber = /^(\d{1,4}|[ivxlcdm]{1,8})$/iu.test(originalText)
+      && line.items.length <= 1
+      && (relativeTop <= 0.12 || relativeBottom >= 0.88);
+    return {
+      page,
+      line,
+      pageNumber: page.pageNumber,
+      lineIndex,
+      text: isEmptyAfterCleaning && isOriginalPageNumber ? originalText : cleanedText,
+      relativeTop,
+      relativeBottom,
+    };
+  })).filter((entry) => entry.text.length > 0);
 }
 
 function normalizedComparisonText(text: string): string {
@@ -65,6 +83,75 @@ function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function findPageNumberItemCandidates(pages: PdfPageDiagnostic[]): PageNumberItemCandidate[] {
+  const candidates: PageNumberItemCandidate[] = [];
+  for (const page of pages) {
+    for (let lineIndex = 0; lineIndex < page.lines.length; lineIndex++) {
+      const line = page.lines[lineIndex];
+      for (const item of line.items) {
+        if (!/^\d{1,4}$/.test(item.text)) continue;
+        const relativeTop = page.height ? item.y / page.height : 0;
+        const relativeBottom = page.height ? (item.y + item.height) / page.height : 0;
+        if (relativeTop > 0.12 && relativeBottom < 0.88) continue;
+        candidates.push({ pageNumber: page.pageNumber, lineIndex, item });
+      }
+    }
+  }
+  return candidates;
+}
+
+function isPlausiblePageNumberItemSequence(candidate: PageNumberItemCandidate, allCandidates: PageNumberItemCandidate[]): boolean {
+  const value = Number(candidate.item.text);
+  if (!Number.isFinite(value)) return false;
+  if (Math.abs(value - candidate.pageNumber) <= 2 || Math.abs(value - (candidate.pageNumber - 1)) <= 2) return true;
+  return allCandidates.some((other) => {
+    if (other.pageNumber === candidate.pageNumber && other.lineIndex === candidate.lineIndex) return false;
+    if (Math.abs(other.pageNumber - candidate.pageNumber) > 2) return false;
+    const otherValue = Number(other.item.text);
+    return Number.isFinite(otherValue)
+      && Math.abs(otherValue - value) <= 2
+      && Math.abs(other.item.x - candidate.item.x) <= 30;
+  });
+}
+
+function isPageNumberItem(
+  item: PdfTextItemDiagnostic,
+  line: PdfLineDiagnostic,
+  page: PdfPageDiagnostic,
+  allCandidates: PageNumberItemCandidate[],
+): boolean {
+  if (!/^\d{1,4}$/.test(item.text)) return false;
+  const relativeTop = page.height ? item.y / page.height : 0;
+  const relativeBottom = page.height ? (item.y + item.height) / page.height : 0;
+  if (relativeTop > 0.12 && relativeBottom < 0.88) return false;
+  const candidate = { pageNumber: page.pageNumber, lineIndex: 0, item };
+  if (!isPlausiblePageNumberItemSequence(candidate, allCandidates)) return false;
+  const otherItems = line.items.filter((i) => i !== item);
+  if (otherItems.length === 0) return true;
+  const itemCenter = item.x + item.width / 2;
+  const lineLeft = Math.min(...line.items.map((i) => i.x));
+  const lineRight = Math.max(...line.items.map((i) => i.x + i.width));
+  const lineWidth = lineRight - lineLeft;
+  const isAtEdge = (itemCenter - lineLeft) <= lineWidth * 0.25 || (lineRight - itemCenter) <= lineWidth * 0.25;
+  return isAtEdge;
+}
+
+function rebuildLineText(items: PdfTextItemDiagnostic[]): string {
+  if (items.length === 0) return "";
+  const sorted = [...items].sort((left, right) => left.x - right.x || left.y - right.y);
+  const height = median(sorted.map((item) => item.height)) || 12;
+  return sorted.reduce((lineText, item, index) => (
+    `${lineText}${shouldInsertSpace(sorted[index - 1], item, height) ? " " : ""}${item.text}`
+  ), "").replace(/\s+/g, " ").trim();
+}
+
+function cleanLineText(line: PdfLineDiagnostic, page: PdfPageDiagnostic, allCandidates: PageNumberItemCandidate[]): string {
+  const pageNumberItems = line.items.filter((item) => isPageNumberItem(item, line, page, allCandidates));
+  if (pageNumberItems.length === 0) return line.text.trim();
+  const remainingItems = line.items.filter((item) => !pageNumberItems.includes(item));
+  return rebuildLineText(remainingItems);
 }
 
 function roundedMode(values: number[], bucket = 6): number {
@@ -346,8 +433,8 @@ function isObviousHeadingText(text: string): boolean {
     && !/^\d+\s+\d{4}\b/.test(text);
 }
 
-export function baseClassifyLines(pages: PdfPageDiagnostic[], regions: PdfLayoutSensitiveRegionDiagnostic[]): ClassifiedLine[] {
-  const lines = flattenPages(pages);
+export function baseClassifyLines(pages: PdfPageDiagnostic[], regions: PdfLayoutSensitiveRegionDiagnostic[], pageNumberItemCandidates: PageNumberItemCandidate[] = []): ClassifiedLine[] {
+  const lines = flattenPages(pages, pageNumberItemCandidates);
   const pageNumberCandidates = lines.filter(isIsolatedPageNumberCandidate);
   const repeatedRoles = repeatedEdgeRoles(lines);
 
@@ -421,7 +508,8 @@ function bodyLikeAfter(lines: ClassifiedLine[], index: number): boolean {
 }
 
 export function detectPdfBodyStartContextual(pages: PdfPageDiagnostic[], classified?: ClassifiedLine[]): PdfBodyStartDiagnostic {
-  const effectiveClassified = classified ?? baseClassifyLines(pages, findLayoutRegions(pages).regions);
+  const pageNumberItemCandidates = findPageNumberItemCandidates(pages);
+  const effectiveClassified = classified ?? baseClassifyLines(pages, findLayoutRegions(pages).regions, pageNumberItemCandidates);
   for (const [index, entry] of effectiveClassified.entries()) {
     const numbered = NUMBERED_INTRODUCTION.test(entry.text);
     const unnumbered = UNNUMBERED_INTRODUCTION.test(entry.text);
@@ -663,8 +751,9 @@ function buildAlerts(blocks: PdfReconstructedBlockDiagnostic[], statistics: PdfT
 }
 
 export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTextReconstructionDiagnostic {
+  const pageNumberItemCandidates = findPageNumberItemCandidates(pages);
   const { regions: layoutRegions, alerts: bridgeAlerts } = findLayoutRegions(pages);
-  const baseClassified = baseClassifyLines(pages, layoutRegions);
+  const baseClassified = baseClassifyLines(pages, layoutRegions, pageNumberItemCandidates);
   const initialMetrics = calculateBodyLayoutMetrics(baseClassified);
   const classified = classifyHeadingsWithMetrics(baseClassified, initialMetrics);
   const bodyLayoutMetrics = calculateBodyLayoutMetrics(classified);

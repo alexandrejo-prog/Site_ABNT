@@ -128,7 +128,7 @@ export function dedupePdfTextItems(items: PdfTextItemDiagnostic[]): PdfTextItemD
   return kept;
 }
 
-function shouldInsertSpace(previous: PdfTextItemDiagnostic | undefined, current: PdfTextItemDiagnostic, medianHeight: number): boolean {
+export function shouldInsertSpace(previous: PdfTextItemDiagnostic | undefined, current: PdfTextItemDiagnostic, medianHeight: number): boolean {
   if (!previous) return false;
   if (/^[,.;:)]/.test(current.text)) return false;
   if (/\s$/.test(previous.text) || /^\s/.test(current.text)) return false;

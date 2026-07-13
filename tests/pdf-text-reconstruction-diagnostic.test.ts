@@ -584,10 +584,110 @@ describe("reconstrucao textual diagnostica de PDF", () => {
     expect(result.alerts.some((a) => a.includes("atravessa") && a.includes("sem evidencia explicita"))).toBe(true);
   });
 
-  it("texto entre visuais independentes continua como paragraph", () => {
+  it("numero 33 no topo direito nao vira sufixo de de", () => {
     const result = reconstructPdfParagraphBlocks([
-      page(55, ["Gráfico 1 – Vendas.", "Fonte: Autor.", "Texto normal entre gráficos.", "Gráfico 2 – Custos.", "Fonte: Autor.", bodyA]),
+      page(33, [
+        "Este parágrafo termina com de",
+        "de33",
+      ], { 1: { top: 800, items: [
+        { text: "de", x: 72, y: 800, width: 14, height: 12 },
+        { text: "33", x: 86, y: 800, width: 12, height: 12 },
+      ] } }),
     ]);
-    expect(result.blocks.some((b) => b.type === "paragraph" && b.text.includes("Texto normal entre gráficos"))).toBe(true);
+    expect(result.blocks.map((b) => b.text).join(" ")).not.toContain("de33");
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("de");
+  });
+
+  it("numero 31 no topo nao e unido ao paragrafo anterior", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(31, [
+        "Este parágrafo termina com ano.",
+        "ano.31",
+      ], { 1: { top: 800, items: [
+        { text: "ano.", x: 72, y: 800, width: 24, height: 12 },
+        { text: "31", x: 96, y: 800, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).not.toContain("ano.31");
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("ano.");
+  });
+
+  it("numero 66 apos marcador nao aparece no bloco", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(66, [
+        "original.]66",
+      ], { 0: { top: 800, items: [
+        { text: "original.]", x: 72, y: 800, width: 80, height: 12 },
+        { text: "66", x: 152, y: 800, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).not.toContain("original.]66");
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("original.]");
+  });
+
+  it("numero 72 nao e colado a pergunta", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(72, [
+        "?72",
+      ], { 0: { top: 800, items: [
+        { text: "?", x: 72, y: 800, width: 12, height: 12 },
+        { text: "72", x: 84, y: 800, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).not.toContain("?72");
+  });
+
+  it("2025 no corpo permanece", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(17, ["16", "2025 aparece dentro de uma referência e deve permanecer no texto."], { 0: { top: 20 } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("2025");
+  });
+
+  it("11.072/2022 permanece", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(17, ["Decreto nº 11.072/2022 permanece intacto no texto."]),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("11.072/2022");
+  });
+
+  it("75-A permanece", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(17, ["O item 75-A permanece com hífen no texto."]),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("75-A");
+  });
+
+  it("percentual 38,2% permanece", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(17, ["O percentual 38,2% permanece no texto."]),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("38,2%");
+  });
+
+  it("numero no centro da pagina permanece", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(17, ["Número 123 no centro da página permanece intacto."]),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("123");
+  });
+
+  it("rawText, items e lines originais nao sao alterados", () => {
+    const pages = [
+      page(33, [
+        "Este parágrafo termina com de",
+        "de33",
+      ], { 1: { top: 800, items: [
+        { text: "de", x: 72, y: 800, width: 14, height: 12 },
+        { text: "33", x: 86, y: 800, width: 12, height: 12 },
+      ] } }),
+    ];
+    const originalRawText = pages[0].rawText;
+    const originalItems = pages[0].items.map(i => ({ ...i }));
+    const originalLines = pages[0].lines.map(l => ({ ...l, items: l.items.map(i => ({ ...i })) }));
+    reconstructPdfParagraphBlocks(pages);
+    expect(pages[0].rawText).toBe(originalRawText);
+    expect(pages[0].items).toEqual(originalItems);
+    expect(pages[0].lines).toEqual(originalLines);
   });
 });

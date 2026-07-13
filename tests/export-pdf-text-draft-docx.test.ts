@@ -530,4 +530,21 @@ describe("exportacao textual minima de PDF reconstruido", () => {
     expect(documentXml).toContain("página original 50");
     expect(documentXml).not.toContain("páginas originais");
   });
+
+  it("nao cola numero de pagina ao texto do paragrafo no DOCX", async () => {
+    const input = baseInput({
+      reconstruction: {
+        ...baseInput().reconstruction,
+        blocks: [
+          { type: "paragraph" as const, text: "Este parágrafo termina com de.", pageStart: 33, pageEnd: 33, sourceLines: [{ pageNumber: 33, lineIndex: 1 }], confidence: "medium" as const, reasons: [] },
+          { type: "paragraph" as const, text: "A consulta ano. foi preservada.", pageStart: 31, pageEnd: 31, sourceLines: [{ pageNumber: 31, lineIndex: 1 }], confidence: "medium" as const, reasons: [] },
+        ],
+      },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).not.toContain("de33");
+    expect(documentXml).not.toContain("ano.31");
+    expect(documentXml).toContain("Este parágrafo termina com de.");
+    expect(documentXml).toContain("A consulta ano. foi preservada.");
+  });
 });
