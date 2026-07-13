@@ -314,4 +314,192 @@ describe("exportacao textual minima de PDF reconstruido", () => {
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
     expect(documentXml).not.toContain("CONTEUDO VISUAL GENERICO");
   });
+
+  function graphicTestBlocks(extraBlocks: PdfTextDraftExportInput["reconstruction"]["blocks"]): PdfTextDraftExportInput["reconstruction"]["blocks"] {
+    return [
+      { type: "paragraph", text: "Texto antes do grafico para validacao.", pageStart: 1, pageEnd: 1, sourceLines: [{ pageNumber: 1, lineIndex: 0 }], confidence: "medium", reasons: [] },
+      ...extraBlocks,
+    ];
+  }
+
+  it("marcador de grafico fica entre legenda e fonte no DOCX", async () => {
+    const input = baseInput({
+      reconstruction: {
+        ...baseInput().reconstruction,
+        blocks: graphicTestBlocks([
+          { type: "caption", text: "Gráfico 1 – Vendas.", pageStart: 40, pageEnd: 40, sourceLines: [{ pageNumber: 40, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "layout-40-1" },
+          { type: "source", text: "Fonte: Autor.", pageStart: 40, pageEnd: 40, sourceLines: [{ pageNumber: 40, lineIndex: 1 }], confidence: "high", reasons: [], layoutRegionId: "layout-40-1" },
+        ]),
+        layoutRegions: [{
+          id: "layout-40-1",
+          pageStart: 40,
+          pageEnd: 40,
+          startLineIndex: 0,
+          endLineIndex: 1,
+          kind: "grafico",
+          caption: "Gráfico 1 – Vendas.",
+          source: "Fonte: Autor.",
+          confidence: "high",
+          reasons: [],
+        }],
+        statistics: { ...baseInput().reconstruction.statistics, layoutRegionCount: 1, captionCount: 1, sourceCount: 1, unresolvedCount: 0, paragraphCount: 1 },
+      },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    const captionIndex = documentXml.indexOf("Gráfico 1 – Vendas.");
+    const sourceIndex = documentXml.indexOf("Fonte: Autor.");
+    const marker = "Elemento visual não inserido neste rascunho textual";
+    const markerIndex = documentXml.indexOf(marker);
+    expect(markerIndex).toBeGreaterThan(-1);
+    expect(captionIndex).toBeLessThan(markerIndex);
+    expect(markerIndex).toBeLessThan(sourceIndex);
+  });
+
+  it("legenda e fonte de grafico aparecem uma vez", async () => {
+    const input = baseInput({
+      reconstruction: {
+        ...baseInput().reconstruction,
+        blocks: graphicTestBlocks([
+          { type: "caption", text: "Gráfico 1 – Vendas.", pageStart: 40, pageEnd: 40, sourceLines: [{ pageNumber: 40, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "layout-40-1" },
+          { type: "source", text: "Fonte: Autor.", pageStart: 40, pageEnd: 40, sourceLines: [{ pageNumber: 40, lineIndex: 1 }], confidence: "high", reasons: [], layoutRegionId: "layout-40-1" },
+        ]),
+        layoutRegions: [{
+          id: "layout-40-1",
+          pageStart: 40,
+          pageEnd: 40,
+          startLineIndex: 0,
+          endLineIndex: 1,
+          kind: "grafico",
+          caption: "Gráfico 1 – Vendas.",
+          source: "Fonte: Autor.",
+          confidence: "high",
+          reasons: [],
+        }],
+        statistics: { ...baseInput().reconstruction.statistics, layoutRegionCount: 1, captionCount: 1, sourceCount: 1, unresolvedCount: 0, paragraphCount: 1 },
+      },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect((documentXml.match(/Gráfico 1 – Vendas\./g) || []).length).toBe(1);
+    expect((documentXml.match(/Fonte: Autor\./g) || []).length).toBe(1);
+  });
+
+  it("dois graficos geram dois marcadores", async () => {
+    const input = baseInput({
+      reconstruction: {
+        ...baseInput().reconstruction,
+        blocks: graphicTestBlocks([
+          { type: "caption", text: "Gráfico 1 – Vendas.", pageStart: 40, pageEnd: 40, sourceLines: [{ pageNumber: 40, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "layout-40-1" },
+          { type: "source", text: "Fonte: Autor.", pageStart: 40, pageEnd: 40, sourceLines: [{ pageNumber: 40, lineIndex: 1 }], confidence: "high", reasons: [], layoutRegionId: "layout-40-1" },
+          { type: "caption", text: "Gráfico 2 – Custos.", pageStart: 41, pageEnd: 41, sourceLines: [{ pageNumber: 41, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "layout-41-1" },
+          { type: "source", text: "Fonte: Autor.", pageStart: 41, pageEnd: 41, sourceLines: [{ pageNumber: 41, lineIndex: 1 }], confidence: "high", reasons: [], layoutRegionId: "layout-41-1" },
+        ]),
+        layoutRegions: [{
+          id: "layout-40-1",
+          pageStart: 40,
+          pageEnd: 40,
+          startLineIndex: 0,
+          endLineIndex: 1,
+          kind: "grafico",
+          caption: "Gráfico 1 – Vendas.",
+          source: "Fonte: Autor.",
+          confidence: "high",
+          reasons: [],
+        }, {
+          id: "layout-41-1",
+          pageStart: 41,
+          pageEnd: 41,
+          startLineIndex: 0,
+          endLineIndex: 1,
+          kind: "grafico",
+          caption: "Gráfico 2 – Custos.",
+          source: "Fonte: Autor.",
+          confidence: "high",
+          reasons: [],
+        }],
+        statistics: { ...baseInput().reconstruction.statistics, layoutRegionCount: 2, captionCount: 2, sourceCount: 2, unresolvedCount: 0, paragraphCount: 1 },
+      },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    const marker = "Elemento visual não inserido neste rascunho textual";
+    expect((documentXml.match(new RegExp(marker, "g")) || []).length).toBe(2);
+  });
+
+  it("mesmo logicalVisualId gera um marcador unico", async () => {
+    const input = baseInput({
+      reconstruction: {
+        ...baseInput().reconstruction,
+        blocks: graphicTestBlocks([
+          { type: "caption", text: "Gráfico 1 – Vendas.", pageStart: 40, pageEnd: 40, sourceLines: [{ pageNumber: 40, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "layout-40-1" },
+          { type: "source", text: "Fonte: Autor.", pageStart: 40, pageEnd: 40, sourceLines: [{ pageNumber: 40, lineIndex: 1 }], confidence: "high", reasons: [], layoutRegionId: "layout-40-1" },
+          { type: "caption", text: "Gráfico 1 – Vendas (conclusão).", pageStart: 42, pageEnd: 42, sourceLines: [{ pageNumber: 42, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "layout-42-1" },
+          { type: "source", text: "Fonte: Autor.", pageStart: 42, pageEnd: 42, sourceLines: [{ pageNumber: 42, lineIndex: 1 }], confidence: "high", reasons: [], layoutRegionId: "layout-42-1" },
+        ]),
+        layoutRegions: [{
+          id: "layout-40-1",
+          pageStart: 40,
+          pageEnd: 40,
+          startLineIndex: 0,
+          endLineIndex: 1,
+          kind: "grafico",
+          caption: "Gráfico 1 – Vendas.",
+          source: "Fonte: Autor.",
+          confidence: "high",
+          reasons: [],
+          logicalVisualId: "grafico-1",
+        }, {
+          id: "layout-42-1",
+          pageStart: 42,
+          pageEnd: 42,
+          startLineIndex: 0,
+          endLineIndex: 1,
+          kind: "grafico",
+          caption: "Gráfico 1 – Vendas (conclusão).",
+          source: "Fonte: Autor.",
+          confidence: "high",
+          reasons: [],
+          logicalVisualId: "grafico-1",
+        }],
+        statistics: { ...baseInput().reconstruction.statistics, layoutRegionCount: 2, captionCount: 2, sourceCount: 2, unresolvedCount: 0, paragraphCount: 1 },
+      },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    const marker = "Elemento visual não inserido neste rascunho textual";
+    expect((documentXml.match(new RegExp(marker, "g")) || []).length).toBe(1);
+    expect(documentXml).toContain("páginas originais 40-42");
+  });
+
+  it("contagem do resumo coincide com marcadores emitidos", async () => {
+    const input = baseInput({
+      reconstruction: {
+        ...baseInput().reconstruction,
+        blocks: graphicTestBlocks([
+          { type: "caption", text: "Gráfico 1 – Vendas.", pageStart: 40, pageEnd: 40, sourceLines: [{ pageNumber: 40, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "layout-40-1" },
+          { type: "source", text: "Fonte: Autor.", pageStart: 40, pageEnd: 40, sourceLines: [{ pageNumber: 40, lineIndex: 1 }], confidence: "high", reasons: [], layoutRegionId: "layout-40-1" },
+        ]),
+        layoutRegions: [{
+          id: "layout-40-1",
+          pageStart: 40,
+          pageEnd: 40,
+          startLineIndex: 0,
+          endLineIndex: 1,
+          kind: "grafico",
+          caption: "Gráfico 1 – Vendas.",
+          source: "Fonte: Autor.",
+          confidence: "high",
+          reasons: [],
+        }],
+        statistics: { ...baseInput().reconstruction.statistics, layoutRegionCount: 1, captionCount: 1, sourceCount: 1, unresolvedCount: 0, paragraphCount: 1 },
+      },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    const marker = "Elemento visual não inserido neste rascunho textual";
+    const markerCount = (documentXml.match(new RegExp(marker, "g")) || []).length;
+    expect(documentXml).toContain("Elementos visuais representados por marcadores:");
+    expect(documentXml).toContain(`Elementos visuais representados por marcadores: ${markerCount}`);
+  });
+
+  it("nao existe w:tbl no documento", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    expect(documentXml).not.toContain("w:tbl");
+  });
 });

@@ -465,4 +465,58 @@ describe("reconstrucao textual diagnostica de PDF", () => {
     expect(result.blocks.some((b) => b.type === "paragraph" && b.text.includes("parágrafo mas está dentro"))).toBe(false);
     expect(result.blocks.some((b) => b.type === "paragraph" && b.text.includes("corpo"))).toBe(true);
   });
+
+  it("grafico com legenda e fonte, sem texto interno, gera regiao", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(40, ["Gráfico 1 – Vendas.", "Fonte: Autor.", bodyA]),
+    ]);
+    expect(result.statistics.layoutRegionCount).toBe(1);
+    const region = result.layoutRegions[0];
+    expect(region.kind).toBe("grafico");
+    const caption = result.blocks.find((b) => b.type === "caption");
+    expect(caption).toBeDefined();
+    expect(caption).toHaveProperty("layoutRegionId", region.id);
+    const source = result.blocks.find((b) => b.type === "source");
+    expect(source).toBeDefined();
+    expect(source).toHaveProperty("layoutRegionId", region.id);
+  });
+
+  it("grafico sem fonte gera regiao medium", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(41, ["Gráfico 2 – Tendências.", bodyA]),
+    ]);
+    expect(result.statistics.layoutRegionCount).toBe(1);
+    expect(result.layoutRegions[0].kind).toBe("grafico");
+    expect(result.layoutRegions[0].confidence).toBe("medium");
+  });
+
+  it("figura com legenda e fonte gera regiao sem texto interno", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(42, ["Figura 1 – Diagrama.", "Fonte: Autor.", bodyA]),
+    ]);
+    expect(result.statistics.layoutRegionCount).toBe(1);
+    expect(result.layoutRegions[0].kind).toBe("figura");
+    const caption = result.blocks.find((b) => b.type === "caption");
+    expect(caption).toBeDefined();
+    expect(caption).toHaveProperty("layoutRegionId", result.layoutRegions[0].id);
+  });
+
+  it("dois graficos geram duas regioes", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(43, ["Gráfico 1 – Um.", "Fonte: Autor.", bodyA]),
+      page(44, ["Gráfico 2 – Dois.", "Fonte: Autor.", bodyA]),
+    ]);
+    expect(result.statistics.layoutRegionCount).toBe(2);
+  });
+
+  it("caption e source de grafico recebem layoutRegionId", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(45, ["Gráfico 3 – Dados.", "Fonte: Elaboração própria.", bodyA]),
+    ]);
+    const caption = result.blocks.find((b) => b.type === "caption");
+    const source = result.blocks.find((b) => b.type === "source");
+    expect(caption?.layoutRegionId).toBeTruthy();
+    expect(source?.layoutRegionId).toBeTruthy();
+    expect(caption?.layoutRegionId).toBe(source?.layoutRegionId);
+  });
 });

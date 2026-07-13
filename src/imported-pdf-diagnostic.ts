@@ -119,7 +119,7 @@ export interface PdfLayoutSensitiveRegionDiagnostic {
   pageEnd: number;
   startLineIndex: number;
   endLineIndex: number;
-  kind: "quadro" | "tabela" | "figura" | "grafico" | "multicolumn" | "unknown";
+  kind: "quadro" | "tabela" | "figura" | "grafico" | "imagem" | "mapa" | "ilustracao" | "multicolumn" | "unknown";
   caption?: string;
   source?: string;
   confidence: "high" | "medium" | "low";

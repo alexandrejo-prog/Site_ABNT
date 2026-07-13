@@ -30,7 +30,7 @@ interface ClassifiedLine extends LineRef {
 const NUMBERED_INTRODUCTION = /^\s*1(?:\.)?\s+INTRODU[CÇ][AÃ]O\s*$/iu;
 const UNNUMBERED_INTRODUCTION = /^\s*INTRODU[CÇ][AÃ]O\s*$/iu;
 const PRETEXTUAL_MARKER = /^(SUM[ÁA]RIO|LISTA DE|RESUMO|ABSTRACT|AGRADECIMENTOS|DEDICAT[ÓO]RIA|FICHA CATALOGR[ÁA]FICA)$/iu;
-const CAPTION_RE = /^(Quadro|Tabela|Figura|Gr[áa]fico)\s+(\d+)\s*[-–—.:]/iu;
+const CAPTION_RE = /^(Quadro|Tabela|Figura|Gr[áa]fico|Imagem|Mapa|Ilustra[çc][ãa]o)\s+(\d+)\s*[-–—.:]/iu;
 const SOURCE_RE = /^Fonte\s*:/iu;
 const LIST_ITEM_RE = /^((?:[a-z]\))|(?:[IVXLCDM]+)\s*[-–—]|[-•])\s+/u;
 const HEADING_RE = /^((?:\d+(?:\.\d+)*\.?\s+)?[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ0-9\s:.-]{2,}|REFER[ÊE]NCIAS|CONCLUS[ÃA]O|CONSIDERA[ÇC][ÕO]ES FINAIS)$/u;
@@ -150,6 +150,10 @@ function isContinuationCaption(text: string): boolean {
   return /\b(continua|continua[çc][ãa]o|conclus[ãa]o)\b/iu.test(text);
 }
 
+function isGraphicLikeKind(kind: PdfLayoutSensitiveRegionDiagnostic["kind"]): boolean {
+  return kind === "grafico" || kind === "figura" || kind === "imagem" || kind === "mapa" || kind === "ilustracao";
+}
+
 function bridgeMultiPageRegions(regions: PdfLayoutSensitiveRegionDiagnostic[], pages: PdfPageDiagnostic[]): PdfLayoutSensitiveRegionDiagnostic[] {
   const result = [...regions];
   const pageMap = new Map(pages.map((page) => [page.pageNumber, page]));
@@ -222,16 +226,26 @@ function findLayoutRegions(pages: PdfPageDiagnostic[]): PdfLayoutSensitiveRegion
         if (paragraphAfterVisual > -1) endLineIndex = paragraphAfterVisual - 1;
       }
 
-      if (endLineIndex <= index) continue;
-      const source = sourceIndex > -1 && sourceIndex <= endLineIndex + 1 ? page.lines[sourceIndex].text.trim() : undefined;
+      const kind = kindFromCaption(line.text);
+      let regionStartLineIndex: number;
+      let regionEndLineIndex: number;
+      if (endLineIndex <= index) {
+        if (!isGraphicLikeKind(kind)) continue;
+        regionStartLineIndex = index;
+        regionEndLineIndex = sourceIndex > -1 ? sourceIndex : index;
+      } else {
+        regionStartLineIndex = index + 1;
+        regionEndLineIndex = endLineIndex;
+      }
+      const source = sourceIndex > -1 && sourceIndex <= regionEndLineIndex + 1 ? page.lines[sourceIndex].text.trim() : undefined;
       const id = `layout-${page.pageNumber}-${regionIndex + 1}`;
       regions.push({
         id,
         pageStart: page.pageNumber,
         pageEnd: page.pageNumber,
-        startLineIndex: index + 1,
-        endLineIndex,
-        kind: kindFromCaption(line.text),
+        startLineIndex: regionStartLineIndex,
+        endLineIndex: regionEndLineIndex,
+        kind,
         caption: line.text.trim(),
         source,
         confidence: source ? "high" : "medium",
@@ -299,8 +313,15 @@ function baseClassifyLines(pages: PdfPageDiagnostic[], regions: PdfLayoutSensiti
     }
     const repeatedRole = repeatedRoles.get(key);
     if (repeatedRole) return { ...entry, role: repeatedRole, confidence: "high", reasons: ["Linha repetida em borda de pagina."] };
-    if (CAPTION_RE.test(entry.text)) return { ...entry, role: "caption", confidence: "high", reasons: ["Legenda visual detectada."] };
-    if (SOURCE_RE.test(entry.text)) return { ...entry, role: "source", confidence: "high", reasons: ["Linha iniciada por Fonte:."] };
+    const captionCheck = CAPTION_RE.test(entry.text);
+    if (captionCheck) {
+      const region = regionForLine(entry, regions);
+      return { ...entry, role: "caption", confidence: "high", reasons: ["Legenda visual detectada."], layoutRegionId: region?.id };
+    }
+    if (SOURCE_RE.test(entry.text)) {
+      const region = regionForLine(entry, regions);
+      return { ...entry, role: "source", confidence: "high", reasons: ["Linha iniciada por Fonte:."], layoutRegionId: region?.id };
+    }
     const region = regionForLine(entry, regions);
     if (region) return { ...entry, role: "layout-sensitive", confidence: region.confidence, reasons: region.reasons, layoutRegionId: region.id };
     if (LIST_ITEM_RE.test(entry.text)) return { ...entry, role: "list-item", confidence: "medium", reasons: ["Padrao conservador de item de lista detectado."] };

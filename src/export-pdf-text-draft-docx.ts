@@ -107,11 +107,18 @@ function bodyHeading(text: string, entry?: TocEntry): Paragraph {
   });
 }
 
+function isGraphicLikeKind(kind?: PdfLayoutSensitiveRegionDiagnostic["kind"]): boolean {
+  return kind === "grafico" || kind === "figura" || kind === "imagem" || kind === "mapa" || kind === "ilustracao";
+}
+
 function visualKindLabel(kind?: PdfLayoutSensitiveRegionDiagnostic["kind"]): string {
   if (kind === "quadro") return "Quadro";
   if (kind === "tabela") return "Tabela";
   if (kind === "figura") return "Figura";
   if (kind === "grafico") return "Gráfico";
+  if (kind === "imagem") return "Imagem";
+  if (kind === "mapa") return "Mapa";
+  if (kind === "ilustracao") return "Ilustração";
   if (kind === "multicolumn") return "Conteúdo em colunas";
   return "Elemento visual não identificado";
 }
@@ -129,14 +136,34 @@ function markerForBlock(block: PdfReconstructedBlockDiagnostic, regions: Map<str
   return `[Elemento visual não inserido neste rascunho textual - ${visualKindLabel(region.kind)}, ${originalPagesLabel(pageStart, pageEnd)}. Consulte o PDF original.]`;
 }
 
+function computeMarkerCount(input: PdfTextDraftExportInput): number {
+  const keys = new Set<string>();
+  for (const block of input.reconstruction.blocks) {
+    if (block.type !== "unresolved") continue;
+    const region = block.layoutRegionId ? input.reconstruction.layoutRegions.find((r) => r.id === block.layoutRegionId) : undefined;
+    const dedupKey = region?.logicalVisualId ?? block.layoutRegionId ?? `unresolved-${block.pageStart}-${block.sourceLines[0]?.lineIndex ?? 0}`;
+    keys.add(dedupKey);
+  }
+  for (const region of input.reconstruction.layoutRegions) {
+    if (!isGraphicLikeKind(region.kind)) continue;
+    const dedupKey = region.logicalVisualId ?? region.id;
+    if (keys.has(dedupKey)) continue;
+    const hasUnresolved = input.reconstruction.blocks.some((b) => b.layoutRegionId === region.id && b.type === "unresolved");
+    if (!hasUnresolved) keys.add(dedupKey);
+  }
+  return keys.size;
+}
+
 function technicalSummary(input: PdfTextDraftExportInput): string[] {
   const stats = input.reconstruction.statistics;
+  const markerCount = computeMarkerCount(input);
   return [
     `Arquivo de origem: ${input.fileName}`,
     `Páginas do PDF: ${input.pageCount}`,
     `Parágrafos reconstruídos: ${stats.paragraphCount}`,
     `Títulos reconstruídos: ${stats.headingCount}`,
     `Elementos visuais não inseridos: ${stats.layoutRegionCount}`,
+    `Elementos visuais representados por marcadores: ${markerCount}`,
     `Hifenizações incertas: ${stats.uncertainHyphenationCount}`,
   ];
 }
@@ -279,7 +306,21 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
     if (block.type === "heading") paragraphs.push(bodyHeading(text, entryByTitle.get(text)));
     if (block.type === "paragraph") paragraphs.push(justified(text));
     if (block.type === "list-item") paragraphs.push(justified(text));
-    if (block.type === "caption") paragraphs.push(left(text, { size: 22 }));
+    if (block.type === "caption") {
+      const region = block.layoutRegionId ? regions.get(block.layoutRegionId) : undefined;
+      const dedupKey = region?.logicalVisualId ?? block.layoutRegionId ?? `caption-${block.pageStart}`;
+      paragraphs.push(left(text, { size: 22 }));
+      if (region && isGraphicLikeKind(region.kind) && !emittedKeys.has(dedupKey)) {
+        const hasUnresolved = input.reconstruction.blocks.some(
+          (b) => b.type === "unresolved" && b.layoutRegionId === block.layoutRegionId
+        );
+        if (!hasUnresolved) {
+          const range = region.logicalVisualId ? logicalVisualRanges.get(region.logicalVisualId) : undefined;
+          paragraphs.push(left(markerForBlock(block, regions, range), { size: 20, italics: true }));
+          emittedKeys.add(dedupKey);
+        }
+      }
+    }
     if (block.type === "source") paragraphs.push(left(text, { size: 22 }));
     if (block.type === "unresolved") {
       const region = block.layoutRegionId ? regions.get(block.layoutRegionId) : undefined;
