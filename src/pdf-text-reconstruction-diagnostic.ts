@@ -47,7 +47,7 @@ const COMPOUND_PREFIX_RE = /(?:^|\s)(p[óo]s|pr[ée]|ex|n[ãa]o|rec[ée]m|vice|t
 
 function flattenPages(pages: PdfPageDiagnostic[], pageNumberItemCandidates: PageNumberItemCandidate[] = []): LineRef[] {
   return pages.flatMap((page) => page.lines.map((line, lineIndex) => {
-    const cleanedText = cleanLineText(line, page, pageNumberItemCandidates);
+    const cleanedText = cleanLineText(line, page, lineIndex, pageNumberItemCandidates);
     const originalText = line.text.trim();
     const relativeTop = page.height ? line.top / page.height : 0;
     const relativeBottom = page.height ? line.bottom / page.height : 0;
@@ -107,7 +107,7 @@ function isPlausiblePageNumberItemSequence(candidate: PageNumberItemCandidate, a
   if (!Number.isFinite(value)) return false;
   if (Math.abs(value - candidate.pageNumber) <= 2 || Math.abs(value - (candidate.pageNumber - 1)) <= 2) return true;
   return allCandidates.some((other) => {
-    if (other.pageNumber === candidate.pageNumber && other.lineIndex === candidate.lineIndex) return false;
+    if (other.pageNumber === candidate.pageNumber && other.lineIndex === candidate.lineIndex && other.item === candidate.item) return false;
     if (Math.abs(other.pageNumber - candidate.pageNumber) > 2) return false;
     const otherValue = Number(other.item.text);
     return Number.isFinite(otherValue)
@@ -120,13 +120,14 @@ function isPageNumberItem(
   item: PdfTextItemDiagnostic,
   line: PdfLineDiagnostic,
   page: PdfPageDiagnostic,
+  lineIndex: number,
   allCandidates: PageNumberItemCandidate[],
 ): boolean {
   if (!/^\d{1,4}$/.test(item.text)) return false;
   const relativeTop = page.height ? item.y / page.height : 0;
   const relativeBottom = page.height ? (item.y + item.height) / page.height : 0;
   if (relativeTop > 0.12 && relativeBottom < 0.88) return false;
-  const candidate = { pageNumber: page.pageNumber, lineIndex: 0, item };
+  const candidate = { pageNumber: page.pageNumber, lineIndex, item };
   if (!isPlausiblePageNumberItemSequence(candidate, allCandidates)) return false;
   const otherItems = line.items.filter((i) => i !== item);
   if (otherItems.length === 0) return true;
@@ -147,8 +148,8 @@ function rebuildLineText(items: PdfTextItemDiagnostic[]): string {
   ), "").replace(/\s+/g, " ").trim();
 }
 
-function cleanLineText(line: PdfLineDiagnostic, page: PdfPageDiagnostic, allCandidates: PageNumberItemCandidate[]): string {
-  const pageNumberItems = line.items.filter((item) => isPageNumberItem(item, line, page, allCandidates));
+function cleanLineText(line: PdfLineDiagnostic, page: PdfPageDiagnostic, lineIndex: number, allCandidates: PageNumberItemCandidate[]): string {
+  const pageNumberItems = line.items.filter((item) => isPageNumberItem(item, line, page, lineIndex, allCandidates));
   if (pageNumberItems.length === 0) return line.text.trim();
   const remainingItems = line.items.filter((item) => !pageNumberItems.includes(item));
   return rebuildLineText(remainingItems);

@@ -14,12 +14,14 @@ function line(text: string, index: number, options: Partial<PdfLineDiagnostic> &
     height,
     fontName: options.fontName,
   };
+  const items = options.items ?? [item];
+  const rebuiltText = items.map((i) => i.text).join(" ");
   return {
     pageNumber: options.pageNumber ?? 1,
-    text,
-    items: options.items ?? [item],
+    text: rebuiltText,
+    items,
     left,
-    right: options.right ?? left + Math.max(10, text.length * 5),
+    right: options.right ?? left + Math.max(10, rebuiltText.length * 5),
     top,
     bottom: top + height,
     height,
@@ -689,5 +691,64 @@ describe("reconstrucao textual diagnostica de PDF", () => {
     expect(pages[0].rawText).toBe(originalRawText);
     expect(pages[0].items).toEqual(originalItems);
     expect(pages[0].lines).toEqual(originalLines);
+  });
+
+  it("numero isolado no rodape sem recorrencia permanece", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(10, ["Texto corrido suficiente para representar corpo acadêmico normal."], { 0: { top: 800, items: [
+        { text: "Texto", x: 72, y: 800, width: 30, height: 12 },
+        { text: "corrido", x: 102, y: 800, width: 35, height: 12 },
+        { text: "99", x: 500, y: 800, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("99");
+  });
+
+  it("numero isolado no topo sem recorrencia permanece", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(10, ["Texto corrido suficiente para representar corpo acadêmico normal."], { 0: { top: 20, items: [
+        { text: "Texto", x: 72, y: 20, width: 30, height: 12 },
+        { text: "corrido", x: 102, y: 20, width: 35, height: 12 },
+        { text: "99", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("99");
+  });
+
+  it("candidato na linha diferente de zero nao se valida sozinho", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(33, [
+        "Este parágrafo termina com de",
+        "de33",
+      ], { 1: { top: 800, items: [
+        { text: "de", x: 72, y: 800, width: 14, height: 12 },
+        { text: "33", x: 86, y: 800, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.blocks.map((b) => b.text).join(" ")).not.toContain("de33");
+    expect(result.blocks.map((b) => b.text).join(" ")).toContain("de");
+  });
+
+  it("numeros 31, 32 e 33 em paginas consecutivas sao removidos", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(31, ["31"], { 0: { top: 20 } }),
+      page(32, ["32"], { 0: { top: 20 } }),
+      page(33, ["33"], { 0: { top: 20 } }),
+    ]);
+    expect(result.ignoredLines.filter((l) => l.role === "page-number")).toHaveLength(3);
+    expect(result.blocks).toHaveLength(0);
+  });
+
+  it("dois candidatos distintos em paginas proximas e posicao X semelhante validam a sequencia", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(31, ["31"], { 0: { top: 20, items: [
+        { text: "31", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+      page(32, ["32"], { 0: { top: 20, items: [
+        { text: "32", x: 500, y: 20, width: 12, height: 12 },
+      ] } }),
+    ]);
+    expect(result.ignoredLines.filter((l) => l.role === "page-number")).toHaveLength(2);
+    expect(result.blocks).toHaveLength(0);
   });
 });
