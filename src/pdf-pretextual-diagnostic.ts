@@ -55,7 +55,9 @@ function isYear(text: string): boolean {
 
 function isLikelyInstitution(text: string): boolean {
   const normalized = fold(text);
-  return normalized.includes("UNIVERSIDADE FEDERAL DE LAVRAS") || normalized === "UFLA";
+  return normalized.includes("UNIVERSIDADE FEDERAL DE LAVRAS")
+    || normalized === "UFLA"
+    || normalized.includes("INSTITUTO FEDERAL");
 }
 
 function isNatureAnchor(text: string): boolean {
@@ -321,6 +323,7 @@ function detectTitlePage(pages: PdfPageDiagnostic[], coverPage?: number, bodyPag
   const advisorLine = best.lines.find((line) => /\bORIENTADOR(?:A)?\b/iu.test(fold(line.text)));
   const coadvisorLine = best.lines.find((line) => /\bCOORIENTADOR(?:A)?\b/iu.test(fold(line.text)));
   const programLine = best.lines.find((line) => isProgramLine(line.text));
+  const institutionLine = best.lines.find((line) => isLikelyInstitution(line.text) && line !== natureLine);
   const yearLine = [...best.lines].reverse().find((line) => isYear(line.text));
   const cityLine = yearLine
     ? [...best.lines.slice(0, best.lines.indexOf(yearLine))].reverse().find((line) => isCentered(line) && !isNatureAnchor(line.text) && !isProgramLine(line.text) && !isAdvisorLine(line.text))
@@ -331,7 +334,10 @@ function detectTitlePage(pages: PdfPageDiagnostic[], coverPage?: number, bodyPag
   const extractedAdvisor = advisorNameLine
     ? clean(advisorNameLine.text)
     : extractAdvisor(best.lines, advisorLine);
-  const stopCandidates = [advisorLine, advisorNameLine, coadvisorLine, cityLine, yearLine]
+  // Stop nature extraction before the institution line so a standalone institution name is
+  // not absorbed into natureText (which would otherwise make the institution deduplication
+  // check below incorrectly drop a legitimate institution).
+  const stopCandidates = [advisorLine, advisorNameLine, coadvisorLine, institutionLine, cityLine, yearLine]
     .filter((line): line is LineRef => Boolean(line))
     .map((line) => best.lines.indexOf(line))
     .filter((index) => index > natureStart);
@@ -372,7 +378,6 @@ function detectTitlePage(pages: PdfPageDiagnostic[], coverPage?: number, bodyPag
     }
   }
 
-  const institutionLine = best.lines.find((line) => isLikelyInstitution(line.text) && line !== natureLine);
   const institution = institutionLine && !(natureText && containsNormalizedText(natureText, institutionLine.text))
     ? institutionLine.text
     : undefined;

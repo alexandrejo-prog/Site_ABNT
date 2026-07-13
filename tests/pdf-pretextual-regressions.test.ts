@@ -393,3 +393,122 @@ describe("diagnóstico pretextual: folha de rosto sem duplicação de natureza/o
     expect(occurrences).toBe(1);
   });
 });
+
+describe("diagnóstico pretextual: instituição não duplicada na folha de rosto", () => {
+  it("instituição completa já presente em natureText fica undefined", () => {
+    const pre = detectPdfPretextual(buildTitlePage([
+      { text: "AUTOR", centered: true },
+      { text: "TÍTULO", centered: true },
+      { text: "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do título de Mestre." },
+      { text: "UNIVERSIDADE FEDERAL DE LAVRAS" },
+      { text: "LAVRAS-MG", centered: true },
+      { text: "2025", centered: true },
+    ])).titlePage;
+
+    expect(pre?.institution).toBeUndefined();
+    expect(pre?.natureText).toContain("Universidade Federal de Lavras");
+  });
+
+  it("diferença de caixa não impede a deduplicação", () => {
+    const pre = detectPdfPretextual(buildTitlePage([
+      { text: "AUTOR", centered: true },
+      { text: "TÍTULO", centered: true },
+      { text: "dissertação apresentada à universidade federal de lavras, como parte das exigências do título de mestre." },
+      { text: "UNIVERSIDADE FEDERAL DE LAVRAS" },
+      { text: "LAVRAS-MG", centered: true },
+      { text: "2025", centered: true },
+    ])).titlePage;
+
+    expect(pre?.institution).toBeUndefined();
+  });
+
+  it("diferença de pontuação e acentuação não impede a deduplicação", () => {
+    const pre = detectPdfPretextual(buildTitlePage([
+      { text: "AUTOR", centered: true },
+      { text: "TÍTULO", centered: true },
+      { text: "Dissertação apresentada à Universidade Federal de Lavras; como parte das exigências do título de Mestre." },
+      { text: "UNIVERSIDADE. FEDERAL. DE. LAVRAS." },
+      { text: "LAVRAS-MG", centered: true },
+      { text: "2025", centered: true },
+    ])).titlePage;
+
+    expect(pre?.institution).toBeUndefined();
+  });
+
+  it("correspondência apenas parcial não remove institution", () => {
+    const pre = detectPdfPretextual(buildTitlePage([
+      { text: "AUTOR", centered: true },
+      { text: "TÍTULO", centered: true },
+      { text: "Dissertação apresentada à Universidade Federal, para obtenção do título de Mestre." },
+      { text: "UNIVERSIDADE FEDERAL DE LAVRAS" },
+      { text: "LAVRAS-MG", centered: true },
+      { text: "2025", centered: true },
+    ])).titlePage;
+
+    expect(pre?.institution).toBe("UNIVERSIDADE FEDERAL DE LAVRAS");
+    expect(pre?.natureText).toContain("Universidade Federal");
+  });
+
+  it("instituição ausente da natureza é preservada", () => {
+    const pre = detectPdfPretextual(buildTitlePage([
+      { text: "AUTOR", centered: true },
+      { text: "TÍTULO", centered: true },
+      { text: "Dissertação apresentada para obtenção do título de Mestre." },
+      { text: "UNIVERSIDADE FEDERAL DE LAVRAS" },
+      { text: "LAVRAS-MG", centered: true },
+      { text: "2025", centered: true },
+    ])).titlePage;
+
+    expect(pre?.institution).toBe("UNIVERSIDADE FEDERAL DE LAVRAS");
+  });
+
+  it("instituição diferente é preservada", () => {
+    const pre = detectPdfPretextual(buildTitlePage([
+      { text: "AUTOR", centered: true },
+      { text: "TÍTULO", centered: true },
+      { text: "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do título de Mestre." },
+      { text: "INSTITUTO FEDERAL DO SUL DE MINAS" },
+      { text: "LAVRAS-MG", centered: true },
+      { text: "2025", centered: true },
+    ])).titlePage;
+
+    expect(pre?.institution).toBe("INSTITUTO FEDERAL DO SUL DE MINAS");
+    expect(pre?.natureText).toContain("Universidade Federal de Lavras");
+  });
+
+  it("advisor continua com o rótulo Orientador:", () => {
+    const pre = detectPdfPretextual(buildTitlePage([
+      { text: "AUTOR", centered: true },
+      { text: "TÍTULO", centered: true },
+      { text: "Dissertação apresentada à Universidade Federal de Lavras, para obtenção do título de Mestre." },
+      { text: "Prof. Dr. Dany Flavio Tonelli" },
+      { text: "Orientador" },
+      { text: "LAVRAS-MG", centered: true },
+      { text: "2025", centered: true },
+    ])).titlePage;
+
+    expect(pre?.advisor).toMatch(/^Orientador:/);
+    expect(pre?.advisor).toContain("Prof. Dr. Dany Flavio Tonelli");
+    expect(pre?.natureText).not.toContain("Prof. Dr. Dany Flavio Tonelli");
+  });
+
+  it("cidade e ano continuam separados da natureza e do orientador", () => {
+    const pre = detectPdfPretextual(buildTitlePage([
+      { text: "AUTOR", centered: true },
+      { text: "TÍTULO", centered: true },
+      { text: "Dissertação apresentada à Universidade Federal de Lavras, para obtenção do título de Mestre." },
+      { text: "UNIVERSIDADE FEDERAL DE LAVRAS" },
+      { text: "Prof. Dr. Ana Costa" },
+      { text: "Orientadora" },
+      { text: "BELO HORIZONTE-MG", centered: true },
+      { text: "2022", centered: true },
+    ])).titlePage;
+
+    expect(pre?.institution).toBeUndefined();
+    expect(pre?.advisor).toMatch(/^Orientadora:/);
+    expect(pre?.natureText).not.toContain("BELO HORIZONTE");
+    expect(pre?.natureText).not.toContain("2022");
+    expect(pre?.city).toBe("BELO HORIZONTE-MG");
+    expect(pre?.year).toBe("2022");
+  });
+});
