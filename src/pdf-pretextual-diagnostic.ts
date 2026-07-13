@@ -328,6 +328,9 @@ function detectTitlePage(pages: PdfPageDiagnostic[], coverPage?: number, bodyPag
   const advisorNameLine = advisorLine
     ? findAdvisorNameLine(best.lines, advisorLine)
     : undefined;
+  const extractedAdvisor = advisorNameLine
+    ? clean(advisorNameLine.text)
+    : extractAdvisor(best.lines, advisorLine);
   const stopCandidates = [advisorLine, advisorNameLine, coadvisorLine, cityLine, yearLine]
     .filter((line): line is LineRef => Boolean(line))
     .map((line) => best.lines.indexOf(line))
@@ -340,13 +343,33 @@ function detectTitlePage(pages: PdfPageDiagnostic[], coverPage?: number, bodyPag
   let program: string | undefined;
   if (programLine) {
     const programIndex = best.lines.indexOf(programLine);
-    const programEnd = [advisorLine, coadvisorLine, cityLine, yearLine]
+    // Stop program extraction before the advisor name line so a standalone advisor
+    // name is not captured as part of the program text.
+    const programEnd = [advisorLine, advisorNameLine, coadvisorLine, cityLine, yearLine]
       .filter((line): line is LineRef => Boolean(line))
       .map((line) => best.lines.indexOf(line))
       .filter((index) => index > programIndex)
       .sort((a, b) => a - b)[0] ?? Math.min(programIndex + 2, best.lines.length);
-    const programText = deduplicateNatureLines(best.lines.slice(programIndex, programEnd).map((line) => line.text));
-    if (programText && !(natureText && containsNormalizedText(natureText, programText))) program = programText;
+
+    let programLines = best.lines.slice(programIndex, programEnd).map((line) => line.text);
+
+    if (advisorNameLine) {
+      const advisorName = clean(advisorNameLine.text);
+      programLines = programLines.filter((line) => !clean(line).includes(advisorName));
+    }
+
+    const programText = deduplicateNatureLines(programLines);
+
+    // Only keep program text when it is not a repetition of the nature text and does
+    // not merely duplicate the advisor name.
+    const advisorTextForCheck = extractedAdvisor ? fold(extractedAdvisor) : "";
+    if (
+      programText &&
+      !(natureText && containsNormalizedText(natureText, programText)) &&
+      !(advisorTextForCheck && containsNormalizedText(programText, advisorTextForCheck))
+    ) {
+      program = programText;
+    }
   }
 
   const institutionLine = best.lines.find((line) => isLikelyInstitution(line.text) && line !== natureLine);
@@ -357,16 +380,24 @@ function detectTitlePage(pages: PdfPageDiagnostic[], coverPage?: number, bodyPag
   return {
     author: authorLine?.text,
     title,
-    natureText,
+    natureText: natureText || undefined,
     program,
     institution,
-    advisor: extractAdvisor(best.lines, advisorLine),
-    coadvisor: extractAdvisor(best.lines, coadvisorLine),
+    advisor: stripAdvisorRole(extractedAdvisor),
+    coadvisor: stripAdvisorRole(extractAdvisor(best.lines, coadvisorLine)),
     city: cityLine && !isYear(cityLine.text) ? cityLine.text : undefined,
     year: yearLine?.text,
     confidence: confidence(best.score),
-    sourceLines: best.lines.map(({ pageNumber, lineIndex }) => ({ pageNumber, lineIndex })),
+    sourceLines: best.lines.map((line) => ({ pageNumber: line.pageNumber, lineIndex: line.lineIndex })),
   };
+}
+
+// Removes a leading "Orientador(a):" / "Coorientador(a):" role label so the advisor
+// field stores only the person's name.
+function stripAdvisorRole(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const stripped = clean(value).replace(/^(?:co)?orientador(?:a)?\s*:?\s*/iu, "").trim();
+  return stripped || undefined;
 }
 
 function paragraphFromLines(lines: LineRef[]): string {
