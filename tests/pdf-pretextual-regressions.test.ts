@@ -542,3 +542,207 @@ describe("diagnóstico pretextual: instituição não duplicada na folha de rost
     expect(pre?.natureText).toContain("Universidade Federal de Lavras");
   });
 });
+
+describe("recuperação do título truncado da capa a partir da folha de rosto", () => {
+  const FULL = "IMPLEMENTAÇÃO DO PROGRAMA DE GESTÃO E DESEMPENHO: ESTUDO EM UMA UNIVERSIDADE FEDERAL NO ESTADO DE MINAS GERAIS";
+  const TRUNCATED = "IMPLEMENTAÇÃO DO PROGRAMA DE GESTÃO E DESEMPENHO: ESTUDO EM UMA UNIVERSIDADE";
+  const AUTHOR = "MARIANA RAQUEL DE OLIVEIRA ANDRADE";
+
+  it("capa com título truncado que é prefixo da folha de rosto recebe o título completo", () => {
+    const result = detectPdfPretextual([
+      page(1, [
+        "UNIVERSIDADE FEDERAL DE LAVRAS",
+        AUTHOR,
+        TRUNCATED,
+        "LAVRAS-MG",
+        "2025",
+      ]),
+      page(2, [
+        AUTHOR,
+        FULL,
+        "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do título de Mestre.",
+        "Orientador: Prof. Dr. Dany Flavio Tonelli",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+    ], 3);
+
+    expect(result.cover?.title).toBe(FULL);
+  });
+
+  it("mesmo caso com título dividido em várias linhas na capa recupera o completo", () => {
+    const result = detectPdfPretextual([
+      page(1, [
+        "UNIVERSIDADE FEDERAL DE LAVRAS",
+        AUTHOR,
+        "IMPLEMENTAÇÃO DO PROGRAMA DE GESTÃO E",
+        "DESEMPENHO: ESTUDO EM UMA UNIVERSIDADE",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+      page(2, [
+        AUTHOR,
+        FULL,
+        "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do título de Mestre.",
+        "Orientador: Prof. Dr. Dany Flavio Tonelli",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+    ], 3);
+
+    expect(result.cover?.title).toBe(FULL);
+  });
+
+  it("capa e folha de rosto já iguais permanecem inalterados", () => {
+    const result = detectPdfPretextual([
+      page(1, [
+        "UNIVERSIDADE FEDERAL DE LAVRAS",
+        AUTHOR,
+        FULL,
+        "LAVRAS-MG",
+        "2025",
+      ]),
+      page(2, [
+        AUTHOR,
+        FULL,
+        "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do título de Mestre.",
+        "Orientador: Prof. Dr. Dany Flavio Tonelli",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+    ], 3);
+
+    expect(result.cover?.title).toBe(FULL);
+  });
+
+  it("títulos parcialmente semelhantes mas semanticamente diferentes não são substituídos", () => {
+    const result = detectPdfPretextual([
+      page(1, [
+        "UNIVERSIDADE FEDERAL DE LAVRAS",
+        AUTHOR,
+        "A IMPLEMENTAÇÃO DO PROGRAMA DE GESTÃO",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+      page(2, [
+        AUTHOR,
+        "O PROGRAMA DE GESTÃO E DESEMPENHO EM HOSPITAIS",
+        "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do título de Mestre.",
+        "Orientador: Prof. Dr. Dany Flavio Tonelli",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+    ], 3);
+
+    expect(result.cover?.title).toBe("A IMPLEMENTAÇÃO DO PROGRAMA DE GESTÃO");
+  });
+
+  it("autores diferentes não substituem a capa", () => {
+    const result = detectPdfPretextual([
+      page(1, [
+        "UNIVERSIDADE FEDERAL DE LAVRAS",
+        "JOÃO CARLOS DE SOUZA",
+        TRUNCATED,
+        "LAVRAS-MG",
+        "2025",
+      ]),
+      page(2, [
+        AUTHOR,
+        FULL,
+        "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do título de Mestre.",
+        "Orientador: Prof. Dr. Dany Flavio Tonelli",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+    ], 3);
+
+    expect(result.cover?.title).toBe(TRUNCATED);
+    expect(result.cover?.author).toBe("JOÃO CARLOS DE SOUZA");
+  });
+
+  it("anos diferentes não substituem a capa", () => {
+    const result = detectPdfPretextual([
+      page(1, [
+        "UNIVERSIDADE FEDERAL DE LAVRAS",
+        AUTHOR,
+        TRUNCATED,
+        "LAVRAS-MG",
+        "2024",
+      ]),
+      page(2, [
+        AUTHOR,
+        FULL,
+        "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do título de Mestre.",
+        "Orientador: Prof. Dr. Dany Flavio Tonelli",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+    ], 3);
+
+    expect(result.cover?.title).toBe(TRUNCATED);
+    expect(result.cover?.year).toBe("2024");
+  });
+
+  it("ausência de folha de rosto mantém a capa como detectada", () => {
+    const result = detectPdfPretextual([
+      page(1, [
+        "UNIVERSIDADE FEDERAL DE LAVRAS",
+        AUTHOR,
+        TRUNCATED,
+        "LAVRAS-MG",
+        "2025",
+      ]),
+    ], 3);
+
+    expect(result.cover?.title).toBe(TRUNCATED);
+    expect(result.titlePage).toBeUndefined();
+  });
+
+  it("título contendo UNIVERSIDADE FEDERAL DE LAVRAS não vira institution e é recuperado", () => {
+    const result = detectPdfPretextual([
+      page(1, [
+        "UNIVERSIDADE FEDERAL DE LAVRAS",
+        AUTHOR,
+        "GESTÃO NA UNIVERSIDADE FEDERAL DE LAVRAS",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+      page(2, [
+        AUTHOR,
+        "GESTÃO NA UNIVERSIDADE FEDERAL DE LAVRAS CAMPUS CENTRAL",
+        "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do título de Mestre.",
+        "Orientador: Prof. Dr. Dany Flavio Tonelli",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+    ], 3);
+
+    expect(result.cover?.title).toBe("GESTÃO NA UNIVERSIDADE FEDERAL DE LAVRAS CAMPUS CENTRAL");
+    expect(result.titlePage?.institution).toBeUndefined();
+  });
+
+  it("caso real sintético do Andrade recupera o título completo sem alterar advisor ou natureza", () => {
+    const result = detectPdfPretextual([
+      page(1, [
+        "UNIVERSIDADE FEDERAL DE LAVRAS",
+        AUTHOR,
+        TRUNCATED,
+        "LAVRAS-MG",
+        "2025",
+      ]),
+      page(2, [
+        AUTHOR,
+        FULL,
+        "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do título de Mestre.",
+        "Orientador: Prof. Dr. Dany Flavio Tonelli",
+        "LAVRAS-MG",
+        "2025",
+      ]),
+    ], 3);
+
+    expect(result.cover?.title).toBe(FULL);
+    expect(result.titlePage?.title).toBe(FULL);
+    expect(result.titlePage?.advisor).toBe("Orientador: Prof. Dr. Dany Flavio Tonelli");
+    expect(result.titlePage?.natureText).toContain("Universidade Federal de Lavras");
+  });
+});
