@@ -456,10 +456,48 @@ function detectAbstract(lines: LineRef[], title: "RESUMO" | "ABSTRACT"): PdfAbst
   };
 }
 
+function normalizeForTitleCompare(text: string): string {
+  return fold(text)
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// When the cover title was truncated (its remaining part landed on another line/region and
+// was missed by cover detection), recover the complete title from the title page. This only
+// happens when the cover title is a normalized prefix of the title-page title — i.e. the
+// title page merely appends words at the end — and author/year agree and the title page is
+// confident enough to be used as the recovery source.
+function reconcileCoverTitle(
+  cover: PdfPretextualDiagnostic["cover"],
+  titlePage: PdfPretextualDiagnostic["titlePage"],
+): PdfPretextualDiagnostic["cover"] {
+  if (!cover || !titlePage) return cover;
+  const coverTitle = cover.title;
+  const pageTitle = titlePage.title;
+  if (!coverTitle || !pageTitle) return cover;
+  if (coverTitle === pageTitle) return cover;
+
+  const coverNorm = normalizeForTitleCompare(coverTitle);
+  const pageNorm = normalizeForTitleCompare(pageTitle);
+  if (!coverNorm || !pageNorm) return cover;
+  if (!pageNorm.startsWith(coverNorm)) return cover;
+
+  if (cover.author && titlePage.author
+    && normalizeForTitleCompare(cover.author) !== normalizeForTitleCompare(titlePage.author)) {
+    return cover;
+  }
+  if (cover.year && titlePage.year && cover.year !== titlePage.year) return cover;
+  if (titlePage.confidence === "low") return cover;
+
+  return { ...cover, title: pageTitle };
+}
+
 export function detectPdfPretextual(pages: PdfPageDiagnostic[], bodyPage?: number): PdfPretextualDiagnostic {
   const warnings: string[] = [];
-  const cover = detectCover(pages, bodyPage);
-  const titlePage = detectTitlePage(pages, cover?.sourceLines[0]?.pageNumber, bodyPage);
+  const detectedCover = detectCover(pages, bodyPage);
+  const titlePage = detectTitlePage(pages, detectedCover?.sourceLines[0]?.pageNumber, bodyPage);
+  const cover = reconcileCoverTitle(detectedCover, titlePage);
   const lines = linesBeforeBody(pages, bodyPage);
   const resumo = detectAbstract(lines, "RESUMO");
   const abstract = detectAbstract(lines, "ABSTRACT");
