@@ -549,6 +549,127 @@ describe("exportacao textual minima de PDF reconstruido", () => {
   });
 });
 
+describe("estabilizacao de paginacao e folha de rosto", () => {
+  it("titulo do corpo possui keepNext no document.xml", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const headingParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find((p) => p.includes("1 INTRODUÇÃO") && !p.includes("PAGEREF"));
+    expect(headingParagraph).toBeDefined();
+    expect(headingParagraph).toContain("<w:keepNext/>");
+  });
+
+  it("titulo do corpo possui keepLines", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const headingParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find((p) => p.includes("1 INTRODUÇÃO") && !p.includes("PAGEREF"));
+    expect(headingParagraph).toBeDefined();
+    expect(headingParagraph).toContain("<w:keepLines/>");
+  });
+
+  it("titulo do corpo nao possui outlineLvl, pStyle de Heading nem numPr", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const headingParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find((p) => p.includes("1 INTRODUÇÃO") && !p.includes("PAGEREF"));
+    expect(headingParagraph).toBeDefined();
+    expect(headingParagraph).not.toContain("outlineLvl");
+    expect(headingParagraph).not.toContain("Heading");
+    expect(headingParagraph).not.toContain("<w:numPr");
+  });
+
+  it("paragrafo comum posterior nao recebe keepNext", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const bodyParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find((p) => p.includes("O teletrabalho na administração pública federal"));
+    expect(bodyParagraph).toBeDefined();
+    expect(bodyParagraph).not.toContain("<w:keepNext/>");
+    expect(bodyParagraph).not.toContain("<w:keepLines/>");
+  });
+
+  it("natureText possui recuo esperado, firstLine zero, espacamento simples e alinhamento justificado", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const natureParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find((p) => p.includes("Dissertação apresentada à Universidade Federal de Lavras"));
+    expect(natureParagraph).toBeDefined();
+    expect(natureParagraph).toContain('<w:ind w:left="4535"');
+    expect(natureParagraph).not.toContain('w:firstLine="');
+    expect(natureParagraph).toContain('<w:spacing w:before="0" w:after="0" w:line="240"');
+    expect(natureParagraph).toContain('w:val="both"');
+  });
+
+  it("program e institution usam o mesmo recuo", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const paragraphs = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []);
+    const programParagraph = paragraphs.find((p) => p.includes("Programa de Pós-Graduação em Administração Pública"));
+    const institutionParagraph = paragraphs.find((p) => p.includes("Universidade Federal de Lavras") && !p.includes("Dissertação apresentada") && !p.includes("Logo UFLA"));
+    expect(programParagraph).toBeDefined();
+    expect(institutionParagraph).toBeDefined();
+    expect(programParagraph).toContain('<w:ind w:left="4535"');
+    expect(institutionParagraph).toContain('<w:ind w:left="4535"');
+  });
+
+  it("advisor e coadvisor usam o mesmo recuo estrutural", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const paragraphs = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []);
+    const advisorParagraph = paragraphs.find((p) => p.includes("Orientador: Prof. João Silva"));
+    const coadvisorParagraph = paragraphs.find((p) => p.includes("Coorientador"));
+    expect(advisorParagraph).toBeDefined();
+    expect(advisorParagraph).toContain('<w:ind w:left="4535"');
+    if (coadvisorParagraph) {
+      expect(coadvisorParagraph).toContain('<w:ind w:left="4535"');
+    }
+  });
+
+  it("autor e titulo continuam centralizados", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const authorParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find((p) => p.includes("Alexandre Andrade") && !p.includes("TELETRABALHO"));
+    const titleParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find((p) => p.includes("TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL") && p.includes('w:val="center"'));
+    expect(authorParagraph).toBeDefined();
+    expect(authorParagraph).toContain('w:val="center"');
+    expect(titleParagraph).toBeDefined();
+    expect(titleParagraph).toContain('w:val="center"');
+  });
+
+  it("cidade e ano continuam centralizados", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const paragraphs = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []);
+    const cityParagraph = paragraphs.find((p) => p.includes("Lavras - MG") && p.includes('w:val="center"'));
+    const yearParagraph = paragraphs.find((p) => p.includes("2025") && p.includes('w:val="center"'));
+    expect(cityParagraph).toBeDefined();
+    expect(yearParagraph).toBeDefined();
+  });
+
+  it("margens permanecem 3 cm superior, 3 cm esquerda, 2 cm inferior, 2 cm direita", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    expect(documentXml).toContain('<w:pgSz w:w="11906" w:h="16838"');
+    expect(documentXml).toContain('<w:pgMar w:top="1701" w:right="1134" w:bottom="1134" w:left="1701"');
+  });
+
+  it("nao ha w:tbl criado pela correcao", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    expect(documentXml).not.toContain("<w:tbl");
+  });
+
+  it("nao ha w:numPr", async () => {
+    const blob = await buildPdfTextDraftDocxBlob(baseInput());
+    const { documentXml, settingsXml, stylesXml } = await loadDocxParts(blob);
+    const allXml = `${documentXml}\n${settingsXml}\n${stylesXml}`;
+    expect(allXml).not.toContain("<w:numPr");
+  });
+
+  it("bookmarks e PAGEREF do sumario continuam presentes", async () => {
+    const { documentXml, settingsXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    expect(documentXml).toContain("SUMÁRIO");
+    expect(documentXml).toContain("1 INTRODUÇÃO");
+    expect(documentXml).toContain("PAGEREF PDFBM001");
+    expect(documentXml).toContain("<w:bookmarkStart");
+    expect(settingsXml).toContain("updateFields");
+  });
+
+  it("corpo comum continua justificado, recuo primeira linha 1,5 cm e espacamento 1,5", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const bodyParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find((p) => p.includes("O teletrabalho na administração pública federal"));
+    expect(bodyParagraph).toBeDefined();
+    expect(bodyParagraph).toContain('w:val="both"');
+    expect(bodyParagraph).toContain('w:firstLine="850"');
+    expect(bodyParagraph).toContain('<w:spacing w:before="0" w:after="0" w:line="360"');
+  });
+});
+
 describe("formatacao de itens de lista no rascunho textual pdf", () => {
   function listInput(): PdfTextDraftExportInput {
     return baseInput({

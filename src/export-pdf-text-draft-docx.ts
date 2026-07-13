@@ -30,6 +30,7 @@ const SINGLE_LINE_TWIP = 240;
 const ZERO_SPACING = { before: 0, after: 0 };
 const FONT = "Times New Roman";
 const UFLA_LOGO_PATH = "/assets/ufla-logo.jpeg";
+const TITLE_PAGE_NATURE_LEFT_TWIP = 4535;
 
 type TocEntry = {
   title: string;
@@ -113,6 +114,9 @@ function bodyHeading(text: string, entry?: TocEntry): Paragraph {
     alignment: AlignmentType.LEFT,
     indent: { firstLine: 0 },
     spacing: { ...ZERO_SPACING, line: ONE_AND_HALF_LINE_TWIP },
+    keepNext: true,
+    keepLines: true,
+    widowControl: true,
   });
 }
 
@@ -227,6 +231,14 @@ function coverParagraphs(input: PdfTextDraftExportInput, logo?: PdfTextDraftLogo
   return paragraphs;
 }
 
+function titlePageNatureParagraph(text: string, bold = false): Paragraph {
+  return paragraph([run(cleanText(text) || " ", 24, { bold })], {
+    alignment: AlignmentType.JUSTIFIED,
+    spacing: { ...ZERO_SPACING, line: SINGLE_LINE_TWIP },
+    indent: { left: TITLE_PAGE_NATURE_LEFT_TWIP },
+  });
+}
+
 function titlePageParagraphs(input: PdfTextDraftExportInput): Paragraph[] {
   const titlePage = input.pretextual?.titlePage;
   const cover = input.pretextual?.cover;
@@ -243,9 +255,9 @@ function titlePageParagraphs(input: PdfTextDraftExportInput): Paragraph[] {
     centered(author),
     centered(title, { bold: true, before: 1200 }),
     ...(titlePage?.subtitle ? [centered(titlePage.subtitle, { bold: true })] : []),
-    ...lines.map((line, index) => left(line, { before: index === 0 ? 900 : 0 })),
-    ...(titlePage?.advisor ? [left(titlePage.advisor, { before: 240 })] : []),
-    ...(titlePage?.coadvisor ? [left(titlePage.coadvisor)] : []),
+    ...lines.map((line, index) => titlePageNatureParagraph(line, index === 0)),
+    ...(titlePage?.advisor ? [titlePageNatureParagraph(titlePage.advisor, false)] : []),
+    ...(titlePage?.coadvisor ? [titlePageNatureParagraph(titlePage.coadvisor, false)] : []),
     centered(city, { before: 3600 }),
     centered(year),
     pageBreak(),
