@@ -58,6 +58,17 @@ function isLikelyInstitution(text: string): boolean {
   return normalized.includes("UNIVERSIDADE FEDERAL DE LAVRAS") || normalized === "UFLA";
 }
 
+const INSTITUTION_TOKENS = new Set(["UNIVERSIDADE", "FEDERAL", "DE", "LAVRAS", "UFLA"]);
+
+// A line is a standalone institution name only when it carries no words other than the
+// institution tokens. This prevents titles that merely mention "UNIVERSIDADE FEDERAL DE
+// LAVRAS" from being dropped as if they were the institution line.
+function isStandaloneInstitutionLine(text: string): boolean {
+  if (!isLikelyInstitution(text)) return false;
+  const extraWords = normalizedWords(text).filter((word) => !INSTITUTION_TOKENS.has(word));
+  return extraWords.length === 0;
+}
+
 function isNatureAnchor(text: string): boolean {
   const normalized = fold(text);
   const dissertationLike = /^(?:DISSERTACAO|TESE|MONOGRAFIA)\b/u.test(normalized)
@@ -164,7 +175,7 @@ function titleBlock(lines: LineRef[], afterIndex: number, beforeLine?: LineRef):
   const candidates = lines
     .slice(start, beforeIndex < 0 ? lines.length : beforeIndex)
     .filter((line) => isCentered(line))
-    .filter((line) => !isYear(line.text) && !isLikelyInstitution(line.text) && !isLikelyPersonName(line.text))
+    .filter((line) => !isYear(line.text) && !isStandaloneInstitutionLine(line.text) && !isLikelyPersonName(line.text))
     .filter((line) => !isNatureAnchor(line.text) && !isProgramLine(line.text) && !isAdvisorLine(line.text))
     .filter((line) => clean(line.text).length >= 12);
   if (!candidates.length) return undefined;
@@ -321,11 +332,21 @@ function detectTitlePage(pages: PdfPageDiagnostic[], coverPage?: number, bodyPag
   const advisorLine = best.lines.find((line) => /\bORIENTADOR(?:A)?\b/iu.test(fold(line.text)));
   const coadvisorLine = best.lines.find((line) => /\bCOORIENTADOR(?:A)?\b/iu.test(fold(line.text)));
   const programLine = best.lines.find((line) => isProgramLine(line.text));
-  const institutionLine = best.lines.find((line) => isLikelyInstitution(line.text) && line !== natureLine);
   const yearLine = [...best.lines].reverse().find((line) => isYear(line.text));
   const cityLine = yearLine
     ? [...best.lines.slice(0, best.lines.indexOf(yearLine))].reverse().find((line) => isCentered(line) && !isNatureAnchor(line.text) && !isProgramLine(line.text) && !isAdvisorLine(line.text))
     : undefined;
+  // Search for the institution line only within the region after the nature text and
+  // before advisor/coadvisor/city/year, so a title that happens to contain
+  // "UNIVERSIDADE FEDERAL DE LAVRAS" is never treated as the institution.
+  const regionEnds = [advisorLine, coadvisorLine, cityLine, yearLine]
+    .filter((line): line is LineRef => Boolean(line))
+    .map((line) => best.lines.indexOf(line))
+    .filter((index) => index > natureStart);
+  const institutionRegionEnd = regionEnds.length ? Math.min(...regionEnds) : best.lines.length;
+  const institutionLine = best.lines
+    .slice(natureStart + 1, institutionRegionEnd)
+    .find((line) => isLikelyInstitution(line.text) && line !== natureLine);
   const advisorNameLine = advisorLine
     ? findAdvisorNameLine(best.lines, advisorLine)
     : undefined;

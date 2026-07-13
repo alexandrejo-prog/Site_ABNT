@@ -526,4 +526,19 @@ describe("diagnóstico pretextual: instituição não duplicada na folha de rost
     expect(pre?.city).toBe("BELO HORIZONTE-MG");
     expect(pre?.year).toBe("2022");
   });
+
+  it("título contendo UNIVERSIDADE FEDERAL DE LAVRAS não vira institution", () => {
+    const pre = detectPdfPretextual(buildTitlePage([
+      { text: "AUTOR", centered: true },
+      { text: "GESTÃO DO PROGRAMA DE DESEMPENHO NA UNIVERSIDADE FEDERAL DE LAVRAS", centered: true },
+      { text: "Dissertação apresentada à Universidade Federal de Lavras, como parte das exigências do título de Mestre." },
+      { text: "UNIVERSIDADE FEDERAL DE LAVRAS — CAMPUS CENTRAL" },
+      { text: "LAVRAS-MG", centered: true },
+      { text: "2025", centered: true },
+    ])).titlePage;
+
+    expect(pre?.title).toBe("GESTÃO DO PROGRAMA DE DESEMPENHO NA UNIVERSIDADE FEDERAL DE LAVRAS");
+    expect(pre?.institution).toBe("UNIVERSIDADE FEDERAL DE LAVRAS — CAMPUS CENTRAL");
+    expect(pre?.natureText).toContain("Universidade Federal de Lavras");
+  });
 });
