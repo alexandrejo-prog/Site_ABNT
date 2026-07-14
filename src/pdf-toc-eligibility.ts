@@ -1,8 +1,17 @@
 const TERMINAL_ACADEMIC_HEADING = /^(?:REFER[ÊE]NCIAS|CONCLUS[ÃA]O|CONSIDERA[ÇC][ÕO]ES FINAIS|AP[ÊE]NDICES?|ANEXOS?)(?:\s+[A-Z0-9ÁÀÂÃÉÊÍÓÔÕÚÜÇ][^.!?;:]*)?$/iu;
-const NUMBERED_HEADING = /^(\d+(?:\.\d+)*)(?:\.)?\s+(.+)$/u;
+const NUMBERED_HEADING = /^(\d+(?:\.\d+)*\.?)\s*(.+)$/u;
 
 function clean(text: string): string {
   return text.replace(/\s+/g, " ").trim();
+}
+
+export function normalizePdfTocHeading(text: string): string {
+  const value = clean(text);
+  const match = value.match(NUMBERED_HEADING);
+  if (!match) return value;
+  const prefix = match[1];
+  const title = match[2].replace(/\s+/g, " ").trim();
+  return `${prefix} ${title}`;
 }
 
 export function isPdfTocEligibleHeadingText(text: string): boolean {

@@ -36,7 +36,10 @@ export interface PdfVisualCropSkip {
     | "invalid-page-size"
     | "no-valid-lines"
     | "invalid-line-range"
-    | "empty-crop";
+    | "empty-crop"
+    | "implausible-crop-height"
+    | "implausible-crop-aspect-ratio"
+    | "caption-only-region";
 }
 
 export interface PdfVisualCropGeometryResult {
@@ -56,6 +59,29 @@ const GRAPHIC_LIKE_KINDS: ReadonlySet<PdfLayoutSensitiveRegionDiagnostic["kind"]
 ]);
 
 const MIN_PAD = 6;
+const MIN_PLAUSIBLE_CROP_HEIGHT = 40;
+const MAX_CROP_ASPECT_RATIO = 25;
+const CROP_EDGE_GAP = 2;
+
+const CAPTION_RE = /^(Quadro|Tabela|Figura|Gr[áa]fico|Imagem|Mapa|Ilustra[çc][ãa]o)\s+(\d+)\s*[-–—.:]/iu;
+const SOURCE_RE = /^Fonte\s*:/iu;
+
+function isCaptionOrSourceLine(text: string, region: PdfLayoutSensitiveRegionDiagnostic): boolean {
+  const trimmed = text.trim();
+  if (region.caption != null && trimmed === region.caption) return true;
+  if (region.source != null && trimmed === region.source) return true;
+  if (CAPTION_RE.test(trimmed)) return true;
+  if (SOURCE_RE.test(trimmed)) return true;
+  return false;
+}
+
+function stripCaptionAndSourceLines(
+  lines: PdfLineDiagnostic[],
+  region: PdfLayoutSensitiveRegionDiagnostic,
+): PdfLineDiagnostic[] {
+  if (region.caption == null && region.source == null) return lines;
+  return lines.filter((line) => !isCaptionOrSourceLine(line.text, region));
+}
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -175,12 +201,31 @@ export function computePdfVisualCropGeometry(
         continue;
       }
 
-      const minTop = Math.min(...selected.map((line) => line.top));
-      const maxBottom = Math.max(...selected.map((line) => line.bottom));
-      const medianLineHeight = medianValue(selected.map((line) => line.height));
+      const graphicLines = stripCaptionAndSourceLines(selected, region);
+      if (graphicLines.length === 0) {
+        skipped.push({ regionId: region.id, pageNumber, reason: "caption-only-region" });
+        continue;
+      }
+
+      const minTop = Math.min(...graphicLines.map((line) => line.top));
+      const maxBottom = Math.max(...graphicLines.map((line) => line.bottom));
+      const medianLineHeight = medianValue(graphicLines.map((line) => line.height));
       const verticalPadding = Math.max(MIN_PAD, medianLineHeight * 0.6);
       let top = minTop - verticalPadding;
       let bottom = maxBottom + verticalPadding;
+
+      if (region.caption != null) {
+        const captionLine = page.lines.find((line) => line.text.trim() === region.caption);
+        if (captionLine && captionLine.bottom + CROP_EDGE_GAP > top) {
+          top = captionLine.bottom + CROP_EDGE_GAP;
+        }
+      }
+      if (region.source != null) {
+        const sourceLine = page.lines.find((line) => line.text.trim() === region.source);
+        if (sourceLine && sourceLine.top - CROP_EDGE_GAP < bottom) {
+          bottom = sourceLine.top - CROP_EDGE_GAP;
+        }
+      }
 
       const horizontalPadding = Math.max(MIN_PAD, page.width * 0.01);
       const manchaValid = manchaIsValid(bodyLayoutMetrics, page.width);
@@ -227,6 +272,15 @@ export function computePdfVisualCropGeometry(
       }
       const width = rightEdge - x;
       const height = bottomEdge - y;
+
+      if (height < MIN_PLAUSIBLE_CROP_HEIGHT) {
+        skipped.push({ regionId: region.id, pageNumber, reason: "implausible-crop-height" });
+        continue;
+      }
+      if (width / height > MAX_CROP_ASPECT_RATIO) {
+        skipped.push({ regionId: region.id, pageNumber, reason: "implausible-crop-aspect-ratio" });
+        continue;
+      }
 
       const reasons = [...region.reasons];
       if (isFiniteNumber(page.rotation) && page.rotation !== 0) {

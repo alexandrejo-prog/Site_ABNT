@@ -16,6 +16,7 @@ import {
 import type { IParagraphOptions } from "docx";
 import type { PdfAbstractDiagnostic, PdfLayoutSensitiveRegionDiagnostic, PdfReconstructedBlockDiagnostic } from "./imported-pdf-diagnostic";
 import { ensurePdfTextDraftTocFields } from "./pdf-text-draft-toc-field-patch";
+import { normalizePdfTocHeading } from "./pdf-toc-eligibility";
 import { visualAssetEntriesForRegion } from "./pdf-visual-asset-integration";
 import type { PdfTextDraftExportInput, PdfTextDraftLogoAsset, PdfTextDraftValidation, PdfTextDraftVisualAsset } from "./pdf-text-draft-contract";
 
@@ -109,7 +110,7 @@ function keywordParagraph(label: string, value?: string): Paragraph | undefined 
 function bodyHeading(text: string, entry?: TocEntry): Paragraph {
   const children: TextRun[] = [];
   if (entry) children.push(run(`__PDF_BM_START_${entry.bookmark}__`, 1));
-  children.push(run(cleanText(text), 24, { bold: true }));
+  children.push(run(normalizePdfTocHeading(cleanText(text)), 24, { bold: true }));
   if (entry) children.push(run(`__PDF_BM_END_${entry.bookmark}__`, 1));
   return paragraph(children, {
     alignment: AlignmentType.LEFT,
@@ -312,9 +313,9 @@ function abstractParagraphs(abstract: PdfAbstractDiagnostic | undefined, title: 
 function makeTocEntries(blocks: PdfReconstructedBlockDiagnostic[]): TocEntry[] {
   return blocks
     .filter((block) => block.type === "heading")
-    .filter((block) => /^(?:\d+(?:\.\d+)*\s+\S|REFER[ÊE]NCIAS|AP[ÊE]NDICE|ANEXO)/i.test(cleanText(block.text)))
+    .filter((block) => /^(?:\d+(?:\.\d+)*\s*\S|REFER[ÊE]NCIAS|AP[ÊE]NDICE|ANEXO)/i.test(cleanText(block.text)))
     .map((block, index) => ({
-      title: cleanText(block.text),
+      title: normalizePdfTocHeading(cleanText(block.text)),
       bookmark: `PDFBM${String(index + 1).padStart(3, "0")}`,
       level: /^\d+\.\d+/.test(cleanText(block.text)) ? 2 : 1,
     }));

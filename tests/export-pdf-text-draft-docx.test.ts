@@ -2181,4 +2181,40 @@ describe("ativos visuais compostos por recorte (chave multipagina)", () => {
     expect(documentText(documentXml)).toContain("Texto antes do elemento visual.");
     expect(documentText(documentXml)).toContain("Texto depois do elemento visual.");
   });
+
+  describe("sumario aceita titulo numerado colado", () => {
+    function gluedInput(headingText: string): PdfTextDraftExportInput {
+      return baseInput({
+        includeReconstructedPretextuals: false,
+        reconstruction: {
+          ...baseInput().reconstruction,
+          bodyStart: { found: true, pageNumber: 17, lineIndex: 1, text: headingText },
+          blocks: [
+            { type: "heading", text: "1 INTRODUÇÃO", pageStart: 17, pageEnd: 17, sourceLines: [{ pageNumber: 17, lineIndex: 1 }], confidence: "high", reasons: [] },
+            { type: "paragraph", text: "Parágrafo de apoio.", pageStart: 18, pageEnd: 18, sourceLines: [{ pageNumber: 18, lineIndex: 1 }], confidence: "medium", reasons: [] },
+            { type: "heading", text: headingText, pageStart: 40, pageEnd: 40, sourceLines: [{ pageNumber: 40, lineIndex: 1 }], confidence: "high", reasons: [] },
+          ],
+          statistics: { ...baseInput().reconstruction.statistics, headingCount: 2, paragraphCount: 1 },
+        },
+      });
+    }
+
+    it("4.3Título aparece no sumario normalizado com bookmark e PAGEREF", async () => {
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(gluedInput("4.3Título")));
+      const text = documentText(documentXml);
+      expect(text).toContain("SUMÁRIO");
+      expect(text).toContain("4.3 Título");
+      expect(documentXml).toContain("<w:bookmarkStart");
+      expect(documentXml).toContain("PAGEREF");
+    });
+
+    it("4.3. Título continua valido e aparece no sumario", async () => {
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(gluedInput("4.3. Título")));
+      const text = documentText(documentXml);
+      expect(text).toContain("SUMÁRIO");
+      expect(text).toContain("4.3. Título");
+      expect(documentXml).toContain("<w:bookmarkStart");
+      expect(documentXml).toContain("PAGEREF");
+    });
+  });
 });

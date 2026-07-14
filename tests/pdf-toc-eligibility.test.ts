@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPdfTocEligibleHeadingText, pdfTocHeadingLevel } from "../src/pdf-toc-eligibility";
+import { isPdfTocEligibleHeadingText, normalizePdfTocHeading, pdfTocHeadingLevel } from "../src/pdf-toc-eligibility";
 import { patchPdfTextDraftDocumentXml } from "../src/pdf-text-draft-toc-field-patch";
 
 function tocParagraph(title: string, bookmark: string): string {
@@ -31,6 +31,21 @@ describe("elegibilidade do sumario do rascunho PDF", () => {
     expect(pdfTocHeadingLevel("4.5.2 Desafios")).toBe(3);
     expect(pdfTocHeadingLevel("4.5.2.10 Comissão")).toBe(4);
     expect(pdfTocHeadingLevel("REFERÊNCIAS")).toBe(1);
+  });
+
+  it("aceita titulo numerado colado (4.3Título) e normaliza o espaco", () => {
+    expect(isPdfTocEligibleHeadingText("4.3Título")).toBe(true);
+    expect(normalizePdfTocHeading("4.3Título")).toBe("4.3 Título");
+  });
+
+  it("aceita titulo com numero, ponto e espaco (4.3. Título)", () => {
+    expect(isPdfTocEligibleHeadingText("4.3. Título")).toBe(true);
+    expect(normalizePdfTocHeading("4.3. Título")).toBe("4.3. Título");
+  });
+
+  it("nao altera titulos academicos sem numeracao", () => {
+    expect(normalizePdfTocHeading("REFERÊNCIAS")).toBe("REFERÊNCIAS");
+    expect(isPdfTocEligibleHeadingText("REFERÊNCIAS")).toBe(true);
   });
 
   it("envolve w:tab orfao em w:r e mantem lider pontilhado e PAGEREF", () => {
