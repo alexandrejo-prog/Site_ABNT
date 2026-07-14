@@ -96,15 +96,17 @@ describe("reconstrucao de anomalias na fronteira real entre linhas", () => {
     expect(text).not.toContain("inter-disciplinar");
   });
 
-  it("reduz COVID-19-19 reconstruído no corpo", () => {
+  it("preserva COVID-19-19 reconstruído no corpo e emite alerta", () => {
     const result = reconstructPdfParagraphBlocks([
       page(17, [
         "1 INTRODUÇÃO",
         "A pandemia de COVID-19-19 mudou o trabalho público federal.",
       ]),
     ]);
-    expect(paragraphTexts(result).join(" ")).toContain("COVID-19");
-    expect(paragraphTexts(result).join(" ")).not.toContain("COVID-19-19");
+    const text = paragraphTexts(result).join(" ");
+    expect(text).toContain("COVID-19-19");
+    expect(text).not.toContain("COVID-19.");
+    expect(result.alerts.some((a) => a.includes("COVID-19-19"))).toBe(true);
   });
 
   it("preserva a fronteira quando a junção atravessa páginas", () => {
@@ -127,6 +129,18 @@ describe("reconstrucao de anomalias na fronteira real entre linhas", () => {
     const text = paragraphTexts(result).join(" ");
     expect(text).toContain("servidorpesquisador");
     expect(text).not.toContain("servidor-pesquisador");
+    expect(result.alerts.some((a) => a.includes("servidorpesquisador"))).toBe(true);
+  });
+
+  it("preserva COVID-19-19 dentro da seção REFERÊNCIAS e emite alerta", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(110, ["REFERÊNCIAS"]),
+      page(111, ["SILVA, J. Impactos da COVID-19-19 na gestão pública. Editora, 2021."]),
+    ]);
+    const ref = paragraphTexts(result).find((t) => t.includes("SILVA, J."));
+    expect(ref).toContain("COVID-19-19");
+    expect(ref).not.toContain("COVID-19.");
+    expect(result.alerts.some((a) => a.includes("COVID-19-19"))).toBe(true);
   });
 
   it("e idempotente para a mesma entrada de PDF", () => {

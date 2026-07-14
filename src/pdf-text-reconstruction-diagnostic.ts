@@ -11,7 +11,7 @@ import type {
   PdfTextReconstructionDiagnostic,
 } from "./imported-pdf-diagnostic";
 import { shouldInsertSpace } from "./import-pdf-diagnostic";
-import { normalizePdfTextAnomalies, shouldKeepHyphenAtJoin } from "./pdf-text-anomaly-normalizer";
+import { normalizePdfTextAnomalies, detectPdfTextAnomalyAlerts, shouldKeepHyphenAtJoin } from "./pdf-text-anomaly-normalizer";
 
 interface LineRef {
   page: PdfPageDiagnostic;
@@ -901,10 +901,14 @@ export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTe
   }
   flushParagraph();
 
-  const normalizedBlocks = blocks.map((block) => ({
-    ...block,
-    text: normalizePdfTextAnomalies(block.text),
-  }));
+  const blockAlerts: string[][] = [];
+  const normalizedBlocks = blocks.map((block) => {
+    blockAlerts.push(detectPdfTextAnomalyAlerts(block.text));
+    return {
+      ...block,
+      text: normalizePdfTextAnomalies(block.text),
+    };
+  });
 
   const paragraphLineCounts = normalizedBlocks.filter((block) => block.type === "paragraph").map((block) => block.sourceLines.length);
   const statistics: PdfTextReconstructionDiagnostic["statistics"] = {
@@ -935,7 +939,7 @@ export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTe
     bodyLayoutMetrics,
     layoutRegions,
     hyphenation,
-    alerts: [...bridgeAlerts, ...buildAlerts(normalizedBlocks, statistics, pages.length)],
+    alerts: [...bridgeAlerts, ...buildAlerts(normalizedBlocks, statistics, pages.length), ...blockAlerts.flat()],
     statistics,
   };
 }

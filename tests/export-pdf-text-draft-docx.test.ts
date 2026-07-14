@@ -584,7 +584,7 @@ describe("estabilizacao de paginacao e folha de rosto", () => {
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
     const natureParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find((p) => p.includes("Dissertação apresentada à Universidade Federal de Lavras"));
     expect(natureParagraph).toBeDefined();
-    expect(natureParagraph).toContain('<w:ind w:left="5953"');
+    expect(natureParagraph).toContain('<w:ind w:left="4252"');
     expect(natureParagraph).not.toContain('w:firstLine="');
     expect(natureParagraph).toContain('<w:spacing w:before="900" w:after="0" w:line="240"');
     expect(natureParagraph).toContain('w:val="both"');
@@ -615,24 +615,25 @@ describe("estabilizacao de paginacao e folha de rosto", () => {
     const institutionParagraph = paragraphs.find((p) => p.includes("Universidade Federal de Lavras") && !p.includes("Dissertação apresentada") && !p.includes("Logo UFLA"));
     expect(programParagraph).toBeDefined();
     expect(institutionParagraph).toBeDefined();
-    expect(programParagraph).toContain('<w:ind w:left="5953"');
-    expect(institutionParagraph).toContain('<w:ind w:left="5953"');
+    expect(programParagraph).toContain('<w:ind w:left="4252"');
+    expect(institutionParagraph).toContain('<w:ind w:left="4252"');
     expect(programParagraph).toContain('<w:spacing w:before="0" w:after="0" w:line="240"');
     expect(institutionParagraph).toContain('<w:spacing w:before="0" w:after="0" w:line="240"');
   });
 
-  it("advisor possui antes 240 e alinhamento esquerdo", async () => {
+  it("advisor possui antes 240, centralizado na pagina e sem recuo", async () => {
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
     const paragraphs = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []);
     const advisorParagraph = paragraphs.find((p) => p.includes("Orientador: Prof. João Silva"));
     expect(advisorParagraph).toBeDefined();
-    expect(advisorParagraph).toContain('<w:ind w:left="5953"');
+    expect(advisorParagraph).not.toContain('w:left="4252"');
+    expect(advisorParagraph).not.toContain('w:left="5953"');
     expect(advisorParagraph).toContain('<w:spacing w:before="240" w:after="0" w:line="240"');
       expect(advisorParagraph).toContain('w:val="center"');
     expect(advisorParagraph).not.toContain("<w:b/>");
   });
 
-  it("coadvisor possui antes zero, alinhamento esquerdo e nao esta em negrito", async () => {
+  it("coadvisor possui antes zero, centralizado na pagina e nao esta em negrito", async () => {
     const input = baseInput({
       pretextual: {
         ...baseInput().pretextual!,
@@ -646,7 +647,8 @@ describe("estabilizacao de paginacao e folha de rosto", () => {
     const paragraphs = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []);
     const coadvisorParagraph = paragraphs.find((p) => p.includes("Coorientador: Prof. Maria Souza"));
     expect(coadvisorParagraph).toBeDefined();
-    expect(coadvisorParagraph).toContain('<w:ind w:left="5953"');
+    expect(coadvisorParagraph).not.toContain('w:left="4252"');
+    expect(coadvisorParagraph).not.toContain('w:left="5953"');
     expect(coadvisorParagraph).toContain('<w:spacing w:before="0" w:after="0" w:line="240"');
       expect(coadvisorParagraph).toContain('w:val="center"');
     expect(coadvisorParagraph).not.toContain("<w:b/>");
@@ -659,17 +661,17 @@ describe("estabilizacao de paginacao e folha de rosto", () => {
     expect(titleParagraph).toContain("<w:b/>");
   });
 
-  it("bloco de natureza nao usa tabela, caixa de texto nem recuo de primeira linha", async () => {
-    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
-    const paragraphs = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []);
-    for (const needle of ["Dissertação apresentada à Universidade Federal de Lavras", "Programa de Pós-Graduação em Administração Pública", "Universidade Federal de Lavras", "Orientador: Prof. João Silva"]) {
-      const p = paragraphs.find((x) => x.includes(needle));
-      expect(p).toBeDefined();
-      expect(p).not.toContain('w:firstLine="');
-      expect(p).not.toContain("<w:tbl");
-      expect(p).not.toContain("<w:txbxContent");
-    }
-  });
+    it("bloco de natureza nao usa tabela, caixa de texto nem recuo de primeira linha", async () => {
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+      const paragraphs = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []);
+      for (const needle of ["Dissertação apresentada à Universidade Federal de Lavras", "Programa de Pós-Graduação em Administração Pública", "Universidade Federal de Lavras"]) {
+        const p = paragraphs.find((x) => x.includes(needle));
+        expect(p).toBeDefined();
+        expect(p).not.toContain('w:firstLine="');
+        expect(p).not.toContain("<w:tbl");
+        expect(p).not.toContain("<w:txbxContent");
+      }
+    });
 
   it("program e institution usam o mesmo recuo", async () => {
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
@@ -678,19 +680,21 @@ describe("estabilizacao de paginacao e folha de rosto", () => {
     const institutionParagraph = paragraphs.find((p) => p.includes("Universidade Federal de Lavras") && !p.includes("Dissertação apresentada") && !p.includes("Logo UFLA"));
     expect(programParagraph).toBeDefined();
     expect(institutionParagraph).toBeDefined();
-    expect(programParagraph).toContain('<w:ind w:left="5953"');
-    expect(institutionParagraph).toContain('<w:ind w:left="5953"');
+    expect(programParagraph).toContain('<w:ind w:left="4252"');
+    expect(institutionParagraph).toContain('<w:ind w:left="4252"');
   });
 
-  it("advisor e coadvisor usam o mesmo recuo estrutural", async () => {
+  it("advisor e coadvisor centralizados na pagina sem recuo", async () => {
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
     const paragraphs = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []);
     const advisorParagraph = paragraphs.find((p) => p.includes("Orientador: Prof. João Silva"));
     const coadvisorParagraph = paragraphs.find((p) => p.includes("Coorientador"));
     expect(advisorParagraph).toBeDefined();
-    expect(advisorParagraph).toContain('<w:ind w:left="5953"');
+    expect(advisorParagraph).not.toContain('<w:ind w:left="');
+    expect(advisorParagraph).toContain('w:val="center"');
     if (coadvisorParagraph) {
-      expect(coadvisorParagraph).toContain('<w:ind w:left="5953"');
+      expect(coadvisorParagraph).not.toContain('<w:ind w:left="');
+      expect(coadvisorParagraph).toContain('w:val="center"');
     }
   });
 
@@ -704,13 +708,15 @@ describe("estabilizacao de paginacao e folha de rosto", () => {
     expect(titleParagraph).toContain('w:val="center"');
   });
 
-  it("cidade e ano continuam centralizados", async () => {
+  it("cidade e ano continuam centralizados e ano fica colado a cidade", async () => {
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
     const paragraphs = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []);
       const cityParagraph = paragraphs.find((p) => p.includes("LAVRAS-MG") && p.includes('w:val="center"'));
     const yearParagraph = paragraphs.find((p) => p.includes("2025") && p.includes('w:val="center"'));
     expect(cityParagraph).toBeDefined();
     expect(yearParagraph).toBeDefined();
+    expect(cityParagraph).toContain('w:spacing w:before="2400"');
+    expect(yearParagraph).toContain('w:spacing w:before="0"');
   });
 
   it("logotipo da capa tem 7 cm por 2,85 cm", async () => {
@@ -1699,6 +1705,53 @@ describe("ativos visuais de regioes pdf", () => {
       expect(para).toContain('w:jc w:val="both"');
       expect(para).toContain('w:firstLine="850"');
       expect(para).toContain('w:line="360"');
+    });
+
+    it("duas referencias fundidas em um bloco saem em paragrafos distintos", async () => {
+      const input = referencesInput([
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        {
+          type: "paragraph",
+          text: "ALVES, A. C. Teletrabalho e administração pública. Editora UFLA, 2021.\nALVES LEITE, B. W.; BENEVIDES DE PINHO, M. A. Pandemia e políticas de saúde. Revista X, 2022.",
+          pageStart: 111,
+          pageEnd: 112,
+          sourceLines: [{ pageNumber: 111, lineIndex: 1 }, { pageNumber: 112, lineIndex: 1 }],
+          confidence: "high",
+          reasons: [],
+        },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const alves = paraWithText(documentXml, "ALVES, A. C.");
+      const leite = paraWithText(documentXml, "ALVES LEITE, B. W.");
+      expect(alves).toBeDefined();
+      expect(leite).toBeDefined();
+      expect(alves).not.toContain("ALVES LEITE");
+      expect(leite).not.toContain("ALVES, A. C.");
+      expect(alves).toContain('w:jc w:val="left"');
+      expect(leite).toContain('w:jc w:val="left"');
+      expect(alves).not.toContain('w:hanging="');
+      expect(leite).not.toContain('w:hanging="');
+      expect(alves).not.toContain('w:left="');
+      expect(leite).not.toContain('w:left="');
+    });
+
+    it("referencia preserva COVID-19-19 da fonte nas referencias", async () => {
+      const input = referencesInput([
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        {
+          type: "paragraph",
+          text: "SILVA, J. Impactos da COVID-19-19 na gestão pública. Editora, 2021.",
+          pageStart: 111,
+          pageEnd: 111,
+          sourceLines: [{ pageNumber: 111, lineIndex: 1 }],
+          confidence: "high",
+          reasons: [],
+        },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const ref = paraWithText(documentXml, "SILVA, J.");
+      expect(ref).toContain("COVID-19-19");
+      expect(ref).not.toContain("COVID-19.");
     });
 
     it("heading REFERENCIAS continua em negrito", async () => {

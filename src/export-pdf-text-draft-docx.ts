@@ -33,7 +33,7 @@ const SINGLE_LINE_TWIP = 240;
 const ZERO_SPACING = { before: 0, after: 0 };
 const FONT = "Times New Roman";
 const UFLA_LOGO_PATH = "/assets/ufla-logo.jpeg";
-const TITLE_PAGE_NATURE_LEFT_TWIP = 5953;
+const TITLE_PAGE_NATURE_LEFT_TWIP = 4252;
 
 type TocEntry = {
   title: string;
@@ -165,6 +165,14 @@ function referenceParagraph(text: string): Paragraph {
   });
 }
 
+function splitReferenceEntries(text: string): string[] {
+  const parts = text
+    .split(/\n+/)
+    .map((part) => part.replace(/\s+/g, " ").trim())
+    .filter((part) => part.length > 0);
+  return parts.length > 0 ? parts : [text.replace(/\s+/g, " ").trim()];
+}
+
 function isGraphicLikeKind(kind?: PdfLayoutSensitiveRegionDiagnostic["kind"]): boolean {
   return kind === "grafico" || kind === "figura" || kind === "imagem" || kind === "mapa" || kind === "ilustracao";
 }
@@ -240,7 +248,7 @@ function coverParagraphs(input: PdfTextDraftExportInput, logo?: PdfTextDraftLogo
   paragraphs.push(centered(title, { size: 32, bold: true, before: 900, line: ONE_AND_HALF_LINE_TWIP }));
   if (subtitle) paragraphs.push(centered(subtitle, { size: 32, bold: true, line: ONE_AND_HALF_LINE_TWIP }));
   paragraphs.push(centered(city, { size: 28, bold: true, before: 2400 }));
-  paragraphs.push(centered(year, { size: 28, bold: true, before: 2400 }));
+  paragraphs.push(centered(year, { size: 28, bold: true, before: 0 }));
   paragraphs.push(pageBreak());
   return paragraphs;
 }
@@ -278,13 +286,13 @@ function titlePageParagraphs(input: PdfTextDraftExportInput): Paragraph[] {
       ? [titlePageNatureParagraph(titlePage.institution, { before: 0, alignment: AlignmentType.JUSTIFIED })]
       : []),
     ...(titlePage?.advisor
-      ? [titlePageNatureParagraph(titlePage.advisor, { before: 240, alignment: AlignmentType.CENTER })]
+      ? [centered(titlePage.advisor, { size: 28, before: 240 })]
       : []),
     ...(titlePage?.coadvisor
-      ? [titlePageNatureParagraph(titlePage.coadvisor, { before: 0, alignment: AlignmentType.CENTER })]
+      ? [centered(titlePage.coadvisor, { size: 28, before: 0 })]
       : []),
     centered(formatCity(city), { size: 28, bold: true, before: 2400 }),
-    centered(year, { size: 28, bold: true, before: 2400 }),
+    centered(year, { size: 28, bold: true, before: 0 }),
     pageBreak(),
   ];
 }
@@ -450,11 +458,19 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
     }
     if (block.type === "paragraph") {
       if (blockInsideVisualSpan(block, visualSpans, pagesWithBodyText)) continue;
-      paragraphs.push(inReferences ? referenceParagraph(text) : justified(text));
+      if (inReferences) {
+        for (const ref of splitReferenceEntries(block.text)) paragraphs.push(referenceParagraph(ref));
+      } else {
+        paragraphs.push(justified(text));
+      }
     }
     if (block.type === "list-item") {
       if (blockInsideVisualSpan(block, visualSpans, pagesWithBodyText)) continue;
-      paragraphs.push(inReferences ? referenceParagraph(text) : listItem(text));
+      if (inReferences) {
+        for (const ref of splitReferenceEntries(block.text)) paragraphs.push(referenceParagraph(ref));
+      } else {
+        paragraphs.push(listItem(text));
+      }
     }
     if (block.type === "caption") {
       const region = block.layoutRegionId ? regions.get(block.layoutRegionId) : undefined;
