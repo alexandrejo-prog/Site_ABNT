@@ -56,6 +56,19 @@ const GRAPHIC_LIKE_KINDS: ReadonlySet<PdfLayoutSensitiveRegionDiagnostic["kind"]
 ]);
 
 const MIN_PAD = 6;
+const VERTICAL_PAD_FACTOR = 0.6;
+const HORIZONTAL_PAD_FACTOR = 0.01;
+const HORIZONTAL_PAD_MIN = 6;
+
+// Para regioes graficas (quadros, tabelas, figuras etc.), as bordas vetoriais,
+// celulas vazias e áreas sem texto ultrapassam as caixas das linhas de texto
+// selecionadas. Estende-se o recorte verticalmente em direcao a linha de texto
+// adjacente (legenda acima / fonte ou texto seguinte abaixo) por uma fração
+// limitada do vão, de modo a capturar a borda sem incluir a legenda, a fonte
+// ou o parágrafo vizinho. A extensão nunca encolhe o recorte.
+const GRAPHIC_ENCLOSE_FRACTION = 0.85;
+const GRAPHIC_ENCLOSE_GAP_THRESHOLD_FACTOR = 2;
+const GRAPHIC_ENCLOSE_MAX_FACTOR = 3;
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -178,13 +191,36 @@ export function computePdfVisualCropGeometry(
       const minTop = Math.min(...selected.map((line) => line.top));
       const maxBottom = Math.max(...selected.map((line) => line.bottom));
       const medianLineHeight = medianValue(selected.map((line) => line.height));
-      const verticalPadding = Math.max(MIN_PAD, medianLineHeight * 0.6);
+      const verticalPadding = Math.max(MIN_PAD, medianLineHeight * VERTICAL_PAD_FACTOR);
       let top = minTop - verticalPadding;
       let bottom = maxBottom + verticalPadding;
 
-      const horizontalPadding = Math.max(MIN_PAD, page.width * 0.01);
-      const manchaValid = manchaIsValid(bodyLayoutMetrics, page.width);
       const graphicLike = GRAPHIC_LIKE_KINDS.has(region.kind);
+      if (graphicLike) {
+        const lastIndex = page.lines.length - 1;
+        const prevLine = indices.start > 0 ? page.lines[indices.start - 1] : undefined;
+        const nextLine = indices.end < lastIndex ? page.lines[indices.end + 1] : undefined;
+        const gapThreshold = medianLineHeight * GRAPHIC_ENCLOSE_GAP_THRESHOLD_FACTOR;
+        const maxExtend = medianLineHeight * GRAPHIC_ENCLOSE_MAX_FACTOR;
+        const edgeSliver = Math.max(1, medianLineHeight * 0.1);
+        if (prevLine && hasValidCoords(prevLine)) {
+          const gapTop = minTop - prevLine.bottom;
+          if (gapTop > 0 && gapTop <= gapThreshold) {
+            const extend = Math.min(gapTop * GRAPHIC_ENCLOSE_FRACTION, maxExtend);
+            top = Math.max(top, minTop - extend);
+          }
+        }
+        if (nextLine && hasValidCoords(nextLine)) {
+          const gapBot = nextLine.top - maxBottom;
+          if (gapBot > 0 && gapBot <= gapThreshold) {
+            const extend = Math.min(gapBot * GRAPHIC_ENCLOSE_FRACTION, maxExtend);
+            bottom = Math.min(Math.max(bottom, maxBottom + extend), nextLine.top - edgeSliver);
+          }
+        }
+      }
+
+      const horizontalPadding = Math.max(HORIZONTAL_PAD_MIN, page.width * HORIZONTAL_PAD_FACTOR);
+      const manchaValid = manchaIsValid(bodyLayoutMetrics, page.width);
 
       let left: number;
       let right: number;

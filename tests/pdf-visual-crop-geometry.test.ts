@@ -496,9 +496,9 @@ describe("camada de geometria de recorte visual pdf", () => {
     const regions = [region({ id: "r1", pageStart: 1, pageEnd: 3, startLineIndex: 100, endLineIndex: 2, kind: "figura" })];
     const result = computePdfVisualCropGeometry(pages, regions);
     const last = result.crops.find((c) => c.pageNumber === 3)!;
-    // usa linhas 0..2 -> top 100, bottom 230, vPad 18
+    // usa linhas 0..2 -> top 100, bottom 230, vPad 18; a linha seguinte (top 250) limita o rodape
     expect(last.sourceRect.y).toBe(82);
-    expect(last.sourceRect.height).toBe(166);
+    expect(last.sourceRect.height).toBe(165);
   });
 
   it("intervalo de pagina unica totalmente acima das linhas nao seleciona a ultima linha", () => {
@@ -612,5 +612,132 @@ describe("camada de geometria de recorte visual pdf", () => {
       width: 820 / PAGE_W,
       height: 106 / PAGE_H,
     });
+  });
+
+  const quadroPage = (
+    captionTop: number,
+    contentTops: number[],
+    sourceTop: number,
+    width = PAGE_W,
+    height = PAGE_H,
+    lineHeight = 30,
+  ) => {
+    const lines: ReturnType<typeof line>[] = [];
+    let idx = 0;
+    lines.push(line(idx++, { left: 100, right: 900, top: captionTop, bottom: captionTop + lineHeight, height: lineHeight, text: "Legenda do elemento" }));
+    for (const t of contentTops) {
+      lines.push(line(idx++, { left: 100, right: 900, top: t, bottom: t + lineHeight, height: lineHeight }));
+    }
+    lines.push(line(idx++, { left: 100, right: 900, top: sourceTop, bottom: sourceTop + lineHeight, height: lineHeight, text: "Fonte: autor (2025)." }));
+    return page(1, width, height, lines as ReturnType<typeof line>[]);
+  };
+
+  it("bordas alem das caixas de texto sao incluidas para regiao grafica", () => {
+    const p = quadroPage(80, [110, 150, 190], 240);
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 3, kind: "quadro" })];
+    const { crops } = computePdfVisualCropGeometry([p], regions);
+    const crop = crops[0];
+    expect(crop.sourceRect.y).toBeLessThan(110);
+    expect(crop.sourceRect.y + crop.sourceRect.height).toBeGreaterThan(220);
+  });
+
+  it("titulo (legenda) nao entra no recorte", () => {
+    const p = quadroPage(70, [110, 150], 210);
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 2, kind: "quadro" })];
+    const { crops } = computePdfVisualCropGeometry([p], regions);
+    const crop = crops[0];
+    expect(crop.sourceRect.y).toBeGreaterThan(100);
+  });
+
+  it("fonte nao entra no recorte", () => {
+    const p = quadroPage(80, [110, 150], 210);
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 2, kind: "quadro" })];
+    const { crops } = computePdfVisualCropGeometry([p], regions);
+    const crop = crops[0];
+    expect(crop.sourceRect.y + crop.sourceRect.height).toBeLessThan(210);
+  });
+
+  it("texto posterior nao entra no recorte", () => {
+    const p = quadroPage(80, [110, 150], 210, PAGE_W, PAGE_H, 30);
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 2, kind: "tabela" })];
+    const { crops } = computePdfVisualCropGeometry([p], regions);
+    const crop = crops[0];
+    expect(crop.sourceRect.y + crop.sourceRect.height).toBeLessThan(210);
+  });
+
+  it("tabela sem texto na ultima linha nao perde a borda inferior", () => {
+    const p = quadroPage(80, [110, 150], 200);
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 2, kind: "tabela" })];
+    const { crops } = computePdfVisualCropGeometry([p], regions);
+    const crop = crops[0];
+    const maxBottom = 150 + 30;
+    expect(crop.sourceRect.y + crop.sourceRect.height).toBeGreaterThan(maxBottom);
+    expect(crop.sourceRect.y + crop.sourceRect.height).toBeLessThan(200);
+  });
+
+  it("quadro com celulas vazias nao e reduzido a largura das linhas textuais", () => {
+    const p = page(1, PAGE_W, PAGE_H, [
+      line(1, { left: 300, right: 320, top: 200, bottom: 230, height: 30 }),
+    ]);
+    const metrics: PdfBodyLayoutMetrics = {
+      dominantLeft: 150, dominantRight: 850, medianLineHeight: 30, medianLineGap: 10,
+      probableFirstLineIndent: 36, probableBodyFontHeight: 12, confidence: "high",
+    };
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 0, kind: "quadro" })];
+    const { crops } = computePdfVisualCropGeometry([p], regions, metrics);
+    expect(crops[0].sourceRect.width).toBe(720);
+  });
+
+  it("padding nao ultrapassa os limites da pagina na horizontal e vertical", () => {
+    const p = quadroPage(80, [110, 150], 210, 500, 700);
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 2, kind: "figura" })];
+    const { crops } = computePdfVisualCropGeometry([p], regions);
+    const crop = crops[0];
+    expect(crop.sourceRect.x).toBeGreaterThanOrEqual(0);
+    expect(crop.sourceRect.y).toBeGreaterThanOrEqual(0);
+    expect(crop.sourceRect.x + crop.sourceRect.width).toBeLessThanOrEqual(500);
+    expect(crop.sourceRect.y + crop.sourceRect.height).toBeLessThanOrEqual(700);
+  });
+
+  it("retangulos tem dimensoes positivas", () => {
+    const p = quadroPage(80, [110, 150, 190, 230], 300);
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 4, kind: "grafico" })];
+    const { crops } = computePdfVisualCropGeometry([p], regions);
+    expect(crops[0].sourceRect.width).toBeGreaterThan(0);
+    expect(crops[0].sourceRect.height).toBeGreaterThan(0);
+    expect(crops[0].normalizedRect.width).toBeGreaterThan(0);
+    expect(crops[0].normalizedRect.height).toBeGreaterThan(0);
+  });
+
+  it("rotacao 90 mantem coordenadas positivas e normalizadas", () => {
+    const p = quadroPage(80, [110, 150], 210, PAGE_W, PAGE_H, 30);
+    const rotated = page(1, PAGE_W, PAGE_H, p.lines, 90);
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 2, kind: "quadro" })];
+    const { crops } = computePdfVisualCropGeometry([rotated], regions);
+    const crop = crops[0];
+    expect(crop.sourceRect.x).toBeGreaterThanOrEqual(0);
+    expect(crop.sourceRect.y).toBeGreaterThanOrEqual(0);
+    expect(crop.sourceRect.width).toBeGreaterThan(0);
+    expect(crop.sourceRect.height).toBeGreaterThan(0);
+    for (const value of [crop.normalizedRect.x, crop.normalizedRect.y, crop.normalizedRect.width, crop.normalizedRect.height]) {
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThanOrEqual(1);
+    }
+    expect(crop.reasons.some((r) => r.includes("rotação"))).toBe(true);
+  });
+
+  it("rotacao 180 e 270 nao invertem eixos", () => {
+    for (const rotation of [180, 270]) {
+      const p = quadroPage(80, [110, 150], 210, PAGE_W, PAGE_H, 30);
+      const rotated = page(1, PAGE_W, PAGE_H, p.lines, rotation);
+      const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 2, kind: "quadro" })];
+      const { crops } = computePdfVisualCropGeometry([rotated], regions);
+      const crop = crops[0];
+      expect(crop.sourceRect.x).toBeGreaterThanOrEqual(0);
+      expect(crop.sourceRect.y).toBeGreaterThanOrEqual(0);
+      expect(crop.sourceRect.x + crop.sourceRect.width).toBeLessThanOrEqual(PAGE_W);
+      expect(crop.sourceRect.y + crop.sourceRect.height).toBeLessThanOrEqual(PAGE_H);
+      expect(crop.reasons.some((r) => r.includes("rotação"))).toBe(true);
+    }
   });
 });
