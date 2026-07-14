@@ -11,6 +11,7 @@ import type {
   PdfTextReconstructionDiagnostic,
 } from "./imported-pdf-diagnostic";
 import { shouldInsertSpace } from "./import-pdf-diagnostic";
+import { normalizePdfTextAnomalies, shouldKeepHyphenAtJoin } from "./pdf-text-anomaly-normalizer";
 
 interface LineRef {
   page: PdfPageDiagnostic;
@@ -675,7 +676,7 @@ function canJoinBodyLine(previous: ClassifiedLine, next: ClassifiedLine, current
   return { join: true, reason: firstLineReturnsToBody ? "Unido por retorno da primeira linha recuada a margem do corpo." : "Unido por continuidade na margem do corpo." };
 }
 
-function appendLineText(current: string, next: string, entry: ClassifiedLine, hyphenation: PdfHyphenationDiagnostic[], reasons: string[]): string {
+function appendLineText(current: string, next: string, entry: ClassifiedLine, hyphenation: PdfHyphenationDiagnostic[], reasons: string[], acrossPage: boolean = false): string {
   if (!/-$/.test(current)) return `${current} ${next}`;
   const originalEnd = current.slice(Math.max(0, current.length - 24));
   const nextStart = next.slice(0, 24);
@@ -684,6 +685,20 @@ function appendLineText(current: string, next: string, entry: ClassifiedLine, hy
   const digitOrUpper = /(?:\d|[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ])-$/.test(previousToken);
   const compoundPrefix = COMPOUND_PREFIX_RE.test(previousToken);
   const uncertainPrefix = /(?:^|\s)(inter|intra|multi|semi|super)-$/iu.test(previousToken);
+  // A correção dependente de fronteira (composto com hifen) fica bloqueada
+  // quando a junção atravessa páginas (spec 7).
+  const keepCompound = !acrossPage && shouldKeepHyphenAtJoin(previousToken, next);
+  if (keepCompound) {
+    hyphenation.push({
+      pageNumber: entry.pageNumber,
+      lineIndex: entry.lineIndex,
+      originalEnd,
+      nextStart,
+      action: "preserved-hyphen",
+      reason: "Hifen preservado por composto conhecido (quali-quantitativa, servidor-pesquisador).",
+    });
+    return `${current}${next}`;
+  }
   if (lowerNext && !digitOrUpper && !compoundPrefix && !uncertainPrefix && previousToken.replace(/-$/, "").length >= 5) {
     hyphenation.push({
       pageNumber: entry.pageNumber,
@@ -850,7 +865,7 @@ export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTe
       flushParagraph();
       const last = blocks[blocks.length - 1];
       if (last?.type === "unresolved" && last.pageEnd === entry.pageNumber && last.layoutRegionId === entry.layoutRegionId) {
-        last.text = appendLineText(last.text, entry.text, entry, hyphenation, last.reasons);
+        last.text = appendLineText(last.text, entry.text, entry, hyphenation, last.reasons, false);
         last.pageEnd = entry.pageNumber;
         last.sourceLines.push({ pageNumber: entry.pageNumber, lineIndex: entry.lineIndex });
       } else {
@@ -875,7 +890,8 @@ export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTe
         reasons: ["Linhas visuais compativeis foram unidas como paragrafo diagnostico.", joinDecision.reason || pendingSeparationReason].filter(Boolean),
       };
     } else {
-      currentParagraph.text = appendLineText(currentParagraph.text, entry.text, entry, hyphenation, currentParagraph.reasons);
+      const acrossPage = previousBodyLine ? previousBodyLine.pageNumber !== entry.pageNumber : false;
+      currentParagraph.text = appendLineText(currentParagraph.text, entry.text, entry, hyphenation, currentParagraph.reasons, acrossPage);
       currentParagraph.pageEnd = entry.pageNumber;
       currentParagraph.sourceLines.push({ pageNumber: entry.pageNumber, lineIndex: entry.lineIndex });
       currentParagraph.reasons.push(joinDecision.reason);
@@ -885,36 +901,41 @@ export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTe
   }
   flushParagraph();
 
-  const paragraphLineCounts = blocks.filter((block) => block.type === "paragraph").map((block) => block.sourceLines.length);
+  const normalizedBlocks = blocks.map((block) => ({
+    ...block,
+    text: normalizePdfTextAnomalies(block.text),
+  }));
+
+  const paragraphLineCounts = normalizedBlocks.filter((block) => block.type === "paragraph").map((block) => block.sourceLines.length);
   const statistics: PdfTextReconstructionDiagnostic["statistics"] = {
-    paragraphCount: blocks.filter((block) => block.type === "paragraph").length,
-    headingCount: blocks.filter((block) => block.type === "heading").length,
-    listItemCount: blocks.filter((block) => block.type === "list-item").length,
-    captionCount: blocks.filter((block) => block.type === "caption").length,
-    sourceCount: blocks.filter((block) => block.type === "source").length,
-    unresolvedCount: blocks.filter((block) => block.type === "unresolved").length,
+    paragraphCount: normalizedBlocks.filter((block) => block.type === "paragraph").length,
+    headingCount: normalizedBlocks.filter((block) => block.type === "heading").length,
+    listItemCount: normalizedBlocks.filter((block) => block.type === "list-item").length,
+    captionCount: normalizedBlocks.filter((block) => block.type === "caption").length,
+    sourceCount: normalizedBlocks.filter((block) => block.type === "source").length,
+    unresolvedCount: normalizedBlocks.filter((block) => block.type === "unresolved").length,
     removedPageNumberCount: ignoredLines.filter((line) => line.role === "page-number").length,
     removedHeaderCount: ignoredLines.filter((line) => line.role === "repeated-header").length,
     removedFooterCount: ignoredLines.filter((line) => line.role === "repeated-footer").length,
     averageLinesPerParagraph: paragraphLineCounts.length ? Number((paragraphLineCounts.reduce((sum, count) => sum + count, 0) / paragraphLineCounts.length).toFixed(2)) : 0,
     medianLinesPerParagraph: median(paragraphLineCounts),
     singleLineParagraphCount: paragraphLineCounts.filter((count) => count === 1).length,
-    multiPageParagraphCount: blocks.filter((block) => block.type === "paragraph" && block.pageEnd > block.pageStart).length,
-    lowConfidenceBlockCount: blocks.filter((block) => block.confidence === "low").length,
+    multiPageParagraphCount: normalizedBlocks.filter((block) => block.type === "paragraph" && block.pageEnd > block.pageStart).length,
+    lowConfidenceBlockCount: normalizedBlocks.filter((block) => block.confidence === "low").length,
     uncertainHyphenationCount: hyphenation.filter((entry) => entry.action === "uncertain").length,
     layoutRegionCount: layoutRegions.length,
-    mixedCaseHeadingCount: blocks.filter((block) => block.type === "heading" && isMixedCase(block.text)).length,
-    combinedHeadingCount: blocks.filter((block) => block.type === "heading" && block.sourceLines.length > 1).length,
+    mixedCaseHeadingCount: normalizedBlocks.filter((block) => block.type === "heading" && isMixedCase(block.text)).length,
+    combinedHeadingCount: normalizedBlocks.filter((block) => block.type === "heading" && block.sourceLines.length > 1).length,
   };
 
   return {
-    blocks,
+    blocks: normalizedBlocks,
     ignoredLines,
     bodyStart,
     bodyLayoutMetrics,
     layoutRegions,
     hyphenation,
-    alerts: [...bridgeAlerts, ...buildAlerts(blocks, statistics, pages.length)],
+    alerts: [...bridgeAlerts, ...buildAlerts(normalizedBlocks, statistics, pages.length)],
     statistics,
   };
 }
