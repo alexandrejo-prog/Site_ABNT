@@ -155,4 +155,67 @@ describe("reconstrucao de anomalias na fronteira real entre linhas", () => {
     const second = reconstructPdfParagraphBlocks(input);
     expect(first.blocks.map((b) => b.text)).toEqual(second.blocks.map((b) => b.text));
   });
+
+  it("separa referencias fundidas no fluxo real do pdf", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(110, [
+        "REFERÊNCIAS",
+        "ALVES, A. C. Teletrabalho na Administração Pública: estudo de caso na",
+        "Controladoria Geral da União. Dissertação (Mestrado Profissional em",
+        "Administração Pública) - Universidade de Brasília, Brasília, 2020.",
+        "ALVES LEITE, B. W.; BENEVIDES DE PINHO, M. A. O programa",
+        "de gestão e desempenho nas universidades públicas brasileiras.",
+        "Encontro Internacional de Gestão, Desenvolvimento e Inovação,",
+        "v. 7, n. 1, 15 maio 2024.",
+      ]),
+    ]);
+    const refBlocks = result.blocks.filter((block) => block.type === "paragraph");
+    expect(refBlocks.length).toBe(2);
+    expect(refBlocks[0].text.startsWith("ALVES, A. C.")).toBe(true);
+    expect(refBlocks[1].text.startsWith("ALVES LEITE, B. W.")).toBe(true);
+    expect(refBlocks[0].text).not.toContain("ALVES LEITE");
+    expect(refBlocks[1].text).not.toContain("ALVES, A. C.");
+  });
+
+  it("desativa separacao de referencias ao encontrar APENDICE", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(110, [
+        "REFERÊNCIAS",
+        "ALVES, A. C. Teletrabalho na Administração Pública. Editora, 2020.",
+        "ALVES LEITE, B. W. O programa de gestão. Editora, 2024.",
+      ]),
+      page(130, [
+        "APÊNDICE A",
+        "ALVES, A. C. Material complementar. Editora, 2020.",
+        "BRASIL. Ministério da Educação. Relatório, 2021.",
+      ]),
+    ]);
+    const refBefore = result.blocks.filter((block) => block.type === "paragraph" && block.pageStart === 110).length;
+    const refAfter = result.blocks.filter((block) => block.type === "paragraph" && block.pageStart === 130).length;
+    expect(refBefore).toBe(2);
+    expect(refAfter).toBe(1);
+  });
+
+  it("preserva pandemia de COVID-19-19 em referencia e emite alerta unico", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(110, ["REFERÊNCIAS"]),
+      page(111, ["SILVA, J. pandemia de COVID-19-19 na gestão pública. Editora, 2021."]),
+    ]);
+    const ref = paragraphTexts(result).find((text) => text.includes("SILVA, J."));
+    expect(ref).toContain("pandemia de COVID-19-19");
+    expect(ref).not.toContain("COVID-19.");
+    expect(result.alerts.some((a) => a.includes("COVID-19-19"))).toBe(true);
+  });
+
+  it("deduplica alerta de COVID-19-19 quando ha varias ocorrencias", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(110, ["REFERÊNCIAS"]),
+      page(111, ["SILVA, A. pandemia de COVID-19-19 na saude. Editora, 2020."]),
+      page(112, ["SOUZA, B. impactos da COVID-19-19 no trabalho. Editora, 2021."]),
+      page(113, ["COSTA, C. efeitos da COVID-19-19 em servidores. Editora, 2022."]),
+    ]);
+    const covidAlerts = result.alerts.filter((a) => a.includes("Possível duplicação textual presente no documento original: COVID-19-19"));
+    expect(covidAlerts.length).toBe(1);
+    expect(covidAlerts[0]).toContain("(3 ocorrências).");
+  });
 });

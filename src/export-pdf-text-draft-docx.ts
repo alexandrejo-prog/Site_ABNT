@@ -45,6 +45,10 @@ function cleanText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+function uppercaseDisplayText(text: string): string {
+  return cleanText(text).toLocaleUpperCase("pt-BR");
+}
+
 function run(text: string, size = 24, options: { bold?: boolean; italics?: boolean } = {}): TextRun {
   return new TextRun({ text, font: FONT, size, bold: options.bold, italics: options.italics });
 }
@@ -165,14 +169,6 @@ function referenceParagraph(text: string): Paragraph {
   });
 }
 
-function splitReferenceEntries(text: string): string[] {
-  const parts = text
-    .split(/\n+/)
-    .map((part) => part.replace(/\s+/g, " ").trim())
-    .filter((part) => part.length > 0);
-  return parts.length > 0 ? parts : [text.replace(/\s+/g, " ").trim()];
-}
-
 function isGraphicLikeKind(kind?: PdfLayoutSensitiveRegionDiagnostic["kind"]): boolean {
   return kind === "grafico" || kind === "figura" || kind === "imagem" || kind === "mapa" || kind === "ilustracao";
 }
@@ -244,9 +240,9 @@ function coverParagraphs(input: PdfTextDraftExportInput, logo?: PdfTextDraftLogo
       altText: { title: "Logo UFLA", description: "Universidade Federal de Lavras", name: "Logo UFLA" },
     })], { alignment: AlignmentType.CENTER, spacing: ZERO_SPACING }));
   }
-  paragraphs.push(centered(author, { size: 28, bold: true, before: logo ? 120 : 0 }));
-  paragraphs.push(centered(title, { size: 32, bold: true, before: 900, line: ONE_AND_HALF_LINE_TWIP }));
-  if (subtitle) paragraphs.push(centered(subtitle, { size: 32, bold: true, line: ONE_AND_HALF_LINE_TWIP }));
+  paragraphs.push(centered(uppercaseDisplayText(author), { size: 28, bold: true, before: logo ? 120 : 0 }));
+  paragraphs.push(centered(uppercaseDisplayText(title), { size: 32, bold: true, before: 900, line: ONE_AND_HALF_LINE_TWIP }));
+  if (subtitle) paragraphs.push(centered(uppercaseDisplayText(subtitle), { size: 32, bold: true, line: ONE_AND_HALF_LINE_TWIP }));
   paragraphs.push(centered(city, { size: 28, bold: true, before: 2400 }));
   paragraphs.push(centered(year, { size: 28, bold: true, before: 0 }));
   paragraphs.push(pageBreak());
@@ -273,9 +269,9 @@ function titlePageParagraphs(input: PdfTextDraftExportInput): Paragraph[] {
   const city = titlePage?.city ?? cover?.city ?? "[LOCAL AUSENTE]";
   const year = titlePage?.year ?? cover?.year ?? "[ANO AUSENTE]";
   return [
-    centered(author, { size: 28, bold: true }),
-    centered(title, { size: 32, bold: true, before: 1200, line: ONE_AND_HALF_LINE_TWIP }),
-    ...(titlePage?.subtitle ? [centered(titlePage.subtitle, { size: 32, bold: true, line: ONE_AND_HALF_LINE_TWIP })] : []),
+    centered(uppercaseDisplayText(author), { size: 28, bold: true }),
+    centered(uppercaseDisplayText(title), { size: 32, bold: true, before: 1200, line: ONE_AND_HALF_LINE_TWIP }),
+    ...(titlePage?.subtitle ? [centered(uppercaseDisplayText(titlePage.subtitle), { size: 32, bold: true, line: ONE_AND_HALF_LINE_TWIP })] : []),
     ...(titlePage?.natureText
       ? [titlePageNatureParagraph(titlePage.natureText, { before: 900, alignment: AlignmentType.JUSTIFIED })]
       : []),
@@ -459,7 +455,7 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
     if (block.type === "paragraph") {
       if (blockInsideVisualSpan(block, visualSpans, pagesWithBodyText)) continue;
       if (inReferences) {
-        for (const ref of splitReferenceEntries(block.text)) paragraphs.push(referenceParagraph(ref));
+        paragraphs.push(referenceParagraph(text));
       } else {
         paragraphs.push(justified(text));
       }
@@ -467,7 +463,7 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
     if (block.type === "list-item") {
       if (blockInsideVisualSpan(block, visualSpans, pagesWithBodyText)) continue;
       if (inReferences) {
-        for (const ref of splitReferenceEntries(block.text)) paragraphs.push(referenceParagraph(ref));
+        paragraphs.push(referenceParagraph(text));
       } else {
         paragraphs.push(listItem(text));
       }

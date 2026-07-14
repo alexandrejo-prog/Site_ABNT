@@ -46,6 +46,45 @@ const HEADING_RE = /^((?:\d+(?:\.\d+)*\.?\s+)?[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ][A-
 const NUMBERED_HEADING_RE = /^\d+(?:\.\d+)*\.?\s+\S.{1,110}$/u;
 const COMPOUND_PREFIX_RE = /(?:^|\s)(p[óo]s|pr[ée]|ex|n[ãa]o|rec[ée]m|vice|t[ée]cnico|pol[íi]tico|hist[óo]rico)-$/iu;
 
+const REFERENCES_SECTION_KEY = "REFERENCIAS";
+const REFERENCES_END_KEYS = ["APENDICE", "APENDICES", "ANEXO", "ANEXOS"];
+const REFERENCE_AUTHOR_RE = /^\p{Lu}[\p{Lu}'’.\- ]*, \p{Lu}\./u;
+const REFERENCE_INSTITUTIONAL_RE = /^\p{Lu}[\p{Lu}'’.\- ]*\.$/u;
+
+function normalizeSectionKey(text: string): string {
+  return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().trim();
+}
+
+function isObviousReferenceContinuation(text: string): boolean {
+  const t = text.trim();
+  if (/^[a-zà-ÿ]/u.test(t)) return true;
+  if (/^(?:Brasília|Rio de Janeiro|São Paulo|Florianópolis|Belo Horizonte|Curitiba|Salvador|Recife|Porto Alegre|Goiânia)\s*:/u.test(t)) return true;
+  if (/\bv\.\s*\d+/u.test(t)) return true;
+  if (/doi:/iu.test(t)) return true;
+  if (/^dispon[íi]vel em:/iu.test(t)) return true;
+  if (/^acesso em:/iu.test(t)) return true;
+  if (/\d{4}\s*[-–—]\s*\d{0,4}/u.test(t)) return true;
+  return false;
+}
+
+function isAllCapsTitleStart(text: string): boolean {
+  if (/[a-zà-ÿ]/.test(text)) return false;
+  if (text.replace(/[^A-Za-zÀ-ÿ]/g, "").length < 4) return false;
+  if (!/^\p{Lu}/u.test(text.trim())) return false;
+  return /\s/.test(text);
+}
+
+function startsNewReference(entry: ClassifiedLine, metrics: PdfBodyLayoutMetrics, currentParagraph: PdfReconstructedBlockDiagnostic | null): boolean {
+  if (!currentParagraph || currentParagraph.sourceLines.length === 0) return false;
+  if (!isNearBodyLeft(entry, metrics)) return false;
+  const text = entry.text;
+  if (isObviousReferenceContinuation(text)) return false;
+  if (REFERENCE_AUTHOR_RE.test(text)) return true;
+  if (REFERENCE_INSTITUTIONAL_RE.test(text)) return true;
+  if (isAllCapsTitleStart(text)) return true;
+  return false;
+}
+
 function flattenPages(pages: PdfPageDiagnostic[], pageNumberItemCandidates: PageNumberItemCandidate[] = []): LineRef[] {
   return pages.flatMap((page) => page.lines.map((line, lineIndex) => {
     const cleanedText = cleanLineText(line, page, lineIndex, pageNumberItemCandidates);
@@ -824,6 +863,7 @@ export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTe
   let currentParagraph: PdfReconstructedBlockDiagnostic | null = null;
   let previousBodyLine: ClassifiedLine | null = null;
   let pendingSeparationReason = "";
+  let inReferences = false;
 
   function flushParagraph() {
     if (currentParagraph) blocks.push(currentParagraph);
@@ -839,6 +879,9 @@ export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTe
       flushParagraph();
       const combined = combineHeadingLines(classified, index, bodyLayoutMetrics);
       blocks.push(combined.block);
+      const sectionKey = normalizeSectionKey(combined.block.text);
+      if (sectionKey === REFERENCES_SECTION_KEY) inReferences = true;
+      else if (REFERENCES_END_KEYS.some((key) => sectionKey.startsWith(key))) inReferences = false;
       index = combined.endIndex;
       pendingSeparationReason = "";
       continue;
@@ -872,6 +915,31 @@ export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTe
         blocks.push(blockFromLine(entry, "unresolved", "low", ["Conteudo marcado como sensivel a layout; nao foi convertido em paragrafo."]));
       }
       pendingSeparationReason = "";
+      continue;
+    }
+
+    if (inReferences && entry.role === "body") {
+      const newStart = startsNewReference(entry, bodyLayoutMetrics, currentParagraph);
+      if (newStart) flushParagraph();
+      if (!currentParagraph) {
+        currentParagraph = {
+          type: "paragraph",
+          text: entry.text,
+          pageStart: entry.pageNumber,
+          pageEnd: entry.pageNumber,
+          sourceLines: [{ pageNumber: entry.pageNumber, lineIndex: entry.lineIndex }],
+          confidence: "medium",
+          reasons: ["Entrada bibliografica iniciada na secao REFERENCIAS."],
+        };
+      } else {
+        const acrossPage = previousBodyLine ? previousBodyLine.pageNumber !== entry.pageNumber : false;
+        currentParagraph.text = appendLineText(currentParagraph.text, entry.text, entry, hyphenation, currentParagraph.reasons, acrossPage);
+        currentParagraph.pageEnd = entry.pageNumber;
+        currentParagraph.sourceLines.push({ pageNumber: entry.pageNumber, lineIndex: entry.lineIndex });
+        currentParagraph.reasons.push("Linha continua a mesma entrada bibliografica (REFERENCIAS).");
+      }
+      pendingSeparationReason = "";
+      previousBodyLine = entry;
       continue;
     }
 
@@ -932,6 +1000,19 @@ export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTe
     combinedHeadingCount: normalizedBlocks.filter((block) => block.type === "heading" && block.sourceLines.length > 1).length,
   };
 
+  const rawAlerts = [...bridgeAlerts, ...buildAlerts(normalizedBlocks, statistics, pages.length), ...blockAlerts.flat()];
+  const alerts = [...new Set(rawAlerts)];
+  const covidOccurrences = blocks.reduce(
+    (sum, block) => sum + (block.text.match(/COVID-19(?:-19)+/gi)?.length ?? 0),
+    0,
+  );
+  if (covidOccurrences > 1) {
+    const covidAlertBase = "Possível duplicação textual presente no documento original: COVID-19-19.";
+    const covidAlertWithCount = `Possível duplicação textual presente no documento original: COVID-19-19 (${covidOccurrences} ocorrências).`;
+    const index = alerts.indexOf(covidAlertBase);
+    if (index > -1) alerts[index] = covidAlertWithCount;
+  }
+
   return {
     blocks: normalizedBlocks,
     ignoredLines,
@@ -939,7 +1020,7 @@ export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTe
     bodyLayoutMetrics,
     layoutRegions,
     hyphenation,
-    alerts: [...bridgeAlerts, ...buildAlerts(normalizedBlocks, statistics, pages.length), ...blockAlerts.flat()],
+    alerts,
     statistics,
   };
 }

@@ -7,7 +7,9 @@ import {
   pdfTextDraftFileName,
   validatePdfTextDraftExport,
 } from "../src/export-pdf-text-draft-docx";
+import { reconstructPdfParagraphBlocks } from "../src/pdf-text-reconstruction-diagnostic";
 import type { PdfTextDraftExportInput, PdfTextDraftVisualAsset } from "../src/pdf-text-draft-contract";
+import type { PdfLineDiagnostic, PdfPageDiagnostic } from "../src/imported-pdf-diagnostic";
 import { documentText, loadDocxParts, paragraphTexts } from "./test-utils/ooxml";
 
 function baseInput(overrides: Partial<PdfTextDraftExportInput> = {}): PdfTextDraftExportInput {
@@ -171,7 +173,7 @@ describe("exportacao textual minima de PDF reconstruido", () => {
     expect(text).not.toContain("Rascunho textual extraído de PDF");
     expect(text).not.toContain("NOTA DE REVISÃO");
     expect(text).not.toContain("Universidade Federal de Lavras".toUpperCase());
-    expect(text).toContain("Alexandre Andrade");
+    expect(text).toContain("ALEXANDRE ANDRADE");
     expect(text).toContain("TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL");
     expect(text).toContain("Dissertação apresentada à Universidade Federal de Lavras");
     expect(text).toContain("RESUMO");
@@ -700,7 +702,7 @@ describe("estabilizacao de paginacao e folha de rosto", () => {
 
   it("autor e titulo continuam centralizados", async () => {
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
-    const authorParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find((p) => p.includes("Alexandre Andrade") && !p.includes("TELETRABALHO"));
+    const authorParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find((p) => p.includes("ALEXANDRE ANDRADE") && !p.includes("TELETRABALHO"));
     const titleParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find((p) => p.includes("TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL") && p.includes('w:val="center"'));
     expect(authorParagraph).toBeDefined();
     expect(authorParagraph).toContain('w:val="center"');
@@ -728,7 +730,7 @@ describe("estabilizacao de paginacao e folha de rosto", () => {
   it("autor e titulo da capa ficam em negrito com 14 e 16 pontos", async () => {
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
     const authorParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find(
-      (p) => p.includes("Alexandre Andrade") && !p.includes("TELETRABALHO") && p.includes('w:val="center"'),
+      (p) => p.includes("ALEXANDRE ANDRADE") && !p.includes("TELETRABALHO") && p.includes('w:val="center"'),
     );
     const titleParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find(
       (p) => p.includes("TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL") && p.includes('w:val="center"'),
@@ -1707,34 +1709,6 @@ describe("ativos visuais de regioes pdf", () => {
       expect(para).toContain('w:line="360"');
     });
 
-    it("duas referencias fundidas em um bloco saem em paragrafos distintos", async () => {
-      const input = referencesInput([
-        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
-        {
-          type: "paragraph",
-          text: "ALVES, A. C. Teletrabalho e administração pública. Editora UFLA, 2021.\nALVES LEITE, B. W.; BENEVIDES DE PINHO, M. A. Pandemia e políticas de saúde. Revista X, 2022.",
-          pageStart: 111,
-          pageEnd: 112,
-          sourceLines: [{ pageNumber: 111, lineIndex: 1 }, { pageNumber: 112, lineIndex: 1 }],
-          confidence: "high",
-          reasons: [],
-        },
-      ]);
-      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
-      const alves = paraWithText(documentXml, "ALVES, A. C.");
-      const leite = paraWithText(documentXml, "ALVES LEITE, B. W.");
-      expect(alves).toBeDefined();
-      expect(leite).toBeDefined();
-      expect(alves).not.toContain("ALVES LEITE");
-      expect(leite).not.toContain("ALVES, A. C.");
-      expect(alves).toContain('w:jc w:val="left"');
-      expect(leite).toContain('w:jc w:val="left"');
-      expect(alves).not.toContain('w:hanging="');
-      expect(leite).not.toContain('w:hanging="');
-      expect(alves).not.toContain('w:left="');
-      expect(leite).not.toContain('w:left="');
-    });
-
     it("referencia preserva COVID-19-19 da fonte nas referencias", async () => {
       const input = referencesInput([
         { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
@@ -1816,6 +1790,84 @@ describe("ativos visuais de regioes pdf", () => {
       const after = paraWithText(documentXml, "Parágrafo após APÊNDICE volta ao corpo.");
       expect(after).toContain('w:jc w:val="both"');
       expect(after).toContain('w:firstLine="850"');
+    });
+
+    function refPage(pageNumber: number, texts: string[]): PdfPageDiagnostic {
+      return {
+        pageNumber,
+        width: 595,
+        height: 842,
+        rotation: 0,
+        rawText: texts.join(" "),
+        textItemCount: texts.length,
+        items: [],
+        lines: texts.map((text, index) => {
+          const top = 80 + index * 18;
+          const height = 12;
+          const width = Math.max(10, text.length * 5);
+          return {
+            pageNumber,
+            text,
+            items: [{ text, x: 72, y: top, width, height, fontName: "" }],
+            left: 72,
+            right: 72 + width,
+            top,
+            bottom: top + height,
+            height,
+          } as PdfLineDiagnostic;
+        }),
+      };
+    }
+
+    it("separa referencias reconstruidas do fluxo real em paragrafos distintos", async () => {
+      const result = reconstructPdfParagraphBlocks([
+        refPage(110, [
+          "REFERÊNCIAS",
+          "ALVES, A. C. Teletrabalho na Administração Pública: estudo de caso na",
+          "Controladoria Geral da União. Dissertação (Mestrado Profissional em",
+          "Administração Pública) - Universidade de Brasília, Brasília, 2020.",
+          "ALVES LEITE, B. W.; BENEVIDES DE PINHO, M. A. O programa",
+          "de gestão e desempenho nas universidades públicas brasileiras.",
+          "Encontro Internacional de Gestão, Desenvolvimento e Inovação,",
+          "v. 7, n. 1, 15 maio 2024.",
+        ]),
+      ]);
+      const refBlocks = result.blocks.filter((block) => block.type === "paragraph");
+      expect(refBlocks.length).toBe(2);
+      const input = referencesInput(result.blocks);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const refParas = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).filter(
+        (p) => p.includes("ALVES, A. C.") || p.includes("ALVES LEITE, B. W."),
+      );
+      expect(refParas.length).toBe(2);
+      const alves = paraWithText(documentXml, "ALVES, A. C.");
+      const leite = paraWithText(documentXml, "ALVES LEITE, B. W.");
+      expect(alves).toBeDefined();
+      expect(leite).toBeDefined();
+      expect(alves).not.toContain("ALVES LEITE");
+      expect(leite).not.toContain("ALVES, A. C.");
+      expect(alves).toContain('w:jc w:val="left"');
+      expect(leite).toContain('w:jc w:val="left"');
+      expect(alves).toContain('w:after="240"');
+      expect(leite).toContain('w:after="240"');
+      expect(alves).toContain('w:line="240"');
+      expect(leite).toContain('w:line="240"');
+      expect(alves).not.toContain('w:hanging="');
+      expect(leite).not.toContain('w:hanging="');
+      expect(alves).not.toContain('w:left="');
+      expect(leite).not.toContain('w:left="');
+    });
+
+    it("referencia preserva pandemia de COVID-19-19 exatamente igual no docx", async () => {
+      const result = reconstructPdfParagraphBlocks([
+        refPage(110, ["REFERÊNCIAS"]),
+        refPage(111, ["SILVA, J. pandemia de COVID-19-19 na gestão pública. Editora, 2021."]),
+      ]);
+      const input = referencesInput(result.blocks);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const ref = paraWithText(documentXml, "SILVA, J.");
+      expect(ref).toContain("pandemia de COVID-19-19");
+      expect(ref).not.toContain("COVID-19.");
     });
 
     it("paragrafo apos APENDICE volta ao formato normal do corpo", async () => {
