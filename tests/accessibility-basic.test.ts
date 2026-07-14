@@ -36,7 +36,7 @@ describe("Acessibilidade básica da interface", () => {
 
   it("possui rótulo acessível no botão de importação", () => {
     expect(combined).toContain('type="file"');
-    expect(combined).toContain('accept=".docx,.txt,.md,.pdf"');
+    expect(combined).toContain('accept=".docx,.txt,.md"');
     expect(combined).toContain("Importar");
   });
 
@@ -68,7 +68,7 @@ describe("Acessibilidade básica da interface", () => {
   });
 
   it("botão de geração DOCX possui estado disabled acessível", () => {
-    expect(appSource).toContain('disabled={isGenerating || isPdfDiagnosticMode}');
+    expect(appSource).toContain('disabled={isGenerating}');
     expect(appSource).toContain("Gerando...");
   });
 
