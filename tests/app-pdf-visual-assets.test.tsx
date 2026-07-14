@@ -281,4 +281,78 @@ describe("fluxo de ativos visuais do PDF no App", () => {
     });
     expect(screen.queryByText("Gerar rascunho textual DOCX")).toBeNull();
   });
+
+  it("clique duplicado durante renderizacao pendente gera somente um DOCX", async () => {
+    computePdfVisualCropGeometryMock.mockReturnValue({ crops: bothCrops(), skipped: [] });
+    let resolveRenderer!: (value: { assets: Record<string, PdfTextDraftVisualAsset>; warnings: string[] }) => void;
+    const rendererPromise = new Promise<{ assets: Record<string, PdfTextDraftVisualAsset>; warnings: string[] }>((resolve) => {
+      resolveRenderer = resolve;
+    });
+    renderPdfVisualAssetsMock.mockReturnValue(rendererPromise);
+    render(<App />);
+    await importFile(pdfFile());
+    const button = screen.getByRole("button", { name: /Gerar rascunho textual DOCX/ });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    // Render pendente: trava sincrona ativa, botao desabilitado.
+    expect(renderPdfVisualAssetsMock).toHaveBeenCalledTimes(1);
+    expect(saveAsMock).toHaveBeenCalledTimes(0);
+    const pendingButton = screen.getByRole("button", { name: /Gerando/ });
+    expect(pendingButton).toBeDisabled();
+    expect(screen.getByText("Gerando...")).toBeTruthy();
+    // Segundo clique durante a pendencia: trava recusa nova geracao.
+    await act(async () => {
+      fireEvent.click(pendingButton);
+    });
+    expect(renderPdfVisualAssetsMock).toHaveBeenCalledTimes(1);
+    expect(saveAsMock).toHaveBeenCalledTimes(0);
+    // Resolve a renderizacao.
+    await act(async () => {
+      resolveRenderer({ assets: { "quadro-1-page-25::p25::rlayout-25-1": makeAsset() }, warnings: [] });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1), { timeout: 8000 });
+    expect(renderPdfVisualAssetsMock).toHaveBeenCalledTimes(1);
+    const restored = screen.getByRole("button", { name: /Gerar rascunho textual DOCX/ });
+    expect(restored).toBeEnabled();
+  });
+
+  it("falha no download libera a trava e permite nova tentativa com um unico download", async () => {
+    computePdfVisualCropGeometryMock.mockReturnValue({ crops: bothCrops(), skipped: [] });
+    const downloads: Array<[unknown, unknown]> = [];
+    renderPdfVisualAssetsMock.mockReturnValue(Promise.resolve({ assets: { "quadro-1-page-25::p25::rlayout-25-1": makeAsset() }, warnings: [] }));
+    const capture = (blob: unknown, name: unknown) => {
+      downloads.push([blob, name]);
+    };
+    saveAsMock.mockImplementation(capture);
+    render(<App />);
+    await importFile(pdfFile());
+    const button = screen.getByRole("button", { name: /Gerar rascunho textual DOCX/ });
+    // Primeira tentativa: download falha.
+    saveAsMock.mockImplementationOnce(() => {
+      throw new Error("falha no download");
+    });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    await waitFor(() => expect(button).toBeEnabled(), { timeout: 8000 });
+    expect(downloads.length).toBe(0);
+    // Segunda tentativa valida.
+    saveAsMock.mockImplementation(capture);
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    await waitFor(() => expect(downloads.length).toBe(1), { timeout: 8000 });
+    expect(button).toBeEnabled();
+  });
+
+  it("interface informa insercao automatica de elementos visuais", async () => {
+    computePdfVisualCropGeometryMock.mockReturnValue({ crops: bothCrops(), skipped: [] });
+    renderPdfVisualAssetsMock.mockReturnValue(Promise.resolve({ assets: {}, warnings: [] }));
+    render(<App />);
+    await importFile(pdfFile());
+    expect(screen.getByText(/serão inseridos automaticamente quando o recorte estiver disponível/)).toBeTruthy();
+    expect(screen.queryByText(/serão representados por marcadores de revisão\./)).toBeNull();
+  });
 });

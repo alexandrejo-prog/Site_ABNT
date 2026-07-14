@@ -143,6 +143,7 @@ export default function App() {
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorContentVersionRef = useRef(0);
   const lastAppliedEditorTextRef = useRef("");
+  const pdfDraftGenerationInProgressRef = useRef(false);
   const errors = useMemo(() => issues.filter((issue) => issue.severity === "error"), [issues]);
   const warnings = useMemo(() => issues.filter((issue) => issue.severity === "warning"), [issues]);
   const isCpgSelected = isCpgWork(fields.workType);
@@ -600,34 +601,36 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       setStatus(`Não foi possível gerar o rascunho textual do PDF. ${validation.blockers.join(" ")}`);
       return;
     }
-    let visualAssets: Record<string, PdfTextDraftVisualAsset> = {};
-    let visualWarnings: string[] = [];
-    if (pdfSourceBytes && pdfRasterizableCrops.length > 0) {
-      try {
-        setStatus("Preparando elementos visuais do PDF...");
-        const rendered = await renderPdfVisualAssets(
-          pdfSourceBytes,
-          pdfRasterizableCrops,
-          {
-            scale: 2,
-            maxOutputWidth: 1600,
-            maxOutputHeight: 2400,
-            docxMaxWidth: 605,
-            imageType: "image/png",
-            concurrency: 2,
-            maxAssets: 80,
-            maxPagePixels: 20_000_000,
-          },
-        );
-        visualAssets = rendered.assets;
-        visualWarnings = rendered.warnings;
-      } catch {
-        visualAssets = {};
-        visualWarnings = [];
-      }
-    }
+    if (pdfDraftGenerationInProgressRef.current) return;
+    pdfDraftGenerationInProgressRef.current = true;
+    setIsGenerating(true);
     try {
-      setIsGenerating(true);
+      let visualAssets: Record<string, PdfTextDraftVisualAsset> = {};
+      let visualWarnings: string[] = [];
+      if (pdfSourceBytes && pdfRasterizableCrops.length > 0) {
+        try {
+          setStatus("Preparando elementos visuais do PDF...");
+          const rendered = await renderPdfVisualAssets(
+            pdfSourceBytes,
+            pdfRasterizableCrops,
+            {
+              scale: 2,
+              maxOutputWidth: 1600,
+              maxOutputHeight: 2400,
+              docxMaxWidth: 605,
+              imageType: "image/png",
+              concurrency: 2,
+              maxAssets: 80,
+              maxPagePixels: 20_000_000,
+            },
+          );
+          visualAssets = rendered.assets;
+          visualWarnings = rendered.warnings;
+        } catch {
+          visualAssets = {};
+          visualWarnings = [];
+        }
+      }
       const exportInput = { ...pdfTextDraftInput, visualAssets };
       const blob = await buildPdfTextDraftDocxBlob(exportInput);
       saveAs(blob, pdfTextDraftFileName(pdfTextDraftInput.fileName));
@@ -643,6 +646,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     } catch {
       setStatus("Não foi possível gerar o rascunho textual do PDF.");
     } finally {
+      pdfDraftGenerationInProgressRef.current = false;
       setIsGenerating(false);
     }
   }
@@ -762,7 +766,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
                 >
                   <FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar rascunho textual DOCX"}
                 </button>
-                <p className="import-note">Este arquivo terá pré-textuais reconstruídos quando encontrados. Quadros, tabelas, figuras e gráficos do PDF serão representados por marcadores de revisão.</p>
+                <p className="import-note">Este arquivo terá pré-textuais reconstruídos quando encontrados. Quadros, tabelas, figuras e gráficos serão inseridos automaticamente quando o recorte estiver disponível. Os elementos não processados permanecerão como marcadores para revisão.</p>
                 {pdfTextDraftValidation && pdfTextDraftValidation.blockers.length > 0 && (
                   <div role="alert" aria-label="Bloqueadores do rascunho textual PDF">
                     <strong>Bloqueadores</strong>
