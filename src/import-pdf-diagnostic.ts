@@ -187,6 +187,17 @@ export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagno
     "O PDF foi lido para diagnóstico. O rascunho DOCX estruturado pode ser gerado para revisão humana.",
   ];
 
+  type DestroyablePdfDocument = {
+    numPages: number;
+    getPage(pageNumber: number): Promise<{
+      getViewport(options: { scale: number }): PdfViewportLike;
+      getTextContent(): Promise<{ items: unknown[] }>;
+    }>;
+    destroy?(): Promise<void> | void;
+  };
+
+  let pdf: DestroyablePdfDocument | null = null;
+
   try {
     const pdfjs = await loadPdfJs();
     const data = await file.arrayBuffer();
@@ -194,10 +205,11 @@ export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagno
       data,
       ...(typeof window === "undefined" ? ({ disableWorker: true } as Record<string, unknown>) : {}),
     });
-    const pdf = await documentTask.promise;
+    pdf = (await documentTask.promise) as DestroyablePdfDocument;
+    const numPages = pdf.numPages;
     const pages: PdfPageDiagnostic[] = [];
 
-    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    for (let pageNumber = 1; pageNumber <= numPages; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
       const viewport = page.getViewport({ scale: 1 });
       const content = await page.getTextContent();
@@ -210,7 +222,7 @@ export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagno
         pageNumber,
         width: viewport.width,
         height: viewport.height,
-        rotation: viewport.rotation,
+        rotation: viewport.rotation ?? 0,
         rawText: normalizeRawText(textItems),
         textItemCount: textItems.length,
         items,
@@ -227,7 +239,7 @@ export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagno
 
     return {
       fileName: file.name,
-      pageCount: pdf.numPages,
+      pageCount: numPages,
       pages,
       pretextual,
       bodyStart: reconstruction.bodyStart,
@@ -236,5 +248,13 @@ export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagno
     };
   } catch {
     throw new Error("Não foi possível ler o PDF. O arquivo pode estar inválido, protegido, corrompido ou ilegível sem OCR.");
+  } finally {
+    if (pdf) {
+      try {
+        await pdf.destroy?.();
+      } catch {
+        // Falha ao liberar o documento não deve substituir o diagnóstico construído com sucesso.
+      }
+    }
   }
 }

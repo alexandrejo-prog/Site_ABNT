@@ -10,6 +10,8 @@ import { editorHtmlToMarkup, editorMarkupToHtml } from "./editor-markup";
 import { templateForWorkType } from "./document-template";
 import { buildDownloadFileName } from "./download-filename";
 import { buildPdfTextDraftDocxBlob, pdfTextDraftFileName, validatePdfTextDraftExport } from "./export-pdf-text-draft-docx";
+import { computePdfVisualCropGeometry } from "./pdf-visual-crop-geometry";
+import { rasterizablePdfCrops, renderPdfVisualAssets } from "./pdf-visual-asset-integration";
 import { stripCpgForbiddenSections, hasCpgForbiddenSections } from "./cpg-content-filter";
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
 import { buildDraftFromFields, hasUnfilledPlaceholders, draftWorkTypeSupportsIndicators } from "./draft-builder";
@@ -29,7 +31,7 @@ import type { ImportedDocumentImage } from "./imported-images";
 import type { ImportedTable } from "./imported-tables";
 import type { DocumentMode, SourceKind } from "./import-contract";
 import type { ImportedPdfDiagnostic } from "./imported-pdf-diagnostic";
-import type { PdfTextDraftExportInput } from "./pdf-text-draft-contract";
+import type { PdfTextDraftExportInput, PdfTextDraftVisualAsset } from "./pdf-text-draft-contract";
 
 const FIELD_LABELS: Record<AcademicFieldKey, string> = {
   author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho", course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador", location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave", abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão", referencias: "Referências", anexos: "Anexos", apendices: "Apêndices", dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators", imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema", problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese", objetivoGeral: "Objetivo Geral", objetivosEspecificos: "Objetivos Específicos", justificativa: "Justificativa", referencialTeorico: "Referencial Teórico", metodologia: "Metodologia", cronograma: "Cronograma", recursosOrcamento: "Recursos/Orçamento", resultadosEsperados: "Resultados Esperados", corpusDados: "Corpus/Dados", contextoInstitucional: "Contexto Institucional", conclusaoProvisoria: "Conclusão Provisória", contribuicoesImpactos: "Contribuições/Impactos", impactoSocial: "Impacto social", impactoCientifico: "Impacto científico", impactoEducacional: "Impacto educacional", impactoAmbiental: "Impacto ambiental", impactoTecnologico: "Impacto tecnológico/econômico", publicoBeneficiado: "Público beneficiado", aderenciaOds: "Aderência a ODS/política institucional",
@@ -117,6 +119,7 @@ export default function App() {
   const [importedImages, setImportedImages] = useState<ImportedDocumentImage[]>([]);
   const [importedTables, setImportedTables] = useState<ImportedTable[]>([]);
   const [pdfDiagnostic, setPdfDiagnostic] = useState<ImportedPdfDiagnostic | null>(null);
+  const [pdfSourceBytes, setPdfSourceBytes] = useState<Uint8Array | null>(null);
   const [includePdfPretextuals, setIncludePdfPretextuals] = useState(true);
   const [allowMissingPdfPretextualFields, setAllowMissingPdfPretextualFields] = useState(false);
   const [selectedPdfPageNumber, setSelectedPdfPageNumber] = useState(1);
@@ -192,6 +195,18 @@ export default function App() {
       allowMissingPretextualFields: allowMissingPdfPretextualFields,
     };
   }, [allowMissingPdfPretextualFields, includePdfPretextuals, pdfDiagnostic]);
+  const pdfVisualCropResult = useMemo(() => {
+    if (!pdfDiagnostic) return { crops: [], skipped: [] };
+    return computePdfVisualCropGeometry(
+      pdfDiagnostic.pages,
+      pdfDiagnostic.reconstruction.layoutRegions,
+      pdfDiagnostic.reconstruction.bodyLayoutMetrics,
+    );
+  }, [pdfDiagnostic]);
+  const pdfRasterizableCrops = useMemo(
+    () => (pdfDiagnostic ? rasterizablePdfCrops(pdfDiagnostic, pdfVisualCropResult.crops) : []),
+    [pdfDiagnostic, pdfVisualCropResult],
+  );
   const pdfTextDraftValidation = useMemo(() => (
     pdfTextDraftInput ? validatePdfTextDraftExport(pdfTextDraftInput) : null
   ), [pdfTextDraftInput]);
@@ -349,6 +364,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     importedImages?: ImportedDocumentImage[];
     importedTables?: ImportedTable[];
     pdfDiagnostic?: ImportedPdfDiagnostic;
+    pdfBytes?: Uint8Array;
   }) {
     try {
       setStatus("Importando arquivo...");
@@ -357,6 +373,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       const previousWorkType = fields.workType;
       if (result.documentMode === "pdf-diagnostic") {
         setPdfDiagnostic(result.pdfDiagnostic ?? null);
+        setPdfSourceBytes(result.pdfBytes ?? null);
         setSelectedPdfPageNumber(1);
         setPdfDiagnosticViewMode("lines");
         setPdfBlockFilter("all");
@@ -365,6 +382,8 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
         setStatus("O PDF foi lido para diagnóstico. O rascunho DOCX estruturado pode ser gerado para revisão.");
         return;
       }
+
+      setPdfSourceBytes(null);
 
       if (autosaveTimeoutRef.current) {
         clearTimeout(autosaveTimeoutRef.current);
@@ -398,6 +417,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       setImportedSourceKind(null);
       setImportedDocumentMode(null);
       setPdfDiagnostic(null);
+      setPdfSourceBytes(null);
       setSelectedPdfPageNumber(1);
       setPdfDiagnosticViewMode("lines");
       setPdfBlockFilter("all");
@@ -413,6 +433,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setImportedImages([]);
     setImportedTables([]);
     setPdfDiagnostic(null);
+    setPdfSourceBytes(null);
     setSelectedPdfPageNumber(1);
     setPdfDiagnosticViewMode("lines");
     setPdfBlockFilter("all");
@@ -439,6 +460,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setImportedImages([]);
     setImportedTables([]);
     setPdfDiagnostic(null);
+    setPdfSourceBytes(null);
     setSelectedPdfPageNumber(1);
     setPdfDiagnosticViewMode("lines");
     setPdfBlockFilter("all");
@@ -578,12 +600,46 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       setStatus(`Não foi possível gerar o rascunho textual do PDF. ${validation.blockers.join(" ")}`);
       return;
     }
+    let visualAssets: Record<string, PdfTextDraftVisualAsset> = {};
+    let visualWarnings: string[] = [];
+    if (pdfSourceBytes && pdfRasterizableCrops.length > 0) {
+      try {
+        setStatus("Preparando elementos visuais do PDF...");
+        const rendered = await renderPdfVisualAssets(
+          pdfSourceBytes,
+          pdfRasterizableCrops,
+          {
+            scale: 2,
+            maxOutputWidth: 1600,
+            maxOutputHeight: 2400,
+            docxMaxWidth: 605,
+            imageType: "image/png",
+            concurrency: 2,
+            maxAssets: 80,
+            maxPagePixels: 20_000_000,
+          },
+        );
+        visualAssets = rendered.assets;
+        visualWarnings = rendered.warnings;
+      } catch {
+        visualAssets = {};
+        visualWarnings = [];
+      }
+    }
     try {
       setIsGenerating(true);
-      setStatus("Gerando rascunho textual do PDF...");
-      const blob = await buildPdfTextDraftDocxBlob(pdfTextDraftInput);
+      const exportInput = { ...pdfTextDraftInput, visualAssets };
+      const blob = await buildPdfTextDraftDocxBlob(exportInput);
       saveAs(blob, pdfTextDraftFileName(pdfTextDraftInput.fileName));
-      setStatus("Rascunho textual DOCX gerado. Revise o arquivo no Word ou LibreOffice.");
+      const assetCount = Object.keys(visualAssets).length;
+      const warningCount = visualWarnings.length;
+      if (assetCount > 0 && warningCount === 0) {
+        setStatus(`Rascunho textual DOCX gerado com ${assetCount} elemento(s) visual(is) inserido(s). Revise no Word ou LibreOffice.`);
+      } else if (assetCount > 0 && warningCount > 0) {
+        setStatus(`Rascunho textual DOCX gerado com ${assetCount} elemento(s) visual(is) inserido(s) e ${warningCount} aviso(s). Os elementos restantes permaneceram como marcadores.`);
+      } else {
+        setStatus("Rascunho textual DOCX gerado. Alguns elementos visuais permaneceram como marcadores para revisão.");
+      }
     } catch {
       setStatus("Não foi possível gerar o rascunho textual do PDF.");
     } finally {
