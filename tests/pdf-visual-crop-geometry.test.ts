@@ -641,12 +641,40 @@ describe("camada de geometria de recorte visual pdf", () => {
     expect(crop.sourceRect.y + crop.sourceRect.height).toBeGreaterThan(220);
   });
 
-  it("titulo (legenda) nao entra no recorte", () => {
+  it("titulo (legenda) fica fora quando o vao e moderado", () => {
+    // legenda em y 70..100; conteudo em 140..; vao de 40pt (> padding base, <= limite).
+    const p = quadroPage(70, [140, 180], 240);
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 2, kind: "quadro" })];
+    const { crops } = computePdfVisualCropGeometry([p], regions);
+    const crop = crops[0];
+    const minTop = 140;
+    const baseTop = minTop - Math.max(6, 30 * 0.6);
+    expect(crop.sourceRect.y).toBeGreaterThan(100);
+    expect(crop.sourceRect.y).toBeLessThanOrEqual(baseTop);
+  });
+
+  it("extensao superior nao aumenta top acima do recorte base (newTop <= baseTop)", () => {
     const p = quadroPage(70, [110, 150], 210);
     const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 2, kind: "quadro" })];
     const { crops } = computePdfVisualCropGeometry([p], regions);
     const crop = crops[0];
-    expect(crop.sourceRect.y).toBeGreaterThan(100);
+    const minTop = 110;
+    const baseTop = minTop - Math.max(6, 30 * 0.6);
+    // Comparacao explicita: recorte novo nunca ultrapassa (em y) o recorte base.
+    expect(crop.sourceRect.y).toBeLessThanOrEqual(baseTop);
+  });
+
+  it("quando o vao e menor que o padding base o recorte nao encolhe", () => {
+    // vao de 10pt (< padding base 18pt): o topo permanece no recorte base.
+    const p = quadroPage(70, [110, 150], 210);
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 2, kind: "quadro" })];
+    const { crops } = computePdfVisualCropGeometry([p], regions);
+    const crop = crops[0];
+    const minTop = 110;
+    const baseTop = minTop - Math.max(6, 30 * 0.6);
+    // Sem encolhimento: topo igual ao recorte base (padding preservado).
+    expect(crop.sourceRect.y).toBe(baseTop);
+    expect(crop.sourceRect.y).toBeLessThanOrEqual(baseTop);
   });
 
   it("fonte nao entra no recorte", () => {

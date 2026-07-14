@@ -207,7 +207,8 @@ export function computePdfVisualCropGeometry(
           const gapTop = minTop - prevLine.bottom;
           if (gapTop > 0 && gapTop <= gapThreshold) {
             const extend = Math.min(gapTop * GRAPHIC_ENCLOSE_FRACTION, maxExtend);
-            top = Math.max(top, minTop - extend);
+            const candidateTop = Math.max(minTop - extend, prevLine.bottom + edgeSliver);
+            top = Math.min(top, candidateTop);
           }
         }
         if (nextLine && hasValidCoords(nextLine)) {
