@@ -8,7 +8,9 @@ import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
 import { UFLA_PPG_PROGRAMS } from "./ufla-ppg-programs";
 import { editorHtmlToMarkup, editorMarkupToHtml } from "./editor-markup";
 import { templateForWorkType } from "./document-template";
+import { buildPdfTextDraftDocxBlob } from "./export-docx";
 import { buildDownloadFileName } from "./download-filename";
+import type { DocumentMode, ImportedDocumentPayload, SourceKind } from "./import-contract";
 import { stripCpgForbiddenSections, hasCpgForbiddenSections } from "./cpg-content-filter";
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
 import { buildDraftFromFields, hasUnfilledPlaceholders, draftWorkTypeSupportsIndicators } from "./draft-builder";
@@ -117,6 +119,8 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateAnyway, setGenerateAnyway] = useState(false);
   const [importedFileName, setImportedFileName] = useState<string | null>(null);
+const [importedSourceKind, setImportedSourceKind] = useState<SourceKind | null>(null);
+const [importedDocumentMode, setImportedDocumentMode] = useState<DocumentMode | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>("body");
   const [adherenceExpanded, setAdherenceExpanded] = useState(false);
   const [assistedMode, setAssistedMode] = useState(false);
@@ -265,15 +269,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
   ].some((keyword) => lower.includes(keyword));
 }
 
-  async function handleImport(result: {
-    fields: ReturnType<typeof emptyAcademicFields>;
-    confidence: ReturnType<typeof emptyConfidenceMap>;
-    editorText: string;
-    messages: string[];
-    fileName: string;
-    importedImages?: ImportedDocumentImage[];
-    importedTables?: ImportedTable[];
-  }) {
+  async function handleImport(result: ImportedDocumentPayload) {
     try {
       setStatus("Importando arquivo...");
       if (autosaveTimeoutRef.current) {
@@ -285,6 +281,8 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       const previousWorkType = fields.workType;
       replaceFieldsWithImportedDocument(result.fields, result.confidence);
       setImportedFileName(result.fileName);
+      setImportedSourceKind(result.sourceKind);
+      setImportedDocumentMode(result.documentMode);
       setEditorMode("body");
       setIssues([]);
       setGenerateAnyway(false);
@@ -310,6 +308,8 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setIssues([]);
     setGenerateAnyway(false);
     setImportedFileName(null);
+    setImportedSourceKind(null);
+    setImportedDocumentMode(null);
     setImportedImages([]);
     setImportedTables([]);
     setEditorMode("body");
@@ -330,6 +330,8 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setIssues([]);
     setGenerateAnyway(false);
     setImportedFileName(null);
+    setImportedSourceKind(null);
+    setImportedDocumentMode(null);
     setImportedImages([]);
     setEditorMode("body");
     lastAppliedEditorTextRef.current = "";
@@ -435,6 +437,20 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     try {
       setIsGenerating(true);
       setStatus("Gerando DOCX...");
+      // O modo de saída é decidido pelo discriminador explícito, não pelo conteúdo.
+      if (importedDocumentMode === "pdf-text-draft") {
+        const blob = await buildPdfTextDraftDocxBlob({
+          fields: generationFields,
+          editorText,
+          sourceKind: importedSourceKind ?? undefined,
+          documentMode: "pdf-text-draft",
+        });
+        saveAs(blob, buildDownloadFileName({ workType: generationFields.workType, title: generationFields.title, importedFileName }));
+        setStatus(
+          "Rascunho textual de PDF gerado. Abra no Word/LibreOffice e revise estrutura, tabelas, quadros, figuras e referências antes de usar.",
+        );
+        return;
+      }
       // Contrato do editor: generate({ fields: generationFields, editorText }) segue como base; imagens importadas acompanham o payload.
       const blob = await templateForWorkType(generationFields.workType).generate({ fields: generationFields, editorText, importedImages, importedTables });
       saveAs(blob, buildDownloadFileName({ workType: generationFields.workType, title: generationFields.title, importedFileName }));
