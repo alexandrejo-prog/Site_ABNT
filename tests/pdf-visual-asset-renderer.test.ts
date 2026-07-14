@@ -339,4 +339,33 @@ describe("renderizador de recortes visuais pdf", () => {
     expect(result.assets).toEqual({});
     expect(result.warnings[0]).toContain("arquivo protegido");
   });
+
+  it("usa viewport sem rotacao para nao inverter eixos em paginas rotacionadas", async () => {
+    const viewportOptions: Array<{ scale: number; rotation?: number }> = [];
+    class RotatedPage {
+      renderCount = 0;
+      getViewport(options: { scale: number; rotation?: number }) {
+        viewportOptions.push(options);
+        const rotated = options.rotation === 90 || options.rotation === 270;
+        return {
+          width: rotated ? 1000 * options.scale : 500 * options.scale,
+          height: rotated ? 500 * options.scale : 1000 * options.scale,
+        };
+      }
+      render() {
+        this.renderCount += 1;
+        return { promise: Promise.resolve() };
+      }
+      cleanup() {}
+    }
+    const rotated = new RotatedPage();
+    const h = harness({ 1: rotated as unknown as FakePage });
+    await renderPdfVisualAssets(new Uint8Array([1]), [crop()], { scale: 2 }, h.dependencies);
+    for (const opts of viewportOptions) {
+      expect(opts.rotation).toBe(0);
+    }
+    const outputCanvas = h.canvases[1];
+    expect(outputCanvas.initialWidth).toBe(400);
+    expect(outputCanvas.initialHeight).toBe(500);
+  });
 });

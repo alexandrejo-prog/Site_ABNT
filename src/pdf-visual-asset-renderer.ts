@@ -23,6 +23,7 @@ export interface PdfVisualAssetRenderResult {
 interface PdfViewportLike {
   width: number;
   height: number;
+  rotation?: number;
 }
 
 interface PdfRenderTaskLike {
@@ -30,7 +31,7 @@ interface PdfRenderTaskLike {
 }
 
 interface PdfPageLike {
-  getViewport(options: { scale: number }): PdfViewportLike;
+  getViewport(options: { scale: number; rotation?: number }): PdfViewportLike;
   render(options: { canvasContext: unknown; viewport: PdfViewportLike }): PdfRenderTaskLike;
   cleanup?: () => void;
 }
@@ -186,11 +187,11 @@ function groupCropsByPage(crops: PdfVisualCropGeometry[]): Array<[number, PdfVis
 
 function viewportForLimits(page: PdfPageLike, requestedScale: number, maxPagePixels: number): PdfViewportLike {
   let scale = clamp(requestedScale, MIN_SCALE, MAX_SCALE);
-  let viewport = page.getViewport({ scale });
+  let viewport = page.getViewport({ scale, rotation: 0 });
   const area = viewport.width * viewport.height;
   if (Number.isFinite(area) && area > maxPagePixels) {
     scale *= Math.sqrt(maxPagePixels / area);
-    viewport = page.getViewport({ scale });
+    viewport = page.getViewport({ scale, rotation: 0 });
   }
   return viewport;
 }
