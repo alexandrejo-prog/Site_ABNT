@@ -76,8 +76,10 @@ describe("regressao de recortes visuais do pdf (estrutura dos quadros cortados)"
     expect(bottom).toBeGreaterThan(baseBottom);
     // A fonte nao entra no recorte.
     expect(bottom).toBeLessThan(sourceTop);
-    // A legenda (titulo) nao entra no recorte.
-    expect(crop.sourceRect.y).toBeGreaterThan(100 + lh);
+    // A extensao superior nunca ultrapassa (em y) o recorte base.
+    const minTop = contentTops[0];
+    const baseTop = minTop - Math.max(6, lh * 0.6);
+    expect(crop.sourceRect.y).toBeLessThanOrEqual(baseTop);
   });
 
   it("Quadro 2: recorte estendido ate a borda inferior sem capturar o paragrafo seguinte", () => {

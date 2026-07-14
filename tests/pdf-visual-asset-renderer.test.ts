@@ -340,32 +340,79 @@ describe("renderizador de recortes visuais pdf", () => {
     expect(result.warnings[0]).toContain("arquivo protegido");
   });
 
-  it("usa viewport sem rotacao para nao inverter eixos em paginas rotacionadas", async () => {
-    const viewportOptions: Array<{ scale: number; rotation?: number }> = [];
-    class RotatedPage {
+  it("usa viewport natural da pagina (com rotacao) para mapear o recorte sem inverter eixos", async () => {
+    class RotatedViewportPage {
+      rotation: number;
+      baseWidth: number;
+      baseHeight: number;
+      lastViewport: { width: number; height: number } | undefined;
       renderCount = 0;
+      cleanupCount = 0;
+      constructor(rotation: number, baseWidth: number, baseHeight: number) {
+        this.rotation = rotation;
+        this.baseWidth = baseWidth;
+        this.baseHeight = baseHeight;
+      }
       getViewport(options: { scale: number; rotation?: number }) {
-        viewportOptions.push(options);
-        const rotated = options.rotation === 90 || options.rotation === 270;
-        return {
-          width: rotated ? 1000 * options.scale : 500 * options.scale,
-          height: rotated ? 500 * options.scale : 1000 * options.scale,
-        };
+        const rot = options.rotation ?? this.rotation;
+        const swapped = rot === 90 || rot === 270;
+        const width = (swapped ? this.baseHeight : this.baseWidth) * options.scale;
+        const height = (swapped ? this.baseWidth : this.baseHeight) * options.scale;
+        const viewport = { width, height };
+        this.lastViewport = viewport;
+        return viewport;
       }
       render() {
         this.renderCount += 1;
         return { promise: Promise.resolve() };
       }
-      cleanup() {}
+      cleanup() {
+        this.cleanupCount += 1;
+      }
     }
-    const rotated = new RotatedPage();
-    const h = harness({ 1: rotated as unknown as FakePage });
-    await renderPdfVisualAssets(new Uint8Array([1]), [crop()], { scale: 2 }, h.dependencies);
-    for (const opts of viewportOptions) {
-      expect(opts.rotation).toBe(0);
+
+    const rect = { x: 0.1, y: 0.2, width: 0.4, height: 0.25 };
+    const rect2 = { x: 0.6, y: 0.7, width: 0.3, height: 0.2 };
+
+    for (const rotation of [90, 180, 270]) {
+      const page = new RotatedViewportPage(rotation, 500, 1000);
+      const h = harness({ 1: page as unknown as FakePage });
+      await renderPdfVisualAssets(
+        new Uint8Array([1]),
+        [crop({ regionId: "a", normalizedRect: rect }), crop({ pageNumber: 1, regionId: "b", normalizedRect: rect2 })],
+        { scale: 2 },
+        h.dependencies,
+      );
+
+      const swapped = rotation === 90 || rotation === 270;
+      const vw = (swapped ? 1000 : 500) * 2;
+      const vh = (swapped ? 500 : 1000) * 2;
+      expect(page.lastViewport?.width).toBe(vw);
+      expect(page.lastViewport?.height).toBe(vh);
+
+      for (const [index, r] of [rect, rect2].entries()) {
+        const call = h.canvases[1 + index].drawCalls[0];
+        const sx = call[1] as number;
+        const sy = call[2] as number;
+        const sw = call[3] as number;
+        const sh = call[4] as number;
+        expect(sx).toBeGreaterThanOrEqual(0);
+        expect(sy).toBeGreaterThanOrEqual(0);
+        expect(sx + sw).toBeLessThanOrEqual(vw);
+        expect(sy + sh).toBeLessThanOrEqual(vh);
+        expect(sw).toBeGreaterThan(0);
+        expect(sh).toBeGreaterThan(0);
+        expect(Math.abs(sw - vw * r.width)).toBeLessThan(3);
+        expect(Math.abs(sh - vh * r.height)).toBeLessThan(3);
+      }
+
+      // Orientacao: recorte 1 no canto superior esquerdo, recorte 2 no inferior direito.
+      const call1 = h.canvases[1].drawCalls[0];
+      const call2 = h.canvases[2].drawCalls[0];
+      expect(call1[1] as number).toBeLessThan(vw / 2);
+      expect(call1[2] as number).toBeLessThan(vh / 2);
+      expect(call2[1] as number).toBeGreaterThan(vw / 2);
+      expect(call2[2] as number).toBeGreaterThan(vh / 2);
     }
-    const outputCanvas = h.canvases[1];
-    expect(outputCanvas.initialWidth).toBe(400);
-    expect(outputCanvas.initialHeight).toBe(500);
   });
 });

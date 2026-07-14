@@ -187,11 +187,11 @@ function groupCropsByPage(crops: PdfVisualCropGeometry[]): Array<[number, PdfVis
 
 function viewportForLimits(page: PdfPageLike, requestedScale: number, maxPagePixels: number): PdfViewportLike {
   let scale = clamp(requestedScale, MIN_SCALE, MAX_SCALE);
-  let viewport = page.getViewport({ scale, rotation: 0 });
+  let viewport = page.getViewport({ scale });
   const area = viewport.width * viewport.height;
   if (Number.isFinite(area) && area > maxPagePixels) {
     scale *= Math.sqrt(maxPagePixels / area);
-    viewport = page.getViewport({ scale, rotation: 0 });
+    viewport = page.getViewport({ scale });
   }
   return viewport;
 }
