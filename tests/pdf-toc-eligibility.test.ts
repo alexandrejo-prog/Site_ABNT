@@ -25,6 +25,15 @@ describe("elegibilidade do sumario do rascunho PDF", () => {
     expect(isPdfTocEligibleHeadingText("3 Escolaridade:")).toBe(false);
   });
 
+  it("aceita titulo numerado longo (4.3 do Andrade_2025) no sumario", () => {
+    const title =
+      "4.3 Percepção dos(as) servidores(as) técnico-administrativos que aderiram ao Programa de Gestão e Desempenho (PGD) na modalidade de teletrabalho, integral ou parcial, quanto às suas vantagens e desvantagens.";
+    expect(isPdfTocEligibleHeadingText(title)).toBe(true);
+    expect(normalizePdfTocHeading(title)).toBe(
+      "4.3 Percepção dos(as) servidores(as) técnico-administrativos que aderiram ao Programa de Gestão e Desempenho (PGD) na modalidade de teletrabalho, integral ou parcial, quanto às suas vantagens e desvantagens.",
+    );
+  });
+
   it("calcula nivel visual pela profundidade da numeracao", () => {
     expect(pdfTocHeadingLevel("1 INTRODUÇÃO")).toBe(1);
     expect(pdfTocHeadingLevel("2.3 Teletrabalho")).toBe(2);

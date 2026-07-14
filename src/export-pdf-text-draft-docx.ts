@@ -25,6 +25,20 @@ const A4_WIDTH_TWIP = 11906;
 const A4_HEIGHT_TWIP = 16838;
 const CM_3_TWIP = 1701;
 const CM_2_TWIP = 1134;
+const MANCHA_WIDTH_TWIP = A4_WIDTH_TWIP - CM_3_TWIP - CM_2_TWIP;
+const MANCHA_HEIGHT_TWIP = A4_HEIGHT_TWIP - CM_3_TWIP - CM_2_TWIP;
+const TWIP_PER_PIXEL = 15;
+const MAX_IMAGE_WIDTH_PX = Math.floor(MANCHA_WIDTH_TWIP / TWIP_PER_PIXEL);
+const MAX_IMAGE_HEIGHT_PX = Math.floor(MANCHA_HEIGHT_TWIP / TWIP_PER_PIXEL);
+
+function fitImageToMancha(width: number, height: number): { width: number; height: number } {
+  const w = Math.max(1, Math.round(width));
+  const h = Math.max(1, Math.round(height));
+  if (w <= MAX_IMAGE_WIDTH_PX && h <= MAX_IMAGE_HEIGHT_PX) return { width: w, height: h };
+  const scale = Math.min(MAX_IMAGE_WIDTH_PX / w, MAX_IMAGE_HEIGHT_PX / h);
+  return { width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) };
+}
+
 const BODY_FIRST_LINE_TWIP = 850;
 const LIST_HANGING_TWIP = 425;
 const ONE_AND_HALF_LINE_TWIP = 360;
@@ -64,11 +78,14 @@ function centered(text: string, options: { bold?: boolean; size?: number; before
   });
 }
 
-function left(text: string, options: { bold?: boolean; size?: number; italics?: boolean; before?: number; after?: number } = {}): Paragraph {
+function left(text: string, options: { bold?: boolean; size?: number; italics?: boolean; before?: number; after?: number; keepNext?: boolean; keepLines?: boolean; widowControl?: boolean } = {}): Paragraph {
   return paragraph([run(cleanText(text) || " ", options.size ?? 24, { bold: options.bold, italics: options.italics })], {
     alignment: AlignmentType.LEFT,
     spacing: { before: options.before ?? 0, after: options.after ?? 0, line: SINGLE_LINE_TWIP },
     indent: { firstLine: 0 },
+    keepNext: options.keepNext,
+    keepLines: options.keepLines,
+    widowControl: options.widowControl,
   });
 }
 
@@ -431,11 +448,12 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
         description: asset.altText?.description ?? (region.caption ?? visualKindLabel(region.kind)),
         name: asset.altText?.name ?? visualKindLabel(region.kind),
       };
+      const fit = fitImageToMancha(asset.width, asset.height);
       paragraphs.push(paragraph([new ImageRun({
         data: asset.data,
-        transformation: { width: asset.width, height: asset.height },
+        transformation: { width: fit.width, height: fit.height },
         altText,
-      })], { alignment: AlignmentType.CENTER, spacing: ZERO_SPACING }));
+      })], { alignment: AlignmentType.CENTER, spacing: ZERO_SPACING, keepNext: true, keepLines: true, widowControl: true }));
       emittedVisualAssetKeys.add(entry.key);
       emitted += 1;
     }
@@ -464,7 +482,7 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
     if (block.type === "caption") {
       const region = block.layoutRegionId ? regions.get(block.layoutRegionId) : undefined;
       const dedupKey = region?.logicalVisualId ?? block.layoutRegionId ?? `caption-${block.pageStart}`;
-      paragraphs.push(left(text, { size: 22 }));
+      paragraphs.push(left(text, { size: 22, keepNext: true, keepLines: true, widowControl: true }));
       if (region && !emittedMarkerKeys.has(dedupKey)) {
         const hasUnresolved = input.reconstruction.blocks.some(
           (b) => b.type === "unresolved" && b.layoutRegionId === block.layoutRegionId

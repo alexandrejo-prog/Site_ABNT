@@ -16,16 +16,16 @@ export function normalizePdfTocHeading(text: string): string {
 
 export function isPdfTocEligibleHeadingText(text: string): boolean {
   const value = clean(text);
-  if (!value || value.length > 180) return false;
+  if (!value) return false;
   if (TERMINAL_ACADEMIC_HEADING.test(value)) return true;
 
   const match = value.match(NUMBERED_HEADING);
   if (!match) return false;
   const title = match[2].trim();
-  if (!title || title.length > 160) return false;
+  if (!title) return false;
   if (/^[a-záàâãéêíóôõúüç]/u.test(title)) return false;
   if (!/^[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ]/u.test(title)) return false;
-  if (/[.!?;:]\s*$/u.test(title)) return false;
+  if (/[!?;:]\s*$/u.test(title)) return false;
   if (/\d+(?:[.,]\d+)?\s*%/u.test(title)) return false;
   if (/^(?:funciona|funcionou|tem|têm|teve|foram|foi|descreve|apresenta|indica|mostra)\b/iu.test(title)) return false;
   return true;

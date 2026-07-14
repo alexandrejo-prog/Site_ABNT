@@ -2217,4 +2217,74 @@ describe("ativos visuais compostos por recorte (chave multipagina)", () => {
       expect(documentXml).toContain("PAGEREF");
     });
   });
+
+  describe("delimitacao estrutural e paginacao de imagens", () => {
+    const logo = readFileSync(join(process.cwd(), "public", "assets", "ufla-logo.jpeg"));
+
+    function graficoInput(opts: { asset?: { width: number; height: number }; pageEnd?: number }): PdfTextDraftExportInput {
+      const visualAssets = opts.asset
+        ? { "layout-40-1": { data: logo, width: opts.asset.width, height: opts.asset.height, key: "layout-40-1" } }
+        : undefined;
+      return baseInput({
+        visualAssets,
+        reconstruction: {
+          ...baseInput().reconstruction,
+          blocks: [
+            { type: "paragraph" as const, text: "Texto antes do grafico para validacao.", pageStart: 1, pageEnd: 1, sourceLines: [{ pageNumber: 1, lineIndex: 0 }], confidence: "medium" as const, reasons: [] },
+            { type: "caption" as const, text: "Gráfico 1 – Vendas.", pageStart: 40, pageEnd: 40, sourceLines: [{ pageNumber: 40, lineIndex: 0 }], confidence: "high" as const, reasons: [], layoutRegionId: "layout-40-1" },
+            { type: "source" as const, text: "Fonte: Autor.", pageStart: 40, pageEnd: 40, sourceLines: [{ pageNumber: 40, lineIndex: 1 }], confidence: "high" as const, reasons: [], layoutRegionId: "layout-40-1" },
+          ],
+          layoutRegions: [{
+            id: "layout-40-1",
+            pageStart: 40,
+            pageEnd: opts.pageEnd ?? 40,
+            startLineIndex: 0,
+            endLineIndex: 1,
+            kind: "grafico",
+            caption: "Gráfico 1 – Vendas.",
+            source: "Fonte: Autor.",
+            confidence: "high" as const,
+            reasons: [],
+          }],
+          statistics: { ...baseInput().reconstruction.statistics, layoutRegionCount: 1, captionCount: 1, sourceCount: 1, unresolvedCount: 0, paragraphCount: 1 },
+        },
+      });
+    }
+
+    it("legenda de elemento visual recebe keepNext no document.xml", async () => {
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(graficoInput({})));
+      const captionParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find((p) => p.includes("Gráfico 1 – Vendas."));
+      expect(captionParagraph).toBeDefined();
+      expect(captionParagraph).toContain("<w:keepNext/>");
+    });
+
+    it("imagem alta respeita a altura maxima da mancha do Word", async () => {
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(graficoInput({ asset: { width: 800, height: 2000 } })));
+      const extent = documentXml.match(/<wp:extent cx="(\d+)" cy="(\d+)"\/>/);
+      expect(extent).not.toBeNull();
+      const cx = Number(extent![1]);
+      const cy = Number(extent![2]);
+      const MAX_CY_EMU = 933 * 9525;
+      expect(cy).toBeLessThanOrEqual(MAX_CY_EMU);
+      expect(cy).toBeLessThan(2000 * 9525);
+      expect(cx).toBeGreaterThan(0);
+      expect(documentXml).toContain("<w:drawing");
+    });
+
+    it("recorte nao confiavel (regiao muito longa) mantem marcador em vez de imagem", async () => {
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(graficoInput({ pageEnd: 44 })));
+      const marker = "Elemento visual não inserido neste rascunho textual - Gráfico, páginas originais 40-44";
+      expect(documentXml).toContain(marker);
+      const captionRuns = (documentXml.match(/<w:t[^>]*>Gráfico 1 – Vendas\.<\/w:t>/g) ?? []).length;
+      expect(captionRuns).toBe(1);
+    });
+
+    it("grafico com recorte valido e inserido como imagem", async () => {
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(graficoInput({ asset: { width: 400, height: 300 } })));
+      expect(documentXml).toContain("<w:drawing");
+      const captionRuns = (documentXml.match(/<w:t[^>]*>Gráfico 1 – Vendas\.<\/w:t>/g) ?? []).length;
+      expect(captionRuns).toBe(1);
+      expect(documentXml).not.toContain("Elemento visual não inserido neste rascunho textual - Gráfico");
+    });
+  });
 });

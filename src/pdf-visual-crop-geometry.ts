@@ -39,7 +39,8 @@ export interface PdfVisualCropSkip {
     | "empty-crop"
     | "implausible-crop-height"
     | "implausible-crop-aspect-ratio"
-    | "caption-only-region";
+    | "caption-only-region"
+    | "incomplete-structural-crop";
 }
 
 export interface PdfVisualCropGeometryResult {
@@ -61,26 +62,147 @@ const GRAPHIC_LIKE_KINDS: ReadonlySet<PdfLayoutSensitiveRegionDiagnostic["kind"]
 const MIN_PAD = 6;
 const MIN_PLAUSIBLE_CROP_HEIGHT = 40;
 const MAX_CROP_ASPECT_RATIO = 25;
-const CROP_EDGE_GAP = 2;
+const CROP_EDGE_GAP = 4;
+const BLOCK_EXTEND_MAX_GAP = 18;
 
 const CAPTION_RE = /^(Quadro|Tabela|Figura|Gr[áa]fico|Imagem|Mapa|Ilustra[çc][ãa]o)\s+(\d+)\s*[-–—.:]/iu;
 const SOURCE_RE = /^Fonte\s*:/iu;
+const HEADING_RE = /^\d+(?:\.\d+)*\s+[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ]/u;
 
-function isCaptionOrSourceLine(text: string, region: PdfLayoutSensitiveRegionDiagnostic): boolean {
-  const trimmed = text.trim();
-  if (region.caption != null && trimmed === region.caption) return true;
-  if (region.source != null && trimmed === region.source) return true;
-  if (CAPTION_RE.test(trimmed)) return true;
-  if (SOURCE_RE.test(trimmed)) return true;
+function normalizeForCompare(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+interface CaptionSourceBlock {
+  startIdx: number;
+  endIdx: number;
+  top: number;
+  bottom: number;
+}
+
+function isPageFurniture(page: PdfPageDiagnostic, line: PdfLineDiagnostic): boolean {
+  const t = line.text.trim();
+  if (t.length === 0) return true;
+  const edge = line.top < page.height * 0.1 || line.bottom > page.height * 0.9;
+  if (edge && /^(\d{1,4}|[ivxlcdm]{1,8})$/iu.test(t)) return true;
   return false;
 }
 
-function stripCaptionAndSourceLines(
-  lines: PdfLineDiagnostic[],
+function extendBlock(
+  page: PdfPageDiagnostic,
+  startIdx: number,
+  isBlockLine: (line: PdfLineDiagnostic, idx: number) => boolean,
+  maxGap: number,
+): CaptionSourceBlock {
+  let endIdx = startIdx;
+  let prevBottom = page.lines[startIdx].bottom;
+  for (let i = startIdx + 1; i < page.lines.length; i += 1) {
+    const line = page.lines[i];
+    if (!hasValidCoords(line)) break;
+    if (line.top - prevBottom > maxGap) break;
+    if (!isBlockLine(line, i)) break;
+    endIdx = i;
+    prevBottom = line.bottom;
+  }
+  return {
+    startIdx,
+    endIdx,
+    top: page.lines[startIdx].top,
+    bottom: page.lines[endIdx].bottom,
+  };
+}
+
+function findCaptionBlock(
+  page: PdfPageDiagnostic,
   region: PdfLayoutSensitiveRegionDiagnostic,
-): PdfLineDiagnostic[] {
-  if (region.caption == null && region.source == null) return lines;
-  return lines.filter((line) => !isCaptionOrSourceLine(line.text, region));
+): CaptionSourceBlock | null {
+  let startIdx = -1;
+  if (region.caption != null) {
+    const target = normalizeForCompare(region.caption);
+    startIdx = page.lines.findIndex((line) => normalizeForCompare(line.text) === target);
+  }
+  if (startIdx < 0) startIdx = page.lines.findIndex((line) => CAPTION_RE.test(line.text.trim()));
+  if (startIdx < 0) return null;
+  return extendBlock(
+    page,
+    startIdx,
+    (line) => {
+      const t = line.text.trim();
+      if (SOURCE_RE.test(t) || CAPTION_RE.test(t) || HEADING_RE.test(t)) return false;
+      if (t.length >= 60) return false;
+      return true;
+    },
+    BLOCK_EXTEND_MAX_GAP,
+  );
+}
+
+function findSourceBlock(
+  page: PdfPageDiagnostic,
+  region: PdfLayoutSensitiveRegionDiagnostic,
+): CaptionSourceBlock | null {
+  let startIdx = -1;
+  if (region.source != null) {
+    const target = normalizeForCompare(region.source);
+    startIdx = page.lines.findIndex((line) => normalizeForCompare(line.text) === target);
+  }
+  if (startIdx < 0) startIdx = page.lines.findIndex((line) => SOURCE_RE.test(line.text.trim()));
+  if (startIdx < 0) return null;
+  return extendBlock(
+    page,
+    startIdx,
+    (line) => {
+      const t = line.text.trim();
+      if (CAPTION_RE.test(t) || HEADING_RE.test(t)) return false;
+      if (t.length >= 60) return false;
+      return true;
+    },
+    BLOCK_EXTEND_MAX_GAP,
+  );
+}
+
+function lineInBlock(idx: number, block: CaptionSourceBlock | null): boolean {
+  return block != null && idx >= block.startIdx && idx <= block.endIdx;
+}
+
+interface ContentExtent {
+  empty: boolean;
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+function contentExtentOnPage(
+  page: PdfPageDiagnostic,
+  captionBlock: CaptionSourceBlock | null,
+  sourceBlock: CaptionSourceBlock | null,
+): ContentExtent {
+  const lines = page.lines.filter(
+    (line, idx) =>
+      hasValidCoords(line) &&
+      !lineInBlock(idx, captionBlock) &&
+      !lineInBlock(idx, sourceBlock) &&
+      !isPageFurniture(page, line),
+  );
+  if (lines.length === 0) {
+    return { empty: true, top: 0, bottom: page.height, left: 0, right: page.width };
+  }
+  return {
+    empty: false,
+    top: Math.min(...lines.map((l) => l.top)),
+    bottom: Math.max(...lines.map((l) => l.bottom)),
+    left: Math.min(...lines.map((l) => l.left)),
+    right: Math.max(...lines.map((l) => l.right)),
+  };
+}
+
+function findFollowingParagraphTop(page: PdfPageDiagnostic, afterIdx: number): number | undefined {
+  for (let i = afterIdx + 1; i < page.lines.length; i += 1) {
+    const line = page.lines[i];
+    if (!hasValidCoords(line)) continue;
+    if (line.text.trim().length >= 35) return line.top;
+  }
+  return undefined;
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -188,57 +310,69 @@ export function computePdfVisualCropGeometry(
         continue;
       }
 
-      const indices = selectedIndexRange(region, pageNumber, page.lines.length);
-      if (!indices) {
-        skipped.push({ regionId: region.id, pageNumber, reason: "no-valid-lines" });
-        continue;
-      }
-      const selected = page.lines.filter(
-        (line, idx) => idx >= indices.start && idx <= indices.end && hasValidCoords(line),
-      );
-      if (selected.length === 0) {
-        skipped.push({ regionId: region.id, pageNumber, reason: "no-valid-lines" });
-        continue;
-      }
+      const structural = region.caption != null || region.source != null;
+      let top: number;
+      let bottom: number;
+      let left: number;
+      let right: number;
 
-      const graphicLines = stripCaptionAndSourceLines(selected, region);
-      if (graphicLines.length === 0) {
-        skipped.push({ regionId: region.id, pageNumber, reason: "caption-only-region" });
-        continue;
-      }
-
-      const minTop = Math.min(...graphicLines.map((line) => line.top));
-      const maxBottom = Math.max(...graphicLines.map((line) => line.bottom));
-      const medianLineHeight = medianValue(graphicLines.map((line) => line.height));
-      const verticalPadding = Math.max(MIN_PAD, medianLineHeight * 0.6);
-      let top = minTop - verticalPadding;
-      let bottom = maxBottom + verticalPadding;
-
-      if (region.caption != null) {
-        const captionLine = page.lines.find((line) => line.text.trim() === region.caption);
-        if (captionLine && captionLine.bottom + CROP_EDGE_GAP > top) {
-          top = captionLine.bottom + CROP_EDGE_GAP;
+      if (!structural) {
+        const indices = selectedIndexRange(region, pageNumber, page.lines.length);
+        if (!indices) {
+          skipped.push({ regionId: region.id, pageNumber, reason: "no-valid-lines" });
+          continue;
         }
-      }
-      if (region.source != null) {
-        const sourceLine = page.lines.find((line) => line.text.trim() === region.source);
-        if (sourceLine && sourceLine.top - CROP_EDGE_GAP < bottom) {
-          bottom = sourceLine.top - CROP_EDGE_GAP;
+        const selected = page.lines.filter(
+          (line, idx) => idx >= indices.start && idx <= indices.end && hasValidCoords(line),
+        );
+        if (selected.length === 0) {
+          skipped.push({ regionId: region.id, pageNumber, reason: "no-valid-lines" });
+          continue;
         }
+        const minTop = Math.min(...selected.map((line) => line.top));
+        const maxBottom = Math.max(...selected.map((line) => line.bottom));
+        const medianLineHeight = medianValue(selected.map((line) => line.height));
+        const verticalPadding = Math.max(MIN_PAD, medianLineHeight * 0.6);
+        top = minTop - verticalPadding;
+        bottom = maxBottom + verticalPadding;
+        left = Math.min(...selected.map((line) => line.left));
+        right = Math.max(...selected.map((line) => line.right));
+      } else {
+        const captionBlock = findCaptionBlock(page, region);
+        const sourceBlock = findSourceBlock(page, region);
+        const content = contentExtentOnPage(page, captionBlock, sourceBlock);
+        if (content.empty) {
+          skipped.push({ regionId: region.id, pageNumber, reason: "incomplete-structural-crop" });
+          continue;
+        }
+        const isFirst = pageNumber === region.pageStart;
+        const isLast = pageNumber === region.pageEnd;
+        const isOnePage = isFirst && isLast;
+
+        if ((isFirst || isOnePage) && captionBlock) {
+          top = captionBlock.bottom + CROP_EDGE_GAP;
+        } else {
+          top = content.top;
+        }
+        if (isLast || isOnePage) {
+          const afterIdx = Math.max(captionBlock?.endIdx ?? -1, sourceBlock?.endIdx ?? -1);
+          const limit = sourceBlock ? sourceBlock.top : findFollowingParagraphTop(page, afterIdx);
+          bottom = (limit ?? content.bottom) - CROP_EDGE_GAP;
+        } else {
+          bottom = content.bottom;
+        }
+        left = content.left;
+        right = content.right;
       }
 
       const horizontalPadding = Math.max(MIN_PAD, page.width * 0.01);
       const manchaValid = manchaIsValid(bodyLayoutMetrics, page.width);
       const graphicLike = GRAPHIC_LIKE_KINDS.has(region.kind);
 
-      let left: number;
-      let right: number;
       if (manchaValid && graphicLike) {
         left = bodyLayoutMetrics!.dominantLeft;
         right = bodyLayoutMetrics!.dominantRight;
       } else if (manchaValid && region.kind === "unknown") {
-        left = Math.min(...selected.map((line) => line.left));
-        right = Math.max(...selected.map((line) => line.right));
         const manchaWidth = bodyLayoutMetrics!.dominantRight - bodyLayoutMetrics!.dominantLeft;
         const minWidth = manchaWidth * 0.5;
         let width = right - left;
@@ -251,9 +385,6 @@ export function computePdfVisualCropGeometry(
       } else if (manchaValid) {
         left = bodyLayoutMetrics!.dominantLeft;
         right = bodyLayoutMetrics!.dominantRight;
-      } else {
-        left = Math.min(...selected.map((line) => line.left));
-        right = Math.max(...selected.map((line) => line.right));
       }
       left -= horizontalPadding;
       right += horizontalPadding;
