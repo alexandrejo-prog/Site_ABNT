@@ -11,6 +11,7 @@ import type {
   PdfTextReconstructionDiagnostic,
 } from "./imported-pdf-diagnostic";
 import { shouldInsertSpace } from "./import-pdf-diagnostic";
+import { normalizePdfTextAnomalies } from "./pdf-text-anomaly-normalizer";
 
 interface LineRef {
   page: PdfPageDiagnostic;
@@ -675,8 +676,28 @@ function canJoinBodyLine(previous: ClassifiedLine, next: ClassifiedLine, current
   return { join: true, reason: firstLineReturnsToBody ? "Unido por retorno da primeira linha recuada a margem do corpo." : "Unido por continuidade na margem do corpo." };
 }
 
-function appendLineText(current: string, next: string, entry: ClassifiedLine, hyphenation: PdfHyphenationDiagnostic[], reasons: string[]): string {
-  if (!/-$/.test(current)) return `${current} ${next}`;
+function fragmentBoundaries(current: string, next: string): { previousFragment: string; nextFragment: string } {
+  const previousFragment = current.trim().split(/\s+/).pop() ?? "";
+  const nextFragment = next.trim().split(/\s+/)[0] ?? "";
+  return { previousFragment, nextFragment };
+}
+
+function appendLineText(current: string, next: string, entry: ClassifiedLine, hyphenation: PdfHyphenationDiagnostic[], reasons: string[], previousPage?: number): string {
+  const { previousFragment, nextFragment } = fragmentBoundaries(current, next);
+  const normalizeJoined = (result: string): string => {
+    const normalized = normalizePdfTextAnomalies(result, {
+      previousFragment,
+      nextFragment,
+      joinedAcrossLine: true,
+      joinedAcrossPage: previousPage !== undefined && previousPage !== entry.pageNumber,
+    });
+    if (normalized.changed) {
+      reasons.push(...normalized.reasons);
+      return normalized.text;
+    }
+    return result;
+  };
+  if (!/-$/.test(current)) return normalizeJoined(`${current} ${next}`);
   const originalEnd = current.slice(Math.max(0, current.length - 24));
   const nextStart = next.slice(0, 24);
   const previousToken = current.split(/\s+/).pop() ?? current;
@@ -694,7 +715,7 @@ function appendLineText(current: string, next: string, entry: ClassifiedLine, hy
       reason: "Quebra de palavra recomposta com proximo fragmento minusculo.",
     });
     reasons.push("Hifenizacao conservadora recomposta entre linhas.");
-    return `${current.slice(0, -1)}${next}`;
+    return normalizeJoined(`${current.slice(0, -1)}${next}`);
   }
   const action: PdfHyphenationDiagnostic["action"] = compoundPrefix || digitOrUpper ? "preserved-hyphen" : "uncertain";
   hyphenation.push({
@@ -706,7 +727,7 @@ function appendLineText(current: string, next: string, entry: ClassifiedLine, hy
     reason: action === "preserved-hyphen" ? "Hifen preservado por padrao de composto, prefixo ou identificador." : "Hifen preservado por incerteza diagnostica.",
   });
   if (action === "uncertain") reasons.push("Hifenizacao incerta preservada.");
-  return `${current}${next}`;
+  return normalizeJoined(`${current}${next}`);
 }
 
 function isHeadingContinuation(previous: ClassifiedLine, next: ClassifiedLine, metrics: PdfBodyLayoutMetrics): boolean {
@@ -804,7 +825,7 @@ export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTe
   const startOrdinal = bodyStart.found
     ? classified.findIndex((entry) => entry.pageNumber === bodyStart.pageNumber && entry.lineIndex === bodyStart.lineIndex)
     : 0;
-  const blocks: PdfReconstructedBlockDiagnostic[] = [];
+  let blocks: PdfReconstructedBlockDiagnostic[] = [];
   const hyphenation: PdfHyphenationDiagnostic[] = [];
   let currentParagraph: PdfReconstructedBlockDiagnostic | null = null;
   let previousBodyLine: ClassifiedLine | null = null;
@@ -849,8 +870,8 @@ export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTe
     if (entry.role === "layout-sensitive") {
       flushParagraph();
       const last = blocks[blocks.length - 1];
-      if (last?.type === "unresolved" && last.pageEnd === entry.pageNumber && last.layoutRegionId === entry.layoutRegionId) {
-        last.text = appendLineText(last.text, entry.text, entry, hyphenation, last.reasons);
+       if (last?.type === "unresolved" && last.pageEnd === entry.pageNumber && last.layoutRegionId === entry.layoutRegionId) {
+         last.text = appendLineText(last.text, entry.text, entry, hyphenation, last.reasons, last.pageEnd);
         last.pageEnd = entry.pageNumber;
         last.sourceLines.push({ pageNumber: entry.pageNumber, lineIndex: entry.lineIndex });
       } else {
@@ -874,9 +895,9 @@ export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTe
         confidence: "medium",
         reasons: ["Linhas visuais compativeis foram unidas como paragrafo diagnostico.", joinDecision.reason || pendingSeparationReason].filter(Boolean),
       };
-    } else {
-      currentParagraph.text = appendLineText(currentParagraph.text, entry.text, entry, hyphenation, currentParagraph.reasons);
-      currentParagraph.pageEnd = entry.pageNumber;
+     } else {
+       currentParagraph.text = appendLineText(currentParagraph.text, entry.text, entry, hyphenation, currentParagraph.reasons, previousBodyLine?.pageNumber);
+       currentParagraph.pageEnd = entry.pageNumber;
       currentParagraph.sourceLines.push({ pageNumber: entry.pageNumber, lineIndex: entry.lineIndex });
       currentParagraph.reasons.push(joinDecision.reason);
     }
@@ -884,6 +905,16 @@ export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTe
     previousBodyLine = entry;
   }
   flushParagraph();
+
+  blocks = blocks.map((block) => {
+    const result = normalizePdfTextAnomalies(block.text, { joinedAcrossPage: block.pageEnd > block.pageStart });
+    if (!result.changed) return block;
+    return {
+      ...block,
+      text: result.text,
+      reasons: [...block.reasons, ...result.reasons],
+    };
+  });
 
   const paragraphLineCounts = blocks.filter((block) => block.type === "paragraph").map((block) => block.sourceLines.length);
   const statistics: PdfTextReconstructionDiagnostic["statistics"] = {
