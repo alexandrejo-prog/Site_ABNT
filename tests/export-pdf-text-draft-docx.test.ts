@@ -1870,6 +1870,55 @@ describe("ativos visuais de regioes pdf", () => {
       expect(ref).not.toContain("COVID-19.");
     });
 
+    it("separa quatro referencias reais reconstruidas em paragrafos distintos", async () => {
+      const result = reconstructPdfParagraphBlocks([
+        refPage(110, [
+          "REFERÊNCIAS",
+          "ALVES LEITE, B. W.; BENEVIDES DE PINHO, M. A. O programa de gestao e",
+          "desempenho nas universidades publicas brasileiras. Encontro Internacional de Gestao,",
+          "Desenvolvimento e Inovacao (EIGEDIN), v. 7, n. 1, 15 maio 2024.",
+          "ARAUJO T.M. DE, LUA I. O trabalho mudou-se para casa: trabalho remoto no contexto",
+          "da pandemia de COVID-19-19. Revista Brasileira de Saude Ocupacional, v. 46,",
+          "p. e27, 2021.",
+          "BRASIL. Decreto nº 1.590, de 10 de agosto de 1995. Dispoe sobre a jornada de trabalho dos",
+          "servidores da Administracao Publica Federal direta, das autarquias e das fundacoes publicas",
+          "federais, e da outras providencias. Diario Oficial da Uniao, Brasilia, DF,",
+          "n. 154, 11 ago. 1995. Secao 1.",
+          "BRASIL. Lei nº 11.091, de 12 de janeiro de 2005. Dispoe sobre a estruturacao do Plano de",
+          "Carreira dos Cargos Tecnico-Administrativos em Educacao.",
+        ]),
+      ]);
+      const refBlocks = result.blocks.filter((block) => block.type === "paragraph");
+      expect(refBlocks.length).toBe(4);
+      const input = referencesInput(result.blocks);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const refParas = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).filter(
+        (p) => p.includes("ALVES LEITE, B. W.") || p.includes("ARAUJO T.M. DE, LUA I.")
+          || p.includes("BRASIL. Decreto") || p.includes("BRASIL. Lei"),
+      );
+      expect(refParas.length).toBe(4);
+      const alves = paraWithText(documentXml, "ALVES LEITE, B. W.");
+      const araujo = paraWithText(documentXml, "ARAUJO T.M. DE, LUA I.");
+      const decreto = paraWithText(documentXml, "BRASIL. Decreto");
+      const lei = paraWithText(documentXml, "BRASIL. Lei");
+      for (const ref of [alves, araujo, decreto, lei]) {
+        expect(ref).toBeDefined();
+        expect(ref).toContain('w:jc w:val="left"');
+        expect(ref).toContain('w:after="240"');
+        expect(ref).toContain('w:line="240"');
+        expect(ref).not.toContain('w:hanging="');
+        expect(ref).not.toContain('w:left="');
+      }
+      expect(alves).not.toContain("ARAUJO T.M. DE");
+      expect(araujo).not.toContain("BRASIL. Decreto");
+      expect(araujo).toContain("COVID-19-19");
+      expect(araujo).not.toContain("COVID-19.");
+      expect(alves).toContain("Encontro Internacional de Gestao, Desenvolvimento e Inovacao (EIGEDIN), v. 7, n. 1, 15 maio 2024.");
+      expect(araujo).toContain("Revista Brasileira de Saude Ocupacional, v. 46, p. e27, 2021.");
+      expect(decreto).toContain("Brasilia, DF, n. 154, 11 ago. 1995. Secao 1.");
+      expect(lei).toContain("Carreira dos Cargos Tecnico-Administrativos em Educacao.");
+    });
+
     it("paragrafo apos APENDICE volta ao formato normal do corpo", async () => {
       const input = referencesInput([
         { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },

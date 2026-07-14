@@ -218,4 +218,61 @@ describe("reconstrucao de anomalias na fronteira real entre linhas", () => {
     expect(covidAlerts.length).toBe(1);
     expect(covidAlerts[0]).toContain("(3 ocorrências).");
   });
+
+  it("reconhece referencias institucionais e autorias variadas no fluxo real", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(110, [
+        "REFERÊNCIAS",
+        "ALVES LEITE, B. W.; BENEVIDES DE PINHO, M. A. O programa de gestao e",
+        "desempenho nas universidades publicas brasileiras. Encontro Internacional de Gestao,",
+        "Desenvolvimento e Inovacao (EIGEDIN), v. 7, n. 1, 15 maio 2024.",
+        "ARAUJO T.M. DE, LUA I. O trabalho mudou-se para casa: trabalho remoto no contexto",
+        "da pandemia de COVID-19-19. Revista Brasileira de Saude Ocupacional, v. 46,",
+        "p. e27, 2021.",
+        "BRASIL. Decreto nº 1.590, de 10 de agosto de 1995. Dispoe sobre a jornada de trabalho dos",
+        "servidores da Administracao Publica Federal direta, das autarquias e das fundacoes publicas",
+        "federais, e da outras providencias. Diario Oficial da Uniao, Brasilia, DF,",
+        "n. 154, 11 ago. 1995. Secao 1.",
+        "BRASIL. Lei nº 11.091, de 12 de janeiro de 2005. Dispoe sobre a estruturacao do Plano de",
+        "Carreira dos Cargos Tecnico-Administrativos em Educacao.",
+      ]),
+    ]);
+    const refBlocks = result.blocks.filter((block) => block.type === "paragraph");
+    expect(refBlocks.length).toBe(4);
+    expect(refBlocks[0].text.startsWith("ALVES LEITE, B. W.")).toBe(true);
+    expect(refBlocks[1].text.startsWith("ARAUJO T.M. DE, LUA I.")).toBe(true);
+    expect(refBlocks[2].text.startsWith("BRASIL. Decreto")).toBe(true);
+    expect(refBlocks[3].text.startsWith("BRASIL. Lei")).toBe(true);
+    expect(refBlocks[0].text).not.toContain("ARAUJO T.M. DE");
+    expect(refBlocks[1].text).not.toContain("BRASIL. Decreto");
+    expect(refBlocks[2].text).not.toContain("BRASIL. Lei");
+    expect(refBlocks[1].text).toContain("COVID-19-19");
+    expect(refBlocks[1].text).not.toContain("COVID-19.");
+    expect(refBlocks[0].text).toContain("Encontro Internacional de Gestao, Desenvolvimento e Inovacao (EIGEDIN), v. 7, n. 1, 15 maio 2024.");
+    expect(refBlocks[1].text).toContain("Revista Brasileira de Saude Ocupacional, v. 46, p. e27, 2021.");
+    expect(refBlocks[2].text).toContain("Brasilia, DF, n. 154, 11 ago. 1995. Secao 1.");
+    expect(refBlocks[3].text).toContain("Carreira dos Cargos Tecnico-Administrativos em Educacao.");
+  });
+
+  it("mantem continuacoes ancoradas no inicio e inicia autoria com v. na mesma linha", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(110, [
+        "REFERÊNCIAS",
+        "SILVA, A. B. Artigo sobre gestao publica. Revista Exemplo, v. 7, n. 1, 2024.",
+        "SOUZA, C. Trabalho remoto. Brasilia: Universidade de Brasilia, 2020.",
+        "COSTA, D. Estudo. Disponivel em: https://exemplo.org/artigo",
+        "LIMA, E. Pesquisa. Acesso em: 15 maio 2025.",
+      ]),
+    ]);
+    const refBlocks = result.blocks.filter((block) => block.type === "paragraph");
+    expect(refBlocks.length).toBe(4);
+    const silva = refBlocks.find((block) => block.text.startsWith("SILVA, A. B."))!;
+    expect(silva.text).toContain("Revista Exemplo, v. 7, n. 1, 2024.");
+    const souza = refBlocks.find((block) => block.text.startsWith("SOUZA, C."))!;
+    expect(souza.text).toContain("Brasilia: Universidade de Brasilia, 2020.");
+    const costa = refBlocks.find((block) => block.text.startsWith("COSTA, D."))!;
+    expect(costa.text).toContain("Disponivel em: https://exemplo.org/artigo");
+    const lima = refBlocks.find((block) => block.text.startsWith("LIMA, E."))!;
+    expect(lima.text).toContain("Acesso em: 15 maio 2025.");
+  });
 });

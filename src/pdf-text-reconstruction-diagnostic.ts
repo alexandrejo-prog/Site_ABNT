@@ -48,23 +48,19 @@ const COMPOUND_PREFIX_RE = /(?:^|\s)(p[óo]s|pr[ée]|ex|n[ãa]o|rec[ée]m|vice|t
 
 const REFERENCES_SECTION_KEY = "REFERENCIAS";
 const REFERENCES_END_KEYS = ["APENDICE", "APENDICES", "ANEXO", "ANEXOS"];
-const REFERENCE_AUTHOR_RE = /^\p{Lu}[\p{Lu}'’.\- ]*, \p{Lu}\./u;
-const REFERENCE_INSTITUTIONAL_RE = /^\p{Lu}[\p{Lu}'’.\- ]*\.$/u;
+const REFERENCE_AUTHOR_RE = /^\p{Lu}[\p{Lu}'’.\- ]*, [\p{Lu}. ;\-]+/u;
+const REFERENCE_INSTITUTIONAL_RE = /^\p{Lu}[\p{Lu}'’.\- ]*\.(?:\s|$)/u;
 
 function normalizeSectionKey(text: string): string {
   return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().trim();
 }
 
-function isObviousReferenceContinuation(text: string): boolean {
-  const t = text.trim();
-  if (/^[a-zà-ÿ]/u.test(t)) return true;
-  if (/^(?:Brasília|Rio de Janeiro|São Paulo|Florianópolis|Belo Horizonte|Curitiba|Salvador|Recife|Porto Alegre|Goiânia)\s*:/u.test(t)) return true;
-  if (/\bv\.\s*\d+/u.test(t)) return true;
-  if (/doi:/iu.test(t)) return true;
-  if (/^dispon[íi]vel em:/iu.test(t)) return true;
-  if (/^acesso em:/iu.test(t)) return true;
-  if (/\d{4}\s*[-–—]\s*\d{0,4}/u.test(t)) return true;
-  return false;
+function isPersonalAuthorStart(text: string): boolean {
+  return REFERENCE_AUTHOR_RE.test(text);
+}
+
+function isInstitutionalStart(text: string): boolean {
+  return REFERENCE_INSTITUTIONAL_RE.test(text);
 }
 
 function isAllCapsTitleStart(text: string): boolean {
@@ -74,14 +70,28 @@ function isAllCapsTitleStart(text: string): boolean {
   return /\s/.test(text);
 }
 
+function isObviousReferenceContinuation(text: string): boolean {
+  const t = text.trim();
+  if (/^[a-zà-ÿ]/u.test(t)) return true;
+  if (/^(?:Brasília|Rio de Janeiro|São Paulo|Florianópolis|Belo Horizonte|Curitiba|Salvador|Recife|Porto Alegre|Goiânia)\s*:/u.test(t)) return true;
+  if (/^v\./u.test(t)) return true;
+  if (/^n\./u.test(t)) return true;
+  if (/^p\./u.test(t)) return true;
+  if (/^doi:/iu.test(t)) return true;
+  if (/^dispon[íi]vel em:/iu.test(t)) return true;
+  if (/^acesso em:/iu.test(t)) return true;
+  if (/^\d{4}\s*[-–—]\s*\d{0,4}/u.test(t)) return true;
+  return false;
+}
+
 function startsNewReference(entry: ClassifiedLine, metrics: PdfBodyLayoutMetrics, currentParagraph: PdfReconstructedBlockDiagnostic | null): boolean {
   if (!currentParagraph || currentParagraph.sourceLines.length === 0) return false;
   if (!isNearBodyLeft(entry, metrics)) return false;
   const text = entry.text;
-  if (isObviousReferenceContinuation(text)) return false;
-  if (REFERENCE_AUTHOR_RE.test(text)) return true;
-  if (REFERENCE_INSTITUTIONAL_RE.test(text)) return true;
+  if (isPersonalAuthorStart(text)) return true;
+  if (isInstitutionalStart(text)) return true;
   if (isAllCapsTitleStart(text)) return true;
+  if (isObviousReferenceContinuation(text)) return false;
   return false;
 }
 
