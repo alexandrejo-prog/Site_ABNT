@@ -16,6 +16,7 @@ import {
 import type { IParagraphOptions } from "docx";
 import type { PdfAbstractDiagnostic, PdfLayoutSensitiveRegionDiagnostic, PdfReconstructedBlockDiagnostic } from "./imported-pdf-diagnostic";
 import { ensurePdfTextDraftTocFields } from "./pdf-text-draft-toc-field-patch";
+import { visualAssetEntriesForRegion } from "./pdf-visual-asset-integration";
 import type { PdfTextDraftExportInput, PdfTextDraftLogoAsset, PdfTextDraftValidation, PdfTextDraftVisualAsset } from "./pdf-text-draft-contract";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -140,9 +141,7 @@ function isGraphicLikeKind(kind?: PdfLayoutSensitiveRegionDiagnostic["kind"]): b
 }
 
 function hasVisualAssetForRegion(region: PdfLayoutSensitiveRegionDiagnostic | undefined, visualAssets: Record<string, PdfTextDraftVisualAsset>): boolean {
-  if (!region) return false;
-  const key = region.logicalVisualId ?? region.id;
-  return visualAssets[key] != null;
+  return visualAssetEntriesForRegion(region, visualAssets).length > 0;
 }
 
 function visualKindLabel(kind?: PdfLayoutSensitiveRegionDiagnostic["kind"]): string {
@@ -384,7 +383,6 @@ function blockInsideVisualSpan(
 }
 
 function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Paragraph[] {
-  const emittedKeys = new Set<string>();
   const regions = new Map(input.reconstruction.layoutRegions.map((region) => [region.id, region]));
   const entryByTitle = new Map(entries.map((entry) => [entry.title, entry]));
   const paragraphs: Paragraph[] = [];
@@ -417,25 +415,30 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
   }
 
   const visualAssets = input.visualAssets ?? {};
-  const emittedVisualImages = new Set<string>();
+  const emittedVisualAssetKeys = new Set<string>();
+  const emittedMarkerKeys = new Set<string>();
 
-  function emitVisualImage(region: PdfLayoutSensitiveRegionDiagnostic): boolean {
-    const key = region.logicalVisualId ?? region.id;
-    if (emittedVisualImages.has(key)) return false;
-    const asset = visualAssets[key];
-    if (!asset) return false;
-    const altText = {
-      title: asset.altText?.title ?? visualKindLabel(region.kind),
-      description: asset.altText?.description ?? (region.caption ?? visualKindLabel(region.kind)),
-      name: asset.altText?.name ?? visualKindLabel(region.kind),
-    };
-    paragraphs.push(paragraph([new ImageRun({
-      data: asset.data,
-      transformation: { width: asset.width, height: asset.height },
-      altText,
-    })], { alignment: AlignmentType.CENTER, spacing: ZERO_SPACING }));
-    emittedVisualImages.add(key);
-    return true;
+  function emitVisualImages(region: PdfLayoutSensitiveRegionDiagnostic): number {
+    const entries = visualAssetEntriesForRegion(region, visualAssets);
+    if (entries.length === 0) return 0;
+    let emitted = 0;
+    for (const entry of entries) {
+      if (emittedVisualAssetKeys.has(entry.key)) continue;
+      const asset = entry.asset;
+      const altText = {
+        title: asset.altText?.title ?? visualKindLabel(region.kind),
+        description: asset.altText?.description ?? (region.caption ?? visualKindLabel(region.kind)),
+        name: asset.altText?.name ?? visualKindLabel(region.kind),
+      };
+      paragraphs.push(paragraph([new ImageRun({
+        data: asset.data,
+        transformation: { width: asset.width, height: asset.height },
+        altText,
+      })], { alignment: AlignmentType.CENTER, spacing: ZERO_SPACING }));
+      emittedVisualAssetKeys.add(entry.key);
+      emitted += 1;
+    }
+    return emitted;
   }
 
   let inReferences = false;
@@ -461,19 +464,21 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
       const region = block.layoutRegionId ? regions.get(block.layoutRegionId) : undefined;
       const dedupKey = region?.logicalVisualId ?? block.layoutRegionId ?? `caption-${block.pageStart}`;
       paragraphs.push(left(text, { size: 22 }));
-      const captionHasAsset = region ? hasVisualAssetForRegion(region, visualAssets) : false;
-      if (region && (captionHasAsset || isGraphicLikeKind(region.kind)) && !emittedKeys.has(dedupKey)) {
+      if (region && !emittedMarkerKeys.has(dedupKey)) {
         const hasUnresolved = input.reconstruction.blocks.some(
           (b) => b.type === "unresolved" && b.layoutRegionId === block.layoutRegionId
         );
-        if (!hasUnresolved) {
-          const emitted = captionHasAsset ? emitVisualImage(region) : false;
-          if (!emitted && !captionHasAsset) {
-            const range = region.logicalVisualId ? logicalVisualRanges.get(region.logicalVisualId) : undefined;
-            const reliableRange = range && region.logicalVisualId && !unreliableRanges.has(region.logicalVisualId) ? range : undefined;
-            paragraphs.push(left(markerForBlock(block, regions, reliableRange), { size: 20, italics: true }));
-          }
-          emittedKeys.add(dedupKey);
+        const regionHasAsset = hasVisualAssetForRegion(region, visualAssets);
+        if (hasUnresolved) {
+          // Imagens e marcadores da região com bloco unresolved são emitidos na posição do unresolved.
+        } else if (regionHasAsset) {
+          emitVisualImages(region);
+          emittedMarkerKeys.add(dedupKey);
+        } else if (isGraphicLikeKind(region.kind)) {
+          const range = region.logicalVisualId ? logicalVisualRanges.get(region.logicalVisualId) : undefined;
+          const reliableRange = range && region.logicalVisualId && !unreliableRanges.has(region.logicalVisualId) ? range : undefined;
+          paragraphs.push(left(markerForBlock(block, regions, reliableRange), { size: 20, italics: true }));
+          emittedMarkerKeys.add(dedupKey);
         }
       }
     }
@@ -482,14 +487,13 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
       const region = block.layoutRegionId ? regions.get(block.layoutRegionId) : undefined;
       const logicalId = region?.logicalVisualId;
       const dedupKey = logicalId ?? block.layoutRegionId ?? `unresolved-${block.pageStart}-${block.sourceLines[0]?.lineIndex ?? paragraphs.length}`;
-      if (emittedKeys.has(dedupKey)) continue;
-      emittedKeys.add(dedupKey);
       const range = logicalId ? logicalVisualRanges.get(logicalId) : undefined;
       const reliableRange = range && logicalId && !unreliableRanges.has(logicalId) ? range : undefined;
       const unresolvedHasAsset = region ? hasVisualAssetForRegion(region, visualAssets) : false;
       if (region && unresolvedHasAsset) {
-        emitVisualImage(region);
-      } else {
+        emitVisualImages(region);
+      } else if (!emittedMarkerKeys.has(dedupKey)) {
+        emittedMarkerKeys.add(dedupKey);
         paragraphs.push(left(markerForBlock(block, regions, reliableRange), { size: 20, italics: true }));
       }
     }
@@ -528,7 +532,13 @@ export function validatePdfTextDraftExport(input: PdfTextDraftExportInput): PdfT
   if (stats.unresolvedCount > 0) warnings.push("Há blocos visuais não resolvidos que serão representados por marcadores.");
   if (stats.uncertainHyphenationCount > 0) warnings.push("Há hifenizações incertas para revisão.");
   if (stats.lowConfidenceBlockCount > 0) warnings.push("Há blocos de baixa confiança.");
-  if (stats.layoutRegionCount > 0) warnings.push("Elementos visuais serão representados por marcadores.");
+  if (stats.layoutRegionCount > 0) {
+    if (input.visualAssets && Object.keys(input.visualAssets).length > 0) {
+      warnings.push("Alguns elementos visuais podem permanecer como marcadores quando o recorte automático não estiver disponível.");
+    } else {
+      warnings.push("Elementos visuais serão representados por marcadores.");
+    }
+  }
   if (!input.pretextual?.abstract) warnings.push("Abstract ausente: nenhum texto será inventado.");
   if (!input.reconstruction.layoutRegions.some((region) => region.kind === "figura" || region.kind === "grafico")) warnings.push("Nenhuma figura ou gráfico foi detectado textualmente.");
   if (stats.multiPageParagraphCount > 0) warnings.push("Há parágrafos atravessando até duas páginas.");

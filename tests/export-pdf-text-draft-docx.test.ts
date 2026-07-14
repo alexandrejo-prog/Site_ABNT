@@ -1866,3 +1866,319 @@ describe("ativos visuais de regioes pdf", () => {
     });
   });
 });
+
+describe("ativos visuais compostos por recorte (chave multipagina)", () => {
+  type Block = PdfTextDraftExportInput["reconstruction"]["blocks"][number];
+  type Region = PdfTextDraftExportInput["reconstruction"]["layoutRegions"][number];
+
+  function compositeAsset(key: string, bytes: number[] = [1, 2, 3], width = 120, height = 80): PdfTextDraftVisualAsset {
+    return { data: new Uint8Array(bytes), width, height, altText: { title: `Imagem ${key}`, description: `Descrição ${key}`, name: key } };
+  }
+
+  function compositeInput(blocks: Block[], regions: Region[], assets: Record<string, PdfTextDraftVisualAsset>, opts: { includePretextuals?: boolean; statistics?: Partial<PdfTextDraftExportInput["reconstruction"]["statistics"]> } = {}): PdfTextDraftExportInput {
+    return baseInput({
+      reconstruction: {
+        ...baseInput().reconstruction,
+        blocks,
+        layoutRegions: regions,
+        statistics: { ...baseInput().reconstruction.statistics, ...opts.statistics },
+      },
+      visualAssets: assets,
+      includeReconstructedPretextuals: opts.includePretextuals ?? false,
+    });
+  }
+
+  function region(id: string, logicalVisualId: string, kind: Region["kind"], pageStart: number, pageEnd: number): Region {
+    return {
+      id, pageStart, pageEnd, startLineIndex: 2, endLineIndex: 4, kind,
+      caption: "Quadro 1 – Exemplo.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId,
+    };
+  }
+
+  function singleRegionBlocks(regionId: string, pages: number[]): Block[] {
+    const first = pages[0];
+    const blocks: Block[] = [
+      { type: "paragraph", text: "Texto antes do elemento visual.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Quadro 1 – Exemplo.", pageStart: first, pageEnd: first, sourceLines: [{ pageNumber: first, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: regionId },
+    ];
+    for (const page of pages) {
+      blocks.push({ type: "unresolved", text: `INTERNO ${page}`, pageStart: page, pageEnd: page, sourceLines: [{ pageNumber: page, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: regionId });
+    }
+    blocks.push({ type: "source", text: "Fonte: Autor.", pageStart: first, pageEnd: first, sourceLines: [{ pageNumber: first, lineIndex: 4 }], confidence: "high", reasons: [], layoutRegionId: regionId });
+    blocks.push({ type: "paragraph", text: "Texto depois do elemento visual.", pageStart: pages[pages.length - 1] + 1, pageEnd: pages[pages.length - 1] + 1, sourceLines: [{ pageNumber: pages[pages.length - 1] + 1, lineIndex: 1 }], confidence: "medium", reasons: [] });
+    return blocks;
+  }
+
+  function regionStats(unresolvedCount: number, layoutRegionCount: number): Partial<PdfTextDraftExportInput["reconstruction"]["statistics"]> {
+    return { paragraphCount: 2, captionCount: 1, sourceCount: 1, unresolvedCount, layoutRegionCount };
+  }
+
+  it("chave composta cria drawing no documento", async () => {
+    const input = compositeInput(
+      singleRegionBlocks("layout-25-1", [25]),
+      [region("layout-25-1", "quadro-1-page-25", "quadro", 25, 25)],
+      { "quadro-1-page-25::p25::rlayout-25-1": compositeAsset("quadro-1-page-25::p25::rlayout-25-1") },
+      { statistics: regionStats(1, 1) },
+    );
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("<w:drawing");
+    expect(documentXml).not.toContain("Elemento visual não inserido");
+  });
+
+  it("cria word/media com a imagem do recorte", async () => {
+    const input = compositeInput(
+      singleRegionBlocks("layout-25-1", [25]),
+      [region("layout-25-1", "quadro-1-page-25", "quadro", 25, 25)],
+      { "quadro-1-page-25::p25::rlayout-25-1": compositeAsset("quadro-1-page-25::p25::rlayout-25-1") },
+      { statistics: regionStats(1, 1) },
+    );
+    const blob = await buildPdfTextDraftDocxBlob(input);
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const mediaFiles = Object.keys(zip.files).filter((entry) => entry.startsWith("word/media/") && !entry.endsWith("/"));
+    expect(mediaFiles).toHaveLength(1);
+  });
+
+  it("dois crops criam dois drawings", async () => {
+    const input = compositeInput(
+      singleRegionBlocks("layout-25-1", [25, 26]),
+      [region("layout-25-1", "quadro-1-page-25", "quadro", 25, 26)],
+      {
+        "quadro-1-page-25::p25::rlayout-25-1": compositeAsset("a", [11, 12]),
+        "quadro-1-page-25::p26::rlayout-25-1": compositeAsset("b", [13, 14]),
+      },
+      { statistics: regionStats(2, 1) },
+    );
+    const blob = await buildPdfTextDraftDocxBlob(input);
+    const { documentXml } = await loadDocxParts(blob);
+    const drawings = (documentXml.match(/<w:drawing/g) ?? []).length;
+    expect(drawings).toBe(2);
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const mediaFiles = Object.keys(zip.files).filter((entry) => entry.startsWith("word/media/") && !entry.endsWith("/"));
+    expect(mediaFiles).toHaveLength(2);
+  });
+
+  it("dois crops mantem a ordem numerica das paginas", async () => {
+    const input = compositeInput(
+      singleRegionBlocks("layout-25-1", [26, 25]),
+      [region("layout-25-1", "quadro-1-page-25", "quadro", 25, 26)],
+      {
+        "quadro-1-page-25::p25::rlayout-25-1": compositeAsset("a", [11]),
+        "quadro-1-page-25::p26::rlayout-25-1": compositeAsset("b", [22]),
+      },
+      { statistics: regionStats(2, 1) },
+    );
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    const embeds = [...documentXml.matchAll(/r:embed="(rId\d+)"/g)].map((match) => Number(match[1].slice(3)));
+    expect(embeds.length).toBeGreaterThanOrEqual(2);
+    expect(embeds[0]).toBeLessThan(embeds[1]);
+  });
+
+  it("logicalVisualId compartilhado nao mistura regioes", async () => {
+    const blocks: Block[] = [
+      { type: "paragraph", text: "Texto antes.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Figura A.", pageStart: 25, pageEnd: 25, sourceLines: [{ pageNumber: 25, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-25-1" },
+      { type: "unresolved", text: "INT A", pageStart: 25, pageEnd: 25, sourceLines: [{ pageNumber: 25, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-25-1" },
+      { type: "source", text: "Fonte A.", pageStart: 25, pageEnd: 25, sourceLines: [{ pageNumber: 25, lineIndex: 4 }], confidence: "high", reasons: [], layoutRegionId: "layout-25-1" },
+      { type: "caption", text: "Figura B.", pageStart: 26, pageEnd: 26, sourceLines: [{ pageNumber: 26, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-26-1" },
+      { type: "unresolved", text: "INT B", pageStart: 26, pageEnd: 26, sourceLines: [{ pageNumber: 26, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-26-1" },
+      { type: "source", text: "Fonte B.", pageStart: 26, pageEnd: 26, sourceLines: [{ pageNumber: 26, lineIndex: 4 }], confidence: "high", reasons: [], layoutRegionId: "layout-26-1" },
+      { type: "paragraph", text: "Texto depois.", pageStart: 27, pageEnd: 27, sourceLines: [{ pageNumber: 27, lineIndex: 1 }], confidence: "medium", reasons: [] },
+    ];
+    const regions: Region[] = [
+      region("layout-25-1", "shared", "figura", 25, 25),
+      region("layout-26-1", "shared", "figura", 26, 26),
+    ];
+    const input = compositeInput(blocks, regions, {
+      "shared::p25::rlayout-25-1": compositeAsset("a", [91, 92, 93]),
+      "shared::p26::rlayout-26-1": compositeAsset("b", [94, 95, 96]),
+    }, { statistics: { paragraphCount: 2, captionCount: 2, sourceCount: 2, unresolvedCount: 2, layoutRegionCount: 2 } });
+    const blob = await buildPdfTextDraftDocxBlob(input);
+    const { documentXml } = await loadDocxParts(blob);
+    expect((documentXml.match(/<w:drawing/g) ?? []).length).toBe(2);
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const mediaEntries = Object.keys(zip.files).filter((entry) => entry.startsWith("word/media/") && !entry.endsWith("/"));
+    const contents = await Promise.all(mediaEntries.map((entry) => zip.file(entry)!.async("uint8array")));
+    const signatures = contents.map((bytes) => Array.from(bytes).join(","));
+    expect(signatures).toContain("91,92,93");
+    expect(signatures).toContain("94,95,96");
+  });
+
+  it("caption aparece antes da imagem", async () => {
+    const input = compositeInput(
+      singleRegionBlocks("layout-25-1", [25]),
+      [region("layout-25-1", "quadro-1-page-25", "quadro", 25, 25)],
+      { "quadro-1-page-25::p25::rlayout-25-1": compositeAsset("quadro-1-page-25::p25::rlayout-25-1") },
+      { statistics: regionStats(1, 1) },
+    );
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    const captionIndex = documentXml.indexOf("Quadro 1 – Exemplo.");
+    const drawingIndex = documentXml.indexOf("<w:drawing");
+    expect(captionIndex).toBeGreaterThan(-1);
+    expect(drawingIndex).toBeGreaterThan(captionIndex);
+  });
+
+  it("source aparece depois da imagem", async () => {
+    const input = compositeInput(
+      singleRegionBlocks("layout-25-1", [25]),
+      [region("layout-25-1", "quadro-1-page-25", "quadro", 25, 25)],
+      { "quadro-1-page-25::p25::rlayout-25-1": compositeAsset("quadro-1-page-25::p25::rlayout-25-1") },
+      { statistics: regionStats(1, 1) },
+    );
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    const drawingIndex = documentXml.indexOf("<w:drawing");
+    const sourceIndex = documentXml.indexOf("Fonte: Autor.");
+    expect(drawingIndex).toBeGreaterThan(-1);
+    expect(sourceIndex).toBeGreaterThan(drawingIndex);
+  });
+
+  it("unresolved com ativo nao gera marcador", async () => {
+    const input = compositeInput(
+      singleRegionBlocks("layout-25-1", [25]),
+      [region("layout-25-1", "quadro-1-page-25", "quadro", 25, 25)],
+      { "quadro-1-page-25::p25::rlayout-25-1": compositeAsset("quadro-1-page-25::p25::rlayout-25-1") },
+      { statistics: regionStats(1, 1) },
+    );
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("<w:drawing");
+    expect(documentXml).not.toContain("Elemento visual não inserido");
+  });
+
+  it("unresolved sem ativo gera marcador", async () => {
+    const input = compositeInput(
+      singleRegionBlocks("layout-25-1", [25]),
+      [region("layout-25-1", "quadro-1-page-25", "quadro", 25, 25)],
+      {},
+      { statistics: regionStats(1, 1) },
+    );
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("Elemento visual não inserido");
+    expect(documentXml).not.toContain("<w:drawing");
+  });
+
+  it("ativo legado pela chave visualId continua funcionando", async () => {
+    const input = compositeInput(
+      singleRegionBlocks("layout-25-1", [25]),
+      [region("layout-25-1", "quadro-1-page-25", "quadro", 25, 25)],
+      { "quadro-1-page-25": compositeAsset("quadro-1-page-25") },
+      { statistics: regionStats(1, 1) },
+    );
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("<w:drawing");
+    expect(documentXml).not.toContain("Elemento visual não inserido");
+  });
+
+  it("caption e unresolved nao duplicam a imagem", async () => {
+    const input = compositeInput(
+      singleRegionBlocks("layout-25-1", [25]),
+      [region("layout-25-1", "quadro-1-page-25", "quadro", 25, 25)],
+      { "quadro-1-page-25::p25::rlayout-25-1": compositeAsset("quadro-1-page-25::p25::rlayout-25-1") },
+      { statistics: regionStats(1, 1) },
+    );
+    const blob = await buildPdfTextDraftDocxBlob(input);
+    const { documentXml } = await loadDocxParts(blob);
+    expect((documentXml.match(/<w:drawing/g) ?? []).length).toBe(1);
+    expect(documentXml).not.toContain("Elemento visual não inserido");
+  });
+
+  it("quadro aceita ativo composto", async () => {
+    const input = compositeInput(
+      singleRegionBlocks("layout-25-1", [25]),
+      [region("layout-25-1", "quadro-1-page-25", "quadro", 25, 25)],
+      { "quadro-1-page-25::p25::rlayout-25-1": compositeAsset("q") },
+      { statistics: regionStats(1, 1) },
+    );
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("<w:drawing");
+    expect(documentXml).not.toContain("Elemento visual não inserido");
+  });
+
+  it("tabela aceita ativo composto", async () => {
+    const input = compositeInput(
+      singleRegionBlocks("layout-25-1", [25]),
+      [region("layout-25-1", "tabela-1-page-25", "tabela", 25, 25)],
+      { "tabela-1-page-25::p25::rlayout-25-1": compositeAsset("t") },
+      { statistics: regionStats(1, 1) },
+    );
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("<w:drawing");
+    expect(documentXml).not.toContain("Elemento visual não inserido");
+  });
+
+  it("multicolumn sem ativo mantem marcador", async () => {
+    const input = compositeInput(
+      singleRegionBlocks("layout-25-1", [25]),
+      [region("layout-25-1", "multicolumn-1-page-25", "multicolumn", 25, 25)],
+      {},
+      { statistics: regionStats(1, 1) },
+    );
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("Elemento visual não inserido");
+    expect(documentXml).not.toContain("<w:drawing");
+  });
+
+  it("contagem de marcadores diminui com o ativo presente", async () => {
+    const blocks = singleRegionBlocks("layout-25-1", [25]);
+    const regions = [region("layout-25-1", "quadro-1-page-25", "quadro", 25, 25)];
+    const without = compositeInput(blocks, regions, {}, { statistics: regionStats(1, 1) });
+    const withAsset = compositeInput(blocks, regions, { "quadro-1-page-25::p25::rlayout-25-1": compositeAsset("q") }, { statistics: regionStats(1, 1) });
+    const markerWithout = Number((await loadDocxParts(await buildPdfTextDraftDocxBlob(without))).documentXml.match(/Elementos visuais representados por marcadores: (\d+)/)![1]);
+    const markerWith = Number((await loadDocxParts(await buildPdfTextDraftDocxBlob(withAsset))).documentXml.match(/Elementos visuais representados por marcadores: (\d+)/)![1]);
+    expect(markerWith).toBeLessThan(markerWithout);
+  });
+
+  it("bookmarks e PAGEREF permanecem com ativos compostos", async () => {
+    const blocks: Block[] = [
+      { type: "heading", text: "1 INTRODUÇÃO", pageStart: 17, pageEnd: 17, sourceLines: [{ pageNumber: 17, lineIndex: 1 }], confidence: "high", reasons: [] },
+      { type: "paragraph", text: "Texto antes do elemento visual.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Quadro 1 – Exemplo.", pageStart: 25, pageEnd: 25, sourceLines: [{ pageNumber: 25, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-25-1" },
+      { type: "unresolved", text: "INTERNO 25", pageStart: 25, pageEnd: 25, sourceLines: [{ pageNumber: 25, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-25-1" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 25, pageEnd: 25, sourceLines: [{ pageNumber: 25, lineIndex: 4 }], confidence: "high", reasons: [], layoutRegionId: "layout-25-1" },
+      { type: "paragraph", text: "Texto depois do elemento visual.", pageStart: 27, pageEnd: 27, sourceLines: [{ pageNumber: 27, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+    ];
+    const input = compositeInput(
+      blocks,
+      [region("layout-25-1", "quadro-1-page-25", "quadro", 25, 25)],
+      { "quadro-1-page-25::p25::rlayout-25-1": compositeAsset("q") },
+      { statistics: { paragraphCount: 2, headingCount: 2, captionCount: 1, sourceCount: 1, unresolvedCount: 1, layoutRegionCount: 1 } },
+    );
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("PAGEREF");
+    expect(documentXml).toContain("<w:bookmarkStart");
+  });
+
+  it("sem w:numPr com ativos compostos", async () => {
+    const input = compositeInput(
+      singleRegionBlocks("layout-25-1", [25]),
+      [region("layout-25-1", "quadro-1-page-25", "quadro", 25, 25)],
+      { "quadro-1-page-25::p25::rlayout-25-1": compositeAsset("q") },
+      { statistics: regionStats(1, 1) },
+    );
+    const { documentXml, settingsXml, stylesXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    const allXml = `${documentXml}\n${settingsXml}\n${stylesXml}`;
+    expect(allXml).not.toContain("<w:numPr");
+  });
+
+  it("sem w:tbl introduzido com ativos compostos", async () => {
+    const input = compositeInput(
+      singleRegionBlocks("layout-25-1", [25]),
+      [region("layout-25-1", "quadro-1-page-25", "quadro", 25, 25)],
+      { "quadro-1-page-25::p25::rlayout-25-1": compositeAsset("q") },
+      { statistics: regionStats(1, 1) },
+    );
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).not.toContain("<w:tbl");
+  });
+
+  it("texto do corpo nao desaparece com ativos compostos", async () => {
+    const input = compositeInput(
+      singleRegionBlocks("layout-25-1", [25]),
+      [region("layout-25-1", "quadro-1-page-25", "quadro", 25, 25)],
+      { "quadro-1-page-25::p25::rlayout-25-1": compositeAsset("q") },
+      { statistics: regionStats(1, 1) },
+    );
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentText(documentXml)).toContain("Texto antes do elemento visual.");
+    expect(documentText(documentXml)).toContain("Texto depois do elemento visual.");
+  });
+});
