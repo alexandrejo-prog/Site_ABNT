@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import JSZip from "jszip";
@@ -169,11 +169,11 @@ describe("exportacao textual minima de PDF reconstruido", () => {
     const text = documentText(documentXml);
 
     expect(text).not.toContain("Rascunho textual extraído de PDF");
-    expect(text.indexOf("UNIVERSIDADE FEDERAL DE LAVRAS")).toBeLessThan(text.indexOf("NOTA DE REVISÃO"));
+    expect(text).not.toContain("NOTA DE REVISÃO");
+    expect(text).not.toContain("Universidade Federal de Lavras".toUpperCase());
     expect(text).toContain("Alexandre Andrade");
     expect(text).toContain("TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL");
     expect(text).toContain("Dissertação apresentada à Universidade Federal de Lavras");
-    expect(text).toContain("NOTA DE REVISÃO");
     expect(text).toContain("RESUMO");
     expect(text).toContain("Palavras-chave:");
     expect(text).toContain("ABSTRACT");
@@ -494,8 +494,7 @@ describe("exportacao textual minima de PDF reconstruido", () => {
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
     const marker = "Elemento visual não inserido neste rascunho textual";
     const markerCount = (documentXml.match(new RegExp(marker, "g")) || []).length;
-    expect(documentXml).toContain("Elementos visuais representados por marcadores:");
-    expect(documentXml).toContain(`Elementos visuais representados por marcadores: ${markerCount}`);
+    expect(markerCount).toBeGreaterThan(0);
   });
 
   it("nao existe w:tbl no documento", async () => {
@@ -585,7 +584,7 @@ describe("estabilizacao de paginacao e folha de rosto", () => {
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
     const natureParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find((p) => p.includes("Dissertação apresentada à Universidade Federal de Lavras"));
     expect(natureParagraph).toBeDefined();
-    expect(natureParagraph).toContain('<w:ind w:left="4535"');
+    expect(natureParagraph).toContain('<w:ind w:left="5953"');
     expect(natureParagraph).not.toContain('w:firstLine="');
     expect(natureParagraph).toContain('<w:spacing w:before="900" w:after="0" w:line="240"');
     expect(natureParagraph).toContain('w:val="both"');
@@ -616,8 +615,8 @@ describe("estabilizacao de paginacao e folha de rosto", () => {
     const institutionParagraph = paragraphs.find((p) => p.includes("Universidade Federal de Lavras") && !p.includes("Dissertação apresentada") && !p.includes("Logo UFLA"));
     expect(programParagraph).toBeDefined();
     expect(institutionParagraph).toBeDefined();
-    expect(programParagraph).toContain('<w:ind w:left="4535"');
-    expect(institutionParagraph).toContain('<w:ind w:left="4535"');
+    expect(programParagraph).toContain('<w:ind w:left="5953"');
+    expect(institutionParagraph).toContain('<w:ind w:left="5953"');
     expect(programParagraph).toContain('<w:spacing w:before="0" w:after="0" w:line="240"');
     expect(institutionParagraph).toContain('<w:spacing w:before="0" w:after="0" w:line="240"');
   });
@@ -627,9 +626,9 @@ describe("estabilizacao de paginacao e folha de rosto", () => {
     const paragraphs = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []);
     const advisorParagraph = paragraphs.find((p) => p.includes("Orientador: Prof. João Silva"));
     expect(advisorParagraph).toBeDefined();
-    expect(advisorParagraph).toContain('<w:ind w:left="4535"');
+    expect(advisorParagraph).toContain('<w:ind w:left="5953"');
     expect(advisorParagraph).toContain('<w:spacing w:before="240" w:after="0" w:line="240"');
-    expect(advisorParagraph).toContain('w:val="left"');
+      expect(advisorParagraph).toContain('w:val="center"');
     expect(advisorParagraph).not.toContain("<w:b/>");
   });
 
@@ -647,9 +646,9 @@ describe("estabilizacao de paginacao e folha de rosto", () => {
     const paragraphs = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []);
     const coadvisorParagraph = paragraphs.find((p) => p.includes("Coorientador: Prof. Maria Souza"));
     expect(coadvisorParagraph).toBeDefined();
-    expect(coadvisorParagraph).toContain('<w:ind w:left="4535"');
+    expect(coadvisorParagraph).toContain('<w:ind w:left="5953"');
     expect(coadvisorParagraph).toContain('<w:spacing w:before="0" w:after="0" w:line="240"');
-    expect(coadvisorParagraph).toContain('w:val="left"');
+      expect(coadvisorParagraph).toContain('w:val="center"');
     expect(coadvisorParagraph).not.toContain("<w:b/>");
   });
 
@@ -679,8 +678,8 @@ describe("estabilizacao de paginacao e folha de rosto", () => {
     const institutionParagraph = paragraphs.find((p) => p.includes("Universidade Federal de Lavras") && !p.includes("Dissertação apresentada") && !p.includes("Logo UFLA"));
     expect(programParagraph).toBeDefined();
     expect(institutionParagraph).toBeDefined();
-    expect(programParagraph).toContain('<w:ind w:left="4535"');
-    expect(institutionParagraph).toContain('<w:ind w:left="4535"');
+    expect(programParagraph).toContain('<w:ind w:left="5953"');
+    expect(institutionParagraph).toContain('<w:ind w:left="5953"');
   });
 
   it("advisor e coadvisor usam o mesmo recuo estrutural", async () => {
@@ -689,9 +688,9 @@ describe("estabilizacao de paginacao e folha de rosto", () => {
     const advisorParagraph = paragraphs.find((p) => p.includes("Orientador: Prof. João Silva"));
     const coadvisorParagraph = paragraphs.find((p) => p.includes("Coorientador"));
     expect(advisorParagraph).toBeDefined();
-    expect(advisorParagraph).toContain('<w:ind w:left="4535"');
+    expect(advisorParagraph).toContain('<w:ind w:left="5953"');
     if (coadvisorParagraph) {
-      expect(coadvisorParagraph).toContain('<w:ind w:left="4535"');
+      expect(coadvisorParagraph).toContain('<w:ind w:left="5953"');
     }
   });
 
@@ -708,10 +707,60 @@ describe("estabilizacao de paginacao e folha de rosto", () => {
   it("cidade e ano continuam centralizados", async () => {
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
     const paragraphs = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []);
-    const cityParagraph = paragraphs.find((p) => p.includes("Lavras - MG") && p.includes('w:val="center"'));
+      const cityParagraph = paragraphs.find((p) => p.includes("LAVRAS-MG") && p.includes('w:val="center"'));
     const yearParagraph = paragraphs.find((p) => p.includes("2025") && p.includes('w:val="center"'));
     expect(cityParagraph).toBeDefined();
     expect(yearParagraph).toBeDefined();
+  });
+
+  it("logotipo da capa tem 7 cm por 2,85 cm", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    expect(documentXml).toContain('cx="2524125"');
+    expect(documentXml).toContain('cy="1028700"');
+  });
+
+  it("autor e titulo da capa ficam em negrito com 14 e 16 pontos", async () => {
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(baseInput()));
+    const authorParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find(
+      (p) => p.includes("Alexandre Andrade") && !p.includes("TELETRABALHO") && p.includes('w:val="center"'),
+    );
+    const titleParagraph = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).find(
+      (p) => p.includes("TELETRABALHO NA ADMINISTRAÇÃO PÚBLICA FEDERAL") && p.includes('w:val="center"'),
+    );
+    expect(authorParagraph).toBeDefined();
+    expect(titleParagraph).toBeDefined();
+    expect(authorParagraph).toContain("<w:b/>");
+    expect(authorParagraph).toContain('<w:sz w:val="28"');
+    expect(titleParagraph).toContain("<w:b/>");
+    expect(titleParagraph).toContain('<w:sz w:val="32"');
+  });
+
+  it("secao primaria inicia em nova pagina e titulos especiais ficam centralizados", async () => {
+    const input = baseInput({
+      reconstruction: {
+        ...baseInput().reconstruction,
+        bodyStart: { found: true, pageNumber: 17, lineIndex: 1, text: "1 INTRODUÇÃO" },
+        blocks: [
+          { type: "heading", text: "1 INTRODUÇÃO", pageStart: 17, pageEnd: 17, sourceLines: [{ pageNumber: 17, lineIndex: 1 }], confidence: "high", reasons: [] },
+          { type: "paragraph", text: "Texto de introdução.", pageStart: 17, pageEnd: 17, sourceLines: [{ pageNumber: 17, lineIndex: 2 }], confidence: "medium", reasons: [] },
+          { type: "heading", text: "2 REFERENCIAL TEÓRICO", pageStart: 40, pageEnd: 40, sourceLines: [{ pageNumber: 40, lineIndex: 1 }], confidence: "high", reasons: [] },
+          { type: "paragraph", text: "Texto do referencial.", pageStart: 40, pageEnd: 40, sourceLines: [{ pageNumber: 40, lineIndex: 2 }], confidence: "medium", reasons: [] },
+          { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        ],
+      },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    const segs = documentXml.split("</w:p>");
+    const headingIdx = (needle: string) => segs.findIndex((s) => s.includes(needle) && s.includes("bookmarkStart"));
+    const introIdx = headingIdx("1 INTRODUÇÃO");
+    const referencialIdx = headingIdx("2 REFERENCIAL TEÓRICO");
+    const referenciasIdx = headingIdx("REFERÊNCIAS");
+    expect(introIdx).toBeGreaterThan(0);
+    expect(referencialIdx).toBeGreaterThan(0);
+    expect(referenciasIdx).toBeGreaterThan(0);
+    expect(segs[introIdx - 1]).not.toContain('<w:br w:type="page"');
+    expect(segs[referencialIdx - 1]).toContain('<w:br w:type="page"');
+    expect(segs[referenciasIdx]).toContain('w:jc w:val="center"');
   });
 
   it("margens permanecem 3 cm superior, 3 cm esquerda, 2 cm inferior, 2 cm direita", async () => {
@@ -1523,11 +1572,7 @@ describe("ativos visuais de regioes pdf", () => {
     });
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
     const markerMatches = documentXml.match(/Elemento visual não inserido/g) ?? [];
-    const summaryMatch = documentXml.match(/Elementos visuais representados por marcadores: (\d+)/);
-    expect(summaryMatch).not.toBeNull();
-    const expected = Number(summaryMatch![1]);
-    expect(markerMatches.length).toBe(expected);
-    expect(expected).toBe(1);
+    expect(markerMatches.length).toBe(1);
   });
 
   it("unresolved com layoutRegionId sem região e com ativo gera marcador e contagem 1", async () => {
@@ -1541,11 +1586,7 @@ describe("ativos visuais de regioes pdf", () => {
     });
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
     const markerMatches = documentXml.match(/Conteúdo com estrutura visual não resolvida/g) ?? [];
-    const summaryMatch = documentXml.match(/Elementos visuais representados por marcadores: (\d+)/);
-    expect(summaryMatch).not.toBeNull();
-    const expected = Number(summaryMatch![1]);
-    expect(markerMatches.length).toBe(expected);
-    expect(expected).toBe(1);
+    expect(markerMatches.length).toBe(1);
   });
 
   it("unresolved com região correspondente e ativo nao gera marcador e contagem 0", async () => {
@@ -1564,9 +1605,6 @@ describe("ativos visuais de regioes pdf", () => {
     expect(documentXml).toContain("<w:drawing");
     expect(documentXml).not.toContain("Elemento visual não inserido");
     expect(documentXml).not.toContain("Conteúdo com estrutura visual não resolvida");
-    const summaryMatch = documentXml.match(/Elementos visuais representados por marcadores: (\d+)/);
-    expect(summaryMatch).not.toBeNull();
-    expect(Number(summaryMatch![1])).toBe(0);
   });
 
   it("unresolved sem região e sem ativo gera marcador e contagem 1", async () => {
@@ -1579,11 +1617,7 @@ describe("ativos visuais de regioes pdf", () => {
     });
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
     const markerMatches = documentXml.match(/Conteúdo com estrutura visual não resolvida/g) ?? [];
-    const summaryMatch = documentXml.match(/Elementos visuais representados por marcadores: (\d+)/);
-    expect(summaryMatch).not.toBeNull();
-    const expected = Number(summaryMatch![1]);
-    expect(markerMatches.length).toBe(expected);
-    expect(expected).toBe(1);
+    expect(markerMatches.length).toBe(1);
   });
 
   it("imagem de quadro nao gera tabela nem numeracao e figura continua funcionando", async () => {
@@ -2121,8 +2155,8 @@ describe("ativos visuais compostos por recorte (chave multipagina)", () => {
     const regions = [region("layout-25-1", "quadro-1-page-25", "quadro", 25, 25)];
     const without = compositeInput(blocks, regions, {}, { statistics: regionStats(1, 1) });
     const withAsset = compositeInput(blocks, regions, { "quadro-1-page-25::p25::rlayout-25-1": compositeAsset("q") }, { statistics: regionStats(1, 1) });
-    const markerWithout = Number((await loadDocxParts(await buildPdfTextDraftDocxBlob(without))).documentXml.match(/Elementos visuais representados por marcadores: (\d+)/)![1]);
-    const markerWith = Number((await loadDocxParts(await buildPdfTextDraftDocxBlob(withAsset))).documentXml.match(/Elementos visuais representados por marcadores: (\d+)/)![1]);
+    const markerWithout = (await loadDocxParts(await buildPdfTextDraftDocxBlob(without))).documentXml.match(/Elemento visual não inserido/g)?.length ?? 0;
+    const markerWith = (await loadDocxParts(await buildPdfTextDraftDocxBlob(withAsset))).documentXml.match(/Elemento visual não inserido/g)?.length ?? 0;
     expect(markerWith).toBeLessThan(markerWithout);
   });
 

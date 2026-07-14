@@ -24,6 +24,8 @@ const A4_WIDTH_TWIP = 11906;
 const A4_HEIGHT_TWIP = 16838;
 const CM_3_TWIP = 1701;
 const CM_2_TWIP = 1134;
+const LOGO_WIDTH_TWIP = 265;
+const LOGO_HEIGHT_TWIP = 108;
 const BODY_FIRST_LINE_TWIP = 850;
 const LIST_HANGING_TWIP = 425;
 const ONE_AND_HALF_LINE_TWIP = 360;
@@ -31,7 +33,7 @@ const SINGLE_LINE_TWIP = 240;
 const ZERO_SPACING = { before: 0, after: 0 };
 const FONT = "Times New Roman";
 const UFLA_LOGO_PATH = "/assets/ufla-logo.jpeg";
-const TITLE_PAGE_NATURE_LEFT_TWIP = 4535;
+const TITLE_PAGE_NATURE_LEFT_TWIP = 5953;
 
 type TocEntry = {
   title: string;
@@ -55,10 +57,10 @@ function pageBreak(): Paragraph {
   return paragraph([new PageBreak()], { spacing: ZERO_SPACING });
 }
 
-function centered(text: string, options: { bold?: boolean; size?: number; before?: number; after?: number } = {}): Paragraph {
+function centered(text: string, options: { bold?: boolean; size?: number; before?: number; after?: number; line?: number } = {}): Paragraph {
   return paragraph([run(cleanText(text) || " ", options.size ?? 24, { bold: options.bold })], {
     alignment: AlignmentType.CENTER,
-    spacing: { before: options.before ?? 0, after: options.after ?? 0, line: SINGLE_LINE_TWIP },
+    spacing: { before: options.before ?? 0, after: options.after ?? 0, line: options.line ?? SINGLE_LINE_TWIP },
     indent: { firstLine: 0 },
   });
 }
@@ -121,6 +123,33 @@ function bodyHeading(text: string, entry?: TocEntry): Paragraph {
   });
 }
 
+function centeredHeading(text: string, entry?: TocEntry): Paragraph {
+  const children: TextRun[] = [];
+  if (entry) children.push(run(`__PDF_BM_START_${entry.bookmark}__`, 1));
+  children.push(run(cleanText(text), 24, { bold: true }));
+  if (entry) children.push(run(`__PDF_BM_END_${entry.bookmark}__`, 1));
+  return paragraph(children, {
+    alignment: AlignmentType.CENTER,
+    indent: { firstLine: 0 },
+    spacing: { ...ZERO_SPACING, line: ONE_AND_HALF_LINE_TWIP },
+    keepNext: true,
+    keepLines: true,
+    widowControl: true,
+  });
+}
+
+function isSpecialCenteredHeading(text: string): boolean {
+  const key = normalizeHeadingKey(text);
+  return key === "REFERENCIAS" || key.startsWith("APENDICE") || key.startsWith("ANEXO");
+}
+
+function isPrimarySectionHeading(text: string): boolean {
+  const cleaned = cleanText(text);
+  const key = normalizeHeadingKey(text);
+  if (key === "REFERENCIAS" || key.startsWith("APENDICE") || key.startsWith("ANEXO")) return true;
+  return /^\d+\s+\S/.test(cleaned) && !/^\d+\.\d+/.test(cleaned);
+}
+
 function normalizeHeadingKey(text: string): string {
   return cleanText(text)
     .toUpperCase()
@@ -169,41 +198,6 @@ function markerForBlock(block: PdfReconstructedBlockDiagnostic, regions: Map<str
   return `[Elemento visual não inserido neste rascunho textual - ${visualKindLabel(region.kind)}, ${originalPagesLabel(pageStart, pageEnd)}. Consulte o PDF original.]`;
 }
 
-function computeMarkerCount(input: PdfTextDraftExportInput): number {
-  const keys = new Set<string>();
-  const visualAssets = input.visualAssets ?? {};
-  for (const block of input.reconstruction.blocks) {
-    if (block.type !== "unresolved") continue;
-    const region = block.layoutRegionId ? input.reconstruction.layoutRegions.find((r) => r.id === block.layoutRegionId) : undefined;
-    const dedupKey = region?.logicalVisualId ?? block.layoutRegionId ?? `unresolved-${block.pageStart}-${block.sourceLines[0]?.lineIndex ?? 0}`;
-    if (!hasVisualAssetForRegion(region, visualAssets)) keys.add(dedupKey);
-  }
-  for (const region of input.reconstruction.layoutRegions) {
-    if (!isGraphicLikeKind(region.kind)) continue;
-    const dedupKey = region.logicalVisualId ?? region.id;
-    if (keys.has(dedupKey)) continue;
-    if (!hasVisualAssetForRegion(region, visualAssets)) {
-      const hasUnresolved = input.reconstruction.blocks.some((b) => b.layoutRegionId === region.id && b.type === "unresolved");
-      if (!hasUnresolved) keys.add(dedupKey);
-    }
-  }
-  return keys.size;
-}
-
-function technicalSummary(input: PdfTextDraftExportInput): string[] {
-  const stats = input.reconstruction.statistics;
-  const markerCount = computeMarkerCount(input);
-  return [
-    `Arquivo de origem: ${input.fileName}`,
-    `Páginas do PDF: ${input.pageCount}`,
-    `Parágrafos reconstruídos: ${stats.paragraphCount}`,
-    `Títulos reconstruídos: ${stats.headingCount}`,
-    `Elementos visuais não inseridos: ${stats.layoutRegionCount}`,
-    `Elementos visuais representados por marcadores: ${markerCount}`,
-    `Hifenizações incertas: ${stats.uncertainHyphenationCount}`,
-  ];
-}
-
 async function defaultLogo(): Promise<PdfTextDraftLogoAsset | undefined> {
   if (typeof fetch !== "function") return undefined;
   try {
@@ -219,28 +213,34 @@ async function resolveLogo(input: PdfTextDraftExportInput): Promise<PdfTextDraft
   return input.logo ?? defaultLogo();
 }
 
+function formatCity(city: string): string {
+  return city
+    .toUpperCase()
+    .replace(/\s*(?:-|–|—)\s*/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function coverParagraphs(input: PdfTextDraftExportInput, logo?: PdfTextDraftLogoAsset): Paragraph[] {
   const cover = input.pretextual?.cover;
-  const institution = cover?.institution ?? "UNIVERSIDADE FEDERAL DE LAVRAS";
   const author = cover?.author ?? "[AUTOR AUSENTE]";
   const title = cover?.title ?? "[TÍTULO AUSENTE]";
   const subtitle = cover?.subtitle;
-  const city = cover?.city ?? "[LOCAL AUSENTE]";
+  const city = formatCity(cover?.city ?? "[LOCAL AUSENTE]");
   const year = cover?.year ?? "[ANO AUSENTE]";
   const paragraphs: Paragraph[] = [];
   if (logo) {
     paragraphs.push(paragraph([new ImageRun({
       data: logo.data,
-      transformation: { width: logo.width ?? 170, height: logo.height ?? 69 },
+      transformation: { width: LOGO_WIDTH_TWIP, height: LOGO_HEIGHT_TWIP },
       altText: { title: "Logo UFLA", description: "Universidade Federal de Lavras", name: "Logo UFLA" },
     })], { alignment: AlignmentType.CENTER, spacing: ZERO_SPACING }));
   }
-  paragraphs.push(centered(institution, { size: 24, before: logo ? 120 : 0 }));
-  paragraphs.push(centered(author, { size: 24, before: 900 }));
-  paragraphs.push(centered(title, { size: 24, bold: true, before: 900 }));
-  if (subtitle) paragraphs.push(centered(subtitle, { size: 24, bold: true }));
-  paragraphs.push(centered(city, { size: 24, before: 3600 }));
-  paragraphs.push(centered(year, { size: 24 }));
+  paragraphs.push(centered(author, { size: 28, bold: true, before: logo ? 120 : 0 }));
+  paragraphs.push(centered(title, { size: 32, bold: true, before: 900, line: ONE_AND_HALF_LINE_TWIP }));
+  if (subtitle) paragraphs.push(centered(subtitle, { size: 32, bold: true, line: ONE_AND_HALF_LINE_TWIP }));
+  paragraphs.push(centered(city, { size: 28, bold: true, before: 2400 }));
+  paragraphs.push(centered(year, { size: 28, bold: true, before: 2400 }));
   paragraphs.push(pageBreak());
   return paragraphs;
 }
@@ -265,9 +265,9 @@ function titlePageParagraphs(input: PdfTextDraftExportInput): Paragraph[] {
   const city = titlePage?.city ?? cover?.city ?? "[LOCAL AUSENTE]";
   const year = titlePage?.year ?? cover?.year ?? "[ANO AUSENTE]";
   return [
-    centered(author),
-    centered(title, { bold: true, before: 1200 }),
-    ...(titlePage?.subtitle ? [centered(titlePage.subtitle, { bold: true })] : []),
+    centered(author, { size: 28, bold: true }),
+    centered(title, { size: 32, bold: true, before: 1200, line: ONE_AND_HALF_LINE_TWIP }),
+    ...(titlePage?.subtitle ? [centered(titlePage.subtitle, { size: 32, bold: true, line: ONE_AND_HALF_LINE_TWIP })] : []),
     ...(titlePage?.natureText
       ? [titlePageNatureParagraph(titlePage.natureText, { before: 900, alignment: AlignmentType.JUSTIFIED })]
       : []),
@@ -278,22 +278,13 @@ function titlePageParagraphs(input: PdfTextDraftExportInput): Paragraph[] {
       ? [titlePageNatureParagraph(titlePage.institution, { before: 0, alignment: AlignmentType.JUSTIFIED })]
       : []),
     ...(titlePage?.advisor
-      ? [titlePageNatureParagraph(titlePage.advisor, { before: 240, alignment: AlignmentType.LEFT })]
+      ? [titlePageNatureParagraph(titlePage.advisor, { before: 240, alignment: AlignmentType.CENTER })]
       : []),
     ...(titlePage?.coadvisor
-      ? [titlePageNatureParagraph(titlePage.coadvisor, { before: 0, alignment: AlignmentType.LEFT })]
+      ? [titlePageNatureParagraph(titlePage.coadvisor, { before: 0, alignment: AlignmentType.CENTER })]
       : []),
-    centered(city, { before: 3600 }),
-    centered(year),
-    pageBreak(),
-  ];
-}
-
-function noteParagraphs(input: PdfTextDraftExportInput): Paragraph[] {
-  return [
-    centered("NOTA DE REVISÃO", { bold: true }),
-    singleJustified("Este documento foi reconstruído automaticamente a partir de um PDF. Revise os pré-textuais, as citações, as hifenizações, os títulos e os elementos visuais antes do uso acadêmico."),
-    ...technicalSummary(input).map((line) => left(line, { size: 20 })),
+    centered(formatCity(city), { size: 28, bold: true, before: 2400 }),
+    centered(year, { size: 28, bold: true, before: 2400 }),
     pageBreak(),
   ];
 }
@@ -442,6 +433,7 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
   }
 
   let inReferences = false;
+  let emittedPrimarySection = false;
 
   for (const block of input.reconstruction.blocks) {
     const text = cleanText(block.text);
@@ -450,7 +442,11 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
       const headingKey = normalizeHeadingKey(text);
       if (headingKey === "REFERENCIAS") inReferences = true;
       else if (headingKey.startsWith("APENDICE") || headingKey.startsWith("ANEXO")) inReferences = false;
-      paragraphs.push(bodyHeading(text, entryByTitle.get(text)));
+      if (isPrimarySectionHeading(text)) {
+        if (emittedPrimarySection) paragraphs.push(pageBreak());
+        emittedPrimarySection = true;
+      }
+      paragraphs.push(isSpecialCenteredHeading(text) ? centeredHeading(text, entryByTitle.get(text)) : bodyHeading(text, entryByTitle.get(text)));
     }
     if (block.type === "paragraph") {
       if (blockInsideVisualSpan(block, visualSpans, pagesWithBodyText)) continue;
@@ -463,7 +459,7 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
     if (block.type === "caption") {
       const region = block.layoutRegionId ? regions.get(block.layoutRegionId) : undefined;
       const dedupKey = region?.logicalVisualId ?? block.layoutRegionId ?? `caption-${block.pageStart}`;
-      paragraphs.push(left(text, { size: 22 }));
+      paragraphs.push(left(text, { size: 24 }));
       if (region && !emittedMarkerKeys.has(dedupKey)) {
         const hasUnresolved = input.reconstruction.blocks.some(
           (b) => b.type === "unresolved" && b.layoutRegionId === block.layoutRegionId
@@ -551,11 +547,10 @@ export async function buildPdfTextDraftDocxBlob(input: PdfTextDraftExportInput):
   const logo = input.includeReconstructedPretextuals === false ? undefined : await resolveLogo(input);
   const entries = makeTocEntries(input.reconstruction.blocks);
   const pretextualChildren = input.includeReconstructedPretextuals === false
-    ? [...noteParagraphs(input), ...tocParagraphs(entries)]
+    ? [...tocParagraphs(entries)]
     : [
       ...coverParagraphs(input, logo),
       ...titlePageParagraphs(input),
-      ...noteParagraphs(input),
       ...abstractParagraphs(input.pretextual?.resumo, "RESUMO"),
       ...abstractParagraphs(input.pretextual?.abstract, "ABSTRACT"),
       ...tocParagraphs(entries),
