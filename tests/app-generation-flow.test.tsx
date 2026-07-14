@@ -3,16 +3,25 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const { generateMock, importDocumentFileMock, saveAsMock } = vi.hoisted(() => ({
+const { generateMock, importDocumentFileMock, pdfDraftBuildMock, pdfDraftFileNameMock, pdfDraftValidateMock, saveAsMock, templateForWorkTypeMock } = vi.hoisted(() => ({
   generateMock: vi.fn(async () => new Blob(["docx"], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })),
   importDocumentFileMock: vi.fn(),
+  pdfDraftBuildMock: vi.fn(async () => new Blob(["pdf-text-draft"], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })),
+  pdfDraftFileNameMock: vi.fn(() => "andrade-rascunho-textual.docx"),
+  pdfDraftValidateMock: vi.fn(() => ({ canExport: true, blockers: [] as string[], warnings: ["Há blocos visuais não resolvidos que serão representados por marcadores."] as string[] })),
   saveAsMock: vi.fn(),
+  templateForWorkTypeMock: vi.fn(() => ({ id: "mock-template", generate: generateMock })),
 }));
 
 vi.mock("file-saver", () => ({ saveAs: saveAsMock }));
 vi.mock("../src/import-docx", () => ({ importDocumentFile: importDocumentFileMock }));
 vi.mock("../src/document-template", () => ({
-  templateForWorkType: vi.fn(() => ({ id: "mock-template", generate: generateMock })),
+  templateForWorkType: templateForWorkTypeMock,
+}));
+vi.mock("../src/export-pdf-text-draft-docx", () => ({
+  buildPdfTextDraftDocxBlob: pdfDraftBuildMock,
+  pdfTextDraftFileName: pdfDraftFileNameMock,
+  validatePdfTextDraftExport: pdfDraftValidateMock,
 }));
 
 import App from "../src/App";
@@ -34,11 +43,192 @@ function getGenerateAnywayCheckbox(): HTMLInputElement {
   return screen.getByRole("checkbox", { name: /Gerar rascunho/i }) as HTMLInputElement;
 }
 
+function pdfDiagnosticResult(fileName = "diagnostico.pdf") {
+  return {
+    sourceKind: "pdf",
+    documentMode: "pdf-diagnostic",
+    text: "",
+    editorText: "",
+    fields: emptyAcademicFields(),
+    confidence: emptyConfidenceMap(),
+    messages: ["O PDF foi lido para diagnóstico. A conversão para DOCX ainda não está habilitada nesta etapa."],
+    blocks: [],
+    importedImages: [],
+    importedTables: [],
+    pdfDiagnostic: {
+      fileName,
+      pageCount: 139,
+      pretextual: {
+        cover: {
+          institution: "UNIVERSIDADE FEDERAL DE LAVRAS",
+          author: "Maria Silva",
+          title: "Titulo importado do PDF",
+          city: "Lavras - MG",
+          year: "2025",
+          confidence: "high",
+          sourceLines: [{ pageNumber: 1, lineIndex: 0 }],
+        },
+        titlePage: {
+          author: "Maria Silva",
+          title: "Titulo importado do PDF",
+          natureText: "Dissertacao apresentada a Universidade Federal de Lavras.",
+          program: "Programa de Pos-Graduacao",
+          advisor: "Orientador: Prof. Teste",
+          city: "Lavras - MG",
+          year: "2025",
+          confidence: "high",
+          sourceLines: [{ pageNumber: 1, lineIndex: 0 }],
+        },
+        resumo: {
+          title: "RESUMO",
+          text: "Resumo reconstruido.",
+          keywordsLabel: "Palavras-chave:",
+          keywords: "PDF. Teste",
+          pageNumber: 1,
+          confidence: "high",
+          sourceLines: [{ pageNumber: 1, lineIndex: 0 }],
+        },
+        abstract: {
+          title: "ABSTRACT",
+          text: "Abstract rebuilt.",
+          keywordsLabel: "Keywords:",
+          keywords: "PDF. Test",
+          pageNumber: 1,
+          confidence: "high",
+          sourceLines: [{ pageNumber: 1, lineIndex: 0 }],
+        },
+        warnings: [],
+      },
+      bodyStart: { found: true, pageNumber: 2, lineIndex: 0, text: "1 INTRODUÇÃO", matchType: "numbered-introduction" },
+      pages: [
+        {
+          pageNumber: 1,
+          width: 595,
+          height: 842,
+          rotation: 0,
+          rawText: "Texto bruto da pagina um.",
+          textItemCount: 7,
+          items: [{ text: "Texto", x: 72, y: 80, width: 40, height: 12 }],
+          lines: [{ pageNumber: 1, text: "Texto bruto da pagina um.", items: [], left: 72, right: 220, top: 80, bottom: 92, height: 12 }],
+        },
+        {
+          pageNumber: 2,
+          width: 595,
+          height: 842,
+          rotation: 0,
+          rawText: "1 INTRODUÇÃO Texto bruto da pagina dois.",
+          textItemCount: 8,
+          items: [{ text: "1 INTRODUÇÃO", x: 72, y: 80, width: 120, height: 12 }],
+          lines: [
+            { pageNumber: 2, text: "1 INTRODUÇÃO", items: [], left: 72, right: 192, top: 80, bottom: 92, height: 12 },
+            { pageNumber: 2, text: "Texto bruto da pagina dois.", items: [], left: 72, right: 240, top: 110, bottom: 122, height: 12 },
+          ],
+        },
+      ],
+      reconstruction: {
+        bodyStart: { found: true, pageNumber: 2, lineIndex: 0, text: "1 INTRODUÇÃO", matchType: "numbered-introduction", reason: "Título de introdução seguido por texto corrido." },
+        ignoredLines: [{ pageNumber: 2, lineIndex: 2, role: "page-number", text: "2" }],
+        bodyLayoutMetrics: {
+          dominantLeft: 72,
+          dominantRight: 500,
+          medianLineHeight: 12,
+          medianLineGap: 6,
+          probableFirstLineIndent: 36,
+          probableBodyFontHeight: 12,
+          confidence: "medium",
+        },
+        layoutRegions: [
+          {
+            id: "layout-1-1",
+            pageStart: 1,
+            pageEnd: 1,
+            startLineIndex: 0,
+            endLineIndex: 0,
+            kind: "quadro",
+            caption: "Quadro 1 - Teste",
+            source: "Fonte: teste.",
+            confidence: "high",
+            reasons: ["Legenda visual identificada."],
+            logicalVisualId: "quadro-1-page-1",
+          },
+        ],
+        hyphenation: [
+          {
+            pageNumber: 2,
+            lineIndex: 1,
+            originalEnd: "administra-",
+            nextStart: "ção",
+            action: "joined-without-hyphen",
+            reason: "Quebra de palavra recomposta com proximo fragmento minusculo.",
+          },
+        ],
+        alerts: ["Quantidade elevada de paragrafos de uma linha."],
+        statistics: {
+          paragraphCount: 1,
+          headingCount: 1,
+          listItemCount: 0,
+          captionCount: 0,
+          sourceCount: 0,
+          unresolvedCount: 1,
+          removedPageNumberCount: 1,
+          removedHeaderCount: 0,
+          removedFooterCount: 0,
+          averageLinesPerParagraph: 2,
+          medianLinesPerParagraph: 2,
+          singleLineParagraphCount: 0,
+          multiPageParagraphCount: 1,
+          lowConfidenceBlockCount: 1,
+          uncertainHyphenationCount: 0,
+          layoutRegionCount: 1,
+          mixedCaseHeadingCount: 0,
+          combinedHeadingCount: 0,
+        },
+        blocks: [
+          {
+            type: "heading",
+            text: "1 INTRODUÇÃO",
+            pageStart: 2,
+            pageEnd: 2,
+            sourceLines: [{ pageNumber: 2, lineIndex: 0 }],
+            confidence: "high",
+            reasons: ["Padrão estrutural de título detectado."],
+          },
+          {
+            type: "paragraph",
+            text: "Texto bruto da pagina dois.",
+            pageStart: 2,
+            pageEnd: 3,
+            sourceLines: [{ pageNumber: 2, lineIndex: 1 }, { pageNumber: 3, lineIndex: 0 }],
+            confidence: "medium",
+            reasons: ["Linhas visuais compatíveis foram unidas como parágrafo diagnóstico."],
+          },
+          {
+            type: "unresolved",
+            text: "Conteúdo de quadro sensível a layout.",
+            pageStart: 1,
+            pageEnd: 1,
+            sourceLines: [{ pageNumber: 1, lineIndex: 0 }],
+            confidence: "low",
+            reasons: ["Conteúdo marcado como sensível a layout; não foi convertido em parágrafo."],
+            layoutRegionId: "layout-1-1",
+          },
+        ],
+      },
+      warnings: ["O PDF foi lido para diagnóstico. A conversão para DOCX ainda não está habilitada nesta etapa."],
+    },
+  };
+}
+
 describe("fluxo real de bloqueio de geração (App)", () => {
   beforeEach(() => {
     generateMock.mockClear();
     importDocumentFileMock.mockReset();
+    pdfDraftBuildMock.mockClear();
+    pdfDraftFileNameMock.mockClear();
+    pdfDraftValidateMock.mockReset();
+    pdfDraftValidateMock.mockReturnValue({ canExport: true, blockers: [] as string[], warnings: ["Há blocos visuais não resolvidos que serão representados por marcadores."] as string[] });
     saveAsMock.mockClear();
+    templateForWorkTypeMock.mockClear();
   });
 
   afterEach(() => {
@@ -297,6 +487,202 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     await screen.findByText(/O tipo atual é Projeto de pesquisa. O nome do arquivo importado não será usado para alterar o modelo./);
   });
 
+  it("importar PDF preserva campos e editor, oculta interface academica e restaura ao remover", async () => {
+    const user = userEvent.setup();
+    importDocumentFileMock.mockResolvedValue(pdfDiagnosticResult("andrade.pdf"));
+
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "dissertacao");
+    fireEvent.change(getTitleInput(), { target: { value: "Título preservado" } });
+    fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
+    fireEvent.change(screen.getByLabelText("Introdução"), { target: { value: "Texto acadêmico preservado." } });
+    await user.click(getButtonByText(/Montar rascunho/));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: /Editor do texto principal/i }).textContent).toContain("Texto acadêmico preservado."));
+
+    await user.upload(screen.getByLabelText("Importar arquivo"), new File(["pdf"], "andrade.pdf", { type: "application/pdf" }));
+
+    expect(await screen.findByText(/Leitura de PDF/i)).toBeInTheDocument();
+    expect(screen.getByText("139")).toBeInTheDocument();
+    expect(screen.getAllByText(/Texto bruto da pagina um/)).toHaveLength(2);
+    expect(screen.getAllByText("Linhas visuais").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Parágrafos")).toBeInTheDocument();
+    expect(screen.getByText("Números de página ignorados")).toBeInTheDocument();
+    expect(screen.getByText("Regiões de layout")).toBeInTheDocument();
+    expect(screen.getByText("Métricas do corpo")).toBeInTheDocument();
+    expect(screen.getByText("Alertas diagnósticos")).toBeInTheDocument();
+    expect(screen.getByLabelText("Página do PDF")).toHaveValue(1);
+    expect(screen.getByText(/As linhas abaixo representam linhas visuais do PDF/)).toBeInTheDocument();
+    expect(screen.getByText(/Candidato de início do corpo: página 2/)).toBeInTheDocument();
+    expect(screen.getByText(/Esta reconstrução é diagnóstica/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Gerar rascunho textual DOCX/i })).toBeInTheDocument();
+    expect(screen.getByText(/Este arquivo terá pré-textuais reconstruídos/)).toBeInTheDocument();
+    expect(screen.getByText(/Há blocos visuais não resolvidos/)).toBeInTheDocument();
+    expect(screen.queryByText(/O DOCX é rascunho técnico/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Texto bruto da pagina dois/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Blocos reconstruídos/i }));
+    expect(screen.getByRole("button", { name: "Todos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Parágrafos" })).toBeInTheDocument();
+    expect(screen.getByText("Regiões de layout da página")).toBeInTheDocument();
+    expect(screen.getByText(/Conteúdo de quadro sensível a layout/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Página do PDF"), { target: { value: "2" } });
+    expect(screen.getAllByText(/Texto bruto da pagina dois/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/páginas 2-3/)).toBeInTheDocument();
+    expect(screen.getByText("Hifenização da página")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Parágrafos" }));
+    expect(screen.queryByText(/Conteúdo de quadro sensível a layout/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Gerar rascunho textual DOCX/i }));
+    await waitFor(() => expect(pdfDraftBuildMock).toHaveBeenCalledTimes(1));
+    expect((pdfDraftBuildMock.mock.calls as unknown[][])[0][0]).toMatchObject({ sourceKind: "pdf", documentMode: "pdf-text-draft", fileName: "andrade.pdf" });
+    expect(pdfDraftFileNameMock).toHaveBeenCalledWith("andrade.pdf");
+    expect(saveAsMock).toHaveBeenCalledWith(expect.any(Blob), "andrade-rascunho-textual.docx");
+    expect(screen.getByText(/Rascunho textual DOCX gerado/)).toBeInTheDocument();
+    expect(templateForWorkTypeMock).not.toHaveBeenCalled();
+    expect(generateMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /Linhas visuais/i }));
+    expect(screen.getByText("1 INTRODUÇÃO")).toBeInTheDocument();
+    expect(screen.getAllByText(/Texto bruto da pagina dois/)).toHaveLength(2);
+    expect(screen.queryByLabelText("Tipo de trabalho")).not.toBeInTheDocument();
+    expect(screen.queryByText("Validar trabalho")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Gerar DOCX/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /Editor do texto principal/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Remover importa/i }));
+
+    expect(screen.queryByText(/Leitura de PDF/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/O DOCX é rascunho técnico/)).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Título preservado")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Maria Silva")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("textbox", { name: /Editor do texto principal/i }).textContent).toContain("Texto acadêmico preservado."));
+  });
+
+  it("PDF nao chama clearDraft nem altera workType", async () => {
+    const user = userEvent.setup();
+    importDocumentFileMock.mockResolvedValue(pdfDiagnosticResult());
+
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "dissertacao");
+    window.localStorage.setItem("site-abnt:draft:v3", JSON.stringify({
+      fields: { title: "Rascunho" },
+      editorText: "Texto salvo",
+      updatedAt: new Date().toISOString(),
+    }));
+    await user.upload(screen.getByLabelText("Importar arquivo"), new File(["pdf"], "diagnostico.pdf", { type: "application/pdf" }));
+    expect(await screen.findByText(/Leitura de PDF/i)).toBeInTheDocument();
+    expect(window.localStorage.getItem("site-abnt:draft:v3")).not.toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Remover importa/i }));
+
+    expect(screen.queryByText(/Leitura de PDF/i)).not.toBeInTheDocument();
+    expect((screen.getByLabelText("Tipo de trabalho") as HTMLSelectElement).value).toBe("dissertacao");
+  });
+
+  it("bloqueadores do rascunho textual PDF nao desabilitam o botao e aparecem visiveis", async () => {
+    const user = userEvent.setup();
+    pdfDraftValidateMock.mockReturnValue({
+      canExport: false,
+      blockers: ["Nenhum parágrafo reconstruído foi encontrado."] as string[],
+      warnings: ["Há blocos de baixa confiança."] as string[],
+    });
+    importDocumentFileMock.mockResolvedValue(pdfDiagnosticResult("bloqueado.pdf"));
+
+    render(<App />);
+    await user.upload(screen.getByLabelText("Importar arquivo"), new File(["pdf"], "bloqueado.pdf", { type: "application/pdf" }));
+
+    const button = await screen.findByRole("button", { name: /Gerar rascunho textual DOCX/i });
+    expect(button).not.toBeDisabled();
+    expect(screen.getByText("Revise os bloqueadores abaixo")).toBeInTheDocument();
+    expect(screen.getByText("Nenhum parágrafo reconstruído foi encontrado.")).toBeInTheDocument();
+    expect(screen.getByText("Há blocos de baixa confiança.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Tipo de trabalho")).not.toBeInTheDocument();
+    expect(pdfDraftBuildMock).not.toHaveBeenCalled();
+    expect(templateForWorkTypeMock).not.toHaveBeenCalled();
+  });
+
+  it("importar DOCX depois de PDF volta ao fluxo estruturado normal", async () => {
+    const user = userEvent.setup();
+    importDocumentFileMock
+      .mockResolvedValueOnce({
+        ...pdfDiagnosticResult(),
+      })
+      .mockResolvedValueOnce({
+        sourceKind: "docx",
+        documentMode: "ufla-structured",
+        text: "Texto importado.",
+        editorText: "# 1 Introducao\nTexto importado.",
+        fields: {
+          ...emptyAcademicFields(),
+          workType: "artigo",
+          title: "Titulo DOCX",
+          author: "Maria Silva",
+        },
+        confidence: emptyConfidenceMap(),
+        messages: [],
+        blocks: [],
+        importedImages: [],
+        importedTables: [],
+      });
+
+    render(<App />);
+    await user.upload(screen.getByLabelText("Importar arquivo"), new File(["pdf"], "diagnostico.pdf", { type: "application/pdf" }));
+    expect(await screen.findByText(/Leitura de PDF/i)).toBeInTheDocument();
+
+    await user.upload(screen.getByLabelText("Importar arquivo"), new File(["docx"], "normal.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }));
+
+    await screen.findByDisplayValue("Titulo DOCX");
+    expect(screen.queryByText(/Leitura de PDF/i)).not.toBeInTheDocument();
+    expect(getButtonByText(/Gerar DOCX/).disabled).toBe(false);
+  });
+
+  it("importar PDF depois de DOCX preserva dados importados, imagens e tabelas ao remover", async () => {
+    const user = userEvent.setup();
+    const importedImages = [{ id: "img-1", position: 1, status: "preserved" }];
+    const importedTables = [{ id: "tbl-1", rows: [[{ text: "A" }]], rowCount: 1, columnCount: 1, position: 2, origin: "docx-table", status: "preserved" }];
+    importDocumentFileMock
+      .mockResolvedValueOnce({
+        sourceKind: "docx",
+        documentMode: "ufla-structured",
+        text: "Texto importado.",
+        editorText: "# 1 Introducao\nTexto importado.",
+        fields: {
+          ...emptyAcademicFields(),
+          workType: "artigo",
+          title: "Titulo DOCX",
+          author: "Maria Silva",
+        },
+        confidence: emptyConfidenceMap(),
+        messages: [],
+        blocks: [],
+        importedImages,
+        importedTables,
+      })
+      .mockResolvedValueOnce(pdfDiagnosticResult("diagnostico.pdf"));
+
+    render(<App />);
+    await user.upload(screen.getByLabelText("Importar arquivo"), new File(["docx"], "normal.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }));
+    await screen.findByDisplayValue("Titulo DOCX");
+
+    await user.upload(screen.getByLabelText("Importar arquivo"), new File(["pdf"], "diagnostico.pdf", { type: "application/pdf" }));
+
+    expect(await screen.findByText(/Leitura de PDF/i)).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Titulo DOCX")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Remover importa/i }));
+
+    expect(await screen.findByDisplayValue("Titulo DOCX")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Maria Silva")).toBeInTheDocument();
+    fireEvent.click(getGenerateAnywayCheckbox());
+    await user.click(getButtonByText(/Gerar DOCX/));
+    await waitFor(() => expect(generateMock).toHaveBeenCalledTimes(1));
+    const generationCalls = generateMock.mock.calls as unknown as Array<[{ importedImages?: unknown; importedTables?: unknown }]>;
+    const savedFileName = saveAsMock.mock.calls[0]?.[1];
+    const generationInput = generationCalls[0]?.[0];
+    expect(generationInput).toBeDefined();
+    expect(savedFileName).toBeDefined();
+    expect(generationInput?.importedImages).toEqual(importedImages);
+    expect(generationInput?.importedTables).toEqual(importedTables);
+    expect(savedFileName).not.toContain("diagnostico");
+  });
+
   it("mostra aviso de rascunho editável para dissertação", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -364,5 +750,80 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     expect(content).not.toContain("Página 1 de");
     expect(content).not.toContain("[PAGE]");
     expect(content).not.toContain("[QUEBRA DE PÁGINA]");
+  });
+
+  it("botao do rascunho textual PDF fica desabilitado somente durante geracao", async () => {
+    const user = userEvent.setup();
+    pdfDraftValidateMock.mockReturnValue({
+      canExport: true,
+      blockers: [] as string[],
+      warnings: [] as string[],
+    });
+    pdfDraftBuildMock.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return new Blob(["docx"], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    });
+    importDocumentFileMock.mockResolvedValue(pdfDiagnosticResult("ok.pdf"));
+
+    render(<App />);
+    await user.upload(screen.getByLabelText("Importar arquivo"), new File(["pdf"], "ok.pdf", { type: "application/pdf" }));
+
+    const button = await screen.findByRole("button", { name: /Gerar rascunho textual DOCX/i });
+    expect(button).not.toBeDisabled();
+
+    await user.click(button);
+    await waitFor(() => expect(button).toBeDisabled());
+    expect(button).toHaveTextContent("Gerando...");
+
+    await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveTextContent("Gerar rascunho textual DOCX");
+  });
+
+  it("botao do rascunho textual PDF retorna a ficar habilitado apos erro", async () => {
+    const user = userEvent.setup();
+    pdfDraftValidateMock.mockReturnValue({
+      canExport: true,
+      blockers: [] as string[],
+      warnings: [] as string[],
+    });
+    pdfDraftBuildMock.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      throw new Error("Falha simulada");
+    });
+    importDocumentFileMock.mockResolvedValue(pdfDiagnosticResult("erro.pdf"));
+
+    render(<App />);
+    await user.upload(screen.getByLabelText("Importar arquivo"), new File(["pdf"], "erro.pdf", { type: "application/pdf" }));
+
+    const button = await screen.findByRole("button", { name: /Gerar rascunho textual DOCX/i });
+    await user.click(button);
+    await waitFor(() => expect(button).toBeDisabled());
+
+    await waitFor(() => expect(button).not.toBeDisabled());
+    expect(screen.getByText(/Não foi possível gerar o rascunho textual do PDF/)).toBeInTheDocument();
+  });
+
+  it("clique no botao com bloqueadores nao chama exportador e mantem botao habilitado", async () => {
+    const user = userEvent.setup();
+    pdfDraftValidateMock.mockReturnValue({
+      canExport: false,
+      blockers: ["Bloqueio 1", "Bloqueio 2"] as string[],
+      warnings: [] as string[],
+    });
+    importDocumentFileMock.mockResolvedValue(pdfDiagnosticResult("bloqueado2.pdf"));
+
+    render(<App />);
+    await user.upload(screen.getByLabelText("Importar arquivo"), new File(["pdf"], "bloqueado2.pdf", { type: "application/pdf" }));
+
+    const button = await screen.findByRole("button", { name: /Gerar rascunho textual DOCX/i });
+    expect(button).not.toBeDisabled();
+
+    await user.click(button);
+    expect(pdfDraftBuildMock).not.toHaveBeenCalled();
+    expect(saveAsMock).not.toHaveBeenCalled();
+    expect(button).not.toBeDisabled();
+    expect(screen.getByText("Bloqueio 1")).toBeInTheDocument();
+    expect(screen.getByText("Bloqueio 2")).toBeInTheDocument();
   });
 });

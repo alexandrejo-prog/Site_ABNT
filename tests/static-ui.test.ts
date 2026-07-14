@@ -23,9 +23,9 @@ describe("interface estática", () => {
 
   it("bloco de importação aparece no topo com título e explicação", () => {
     expect(uiComponents).toContain("Importar arquivo existente");
-    expect(uiComponents).toContain("Importe DOCX, TXT ou Markdown para extrair texto e metadados. Revise tudo antes de gerar.");
+    expect(uiComponents).toContain("Importe DOCX, TXT ou Markdown para extrair texto e metadados. PDF entra apenas como diagnóstico experimental.");
     expect(uiComponents).toContain('type="file"');
-    expect(uiComponents).toContain('accept=".docx,.txt,.md"');
+    expect(uiComponents).toContain('accept=".docx,.txt,.md,.pdf"');
   });
 
   it("seletor de tipo de trabalho organiza tipos em grupos", () => {
