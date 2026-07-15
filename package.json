@@ -7,7 +7,10 @@
     "dev": "vite --host 127.0.0.1",
     "test": "vitest run --environment node",
     "build": "tsc -b && vite build",
-    "verify": "npm test -- --run && npm run build"
+    "verify": "npm test -- --run && npm run build",
+    "acceptance:docx": "node scripts/acceptance/audit-docx.mjs",
+    "acceptance:word": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/validate-word.ps1",
+    "acceptance:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run-docx-acceptance.ps1"
   },
   "dependencies": {
     "@tiptap/extension-text-align": "^3.27.3",
