@@ -20,7 +20,6 @@ const {
   validateExpectSpec,
   parseExpectationsBytes,
   DEFAULT_MARKER,
-  VALID_PROFILES,
 } = core;
 
 const TMP = path.join(os.tmpdir(), "opencode-acceptance-tests-v2");
@@ -30,8 +29,6 @@ const PAR = (inner: string) => `<w:p>${inner}</w:p>`;
 const TEXT = (t: string) => `<w:r><w:t xml:space="preserve">${t}</w:t></w:r>`;
 const DRAW = (rId: string) =>
   `<w:r><w:drawing><wp:inline><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:blipFill><a:blip r:embed="${rId}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/></pic:blipFill></pic:pic></a:graphicData></wp:inline></w:drawing></w:r>`;
-const DRAW_ANCHOR = (rId: string) =>
-  `<w:r><w:drawing><wp:anchor><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:blipFill><a:blip r:embed="${rId}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/></pic:blipFill></pic:pic></a:graphicData></wp:anchor></w:drawing></w:r>`;
 
 const IMG_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
 function relsXml(items: { id: string; type: string; target: string; mode?: string }[]) {
@@ -553,7 +550,7 @@ describe("CLI (subprocesso, sem Word)", () => {
     fs.writeFileSync(docxPath, await buildDocx(minimalParts()));
     const expPath = path.join(workDir, "bad.json");
     // latin1 bytes that are invalid UTF-8
-    fs.writeFileSync(expPath, Buffer.from([0xff, 0xfe, 0x7b], "latin1"));
+    fs.writeFileSync(expPath, Buffer.from(Uint8Array.from([0xff, 0xfe, 0x7b])));
     const code = runCli(["--docx", docxPath, "--expect", expPath, "--profile", "pdf-text-draft"], workDir);
     expect(code).toBe(6);
   });
