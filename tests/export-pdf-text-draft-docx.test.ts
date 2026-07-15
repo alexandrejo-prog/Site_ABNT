@@ -2386,5 +2386,42 @@ describe("ativos visuais compostos por recorte (chave multipagina)", () => {
       expect(documentText(documentXml)).toContain("Fonte: Autor."); // fonte como texto (fora do PNG)
       expect(documentText(documentXml)).toContain("Gráfico 10 – Evolução."); // legenda como texto
     });
+
+    it("E5 grupo logico parcialmente valido gera zero imagens e um unico marcador (paginas 63-64)", async () => {
+      const regions: PdfTextDraftExportInput["reconstruction"]["layoutRegions"] = [
+        { id: "rA", pageStart: 63, pageEnd: 63, startLineIndex: 0, endLineIndex: 1, kind: "quadro", caption: "Quadro 8 – X.", source: "Fonte: A.", confidence: "high", reasons: [], logicalVisualId: "q8" },
+        { id: "rB", pageStart: 64, pageEnd: 64, startLineIndex: 0, endLineIndex: 1, kind: "quadro", caption: "Quadro 8 – Y.", source: "Fonte: B.", confidence: "high", reasons: [], logicalVisualId: "q8" },
+      ];
+      const visualAssets: Record<string, PdfTextDraftVisualAsset> = {
+        [pdfRegionCropKey("q8", 63, "rA")]: { data: logo, width: 400, height: 300, altText: { title: "Quadro 8 – X.", description: "x", name: "x" } },
+      };
+      const blocks: PdfTextDraftExportInput["reconstruction"]["blocks"] = [
+        { type: "paragraph", text: "Texto antes do elemento visual para validacao.", pageStart: 63, pageEnd: 63, sourceLines: [{ pageNumber: 63, lineIndex: 0 }], confidence: "medium", reasons: [] },
+        { type: "caption", text: "Quadro 8 – X.", pageStart: 63, pageEnd: 63, sourceLines: [{ pageNumber: 63, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "rA" },
+        { type: "source", text: "Fonte: A.", pageStart: 63, pageEnd: 63, sourceLines: [{ pageNumber: 63, lineIndex: 1 }], confidence: "high", reasons: [], layoutRegionId: "rA" },
+        { type: "caption", text: "Quadro 8 – Y.", pageStart: 64, pageEnd: 64, sourceLines: [{ pageNumber: 64, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "rB" },
+        { type: "source", text: "Fonte: B.", pageStart: 64, pageEnd: 64, sourceLines: [{ pageNumber: 64, lineIndex: 1 }], confidence: "high", reasons: [], layoutRegionId: "rB" },
+      ];
+      const input = baseInput({
+        visualAssets,
+        reconstruction: {
+          ...baseInput().reconstruction,
+          blocks,
+          layoutRegions: regions,
+          statistics: { ...baseInput().reconstruction.statistics, layoutRegionCount: 2, captionCount: 2, sourceCount: 2, unresolvedCount: 0, paragraphCount: 1 },
+        },
+      });
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      // zero imagens do q8: apenas o logo (1 drawing)
+      expect((documentXml.match(/<w:drawing/g) ?? []).length).toBe(1);
+      // exatamente um marcador
+      const markers = documentXml.match(new RegExp(MARKER, "g")) ?? [];
+      expect(markers).toHaveLength(1);
+      // marcador abrange o intervalo integral do grupo (63-64)
+      expect(documentXml).toContain("páginas originais 63-64");
+      // nao ha marcadores parciais 63-63 nem 64-64
+      expect(documentXml).not.toContain("páginas originais 63-63");
+      expect(documentXml).not.toContain("páginas originais 64-64");
+    });
   });
 });

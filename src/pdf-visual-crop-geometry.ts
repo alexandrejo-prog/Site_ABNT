@@ -199,6 +199,8 @@ function contentExtentOnPage(
       hasValidCoords(line) &&
       !lineInBlock(idx, captionBlock) &&
       !lineInBlock(idx, sourceBlock) &&
+      // Linhas depois da fonte não pertencem ao conteúdo estrutural do visual.
+      (sourceBlock == null || line.top <= sourceBlock.top) &&
       !isPageFurniture(page, line),
   );
   if (lines.length === 0) {
@@ -380,11 +382,32 @@ export function computePdfVisualCropGeometry(
         }
         if (isLast || isOnePage) {
           if (sourceBlock) {
-            // Margem segura antes de "Fonte:" (nunca corta o conteúdo real).
-            bottom = Math.max(sourceBlock.top - sourceSafetyGap(page, sourceBlock), content.bottom);
+            // Limite RÍGIDO: o recorte termina antes de "Fonte:". Nunca se usa
+            // Math.max com content.bottom, pois isso permitiria que texto
+            // posterior à fonte expandisse o recorte para baixo.
+            bottom = sourceBlock.top - sourceSafetyGap(page, sourceBlock);
+            // Validações estruturais: o recorte deve conter todo o conteúdo do
+            // visual e não deve ultrapassar a linha de fonte.
+            if (bottom <= top) {
+              skipped.push({ regionId: region.id, pageNumber, reason: "incomplete-structural-crop" });
+              continue;
+            }
+            if (content.bottom > bottom + 0.5) {
+              // alguma linha estrutural do visual ficaria abaixo do limite
+              skipped.push({ regionId: region.id, pageNumber, reason: "incomplete-structural-crop" });
+              continue;
+            }
           } else {
-            const afterIdx = captionBlock != null ? captionBlock.endIdx : -1;
-            const following = findFollowingParagraphTop(page, afterIdx);
+            // Sem bloco de fonte: o parágrafo posterior é localizado a partir do
+            // fim ESTURUTRAL da região (selectedIndexRange), nunca logo após a
+            // legenda. Uma célula longa da tabela não deve ser confundida com o
+            // parágrafo posterior.
+            const indices = selectedIndexRange(region, pageNumber, page.lines.length);
+            if (!indices) {
+              skipped.push({ regionId: region.id, pageNumber, reason: "incomplete-structural-crop" });
+              continue;
+            }
+            const following = findFollowingParagraphTop(page, indices.end);
             bottom = (following ?? content.bottom) - CROP_EDGE_GAP;
           }
         } else {

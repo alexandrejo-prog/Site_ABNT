@@ -18,11 +18,13 @@ import type { PdfAbstractDiagnostic, PdfLayoutSensitiveRegionDiagnostic, PdfReco
 import { ensurePdfTextDraftTocFields } from "./pdf-text-draft-toc-field-patch";
 import { normalizePdfTocHeading } from "./pdf-toc-eligibility";
 import {
-  decideRegionVisualEmission,
+  decideLogicalVisualEmission,
+  LogicalVisualEmission,
+  PdfVisualAssetRegionEntry,
   pdfRegionCropKey,
-  visualAssetEntriesForRegion,
+  visualAssetEntriesForLogicalVisual,
 } from "./pdf-visual-asset-integration";
-import type { PdfTextDraftExportInput, PdfTextDraftLogoAsset, PdfTextDraftValidation, PdfTextDraftVisualAsset } from "./pdf-text-draft-contract";
+import type { PdfTextDraftExportInput, PdfTextDraftLogoAsset, PdfTextDraftValidation } from "./pdf-text-draft-contract";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const A4_WIDTH_TWIP = 11906;
@@ -162,18 +164,6 @@ function isGraphicLikeKind(kind?: PdfLayoutSensitiveRegionDiagnostic["kind"]): b
   return kind === "grafico" || kind === "figura" || kind === "imagem" || kind === "mapa" || kind === "ilustracao";
 }
 
-function hasVisualAssetForRegion(region: PdfLayoutSensitiveRegionDiagnostic | undefined, visualAssets: Record<string, PdfTextDraftVisualAsset>): boolean {
-  if (!region) return false;
-  // Decisao atomica: so ha ativo quando TODAS as paginas do elemento foram recortadas.
-  const keys = new Set(Object.keys(visualAssets ?? {}));
-  const visualKey = region.logicalVisualId ?? region.id;
-  // Ativo legado (chave unica visualKey) cobre regioes de pagina unica.
-  if (keys.has(visualKey) && region.pageStart === region.pageEnd) {
-    keys.add(pdfRegionCropKey(visualKey, region.pageStart, region.id));
-  }
-  return decideRegionVisualEmission(region, keys).mode === "images";
-}
-
 function visualKindLabel(kind?: PdfLayoutSensitiveRegionDiagnostic["kind"]): string {
   if (kind === "quadro") return "Quadro";
   if (kind === "tabela") return "Tabela";
@@ -199,36 +189,79 @@ function markerForBlock(block: PdfReconstructedBlockDiagnostic, regions: Map<str
   return `[Elemento visual não inserido neste rascunho textual - ${visualKindLabel(region.kind)}, ${originalPagesLabel(pageStart, pageEnd)}. Consulte o PDF original.]`;
 }
 
-function computeMarkerCount(input: PdfTextDraftExportInput): number {
-  const keys = new Set<string>();
+interface LogicalVisualDecisions {
+  emissionByLogical: Map<string, LogicalVisualEmission>;
+  entriesByLogical: Map<string, PdfVisualAssetRegionEntry[]>;
+  regionsByLogical: Map<string, PdfLayoutSensitiveRegionDiagnostic[]>;
+}
+
+// Calcula a decisão de emissão UMA vez por logicalVisualId. O exportador nunca
+// decide região a região: todas as regiões que compartilham o mesmo identificador
+// lógico são resolvidas em conjunto (todas as imagens ou um único marcador).
+function buildLogicalVisualDecisions(input: PdfTextDraftExportInput): LogicalVisualDecisions {
   const visualAssets = input.visualAssets ?? {};
+  const allKeys = new Set(Object.keys(visualAssets));
+  const regionsByLogical = new Map<string, PdfLayoutSensitiveRegionDiagnostic[]>();
+  for (const region of input.reconstruction.layoutRegions) {
+    const lid = region.logicalVisualId ?? region.id;
+    const list = regionsByLogical.get(lid);
+    if (list) list.push(region);
+    else regionsByLogical.set(lid, [region]);
+  }
+  const emissionByLogical = new Map<string, LogicalVisualEmission>();
+  const entriesByLogical = new Map<string, PdfVisualAssetRegionEntry[]>();
+  for (const [lid, regs] of regionsByLogical) {
+    const cropKeys = new Set(allKeys);
+    for (const region of regs) {
+      const vk = region.logicalVisualId ?? region.id;
+      // Ativo legado (chave única visualKey) cobre regiões de página única.
+      if (cropKeys.has(vk) && region.pageStart === region.pageEnd) {
+        cropKeys.add(pdfRegionCropKey(vk, region.pageStart, region.id));
+      }
+    }
+    emissionByLogical.set(lid, decideLogicalVisualEmission(regs, cropKeys));
+    entriesByLogical.set(lid, visualAssetEntriesForLogicalVisual(regs, visualAssets));
+  }
+  return { emissionByLogical, entriesByLogical, regionsByLogical };
+}
+
+function computeMarkerCount(input: PdfTextDraftExportInput, decisions: LogicalVisualDecisions): number {
+  const emitted = new Set<string>();
   for (const block of input.reconstruction.blocks) {
     if (block.type !== "unresolved") continue;
     const region = block.layoutRegionId ? input.reconstruction.layoutRegions.find((r) => r.id === block.layoutRegionId) : undefined;
-    const dedupKey = region?.logicalVisualId ?? block.layoutRegionId ?? `unresolved-${block.pageStart}-${block.sourceLines[0]?.lineIndex ?? 0}`;
-    if (!hasVisualAssetForRegion(region, visualAssets)) keys.add(dedupKey);
+    const lid = region
+      ? (region.logicalVisualId ?? region.id)
+      : (block.layoutRegionId ?? `unresolved-${block.pageStart}-${block.sourceLines[0]?.lineIndex ?? 0}`);
+    const emission = lid ? decisions.emissionByLogical.get(lid) : undefined;
+    if (region && emission?.mode === "images") {
+      // emitido como imagem: nenhum marcador
+    } else {
+      emitted.add(lid);
+    }
   }
   for (const region of input.reconstruction.layoutRegions) {
     if (!isGraphicLikeKind(region.kind)) continue;
-    const dedupKey = region.logicalVisualId ?? region.id;
-    if (keys.has(dedupKey)) continue;
-    if (!hasVisualAssetForRegion(region, visualAssets)) {
+    const lid = region.logicalVisualId ?? region.id;
+    if (emitted.has(lid)) continue;
+    const emission = decisions.emissionByLogical.get(lid);
+    if (emission?.mode === "marker") {
       const hasUnresolved = input.reconstruction.blocks.some((b) => b.layoutRegionId === region.id && b.type === "unresolved");
-      if (!hasUnresolved) keys.add(dedupKey);
+      if (!hasUnresolved) emitted.add(lid);
     }
   }
-  return keys.size;
+  return emitted.size;
 }
 
-function technicalSummary(input: PdfTextDraftExportInput): string[] {
+function technicalSummary(input: PdfTextDraftExportInput, decisions: LogicalVisualDecisions): string[] {
   const stats = input.reconstruction.statistics;
-  const markerCount = computeMarkerCount(input);
+  const markerCount = computeMarkerCount(input, decisions);
   return [
     `Arquivo de origem: ${input.fileName}`,
     `Páginas do PDF: ${input.pageCount}`,
     `Parágrafos reconstruídos: ${stats.paragraphCount}`,
     `Títulos reconstruídos: ${stats.headingCount}`,
-    `Elementos visuais não inseridos: ${stats.layoutRegionCount}`,
+    `Regiões visuais detectadas: ${stats.layoutRegionCount}`,
     `Elementos visuais representados por marcadores: ${markerCount}`,
     `Hifenizações incertas: ${stats.uncertainHyphenationCount}`,
   ];
@@ -319,11 +352,11 @@ function titlePageParagraphs(input: PdfTextDraftExportInput): Paragraph[] {
   ];
 }
 
-function noteParagraphs(input: PdfTextDraftExportInput): Paragraph[] {
+function noteParagraphs(input: PdfTextDraftExportInput, decisions: LogicalVisualDecisions): Paragraph[] {
   return [
     centered("NOTA DE REVISÃO", { bold: true }),
     singleJustified("Este documento foi reconstruído automaticamente a partir de um PDF. Revise os pré-textuais, as citações, as hifenizações, os títulos e os elementos visuais antes do uso acadêmico."),
-    ...technicalSummary(input).map((line) => left(line, { size: 20 })),
+    ...technicalSummary(input, decisions).map((line) => left(line, { size: 20 })),
     pageBreak(),
   ];
 }
@@ -412,7 +445,7 @@ function blockInsideVisualSpan(
   return false;
 }
 
-function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Paragraph[] {
+function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[], decisions: LogicalVisualDecisions): Paragraph[] {
   const regions = new Map(input.reconstruction.layoutRegions.map((region) => [region.id, region]));
   const entryByTitle = new Map(entries.map((entry) => [entry.title, entry]));
   const paragraphs: Paragraph[] = [];
@@ -425,33 +458,20 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
     }
   }
 
-  const logicalVisualRanges = new Map<string, { pageStart: number; pageEnd: number }>();
-  for (const region of input.reconstruction.layoutRegions) {
-    if (!region.logicalVisualId) continue;
-    const existing = logicalVisualRanges.get(region.logicalVisualId);
-    if (existing) {
-      existing.pageStart = Math.min(existing.pageStart, region.pageStart);
-      existing.pageEnd = Math.max(existing.pageEnd, region.pageEnd);
-    } else {
-      logicalVisualRanges.set(region.logicalVisualId, { pageStart: region.pageStart, pageEnd: region.pageEnd });
-    }
-  }
-
-  const visualAssets = input.visualAssets ?? {};
   const emittedVisualAssetKeys = new Set<string>();
   const emittedMarkerKeys = new Set<string>();
 
-  function emitVisualImages(region: PdfLayoutSensitiveRegionDiagnostic): number {
-    const entries = visualAssetEntriesForRegion(region, visualAssets);
+  function emitVisualImagesForLogical(lid: string): number {
+    const entries = decisions.entriesByLogical.get(lid) ?? [];
     if (entries.length === 0) return 0;
     let emitted = 0;
     for (const entry of entries) {
       if (emittedVisualAssetKeys.has(entry.key)) continue;
       const asset = entry.asset;
       const altText = {
-        title: asset.altText?.title ?? visualKindLabel(region.kind),
-        description: asset.altText?.description ?? (region.caption ?? visualKindLabel(region.kind)),
-        name: asset.altText?.name ?? visualKindLabel(region.kind),
+        title: asset.altText?.title ?? "Elemento visual",
+        description: asset.altText?.description ?? "Elemento visual",
+        name: asset.altText?.name ?? "Elemento visual",
       };
       const fit = fitImageToMancha(asset.width, asset.height);
       paragraphs.push(paragraph([new ImageRun({
@@ -486,41 +506,43 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
     }
     if (block.type === "caption") {
       const region = block.layoutRegionId ? regions.get(block.layoutRegionId) : undefined;
-      const dedupKey = region?.logicalVisualId ?? block.layoutRegionId ?? `caption-${block.pageStart}`;
+      const lid = region?.logicalVisualId ?? block.layoutRegionId ?? `caption-${block.pageStart}`;
       // Legendas de continuação/conclusão não devem ficar "soltas" quando o
       // elemento já foi inserido como imagem ou representado por marcador.
       const isContinuationCaption = /continua|conclus[ãa]o/i.test(text);
       if (!isContinuationCaption) {
         paragraphs.push(left(text, { size: 22, keepNext: true, keepLines: true, widowControl: true }));
       }
-      if (region && !emittedMarkerKeys.has(dedupKey)) {
+      if (region && !emittedMarkerKeys.has(lid)) {
         const hasUnresolved = input.reconstruction.blocks.some(
           (b) => b.type === "unresolved" && b.layoutRegionId === block.layoutRegionId
         );
-        const regionHasAsset = hasVisualAssetForRegion(region, visualAssets);
-        if (hasUnresolved) {
-          // Imagens e marcadores da região com bloco unresolved são emitidos na posição do unresolved.
-        } else if (regionHasAsset) {
-          emitVisualImages(region);
-          emittedMarkerKeys.add(dedupKey);
-        } else if (isGraphicLikeKind(region.kind)) {
-          const range = region.logicalVisualId ? logicalVisualRanges.get(region.logicalVisualId) : undefined;
+        const emission = decisions.emissionByLogical.get(lid);
+        if (emission?.mode === "images") {
+          emitVisualImagesForLogical(lid);
+          emittedMarkerKeys.add(lid);
+        } else if (!hasUnresolved && (isGraphicLikeKind(region.kind) || (decisions.entriesByLogical.get(lid)?.length ?? 0) > 0)) {
+          // Grupo lógico marcador. Para não-gráficos, só emitimos o marcador na
+          // legenda quando há recorte disponível sendo suprimido pela decisão de
+          // grupo (caso contrário mantém-se o texto da legenda/fonte).
+          const range = emission ?? undefined;
           paragraphs.push(left(markerForBlock(block, regions, range), { size: 20, italics: true }));
-          emittedMarkerKeys.add(dedupKey);
+          emittedMarkerKeys.add(lid);
         }
+        // Com bloco unresolved, o marcador é emitido no branch do unresolved.
       }
     }
     if (block.type === "source") paragraphs.push(left(text, { size: 22 }));
     if (block.type === "unresolved") {
       const region = block.layoutRegionId ? regions.get(block.layoutRegionId) : undefined;
-      const logicalId = region?.logicalVisualId;
-      const dedupKey = logicalId ?? block.layoutRegionId ?? `unresolved-${block.pageStart}-${block.sourceLines[0]?.lineIndex ?? paragraphs.length}`;
-      const range = logicalId ? logicalVisualRanges.get(logicalId) : undefined;
-      const unresolvedHasAsset = region ? hasVisualAssetForRegion(region, visualAssets) : false;
-      if (region && unresolvedHasAsset) {
-        emitVisualImages(region);
-      } else if (!emittedMarkerKeys.has(dedupKey)) {
-        emittedMarkerKeys.add(dedupKey);
+      const lid = region?.logicalVisualId ?? block.layoutRegionId ?? `unresolved-${block.pageStart}-${block.sourceLines[0]?.lineIndex ?? paragraphs.length}`;
+      const emission = lid ? decisions.emissionByLogical.get(lid) : undefined;
+      const range = emission ?? undefined;
+      if (region && emission?.mode === "images") {
+        emitVisualImagesForLogical(lid);
+        emittedMarkerKeys.add(lid);
+      } else if (!emittedMarkerKeys.has(lid)) {
+        emittedMarkerKeys.add(lid);
         paragraphs.push(left(markerForBlock(block, regions, range), { size: 20, italics: true }));
       }
     }
@@ -577,12 +599,13 @@ export async function buildPdfTextDraftDocxBlob(input: PdfTextDraftExportInput):
   if (!validation.canExport) throw new Error(validation.blockers.join(" "));
   const logo = input.includeReconstructedPretextuals === false ? undefined : await resolveLogo(input);
   const entries = makeTocEntries(input.reconstruction.blocks);
+  const decisions = buildLogicalVisualDecisions(input);
   const pretextualChildren = input.includeReconstructedPretextuals === false
-    ? [...noteParagraphs(input), ...tocParagraphs(entries)]
+    ? [...noteParagraphs(input, decisions), ...tocParagraphs(entries)]
     : [
       ...coverParagraphs(input, logo),
       ...titlePageParagraphs(input),
-      ...noteParagraphs(input),
+      ...noteParagraphs(input, decisions),
       ...abstractParagraphs(input.pretextual?.resumo, "RESUMO"),
       ...abstractParagraphs(input.pretextual?.abstract, "ABSTRACT"),
       ...tocParagraphs(entries),
@@ -605,7 +628,7 @@ export async function buildPdfTextDraftDocxBlob(input: PdfTextDraftExportInput):
         },
       },
       headers: { default: pageNumberHeader() },
-      children: bodyParagraphs(input, entries),
+      children: bodyParagraphs(input, entries, decisions),
     }],
   });
   const blob = await Packer.toBlob(document);

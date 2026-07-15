@@ -3,10 +3,12 @@ import type { ImportedPdfDiagnostic, PdfLayoutSensitiveRegionDiagnostic } from "
 import type { PdfVisualCropGeometry } from "../src/pdf-visual-crop-geometry";
 import type { PdfTextDraftVisualAsset } from "../src/pdf-text-draft-contract";
 import {
+  decideLogicalVisualEmission,
   decideRegionVisualEmission,
   isRasterizablePdfRegionKind,
   pdfRegionCropKey,
   rasterizablePdfCrops,
+  visualAssetEntriesForLogicalVisual,
   visualAssetEntriesForRegion,
 } from "../src/pdf-visual-asset-integration";
 
@@ -247,5 +249,51 @@ describe("decisao atomica de emissao visual", () => {
     expect(decisionB.mode).toBe("images");
     expect(decisionA.pagesCovered).toBe(2);
     expect(decisionB.pagesCovered).toBe(2);
+  });
+
+  it("I6 grupo logico totalmente valido gera todas as imagens em ordem", () => {
+    const a = makeRegion({ id: "rA", logicalVisualId: "q8", pageStart: 63, pageEnd: 63, kind: "quadro" });
+    const b = makeRegion({ id: "rB", logicalVisualId: "q8", pageStart: 64, pageEnd: 64, kind: "quadro" });
+    const keys = new Set([...keysFor("q8", "rA", [63]), ...keysFor("q8", "rB", [64])]);
+    const decision = decideLogicalVisualEmission([a, b], keys);
+    expect(decision.mode).toBe("images");
+    expect(decision.pagesCovered).toBe(2);
+    expect(decision.pagesTotal).toBe(2);
+    expect(decision.pageStart).toBe(63);
+    expect(decision.pageEnd).toBe(64);
+  });
+
+  it("I7 grupo logico parcialmente valido gera marcador unico (nenhuma imagem)", () => {
+    const a = makeRegion({ id: "rA", logicalVisualId: "q8", pageStart: 63, pageEnd: 63, kind: "quadro" });
+    const b = makeRegion({ id: "rB", logicalVisualId: "q8", pageStart: 64, pageEnd: 64, kind: "quadro" });
+    const keys = new Set(keysFor("q8", "rA", [63])); // rB ausente
+    const decision = decideLogicalVisualEmission([a, b], keys);
+    expect(decision.mode).toBe("marker"); // nao images+marker
+    expect(decision.pagesCovered).toBe(1);
+    expect(decision.pagesTotal).toBe(2);
+    expect(decision.pageStart).toBe(63);
+    expect(decision.pageEnd).toBe(64); // abrange o grupo completo
+  });
+
+  it("I8 grupos distintos sao decididos independentemente", () => {
+    const q8a = makeRegion({ id: "rA", logicalVisualId: "q8", pageStart: 63, pageEnd: 63, kind: "quadro" });
+    const q8b = makeRegion({ id: "rB", logicalVisualId: "q8", pageStart: 64, pageEnd: 64, kind: "quadro" });
+    const other = makeRegion({ id: "rC", logicalVisualId: "q9", pageStart: 70, pageEnd: 70, kind: "quadro" });
+    const keys = new Set([...keysFor("q8", "rA", [63]), ...keysFor("q9", "rC", [70])]);
+    const q8 = decideLogicalVisualEmission([q8a, q8b], keys);
+    const q9 = decideLogicalVisualEmission([other], keys);
+    expect(q8.mode).toBe("marker"); // rB ausente
+    expect(q9.mode).toBe("images"); // presente
+  });
+
+  it("I9 ativos do grupo logico sao ordenados por pagina e regiao", () => {
+    const a = makeRegion({ id: "rA", logicalVisualId: "q8", pageStart: 63, pageEnd: 63, kind: "quadro" });
+    const b = makeRegion({ id: "rB", logicalVisualId: "q8", pageStart: 64, pageEnd: 64, kind: "quadro" });
+    const visualAssets: Record<string, PdfTextDraftVisualAsset> = {
+      "q8::p64::rrB": asset(),
+      "q8::p63::rrA": asset(),
+    };
+    const entries = visualAssetEntriesForLogicalVisual([a, b], visualAssets);
+    expect(entries.map((entry) => entry.key)).toEqual(["q8::p63::rrA", "q8::p64::rrB"]);
   });
 });

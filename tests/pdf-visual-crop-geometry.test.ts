@@ -725,19 +725,20 @@ describe("camada de geometria de recorte visual pdf", () => {
       expect(crops[0].sourceRect.y).toBeLessThanOrEqual(160);
     });
 
-    it("base da tabela nao e cortada na ultima pagina", () => {
+    it("base da tabela nao e cortada na ultima pagina (limite rigido antes da fonte)", () => {
       const pages = [page(1, PAGE_W, PAGE_H, [
         line(1, { left: 100, right: 900, top: 950, bottom: 980, height: 30, text: "penultima linha" }),
         line(1, { left: 100, right: 900, top: 1000, bottom: 1030, height: 30, text: "ultima linha" }),
-        line(1, { left: 100, right: 900, top: 1040, bottom: 1070, height: 30, text: "Fonte: A." }),
+        line(1, { left: 100, right: 900, top: 1100, bottom: 1130, height: 30, text: "Fonte: A." }),
       ])];
       const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 2, kind: "tabela", source: "Fonte: A." })];
       const { crops } = computePdfVisualCropGeometry(pages, regions);
       expect(crops).toHaveLength(1);
       const bottom = crops[0].sourceRect.y + crops[0].sourceRect.height;
-      expect(bottom).toBe(1030); // topo da fonte (1040) - margem segura, ultima linha preservada
+      // limite rigido: topo da fonte (1100) - margem segura (18) = 1082
+      expect(bottom).toBe(1082);
       expect(bottom).toBeGreaterThanOrEqual(1030); // ultima linha (base 1030) preservada
-      expect(bottom).toBeLessThan(1040); // fonte fora
+      expect(bottom).toBeLessThan(1100); // fonte fora
     });
 
     it("regiao composta apenas por legenda e fonte (sem conteudo) e rejeitada como incompleta", () => {
@@ -945,6 +946,77 @@ describe("camada de geometria de recorte visual pdf", () => {
       expect(c.sourceRect.y).toBeLessThanOrEqual(graphicTop); // grafico incluido desde o topo
       expect(c.sourceRect.y + c.sourceRect.height).toBeGreaterThanOrEqual(graphicBottom); // grafico completo
       expect(c.sourceRect.y + c.sourceRect.height).toBeLessThan(560); // fonte fora do PNG
+    });
+
+    it("G12 limite rigido antes da fonte; paragrafo posterior nao entra e nao aumenta bottom", () => {
+      const withParagraph = page(1, PAGE_W, PAGE_H, [
+        line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 1 – Dados." }),
+        line(1, { left: 100, right: 900, top: 160, bottom: 190, height: 30, text: "linha 1" }),
+        line(1, { left: 100, right: 900, top: 220, bottom: 250, height: 30, text: "linha 2" }),
+        line(1, { left: 100, right: 900, top: 280, bottom: 310, height: 30, text: "linha 3" }),
+        line(1, { left: 100, right: 900, top: 350, bottom: 380, height: 30, text: "Fonte: A." }),
+        line(1, { left: 100, right: 900, top: 420, bottom: 450, height: 30, text: "Parágrafo posterior ao quadro." }),
+      ]);
+      const withoutParagraph = page(1, PAGE_W, PAGE_H, [
+        line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 1 – Dados." }),
+        line(1, { left: 100, right: 900, top: 160, bottom: 190, height: 30, text: "linha 1" }),
+        line(1, { left: 100, right: 900, top: 220, bottom: 250, height: 30, text: "linha 2" }),
+        line(1, { left: 100, right: 900, top: 280, bottom: 310, height: 30, text: "linha 3" }),
+        line(1, { left: 100, right: 900, top: 350, bottom: 380, height: 30, text: "Fonte: A." }),
+      ]);
+      const reg = region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 3, kind: "quadro", caption: "Quadro 1 – Dados.", source: "Fonte: A." });
+      const a = computePdfVisualCropGeometry([withParagraph], [reg]);
+      const b = computePdfVisualCropGeometry([withoutParagraph], [reg]);
+      expect(a.skipped).toHaveLength(0);
+      expect(b.skipped).toHaveLength(0);
+      const bottomA = a.crops[0].sourceRect.y + a.crops[0].sourceRect.height;
+      const bottomB = b.crops[0].sourceRect.y + b.crops[0].sourceRect.height;
+      // limite rigido: topo da fonte (350) - margem segura (18) = 332
+      expect(bottomA).toBe(332);
+      expect(bottomB).toBe(332); // a existencia do paragrafo posterior nao aumenta bottom
+      expect(bottomA).toBeLessThan(350); // fonte fora
+      expect(a.crops[0].sourceRect.y + a.crops[0].sourceRect.height).toBeLessThan(420); // paragrafo posterior fora
+    });
+
+    it("G13 fonte quebrada em duas linhas respeita o limite rigido (ambas as linhas fora)", () => {
+      const pages = [page(1, PAGE_W, PAGE_H, [
+        line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 1 – Dados." }),
+        line(1, { left: 100, right: 900, top: 160, bottom: 190, height: 30, text: "linha 1" }),
+        line(1, { left: 100, right: 900, top: 220, bottom: 250, height: 30, text: "linha 2" }),
+        line(1, { left: 100, right: 900, top: 280, bottom: 310, height: 30, text: "linha 3" }),
+        line(1, { left: 100, right: 900, top: 380, bottom: 410, height: 30, text: "Fonte: IBGE," }),
+        line(1, { left: 100, right: 900, top: 415, bottom: 445, height: 30, text: "2025." }),
+        line(1, { left: 100, right: 900, top: 480, bottom: 510, height: 30, text: "Parágrafo posterior." }),
+      ])];
+      const reg = region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 3, kind: "quadro", caption: "Quadro 1 – Dados.", source: "Fonte: IBGE, 2025." });
+      const { crops } = computePdfVisualCropGeometry(pages, [reg]);
+      expect(crops).toHaveLength(1);
+      const bottom = crops[0].sourceRect.y + crops[0].sourceRect.height;
+      // bloco de fonte (380..445, altura 65) -> margem 65*0.6 = 39
+      expect(bottom).toBe(341); // 380 - 39
+      expect(bottom).toBeGreaterThanOrEqual(310); // conteudo preservado
+      expect(bottom).toBeLessThan(380); // primeira linha da fonte fora
+      expect(bottom).toBeLessThan(480); // paragrafo posterior fora
+    });
+
+    it("G14 paragrafo posterior e localizado apos o fim estrutural (nao apos a legenda)", () => {
+      const pages = [page(1, PAGE_W, PAGE_H, [
+        line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 1 – Tabela longa." }),
+        line(1, { left: 100, right: 900, top: 160, bottom: 190, height: 30, text: "Esta é a primeira célula da tabela e possui mais de trinta e cinco caracteres de texto." }),
+        line(1, { left: 100, right: 900, top: 220, bottom: 250, height: 30, text: "segunda célula da tabela" }),
+        line(1, { left: 100, right: 900, top: 280, bottom: 310, height: 30, text: "terceira célula da tabela" }),
+        line(1, { left: 100, right: 900, top: 350, bottom: 380, height: 30, text: "Este é o parágrafo posterior que aparece depois de toda a tabela." }),
+      ])];
+      const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 3, kind: "quadro", caption: "Quadro 1 – Tabela longa." })];
+      const { crops } = computePdfVisualCropGeometry(pages, regions);
+      expect(crops).toHaveLength(1);
+      const c = crops[0];
+      const bottom = c.sourceRect.y + c.sourceRect.height;
+      // o paragrafo posterior (topo 350) e localizado apos region.endLineIndex (3)
+      expect(bottom).toBe(346); // 350 - CROP_EDGE_GAP
+      expect(c.sourceRect.y).toBeLessThan(160); // primeira célula incluída
+      expect(bottom).toBeGreaterThanOrEqual(310); // toda a tabela permanece no intervalo
+      expect(bottom).toBeLessThan(350); // paragrafo posterior fora
     });
   });
 });
