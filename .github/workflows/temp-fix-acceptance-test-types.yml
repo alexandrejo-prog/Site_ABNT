@@ -1,0 +1,63 @@
+name: Temporary fix acceptance test TypeScript
+
+on:
+  push:
+    branches:
+      - feat/pdf-import-acceptance-pipeline
+
+permissions:
+  contents: write
+
+jobs:
+  patch-build-clean:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/pdf-import-acceptance-pipeline
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Patch TypeScript errors
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("tests/acceptance-docx-audit.test.ts")
+          text = path.read_text(encoding="utf-8")
+
+          replacements = [
+              ("  DEFAULT_MARKER,\n  VALID_PROFILES,\n", "  DEFAULT_MARKER,\n"),
+              ('const DRAW_ANCHOR = (rId: string) =>\n  `<w:r><w:drawing><wp:anchor><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:blipFill><a:blip r:embed="${rId}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/></pic:blipFill></pic:pic></a:graphicData></wp:anchor></w:drawing></w:r>`;\n', ""),
+              ('Buffer.from([0xff, 0xfe, 0x7b], "latin1")', 'Buffer.from(Uint8Array.from([0xff, 0xfe, 0x7b]))'),
+          ]
+
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f"Expected pattern not found: {old[:80]!r}")
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding="utf-8", newline="\n")
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit fix and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/temp-fix-acceptance-test-types.yml
+          git add tests/acceptance-docx-audit.test.ts
+          git commit -m "fix: corrigir tipagem dos testes de aceitacao"
+          git push origin HEAD:feat/pdf-import-acceptance-pipeline
