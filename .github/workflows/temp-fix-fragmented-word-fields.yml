@@ -1,0 +1,60 @@
+name: Temporary fix fragmented Word fields
+
+on:
+  push:
+    branches:
+      - feat/pdf-import-acceptance-pipeline
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    if: github.event.head_commit.message == 'chore: trigger fragmented Word field fix'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/pdf-import-acceptance-pipeline
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Apply exact source correction
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/acceptance/docx-audit-core.mjs')
+          text = path.read_text(encoding='utf-8')
+          old = '      if (building) acc += " " + t[2];'
+          new = '      if (building) acc += t[2];'
+          occurrences = text.count(old)
+          if occurrences != 1:
+              raise SystemExit(f'Expected exactly one target line, found {occurrences}.')
+          path.write_text(text.replace(old, new), encoding='utf-8', newline='\n')
+          PY
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run acceptance auditor tests
+        run: npx vitest run tests/acceptance-docx-audit.test.ts
+
+      - name: Commit correction and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/temp-fix-fragmented-word-fields.yml
+          git add scripts/acceptance/docx-audit-core.mjs
+          git diff --cached --check
+          git commit -m "fix: reconstruir campos Word fragmentados"
+          git push origin HEAD:feat/pdf-import-acceptance-pipeline
