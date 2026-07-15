@@ -1031,4 +1031,38 @@ describe("reconstrução de continuações de títulos (heading continuation)", 
       expect(result.blocks.some((b) => b.type === "heading" && b.text === full), `título completo: ${full}`).toBe(true);
     }
   });
+
+  it("separa referencias iniciadas por ano das demais entradas", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(11, [
+        "REFERÊNCIAS",
+        "ALVES, A. C. Teletrabalho na Administração Pública: estudo de caso na",
+        "Controladoria Geral da União. Dissertação - Universidade de Brasília, 2020.",
+        "2020. SOBRINHO, A. B. O programa de gestão e desempenho nas universidades.",
+        "Editora, 2020.",
+        "BRASIL. Lei nº 11.091, de 12 de janeiro de 2005. Dispõe sobre a estruturação",
+        "do Plano de Carreira dos Cargos Técnico-Administrativos em Educação.",
+      ]),
+    ]);
+    expect(result.blocks.find((b) => b.text.includes("REFER"))?.type).toBe("heading");
+    const refBlocks = result.blocks.filter((b) => b.type === "paragraph");
+    expect(refBlocks).toHaveLength(3);
+    const sobrinho = refBlocks.find((b) => b.text.includes("SOBRINHO"));
+    expect(sobrinho?.text).toContain("2020. SOBRINHO, A. B.");
+    expect(sobrinho?.text).not.toContain("ALVES, A. C.");
+  });
+
+  it("reconhece REFERENCIAS BIBLIOGRAFICAS como inicio da secao de referencias", () => {
+    const result = reconstructPdfParagraphBlocks([
+      page(11, [
+        "REFERÊNCIAS BIBLIOGRÁFICAS",
+        "ALVES, A. C. Teletrabalho na Administração Pública. Editora, 2020.",
+        "BRASIL. Lei nº 11.091, de 12 de janeiro de 2005. Plano de Carreira.",
+      ]),
+    ]);
+    const heading = result.blocks.find((b) => b.type === "heading");
+    expect(heading?.text).toBe("REFERÊNCIAS BIBLIOGRÁFICAS");
+    const refBlocks = result.blocks.filter((b) => b.type === "paragraph");
+    expect(refBlocks).toHaveLength(2);
+  });
 });

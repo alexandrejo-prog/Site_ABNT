@@ -2052,6 +2052,68 @@ describe("ativos visuais de regioes pdf", () => {
       expect(documentXml).toContain("PEREIRA, João (2017). Outra referência com DOI 10.1000/xyz. Editora.");
       expect(documentXml).toContain("REFERÊNCIAS");
     });
+
+    it("REFERENCIAS BIBLIOGRAFICAS ativa o modo de referencias no export", async () => {
+      const input = referencesInput([
+        { type: "heading", text: "REFERÊNCIAS BIBLIOGRÁFICAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "ALVES, A. C. Teletrabalho na Administração Pública. Editora, 2020.", pageStart: 111, pageEnd: 111, sourceLines: [{ pageNumber: 111, lineIndex: 1 }], confidence: "high", reasons: [] },
+        { type: "paragraph", text: "BRASIL. Lei nº 11.091, de 12 de janeiro de 2005. Plano de Carreira.", pageStart: 112, pageEnd: 112, sourceLines: [{ pageNumber: 112, lineIndex: 1 }], confidence: "high", reasons: [] },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const heading = headingPara(documentXml, "REFERÊNCIAS BIBLIOGRÁFICAS");
+      expect(heading).toMatch(/<w:b(?!ookmark)/);
+      const ref1 = paraWithText(documentXml, "ALVES, A. C.");
+      const ref2 = paraWithText(documentXml, "BRASIL. Lei");
+      expect(ref1).toContain('w:jc w:val="left"');
+      expect(ref1).not.toContain('w:firstLine="850"');
+      expect(ref2).toContain('w:jc w:val="left"');
+      expect(ref2).not.toContain('w:firstLine="850"');
+    });
+
+    it("referencia iniciada por ano vira paragrafo proprio via fluxo real", async () => {
+      const result = reconstructPdfParagraphBlocks([
+        refPage(110, [
+          "REFERÊNCIAS",
+          "ALVES, A. C. Teletrabalho na Administração Pública: estudo de caso na",
+          "Controladoria Geral da União. Dissertação - Universidade de Brasília, 2020.",
+          "2020. SOBRINHO, A. B. O programa de gestão e desempenho nas universidades.",
+          "Editora, 2020.",
+          "BRASIL. Lei nº 11.091, de 12 de janeiro de 2005. Dispõe sobre a estruturação",
+          "do Plano de Carreira dos Cargos Técnico-Administrativos em Educação.",
+        ]),
+      ]);
+      const refBlocks = result.blocks.filter((b) => b.type === "paragraph");
+      expect(refBlocks).toHaveLength(3);
+      const input = referencesInput(result.blocks);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const refParas = (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).filter(
+        (p) => p.includes("ALVES, A. C.") || p.includes("SOBRINHO, A. B.") || p.includes("BRASIL. Lei"),
+      );
+      expect(refParas).toHaveLength(3);
+      const sobrinho = paraWithText(documentXml, "SOBRINHO, A. B.");
+      expect(sobrinho).toContain('w:jc w:val="left"');
+      expect(sobrinho).not.toContain("ALVES, A. C.");
+    });
+
+    it("nenhum aviso ou diagnostico interno vaza como texto do documento", async () => {
+      const input = referencesInput([
+        { type: "heading", text: "REFERÊNCIAS", pageStart: 110, pageEnd: 110, sourceLines: [{ pageNumber: 110, lineIndex: 1 }], confidence: "high", reasons: [] },
+        {
+          type: "paragraph",
+          text: "SILVA, J. pandemia de COVID-19-19 na gestão pública. Editora, 2021.",
+          pageStart: 111,
+          pageEnd: 111,
+          sourceLines: [{ pageNumber: 111, lineIndex: 1 }],
+          confidence: "high",
+          reasons: [],
+        },
+      ]);
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      expect(documentXml).toContain("COVID-19-19");
+      expect(documentXml).not.toContain("Possível duplicação textual");
+      expect(documentXml).not.toContain("Possível fusão lexical");
+      expect(documentXml).not.toContain("Conteúdo marcado como sensivel a layout");
+    });
   });
 });
 

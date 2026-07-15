@@ -144,13 +144,13 @@ function centeredHeading(text: string, entry?: TocEntry): Paragraph {
 
 function isSpecialCenteredHeading(text: string): boolean {
   const key = normalizeHeadingKey(text);
-  return key === "REFERENCIAS" || key.startsWith("APENDICE") || key.startsWith("ANEXO");
+  return key.startsWith("REFERENCIAS") || key.startsWith("APENDICE") || key.startsWith("ANEXO");
 }
 
 function isPrimarySectionHeading(text: string): boolean {
   const cleaned = cleanText(text);
   const key = normalizeHeadingKey(text);
-  if (key === "REFERENCIAS" || key.startsWith("APENDICE") || key.startsWith("ANEXO")) return true;
+  if (key.startsWith("REFERENCIAS") || key.startsWith("APENDICE") || key.startsWith("ANEXO")) return true;
   return /^\d+\s+\S/.test(cleaned) && !/^\d+\.\d+/.test(cleaned);
 }
 
@@ -444,7 +444,7 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
     if (!text && block.type !== "unresolved") continue;
     if (block.type === "heading") {
       const headingKey = normalizeHeadingKey(text);
-      if (headingKey === "REFERENCIAS") inReferences = true;
+      if (headingKey.startsWith("REFERENCIAS")) inReferences = true;
       else if (headingKey.startsWith("APENDICE") || headingKey.startsWith("ANEXO")) inReferences = false;
       if (isPrimarySectionHeading(text)) {
         if (emittedPrimarySection) paragraphs.push(pageBreak());

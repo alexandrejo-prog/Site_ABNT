@@ -50,6 +50,7 @@ const REFERENCES_SECTION_KEY = "REFERENCIAS";
 const REFERENCES_END_KEYS = ["APENDICE", "APENDICES", "ANEXO", "ANEXOS"];
 const REFERENCE_AUTHOR_RE = /^\p{Lu}[\p{Lu}'’.\- ]*, [\p{Lu}. ;\-]+/u;
 const REFERENCE_INSTITUTIONAL_RE = /^\p{Lu}[\p{Lu}'’.\- ]*\.(?:\s|$)/u;
+const REFERENCE_YEAR_FIRST_RE = /^\d{4}\s*[.,]\s*\S/u;
 
 function normalizeSectionKey(text: string): string {
   return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().trim();
@@ -91,6 +92,7 @@ function startsNewReference(entry: ClassifiedLine, metrics: PdfBodyLayoutMetrics
   if (isPersonalAuthorStart(text)) return true;
   if (isInstitutionalStart(text)) return true;
   if (isAllCapsTitleStart(text)) return true;
+  if (REFERENCE_YEAR_FIRST_RE.test(text)) return true;
   if (isObviousReferenceContinuation(text)) return false;
   return false;
 }
@@ -890,7 +892,7 @@ export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTe
       const combined = combineHeadingLines(classified, index, bodyLayoutMetrics);
       blocks.push(combined.block);
       const sectionKey = normalizeSectionKey(combined.block.text);
-      if (sectionKey === REFERENCES_SECTION_KEY) inReferences = true;
+      if (sectionKey.startsWith(REFERENCES_SECTION_KEY)) inReferences = true;
       else if (REFERENCES_END_KEYS.some((key) => sectionKey.startsWith(key))) inReferences = false;
       index = combined.endIndex;
       pendingSeparationReason = "";
