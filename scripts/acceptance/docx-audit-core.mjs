@@ -164,7 +164,7 @@ function reconstructFields(docXml) {
       }
     } else {
       // instrText
-      if (building) acc += " " + t[2];
+      if (building) acc += t[2];
     }
   }
   if (building) {
