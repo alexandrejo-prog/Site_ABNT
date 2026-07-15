@@ -88,76 +88,93 @@ function isPageFurniture(page: PdfPageDiagnostic, line: PdfLineDiagnostic): bool
   return false;
 }
 
-function extendBlock(
+function findCaptionStartLine(page: PdfPageDiagnostic, target: string): number {
+  return page.lines.findIndex((line) => {
+    const n = normalizeForCompare(line.text);
+    if (n === target) return true;
+    if (CAPTION_RE.test(line.text.trim()) && n.length > 0 && target.startsWith(n)) return true;
+    return false;
+  });
+}
+
+function findSourceStartLine(page: PdfPageDiagnostic, target: string): number {
+  return page.lines.findIndex((line) => {
+    const n = normalizeForCompare(line.text);
+    if (n === target) return true;
+    if (SOURCE_RE.test(line.text.trim()) && n.length > 0 && target.startsWith(n)) return true;
+    return false;
+  });
+}
+
+// Reconstitui um bloco de legenda/fonte concatenando linhas consecutivas
+// SOMENTE enquanto o texto concatenado for igual ao alvo ou continuar sendo
+// prefixo real do alvo. Linhas de célula, cabeçalho ou parágrafo seguinte
+// (que não continuam o alvo) interrompem o bloco imediatamente.
+function matchBlockByPrefix(
   page: PdfPageDiagnostic,
   startIdx: number,
-  isBlockLine: (line: PdfLineDiagnostic, idx: number) => boolean,
-  maxGap: number,
+  target: string | null,
 ): CaptionSourceBlock {
+  if (target == null) {
+    return { startIdx, endIdx: startIdx, top: page.lines[startIdx].top, bottom: page.lines[startIdx].bottom };
+  }
   let endIdx = startIdx;
+  let concatenated = normalizeForCompare(page.lines[startIdx].text);
   let prevBottom = page.lines[startIdx].bottom;
   for (let i = startIdx + 1; i < page.lines.length; i += 1) {
     const line = page.lines[i];
     if (!hasValidCoords(line)) break;
-    if (line.top - prevBottom > maxGap) break;
-    if (!isBlockLine(line, i)) break;
-    endIdx = i;
-    prevBottom = line.bottom;
+    if (line.top - prevBottom > BLOCK_EXTEND_MAX_GAP) break;
+    const n = normalizeForCompare(line.text);
+    if (n.length === 0) break;
+    if (SOURCE_RE.test(line.text.trim()) || CAPTION_RE.test(line.text.trim()) || HEADING_RE.test(line.text.trim())) break;
+    const candidate = `${concatenated} ${n}`;
+    if (candidate === target) {
+      endIdx = i;
+      break;
+    }
+    if (target.startsWith(candidate)) {
+      endIdx = i;
+      concatenated = candidate;
+      prevBottom = line.bottom;
+      continue;
+    }
+    break;
   }
-  return {
-    startIdx,
-    endIdx,
-    top: page.lines[startIdx].top,
-    bottom: page.lines[endIdx].bottom,
-  };
+  return { startIdx, endIdx, top: page.lines[startIdx].top, bottom: page.lines[endIdx].bottom };
 }
 
 function findCaptionBlock(
   page: PdfPageDiagnostic,
   region: PdfLayoutSensitiveRegionDiagnostic,
 ): CaptionSourceBlock | null {
-  let startIdx = -1;
-  if (region.caption != null) {
-    const target = normalizeForCompare(region.caption);
-    startIdx = page.lines.findIndex((line) => normalizeForCompare(line.text) === target);
-  }
+  const target = region.caption != null && region.caption.trim().length > 0
+    ? normalizeForCompare(region.caption)
+    : null;
+  let startIdx = target != null ? findCaptionStartLine(page, target) : -1;
   if (startIdx < 0) startIdx = page.lines.findIndex((line) => CAPTION_RE.test(line.text.trim()));
   if (startIdx < 0) return null;
-  return extendBlock(
-    page,
-    startIdx,
-    (line) => {
-      const t = line.text.trim();
-      if (SOURCE_RE.test(t) || CAPTION_RE.test(t) || HEADING_RE.test(t)) return false;
-      if (t.length >= 60) return false;
-      return true;
-    },
-    BLOCK_EXTEND_MAX_GAP,
-  );
+  return matchBlockByPrefix(page, startIdx, target);
 }
 
 function findSourceBlock(
   page: PdfPageDiagnostic,
   region: PdfLayoutSensitiveRegionDiagnostic,
 ): CaptionSourceBlock | null {
-  let startIdx = -1;
-  if (region.source != null) {
-    const target = normalizeForCompare(region.source);
-    startIdx = page.lines.findIndex((line) => normalizeForCompare(line.text) === target);
-  }
+  const target = region.source != null && region.source.trim().length > 0
+    ? normalizeForCompare(region.source)
+    : null;
+  let startIdx = target != null ? findSourceStartLine(page, target) : -1;
   if (startIdx < 0) startIdx = page.lines.findIndex((line) => SOURCE_RE.test(line.text.trim()));
   if (startIdx < 0) return null;
-  return extendBlock(
-    page,
-    startIdx,
-    (line) => {
-      const t = line.text.trim();
-      if (CAPTION_RE.test(t) || HEADING_RE.test(t)) return false;
-      if (t.length >= 60) return false;
-      return true;
-    },
-    BLOCK_EXTEND_MAX_GAP,
-  );
+  return matchBlockByPrefix(page, startIdx, target);
+}
+
+function sourceSafetyGap(page: PdfPageDiagnostic, sourceBlock: CaptionSourceBlock): number {
+  const heights = page.lines.filter(hasValidCoords).map((line) => line.height);
+  const median = medianValue(heights);
+  const blockHeight = sourceBlock.bottom - sourceBlock.top;
+  return Math.max(CROP_EDGE_GAP, blockHeight * 0.6, median * 0.6);
 }
 
 function lineInBlock(idx: number, block: CaptionSourceBlock | null): boolean {
@@ -338,8 +355,8 @@ export function computePdfVisualCropGeometry(
         left = Math.min(...selected.map((line) => line.left));
         right = Math.max(...selected.map((line) => line.right));
       } else {
-        const captionBlock = findCaptionBlock(page, region);
-        const sourceBlock = findSourceBlock(page, region);
+        const captionBlock: CaptionSourceBlock | null = findCaptionBlock(page, region);
+        const sourceBlock: CaptionSourceBlock | null = findSourceBlock(page, region);
         const content = contentExtentOnPage(page, captionBlock, sourceBlock);
         if (content.empty) {
           skipped.push({ regionId: region.id, pageNumber, reason: "incomplete-structural-crop" });
@@ -349,18 +366,40 @@ export function computePdfVisualCropGeometry(
         const isLast = pageNumber === region.pageEnd;
         const isOnePage = isFirst && isLast;
 
-        if ((isFirst || isOnePage) && captionBlock) {
+        // Intervalo estrutural esperado (para avaliar completude em página única).
+        const expectedTop = captionBlock ? captionBlock.bottom : content.top;
+        const expectedBottom = sourceBlock ? sourceBlock.top : content.bottom;
+        const expectedSpan = expectedBottom - expectedTop;
+
+        // O topo do recorte exclui a legenda quando ela está ACIMA do conteúdo;
+        // quando a legenda está ABAIXO (figuras/gráficos), o topo é o conteúdo.
+        if ((isFirst || isOnePage) && captionBlock && captionBlock.top < content.top) {
           top = captionBlock.bottom + CROP_EDGE_GAP;
         } else {
           top = content.top;
         }
         if (isLast || isOnePage) {
-          const afterIdx = Math.max(captionBlock?.endIdx ?? -1, sourceBlock?.endIdx ?? -1);
-          const limit = sourceBlock ? sourceBlock.top : findFollowingParagraphTop(page, afterIdx);
-          bottom = (limit ?? content.bottom) - CROP_EDGE_GAP;
+          if (sourceBlock) {
+            // Margem segura antes de "Fonte:" (nunca corta o conteúdo real).
+            bottom = Math.max(sourceBlock.top - sourceSafetyGap(page, sourceBlock), content.bottom);
+          } else {
+            const afterIdx = captionBlock != null ? captionBlock.endIdx : -1;
+            const following = findFollowingParagraphTop(page, afterIdx);
+            bottom = (following ?? content.bottom) - CROP_EDGE_GAP;
+          }
         } else {
           bottom = content.bottom;
         }
+
+        // Página única: rejeitar fragmentos (<80% do intervalo estrutural real).
+        if (isOnePage && expectedSpan > 0) {
+          const capturedSpan = bottom - top;
+          if (capturedSpan < expectedSpan * 0.8) {
+            skipped.push({ regionId: region.id, pageNumber, reason: "incomplete-structural-crop" });
+            continue;
+          }
+        }
+
         left = content.left;
         right = content.right;
       }

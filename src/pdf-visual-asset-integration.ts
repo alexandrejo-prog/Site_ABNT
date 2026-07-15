@@ -98,3 +98,33 @@ export function rasterizablePdfCrops(
     return region ? isRasterizablePdfRegionKind(region.kind) : false;
   });
 }
+
+export interface RegionVisualEmission {
+  mode: "images" | "marker";
+  pagesCovered: number;
+  pagesTotal: number;
+  pageStart: number;
+  pageEnd: number;
+}
+
+// Decisao atomica: um elemento visual multipagina so e inserido como imagens
+// quando TODAS as suas paginas foram recortadas com sucesso. Se alguma pagina
+// falhar, nenhuma parte e emitida e o elemento vira um unico marcador.
+export function decideRegionVisualEmission(
+  region: PdfLayoutSensitiveRegionDiagnostic,
+  cropKeys: Set<string>,
+): RegionVisualEmission {
+  const visualKey = region.logicalVisualId ?? region.id;
+  const total = region.pageEnd - region.pageStart + 1;
+  let covered = 0;
+  for (let page = region.pageStart; page <= region.pageEnd; page += 1) {
+    if (cropKeys.has(pdfRegionCropKey(visualKey, page, region.id))) covered += 1;
+  }
+  return {
+    mode: covered === total ? "images" : "marker",
+    pagesCovered: covered,
+    pagesTotal: total,
+    pageStart: region.pageStart,
+    pageEnd: region.pageEnd,
+  };
+}

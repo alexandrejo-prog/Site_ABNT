@@ -628,9 +628,9 @@ describe("camada de geometria de recorte visual pdf", () => {
       const { crops } = computePdfVisualCropGeometry(pages, regions);
       expect(crops).toHaveLength(1);
       const c = crops[0];
-      // topo = base da legenda (130) + gap; base = topo da fonte (1040) - gap
+      // topo = base da legenda (130) + gap; base = topo da fonte (1040) - margem segura
       expect(c.sourceRect.y).toBe(134);
-      expect(c.sourceRect.y + c.sourceRect.height).toBe(1036);
+      expect(c.sourceRect.y + c.sourceRect.height).toBe(1022);
       expect(c.sourceRect.height).toBeGreaterThan(800); // intervalo estrutural completo, nunca 230px
     });
 
@@ -646,7 +646,7 @@ describe("camada de geometria de recorte visual pdf", () => {
       expect(crops).toHaveLength(1);
       const c = crops[0];
       expect(c.sourceRect.y).toBe(134); // base da legenda (130) + gap
-      expect(c.sourceRect.y + c.sourceRect.height).toBe(466); // topo da fonte (470) - gap
+      expect(c.sourceRect.y + c.sourceRect.height).toBe(452); // topo da fonte (470) - margem segura
       expect(c.sourceRect.y).toBeGreaterThan(130);
       expect(c.sourceRect.y + c.sourceRect.height).toBeLessThan(470);
     });
@@ -677,7 +677,7 @@ describe("camada de geometria de recorte visual pdf", () => {
       const first = crops.find((c) => c.pageNumber === 1)!;
       const last = crops.find((c) => c.pageNumber === 3)!;
       expect(first.sourceRect.y).toBe(134); // exclui legenda (base 130)
-      expect(last.sourceRect.y + last.sourceRect.height).toBe(1036); // exclui fonte (topo 1040)
+      expect(last.sourceRect.y + last.sourceRect.height).toBe(1022); // exclui fonte (topo 1040) - margem segura
     });
 
     it("fonte quebrada em duas linhas e excluida do recorte", () => {
@@ -691,7 +691,7 @@ describe("camada de geometria de recorte visual pdf", () => {
       const { crops } = computePdfVisualCropGeometry(pages, regions);
       expect(crops).toHaveLength(1);
       const c = crops[0];
-      expect(c.sourceRect.y + c.sourceRect.height).toBe(466); // topo da fonte (470) - gap, ambas linhas fora
+      expect(c.sourceRect.y + c.sourceRect.height).toBe(431); // topo da fonte (470) - margem segura, ambas linhas fora
       expect(c.sourceRect.y + c.sourceRect.height).toBeLessThan(470);
     });
 
@@ -702,7 +702,7 @@ describe("camada de geometria de recorte visual pdf", () => {
         line(1, { left: 100, right: 900, top: 200, bottom: 300, height: 30, text: "corpo" }),
         line(1, { left: 100, right: 900, top: 470, bottom: 500, height: 30, text: "Fonte: A." }),
       ])];
-      const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 3, kind: "quadro", caption: "Quadro 1 – Percepção", source: "Fonte: A." })];
+      const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 3, kind: "quadro", caption: "Quadro 1 – Percepção dos servidores.", source: "Fonte: A." })];
       const { crops } = computePdfVisualCropGeometry(pages, regions);
       expect(crops).toHaveLength(1);
       const c = crops[0];
@@ -735,7 +735,7 @@ describe("camada de geometria de recorte visual pdf", () => {
       const { crops } = computePdfVisualCropGeometry(pages, regions);
       expect(crops).toHaveLength(1);
       const bottom = crops[0].sourceRect.y + crops[0].sourceRect.height;
-      expect(bottom).toBe(1036); // topo da fonte (1040) - gap
+      expect(bottom).toBe(1030); // topo da fonte (1040) - margem segura, ultima linha preservada
       expect(bottom).toBeGreaterThanOrEqual(1030); // ultima linha (base 1030) preservada
       expect(bottom).toBeLessThan(1040); // fonte fora
     });
@@ -763,7 +763,7 @@ describe("camada de geometria de recorte visual pdf", () => {
 
     it("proporcao muito achatada continua rejeitada", () => {
       const pages = [page(1, PAGE_W, PAGE_H, [
-        line(1, { left: 100, right: 700, top: 200, bottom: 215, height: 15 }),
+        line(1, { left: 700, right: 720, top: 200, bottom: 215, height: 15 }),
       ])];
       const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 0, kind: "quadro" })];
       const { crops, skipped } = computePdfVisualCropGeometry(pages, regions);
@@ -771,6 +771,180 @@ describe("camada de geometria de recorte visual pdf", () => {
       expect(skipped.length).toBe(1);
       expect(skipped[0].regionId).toBe("r1");
       expect(skipped[0].reason).toMatch(/^implausible-crop-/);
+    });
+  });
+
+  describe("correcoes de precisao e atomicidade estrutural", () => {
+    const rowsFrom = (startTop: number, count: number, step = 40, height = 30) =>
+      Array.from({ length: count }, (_, i) =>
+        line(1, { left: 100, right: 900, top: startTop + i * step, bottom: startTop + i * step + height, height, text: `celula ${i}` }),
+      );
+
+    it("G1 legenda de 1 linha nao absorve linha de celula curta subsequente", () => {
+      const pages = [page(1, PAGE_W, PAGE_H, [
+        line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 1 – X." }),
+        ...rowsFrom(160, 3),
+      ])];
+      const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 3, kind: "quadro", caption: "Quadro 1 – X." })];
+      const { crops } = computePdfVisualCropGeometry(pages, regions);
+      expect(crops).toHaveLength(1);
+      // topo = base da legenda (130) + gap; se absorvesse celulas, topo seria >= 160
+      expect(crops[0].sourceRect.y).toBe(134);
+      expect(crops[0].sourceRect.y).toBeLessThan(160);
+    });
+
+    it("G2 legenda quebrada em 2 linhas e reconstituida por prefixo nao absorve celula", () => {
+      const pages = [page(1, PAGE_W, PAGE_H, [
+        line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 1 – Percepção" }),
+        line(1, { left: 100, right: 900, top: 135, bottom: 165, height: 30, text: "dos servidores." }),
+        line(1, { left: 100, right: 900, top: 200, bottom: 230, height: 30, text: "celula 0" }),
+      ])];
+      const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 2, kind: "quadro", caption: "Quadro 1 – Percepção dos servidores.", source: "Fonte: A." })];
+      const { crops } = computePdfVisualCropGeometry(pages, regions);
+      expect(crops).toHaveLength(1);
+      // bloco de legenda = 2 linhas (base 165) + gap; celula (200) preservada
+      expect(crops[0].sourceRect.y).toBe(169);
+      expect(crops[0].sourceRect.y).toBeLessThan(200);
+    });
+
+    it("G3 linha curta nao-prefixo posterior nao e incorporada a legenda", () => {
+      const pages = [page(1, PAGE_W, PAGE_H, [
+        line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 1 – Nota." }),
+        line(1, { left: 100, right: 900, top: 160, bottom: 190, height: 30, text: "Obs." }),
+      ])];
+      const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 1, kind: "quadro", caption: "Quadro 1 – Nota." })];
+      const { crops } = computePdfVisualCropGeometry(pages, regions);
+      expect(crops).toHaveLength(1);
+      expect(crops[0].sourceRect.y).toBe(134); // legenda com 1 linha apenas
+      expect(crops[0].sourceRect.y).toBeLessThan(160);
+    });
+
+    it("G4 Quadro 1 sintetico preserva topo e base completos sem fragmento", () => {
+      const rows = rowsFrom(160, 10, 40); // 160..550
+      const pages = [page(1, PAGE_W, PAGE_H, [
+        line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 1 – Título." }),
+        ...rows,
+        line(1, { left: 100, right: 900, top: 600, bottom: 630, height: 30, text: "Fonte: A." }),
+      ])];
+      const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 10, kind: "quadro", caption: "Quadro 1 – Título.", source: "Fonte: A." })];
+      const { crops, skipped } = computePdfVisualCropGeometry(pages, regions);
+      expect(skipped).toHaveLength(0);
+      expect(crops).toHaveLength(1);
+      const c = crops[0];
+      const lastRowBottom = 160 + 9 * 40 + 30; // 550
+      expect(c.sourceRect.y).toBe(134); // exclui legenda
+      expect(c.sourceRect.y + c.sourceRect.height).toBeGreaterThanOrEqual(lastRowBottom); // base completa
+      expect(c.sourceRect.y + c.sourceRect.height).toBeLessThan(600); // exclui fonte
+    });
+
+    it("G5 Quadro 7 sintetico nao corta cabecalhos de coluna", () => {
+      const header = line(1, { left: 100, right: 900, top: 160, bottom: 190, height: 30, text: "Cabeçalho A B" });
+      const rows = rowsFrom(200, 8, 40);
+      const pages = [page(1, PAGE_W, PAGE_H, [
+        line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 7 – Síntese." }),
+        header,
+        ...rows,
+        line(1, { left: 100, right: 900, top: 700, bottom: 730, height: 30, text: "Fonte: B." }),
+      ])];
+      const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 9, kind: "quadro", caption: "Quadro 7 – Síntese.", source: "Fonte: B." })];
+      const { crops } = computePdfVisualCropGeometry(pages, regions);
+      expect(crops).toHaveLength(1);
+      expect(crops[0].sourceRect.y).toBeLessThanOrEqual(160); // cabeçalho dentro do recorte
+      expect(crops[0].sourceRect.y + crops[0].sourceRect.height).toBeLessThan(700); // fonte fora
+    });
+
+    it("G6 Quadro 15 sintetico preserva ultimas linhas", () => {
+      const rows = rowsFrom(160, 9, 40); // ultima em 160+8*40=480..510
+      const pages = [page(1, PAGE_W, PAGE_H, [
+        line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 15 – Dados." }),
+        ...rows,
+        line(1, { left: 100, right: 900, top: 600, bottom: 630, height: 30, text: "Fonte: C." }),
+      ])];
+      const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 9, kind: "quadro", caption: "Quadro 15 – Dados.", source: "Fonte: C." })];
+      const { crops } = computePdfVisualCropGeometry(pages, regions);
+      expect(crops).toHaveLength(1);
+      const lastRowBottom = 160 + 8 * 40 + 30; // 510
+      expect(crops[0].sourceRect.y + crops[0].sourceRect.height).toBeGreaterThanOrEqual(lastRowBottom);
+      expect(crops[0].sourceRect.y + crops[0].sourceRect.height).toBeLessThan(600);
+    });
+
+    it("G7 fonte de 1 linha e excluida do recorte", () => {
+      const pages = [page(1, PAGE_W, PAGE_H, [
+        line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 1 – X." }),
+        line(1, { left: 100, right: 900, top: 160, bottom: 300, height: 30, text: "corpo" }),
+        line(1, { left: 100, right: 900, top: 470, bottom: 500, height: 30, text: "Fonte: A." }),
+      ])];
+      const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 2, kind: "quadro", caption: "Quadro 1 – X.", source: "Fonte: A." })];
+      const { crops } = computePdfVisualCropGeometry(pages, regions);
+      expect(crops).toHaveLength(1);
+      const bottom = crops[0].sourceRect.y + crops[0].sourceRect.height;
+      expect(bottom).toBeLessThan(470); // fonte fora
+      expect(bottom).toBeGreaterThanOrEqual(300); // conteudo preservado
+    });
+
+    it("G8 fonte de 2 linhas e excluida do recorte", () => {
+      const pages = [page(1, PAGE_W, PAGE_H, [
+        line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 1 – X." }),
+        line(1, { left: 100, right: 900, top: 160, bottom: 300, height: 30, text: "corpo" }),
+        line(1, { left: 100, right: 900, top: 470, bottom: 500, height: 30, text: "Fonte: IBGE," }),
+        line(1, { left: 100, right: 900, top: 505, bottom: 535, height: 30, text: "2025." }),
+      ])];
+      const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 3, kind: "quadro", caption: "Quadro 1 – X.", source: "Fonte: IBGE, 2025." })];
+      const { crops } = computePdfVisualCropGeometry(pages, regions);
+      expect(crops).toHaveLength(1);
+      const bottom = crops[0].sourceRect.y + crops[0].sourceRect.height;
+      expect(bottom).toBeLessThan(470); // fonte fora
+      expect(bottom).toBeGreaterThanOrEqual(300); // conteudo preservado
+    });
+
+    it("G9 margem da fonte respeita a altura de linha (altura do bloco * 0.6)", () => {
+      const source = [
+        line(1, { left: 100, right: 900, top: 1000, bottom: 1100, height: 100, text: "Fonte: IBGE," }),
+        line(1, { left: 100, right: 900, top: 1105, bottom: 1205, height: 100, text: "2025." }),
+      ];
+      const pages = [page(1, PAGE_W, PAGE_H, [
+        line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 1 – X." }),
+        ...rowsFrom(160, 6, 40), // 160..390
+        ...source,
+      ])];
+      const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 7, kind: "quadro", caption: "Quadro 1 – X.", source: "Fonte: IBGE, 2025." })];
+      const { crops } = computePdfVisualCropGeometry(pages, regions);
+      expect(crops).toHaveLength(1);
+      const bottom = crops[0].sourceRect.y + crops[0].sourceRect.height;
+      // bloco de fonte com 205px -> margem = 205 * 0.6 = 123 (maior que 0.6*mediana)
+      expect(bottom).toBe(877);
+      expect(1000 - bottom).toBe(123);
+      expect(1000 - bottom).toBeGreaterThanOrEqual(Math.round(100 * 0.6));
+    });
+
+    it("G10 recorte com menos de 80% do intervalo estrutural e rejeitado", () => {
+      const pages = [page(1, PAGE_W, PAGE_H, [
+        line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 1 – X." }),
+        line(1, { left: 100, right: 900, top: 160, bottom: 190, height: 30, text: "corpo" }),
+        line(1, { left: 100, right: 900, top: 220, bottom: 250, height: 30, text: "Fonte: A." }),
+      ])];
+      const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 2, kind: "quadro", caption: "Quadro 1 – X.", source: "Fonte: A." })];
+      const { crops, skipped } = computePdfVisualCropGeometry(pages, regions);
+      expect(crops).toHaveLength(0);
+      expect(skipped).toEqual([{ regionId: "r1", pageNumber: 1, reason: "incomplete-structural-crop" }]);
+    });
+
+    it("G11 Grafico 10 sintetico: legenda/fonte abaixo, grafico acima; recorte inclui grafico e exclui fonte", () => {
+      const pages = [page(1, PAGE_W, PAGE_H, [
+        ...rowsFrom(150, 9, 45), // grafico de 150..555
+        line(1, { left: 100, right: 900, top: 520, bottom: 550, height: 30, text: "Gráfico 10 – Evolução." }),
+        line(1, { left: 100, right: 900, top: 560, bottom: 590, height: 30, text: "Fonte: Autor." }),
+      ])];
+      const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 10, kind: "grafico", caption: "Gráfico 10 – Evolução.", source: "Fonte: Autor." })];
+      const { crops, skipped } = computePdfVisualCropGeometry(pages, regions);
+      expect(skipped).toHaveLength(0);
+      expect(crops).toHaveLength(1);
+      const c = crops[0];
+      const graphicTop = 150;
+      const graphicBottom = 150 + 8 * 45 + 30; // ultima linha: top 510, bottom 540
+      expect(c.sourceRect.y).toBeLessThanOrEqual(graphicTop); // grafico incluido desde o topo
+      expect(c.sourceRect.y + c.sourceRect.height).toBeGreaterThanOrEqual(graphicBottom); // grafico completo
+      expect(c.sourceRect.y + c.sourceRect.height).toBeLessThan(560); // fonte fora do PNG
     });
   });
 });

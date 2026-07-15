@@ -17,7 +17,11 @@ import type { IParagraphOptions } from "docx";
 import type { PdfAbstractDiagnostic, PdfLayoutSensitiveRegionDiagnostic, PdfReconstructedBlockDiagnostic } from "./imported-pdf-diagnostic";
 import { ensurePdfTextDraftTocFields } from "./pdf-text-draft-toc-field-patch";
 import { normalizePdfTocHeading } from "./pdf-toc-eligibility";
-import { visualAssetEntriesForRegion } from "./pdf-visual-asset-integration";
+import {
+  decideRegionVisualEmission,
+  pdfRegionCropKey,
+  visualAssetEntriesForRegion,
+} from "./pdf-visual-asset-integration";
 import type { PdfTextDraftExportInput, PdfTextDraftLogoAsset, PdfTextDraftValidation, PdfTextDraftVisualAsset } from "./pdf-text-draft-contract";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -159,7 +163,15 @@ function isGraphicLikeKind(kind?: PdfLayoutSensitiveRegionDiagnostic["kind"]): b
 }
 
 function hasVisualAssetForRegion(region: PdfLayoutSensitiveRegionDiagnostic | undefined, visualAssets: Record<string, PdfTextDraftVisualAsset>): boolean {
-  return visualAssetEntriesForRegion(region, visualAssets).length > 0;
+  if (!region) return false;
+  // Decisao atomica: so ha ativo quando TODAS as paginas do elemento foram recortadas.
+  const keys = new Set(Object.keys(visualAssets ?? {}));
+  const visualKey = region.logicalVisualId ?? region.id;
+  // Ativo legado (chave unica visualKey) cobre regioes de pagina unica.
+  if (keys.has(visualKey) && region.pageStart === region.pageEnd) {
+    keys.add(pdfRegionCropKey(visualKey, region.pageStart, region.id));
+  }
+  return decideRegionVisualEmission(region, keys).mode === "images";
 }
 
 function visualKindLabel(kind?: PdfLayoutSensitiveRegionDiagnostic["kind"]): string {
@@ -425,13 +437,6 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
     }
   }
 
-  const unreliableRanges = new Set<string>();
-  for (const [id, range] of logicalVisualRanges) {
-    if (range.pageEnd - range.pageStart > 3) {
-      unreliableRanges.add(id);
-    }
-  }
-
   const visualAssets = input.visualAssets ?? {};
   const emittedVisualAssetKeys = new Set<string>();
   const emittedMarkerKeys = new Set<string>();
@@ -482,7 +487,12 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
     if (block.type === "caption") {
       const region = block.layoutRegionId ? regions.get(block.layoutRegionId) : undefined;
       const dedupKey = region?.logicalVisualId ?? block.layoutRegionId ?? `caption-${block.pageStart}`;
-      paragraphs.push(left(text, { size: 22, keepNext: true, keepLines: true, widowControl: true }));
+      // Legendas de continuação/conclusão não devem ficar "soltas" quando o
+      // elemento já foi inserido como imagem ou representado por marcador.
+      const isContinuationCaption = /continua|conclus[ãa]o/i.test(text);
+      if (!isContinuationCaption) {
+        paragraphs.push(left(text, { size: 22, keepNext: true, keepLines: true, widowControl: true }));
+      }
       if (region && !emittedMarkerKeys.has(dedupKey)) {
         const hasUnresolved = input.reconstruction.blocks.some(
           (b) => b.type === "unresolved" && b.layoutRegionId === block.layoutRegionId
@@ -495,8 +505,7 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
           emittedMarkerKeys.add(dedupKey);
         } else if (isGraphicLikeKind(region.kind)) {
           const range = region.logicalVisualId ? logicalVisualRanges.get(region.logicalVisualId) : undefined;
-          const reliableRange = range && region.logicalVisualId && !unreliableRanges.has(region.logicalVisualId) ? range : undefined;
-          paragraphs.push(left(markerForBlock(block, regions, reliableRange), { size: 20, italics: true }));
+          paragraphs.push(left(markerForBlock(block, regions, range), { size: 20, italics: true }));
           emittedMarkerKeys.add(dedupKey);
         }
       }
@@ -507,13 +516,12 @@ function bodyParagraphs(input: PdfTextDraftExportInput, entries: TocEntry[]): Pa
       const logicalId = region?.logicalVisualId;
       const dedupKey = logicalId ?? block.layoutRegionId ?? `unresolved-${block.pageStart}-${block.sourceLines[0]?.lineIndex ?? paragraphs.length}`;
       const range = logicalId ? logicalVisualRanges.get(logicalId) : undefined;
-      const reliableRange = range && logicalId && !unreliableRanges.has(logicalId) ? range : undefined;
       const unresolvedHasAsset = region ? hasVisualAssetForRegion(region, visualAssets) : false;
       if (region && unresolvedHasAsset) {
         emitVisualImages(region);
       } else if (!emittedMarkerKeys.has(dedupKey)) {
         emittedMarkerKeys.add(dedupKey);
-        paragraphs.push(left(markerForBlock(block, regions, reliableRange), { size: 20, italics: true }));
+        paragraphs.push(left(markerForBlock(block, regions, range), { size: 20, italics: true }));
       }
     }
   }

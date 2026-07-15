@@ -3,6 +3,7 @@ import type { ImportedPdfDiagnostic, PdfLayoutSensitiveRegionDiagnostic } from "
 import type { PdfVisualCropGeometry } from "../src/pdf-visual-crop-geometry";
 import type { PdfTextDraftVisualAsset } from "../src/pdf-text-draft-contract";
 import {
+  decideRegionVisualEmission,
   isRasterizablePdfRegionKind,
   pdfRegionCropKey,
   rasterizablePdfCrops,
@@ -192,5 +193,59 @@ describe("filtro de crops rasterizaveis", () => {
 
   it("retorna vazio quando nao ha crops", () => {
     expect(rasterizablePdfCrops(diagnostic([]), [])).toEqual([]);
+  });
+});
+
+describe("decisao atomica de emissao visual", () => {
+  function keysFor(visualKey: string, regionId: string, pages: number[]): Set<string> {
+    return new Set(pages.map((p) => pdfRegionCropKey(visualKey, p, regionId)));
+  }
+
+  it("I1 multipagina com todas as paginas recortadas gera todas as partes (images)", () => {
+    const region = makeRegion({ id: "r1", logicalVisualId: "q1", pageStart: 1, pageEnd: 3, kind: "quadro" });
+    const keys = keysFor("q1", "r1", [1, 2, 3]);
+    const decision = decideRegionVisualEmission(region, keys);
+    expect(decision.mode).toBe("images");
+    expect(decision.pagesCovered).toBe(3);
+    expect(decision.pagesTotal).toBe(3);
+  });
+
+  it("I2 multipagina com uma pagina faltando gera marcador unico (nenhuma imagem)", () => {
+    const region = makeRegion({ id: "r1", logicalVisualId: "q1", pageStart: 1, pageEnd: 3, kind: "quadro" });
+    const keys = keysFor("q1", "r1", [1, 3]); // pagina 2 ausente
+    const decision = decideRegionVisualEmission(region, keys);
+    expect(decision.mode).toBe("marker");
+    expect(decision.pagesCovered).toBe(2);
+    expect(decision.pagesTotal).toBe(3);
+  });
+
+  it("I3 marcador cobre o intervalo integral da regiao (pageStart-pageEnd)", () => {
+    const region = makeRegion({ id: "r1", logicalVisualId: "q1", pageStart: 5, pageEnd: 8, kind: "tabela" });
+    const keys = keysFor("q1", "r1", [5, 8]); // pagina 6 e 7 ausentes
+    const decision = decideRegionVisualEmission(region, keys);
+    expect(decision.mode).toBe("marker");
+    expect(decision.pageStart).toBe(5);
+    expect(decision.pageEnd).toBe(8);
+  });
+
+  it("I4 regiao com intervalo amplo contabiliza pagesTotal integral", () => {
+    const region = makeRegion({ id: "r1", logicalVisualId: "q1", pageStart: 1, pageEnd: 4, kind: "quadro" });
+    const keys = keysFor("q1", "r1", [1, 2, 3, 4]);
+    const decision = decideRegionVisualEmission(region, keys);
+    expect(decision.pagesTotal).toBe(4);
+    expect(decision.pagesCovered).toBe(4);
+    expect(decision.mode).toBe("images");
+  });
+
+  it("I5 duas regioes com mesmo logicalVisualId (continuacoes) emitem todas as partes quando todas as paginas existem", () => {
+    const a = makeRegion({ id: "rA", logicalVisualId: "q1", pageStart: 1, pageEnd: 2, kind: "quadro" });
+    const b = makeRegion({ id: "rB", logicalVisualId: "q1", pageStart: 3, pageEnd: 4, kind: "quadro" });
+    const keys = new Set([...keysFor("q1", "rA", [1, 2]), ...keysFor("q1", "rB", [3, 4])]);
+    const decisionA = decideRegionVisualEmission(a, keys);
+    const decisionB = decideRegionVisualEmission(b, keys);
+    expect(decisionA.mode).toBe("images");
+    expect(decisionB.mode).toBe("images");
+    expect(decisionA.pagesCovered).toBe(2);
+    expect(decisionB.pagesCovered).toBe(2);
   });
 });

@@ -8,6 +8,7 @@ import {
   validatePdfTextDraftExport,
 } from "../src/export-pdf-text-draft-docx";
 import type { PdfTextDraftExportInput, PdfTextDraftVisualAsset } from "../src/pdf-text-draft-contract";
+import { pdfRegionCropKey } from "../src/pdf-visual-asset-integration";
 import { documentText, loadDocxParts, paragraphTexts } from "./test-utils/ooxml";
 
 function baseInput(overrides: Partial<PdfTextDraftExportInput> = {}): PdfTextDraftExportInput {
@@ -2285,6 +2286,105 @@ describe("ativos visuais compostos por recorte (chave multipagina)", () => {
       const captionRuns = (documentXml.match(/<w:t[^>]*>Gráfico 1 – Vendas\.<\/w:t>/g) ?? []).length;
       expect(captionRuns).toBe(1);
       expect(documentXml).not.toContain("Elemento visual não inserido neste rascunho textual - Gráfico");
+    });
+  });
+
+  describe("atomicidade e precisao de recortes estruturais (correcoes)", () => {
+    const logo = readFileSync(join(process.cwd(), "public", "assets", "ufla-logo.jpeg"));
+    const MARKER = "Elemento visual não inserido";
+
+    function multipageVisualInput(opts: {
+      id: string;
+      logicalId: string;
+      pageStart: number;
+      pageEnd: number;
+      kind: "quadro" | "grafico" | "tabela";
+      caption: string;
+      source: string;
+      coveredPages: number[];
+    }): PdfTextDraftExportInput {
+      const region: PdfTextDraftExportInput["reconstruction"]["layoutRegions"][number] = {
+        id: opts.id,
+        pageStart: opts.pageStart,
+        pageEnd: opts.pageEnd,
+        startLineIndex: 0,
+        endLineIndex: 1,
+        kind: opts.kind,
+        caption: opts.caption,
+        source: opts.source,
+        confidence: "high",
+        reasons: [],
+        logicalVisualId: opts.logicalId,
+      };
+      const visualAssets: Record<string, PdfTextDraftVisualAsset> = {};
+      for (const p of opts.coveredPages) {
+        const key = pdfRegionCropKey(opts.logicalId, p, opts.id);
+        visualAssets[key] = {
+          data: logo,
+          width: 400,
+          height: 300,
+          altText: { title: opts.caption, description: opts.caption, name: opts.caption },
+        };
+      }
+      const blocks: PdfTextDraftExportInput["reconstruction"]["blocks"] = [
+        { type: "paragraph", text: "Texto antes do elemento visual para validacao.", pageStart: opts.pageStart, pageEnd: opts.pageStart, sourceLines: [{ pageNumber: opts.pageStart, lineIndex: 0 }], confidence: "medium", reasons: [] },
+        { type: "caption", text: opts.caption, pageStart: opts.pageStart, pageEnd: opts.pageStart, sourceLines: [{ pageNumber: opts.pageStart, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: opts.id },
+        { type: "source", text: opts.source, pageStart: opts.pageEnd, pageEnd: opts.pageEnd, sourceLines: [{ pageNumber: opts.pageEnd, lineIndex: 1 }], confidence: "high", reasons: [], layoutRegionId: opts.id },
+      ];
+      return baseInput({
+        visualAssets: Object.keys(visualAssets).length ? visualAssets : undefined,
+        reconstruction: {
+          ...baseInput().reconstruction,
+          blocks,
+          layoutRegions: [region],
+          statistics: { ...baseInput().reconstruction.statistics, layoutRegionCount: 1, captionCount: 1, sourceCount: 1, unresolvedCount: 0, paragraphCount: 1 },
+        },
+      });
+    }
+
+    it("E1 regiao multipagina com uma pagina faltando gera exatamente um marcador (sem imagem)", async () => {
+      const input = multipageVisualInput({ id: "layout-40-1", logicalId: "g10", pageStart: 40, pageEnd: 41, kind: "grafico", caption: "Gráfico 10 – Evolução.", source: "Fonte: Autor.", coveredPages: [40] });
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const markers = documentXml.match(new RegExp(MARKER, "g")) ?? [];
+      expect(markers).toHaveLength(1);
+      // apenas o logo (1 drawing); nenhuma imagem do elemento visual
+      expect((documentXml.match(/<w:drawing/g) ?? []).length).toBe(1);
+    });
+
+    it("E2 marcador multipagina mostra o intervalo integral (paginas originais X-Y)", async () => {
+      const input = multipageVisualInput({ id: "layout-40-1", logicalId: "g10", pageStart: 40, pageEnd: 42, kind: "grafico", caption: "Gráfico 10 – Evolução.", source: "Fonte: Autor.", coveredPages: [] });
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      expect(documentXml).toContain("páginas originais 40-42");
+      expect((documentXml.match(/<w:drawing/g) ?? []).length).toBe(1); // sem imagem do elemento
+    });
+
+    it("E3 4.3 aparece no sumario; nenhuma w:tbl; bookmarks e PAGEREF presentes", async () => {
+      const input = baseInput({
+        reconstruction: {
+          ...baseInput().reconstruction,
+          blocks: [
+            ...baseInput().reconstruction.blocks,
+            { type: "heading", text: "4.3 Metodologia", pageStart: 40, pageEnd: 40, sourceLines: [{ pageNumber: 40, lineIndex: 1 }], confidence: "high", reasons: [] },
+          ],
+        },
+      });
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      const text = documentText(documentXml);
+      expect(text).toContain("SUMÁRIO");
+      expect(text).toContain("4.3 Metodologia");
+      expect(documentXml).not.toContain("<w:tbl");
+      expect(documentXml).toContain("<w:bookmarkStart");
+      expect(documentXml).toContain("PAGEREF");
+    });
+
+    it("E4 Grafico 10 com ativos presentes e inserido como imagem; fonte aparece como texto fora da imagem", async () => {
+      const input = multipageVisualInput({ id: "layout-40-1", logicalId: "grafico-10-page-40", pageStart: 40, pageEnd: 40, kind: "grafico", caption: "Gráfico 10 – Evolução.", source: "Fonte: Autor.", coveredPages: [40] });
+      const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+      // logo (1) + imagem do elemento (1) = 2 drawings
+      expect((documentXml.match(/<w:drawing/g) ?? []).length).toBe(2); // imagem inserida
+      expect(documentXml).not.toContain(MARKER); // nenhum marcador
+      expect(documentText(documentXml)).toContain("Fonte: Autor."); // fonte como texto (fora do PNG)
+      expect(documentText(documentXml)).toContain("Gráfico 10 – Evolução."); // legenda como texto
     });
   });
 });
