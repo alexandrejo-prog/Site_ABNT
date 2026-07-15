@@ -64,6 +64,9 @@ const MIN_PLAUSIBLE_CROP_HEIGHT = 40;
 const MAX_CROP_ASPECT_RATIO = 25;
 const CROP_EDGE_GAP = 4;
 const BLOCK_EXTEND_MAX_GAP = 18;
+// Janela (em linhas) ao redor do intervalo estrutural usada para localizar a
+// legenda/fonte mais próxima de cada região, sem capturar a de um visual vizinho.
+const CAPTION_SOURCE_SEARCH = 8;
 
 const CAPTION_RE = /^(Quadro|Tabela|Figura|Gr[áa]fico|Imagem|Mapa|Ilustra[çc][ãa]o)\s+(\d+)\s*[-–—.:]/iu;
 const SOURCE_RE = /^Fonte\s*:/iu;
@@ -86,24 +89,6 @@ function isPageFurniture(page: PdfPageDiagnostic, line: PdfLineDiagnostic): bool
   const edge = line.top < page.height * 0.1 || line.bottom > page.height * 0.9;
   if (edge && /^(\d{1,4}|[ivxlcdm]{1,8})$/iu.test(t)) return true;
   return false;
-}
-
-function findCaptionStartLine(page: PdfPageDiagnostic, target: string): number {
-  return page.lines.findIndex((line) => {
-    const n = normalizeForCompare(line.text);
-    if (n === target) return true;
-    if (CAPTION_RE.test(line.text.trim()) && n.length > 0 && target.startsWith(n)) return true;
-    return false;
-  });
-}
-
-function findSourceStartLine(page: PdfPageDiagnostic, target: string): number {
-  return page.lines.findIndex((line) => {
-    const n = normalizeForCompare(line.text);
-    if (n === target) return true;
-    if (SOURCE_RE.test(line.text.trim()) && n.length > 0 && target.startsWith(n)) return true;
-    return false;
-  });
 }
 
 // Reconstitui um bloco de legenda/fonte concatenando linhas consecutivas
@@ -147,27 +132,71 @@ function matchBlockByPrefix(
 function findCaptionBlock(
   page: PdfPageDiagnostic,
   region: PdfLayoutSensitiveRegionDiagnostic,
+  pageNumber: number,
 ): CaptionSourceBlock | null {
   const target = region.caption != null && region.caption.trim().length > 0
     ? normalizeForCompare(region.caption)
     : null;
-  let startIdx = target != null ? findCaptionStartLine(page, target) : -1;
-  if (startIdx < 0) startIdx = page.lines.findIndex((line) => CAPTION_RE.test(line.text.trim()));
-  if (startIdx < 0) return null;
-  return matchBlockByPrefix(page, startIdx, target);
+  const range = selectedIndexRange(region, pageNumber, page.lines.length);
+  const searchStart = range ? Math.max(0, Math.min(range.start, region.startLineIndex) - CAPTION_SOURCE_SEARCH) : 0;
+  const searchEnd = range
+    ? Math.min(page.lines.length - 1, Math.max(range.end, region.endLineIndex) + CAPTION_SOURCE_SEARCH)
+    : page.lines.length - 1;
+  let bestIdx = -1;
+  let bestDistance = Infinity;
+  for (let i = searchStart; i <= searchEnd; i += 1) {
+    const line = page.lines[i];
+    if (!hasValidCoords(line)) continue;
+    if (!CAPTION_RE.test(line.text.trim())) continue;
+    const n = normalizeForCompare(line.text);
+    const matches = target == null ? true : (n === target || (n.length > 0 && target.startsWith(n)));
+    if (!matches) continue;
+    // Legenda mais próxima do início estrutural; empate prefere a anterior.
+    const distance = Math.abs(i - (range?.start ?? i));
+    if (distance < bestDistance || (distance === bestDistance && i < bestIdx)) {
+      bestDistance = distance;
+      bestIdx = i;
+    }
+  }
+  if (bestIdx < 0) bestIdx = page.lines.findIndex((line) => CAPTION_RE.test(line.text.trim()));
+  if (bestIdx < 0) return null;
+  return matchBlockByPrefix(page, bestIdx, target);
 }
 
 function findSourceBlock(
   page: PdfPageDiagnostic,
   region: PdfLayoutSensitiveRegionDiagnostic,
+  pageNumber: number,
 ): CaptionSourceBlock | null {
   const target = region.source != null && region.source.trim().length > 0
     ? normalizeForCompare(region.source)
     : null;
-  let startIdx = target != null ? findSourceStartLine(page, target) : -1;
-  if (startIdx < 0) startIdx = page.lines.findIndex((line) => SOURCE_RE.test(line.text.trim()));
-  if (startIdx < 0) return null;
-  return matchBlockByPrefix(page, startIdx, target);
+  const range = selectedIndexRange(region, pageNumber, page.lines.length);
+  const searchStart = range ? Math.max(0, range.start - CAPTION_SOURCE_SEARCH) : 0;
+  const searchEnd = range
+    ? Math.min(page.lines.length - 1, range.end + CAPTION_SOURCE_SEARCH)
+    : page.lines.length - 1;
+  let bestIdx = -1;
+  let bestDistance = Infinity;
+  for (let i = searchStart; i <= searchEnd; i += 1) {
+    const line = page.lines[i];
+    if (!hasValidCoords(line)) continue;
+    if (!SOURCE_RE.test(line.text.trim())) continue;
+    const n = normalizeForCompare(line.text);
+    const matches = target == null ? true : (n === target || (n.length > 0 && target.startsWith(n)));
+    if (!matches) continue;
+    // Fonte deve estar APÓS o fim estrutural (nunca vincular a fonte de um
+    // visual anterior) e ser a mais próxima desse fim.
+    const distance = i - (range?.end ?? i);
+    if (distance < 0) continue;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIdx = i;
+    }
+  }
+  if (bestIdx < 0) bestIdx = page.lines.findIndex((line) => SOURCE_RE.test(line.text.trim()));
+  if (bestIdx < 0) return null;
+  return matchBlockByPrefix(page, bestIdx, target);
 }
 
 function sourceSafetyGap(page: PdfPageDiagnostic, sourceBlock: CaptionSourceBlock): number {
@@ -189,13 +218,24 @@ interface ContentExtent {
   right: number;
 }
 
-function contentExtentOnPage(
+function contentExtentForRegion(
   page: PdfPageDiagnostic,
+  region: PdfLayoutSensitiveRegionDiagnostic,
+  pageNumber: number,
   captionBlock: CaptionSourceBlock | null,
   sourceBlock: CaptionSourceBlock | null,
 ): ContentExtent {
+  const range = selectedIndexRange(region, pageNumber, page.lines.length);
+  if (!range) {
+    return { empty: true, top: 0, bottom: page.height, left: 0, right: page.width };
+  }
+  // Nunca calcular top/bottom/left/right usando linhas fora do intervalo
+  // estrutural da região: o recorte é delimitado exclusivamente por suas
+  // próprias linhas (legenda, conteúdo e fonte), nunca por texto vizinho.
   const lines = page.lines.filter(
     (line, idx) =>
+      idx >= range.start &&
+      idx <= range.end &&
       hasValidCoords(line) &&
       !lineInBlock(idx, captionBlock) &&
       !lineInBlock(idx, sourceBlock) &&
@@ -357,9 +397,9 @@ export function computePdfVisualCropGeometry(
         left = Math.min(...selected.map((line) => line.left));
         right = Math.max(...selected.map((line) => line.right));
       } else {
-        const captionBlock: CaptionSourceBlock | null = findCaptionBlock(page, region);
-        const sourceBlock: CaptionSourceBlock | null = findSourceBlock(page, region);
-        const content = contentExtentOnPage(page, captionBlock, sourceBlock);
+        const captionBlock: CaptionSourceBlock | null = findCaptionBlock(page, region, pageNumber);
+        const sourceBlock: CaptionSourceBlock | null = findSourceBlock(page, region, pageNumber);
+        const content = contentExtentForRegion(page, region, pageNumber, captionBlock, sourceBlock);
         if (content.empty) {
           skipped.push({ regionId: region.id, pageNumber, reason: "incomplete-structural-crop" });
           continue;
@@ -367,6 +407,8 @@ export function computePdfVisualCropGeometry(
         const isFirst = pageNumber === region.pageStart;
         const isLast = pageNumber === region.pageEnd;
         const isOnePage = isFirst && isLast;
+        const medianLineHeight = medianValue(page.lines.filter(hasValidCoords).map((line) => line.height));
+        const verticalPadding = Math.max(MIN_PAD, medianLineHeight * 0.6);
 
         // Intervalo estrutural esperado (para avaliar completude em página única).
         const expectedTop = captionBlock ? captionBlock.bottom : content.top;
@@ -374,18 +416,21 @@ export function computePdfVisualCropGeometry(
         const expectedSpan = expectedBottom - expectedTop;
 
         // O topo do recorte exclui a legenda quando ela está ACIMA do conteúdo;
-        // quando a legenda está ABAIXO (figuras/gráficos), o topo é o conteúdo.
+        // quando a legenda está ABAIXO (figuras/gráficos) ou ausente, o topo
+        // recua pela altura mediana para preservar a borda superior / área
+        // gráfica acima do primeiro texto interno reconhecido.
         if ((isFirst || isOnePage) && captionBlock && captionBlock.top < content.top) {
           top = captionBlock.bottom + CROP_EDGE_GAP;
         } else {
-          top = content.top;
+          top = content.top - verticalPadding;
         }
         if (isLast || isOnePage) {
           if (sourceBlock) {
-            // Limite RÍGIDO: o recorte termina antes de "Fonte:". Nunca se usa
-            // Math.max com content.bottom, pois isso permitiria que texto
-            // posterior à fonte expandisse o recorte para baixo.
-            bottom = sourceBlock.top - sourceSafetyGap(page, sourceBlock);
+            // Limite antes de "Fonte:". O recorte nunca ultrapassa a linha de
+            // fonte (fonte permanece fora do PNG) e, ao mesmo tempo, preserva a
+            // borda inferior do visual (não corta o conteúdo estrutural).
+            const sourceLimit = sourceBlock.top - sourceSafetyGap(page, sourceBlock);
+            bottom = Math.max(content.bottom, sourceLimit);
             // Validações estruturais: o recorte deve conter todo o conteúdo do
             // visual e não deve ultrapassar a linha de fonte.
             if (bottom <= top) {

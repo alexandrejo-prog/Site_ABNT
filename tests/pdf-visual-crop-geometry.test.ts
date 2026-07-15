@@ -1020,3 +1020,89 @@ describe("camada de geometria de recorte visual pdf", () => {
     });
   });
 });
+
+describe("regressoes de delimitacao por regiao (FALHA 1-4, 8)", () => {
+  it("FALHA 1: legenda acima do conteudo nao e recortada junto com o visual", () => {
+    const pages = [page(1, PAGE_W, PAGE_H, [
+      line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 1 – Título." }),
+      line(1, { left: 100, right: 900, top: 200, bottom: 230, height: 30, text: "Corpo da tabela." }),
+      line(1, { left: 100, right: 900, top: 300, bottom: 330, height: 30, text: "Fonte: Autor (2020)." }),
+    ])];
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 1, kind: "quadro", caption: "Quadro 1 – Título.", source: "Fonte: Autor (2020)." })];
+    const { crops, skipped } = computePdfVisualCropGeometry(pages, regions);
+    expect(skipped).toHaveLength(0);
+    expect(crops).toHaveLength(1);
+    // topo do recorte fica abaixo da legenda (130) e acima do corpo (200)
+    expect(crops[0].sourceRect.y).toBeGreaterThan(130);
+    expect(crops[0].sourceRect.y).toBeLessThan(200);
+  });
+
+  it("FALHA 3: borda superior / cabecalho do quadro preservada pelo recuo do topo", () => {
+    const pages = [page(1, PAGE_W, PAGE_H, [
+      line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 15 – Título." }),
+      line(1, { left: 100, right: 900, top: 140, bottom: 170, height: 30, text: "Cabeçalho da tabela." }),
+      line(1, { left: 100, right: 900, top: 300, bottom: 330, height: 30, text: "Fonte: Autor (2020)." }),
+    ])];
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 1, kind: "quadro", caption: "Quadro 15 – Título.", source: "Fonte: Autor (2020)." })];
+    const { crops } = computePdfVisualCropGeometry(pages, regions);
+    expect(crops).toHaveLength(1);
+    const c = crops[0];
+    // topo recua abaixo da legenda, mas inclui o cabecalho (140)
+    expect(c.sourceRect.y).toBeLessThanOrEqual(140);
+    expect(c.sourceRect.y + c.sourceRect.height).toBeGreaterThanOrEqual(170);
+  });
+
+  it("FALHA 4: folga antes da fonte exclui restos de glifos", () => {
+    const pages = [page(1, PAGE_W, PAGE_H, [
+      line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 8 – Título." }),
+      line(1, { left: 100, right: 900, top: 160, bottom: 190, height: 30, text: "linha da tabela" }),
+      line(1, { left: 100, right: 900, top: 300, bottom: 330, height: 30, text: "Fonte: Autor (2020)." }),
+    ])];
+    const regions = [region({ id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 1, kind: "quadro", caption: "Quadro 8 – Título.", source: "Fonte: Autor (2020)." })];
+    const { crops } = computePdfVisualCropGeometry(pages, regions);
+    expect(crops).toHaveLength(1);
+    const c = crops[0];
+    const bottom = c.sourceRect.y + c.sourceRect.height;
+    expect(bottom).toBeLessThan(300); // fonte (topo 300) fora
+    expect(bottom).toBeGreaterThanOrEqual(190); // conteudo preservado
+  });
+
+  it("FALHA 2: regioes vizinhas com mesma fonte nao capturam a fonte uma da outra", () => {
+    const pages = [page(1, PAGE_W, PAGE_H, [
+      line(1, { left: 100, right: 900, top: 40, bottom: 70, height: 30, text: "Gráfico 6 – Título." }),
+      line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "dados do gráfico" }),
+      line(1, { left: 100, right: 900, top: 200, bottom: 230, height: 30, text: "Fonte: Autor (2020)." }),
+      line(1, { left: 100, right: 900, top: 260, bottom: 290, height: 30, text: "Quadro 7 – Título." }),
+      line(1, { left: 100, right: 900, top: 320, bottom: 350, height: 30, text: "célula do quadro" }),
+      line(1, { left: 100, right: 900, top: 400, bottom: 430, height: 30, text: "Fonte: Autor (2020)." }),
+    ])];
+    const regions = [
+      region({ id: "g6", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 1, kind: "grafico", caption: "Gráfico 6 – Título.", source: "Fonte: Autor (2020)." }),
+      region({ id: "q7", pageStart: 1, pageEnd: 1, startLineIndex: 4, endLineIndex: 4, kind: "quadro", caption: "Quadro 7 – Título.", source: "Fonte: Autor (2020)." }),
+    ];
+    const { crops, skipped } = computePdfVisualCropGeometry(pages, regions);
+    expect(skipped).toHaveLength(0);
+    expect(crops).toHaveLength(2);
+    const grafico = crops.find((c) => c.regionId === "g6")!;
+    const quadro = crops.find((c) => c.regionId === "q7")!;
+    const graficoBottom = grafico.sourceRect.y + grafico.sourceRect.height;
+    const quadroBottom = quadro.sourceRect.y + quadro.sourceRect.height;
+    expect(graficoBottom).toBeLessThan(200); // fonte do gráfico (200) fora
+    expect(quadroBottom).toBeLessThan(400); // fonte do quadro (400) fora
+    expect(graficoBottom).toBeLessThan(quadro.sourceRect.y); // nao alcança a fonte vizinha
+  });
+
+  it("FALHA 8: grafico com legenda e fonte gera recorte aceito (nao rejeitado)", () => {
+    const pages = [page(1, PAGE_W, PAGE_H, [
+      line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Gráfico 10 – Título." }),
+      line(1, { left: 100, right: 900, top: 160, bottom: 190, height: 30, text: "dados" }),
+      line(1, { left: 100, right: 900, top: 220, bottom: 250, height: 30, text: "mais dados" }),
+      line(1, { left: 100, right: 900, top: 320, bottom: 350, height: 30, text: "Fonte: Autor (2024)." }),
+    ])];
+    const regions = [region({ id: "g10", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 2, kind: "grafico", caption: "Gráfico 10 – Título.", source: "Fonte: Autor (2024)." })];
+    const { crops, skipped } = computePdfVisualCropGeometry(pages, regions);
+    expect(skipped).toHaveLength(0);
+    expect(crops).toHaveLength(1);
+    expect(crops[0].regionId).toBe("g10");
+  });
+});

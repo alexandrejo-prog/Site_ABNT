@@ -1026,10 +1026,12 @@ describe("supressao de conteudo interno de regioes visuais pdf", () => {
       { type: "paragraph", text: "Linha interna da página final do quadro conclusão.", pageStart: 13, pageEnd: 13, sourceLines: [{ pageNumber: 13, lineIndex: 1 }], confidence: "medium", reasons: [] },
       { type: "source", text: "Fonte: Autor (2021).", pageStart: 13, pageEnd: 13, sourceLines: [{ pageNumber: 13, lineIndex: 2 }], confidence: "high", reasons: [] },
     ];
-    const regions: Region[] = [{
-      id: "layout-11-9", pageStart: 11, pageEnd: 11, startLineIndex: 3, endLineIndex: 4, kind: "quadro",
-      caption: "Quadro 9 – Quadro multipágina sintético.", source: "Fonte: Autor (2021).", confidence: "high", reasons: [], logicalVisualId: "quadro-9-page-11",
-    }];
+    const regions: Region[] = [
+      { id: "layout-11-9", pageStart: 11, pageEnd: 11, startLineIndex: 3, endLineIndex: 4, kind: "quadro",
+        caption: "Quadro 9 – Quadro multipágina sintético.", source: "Fonte: Autor (2021).", confidence: "high", reasons: [], logicalVisualId: "quadro-9-page-11" },
+      { id: "layout-13-9", pageStart: 13, pageEnd: 13, startLineIndex: 1, endLineIndex: 1, kind: "quadro",
+        caption: "Quadro 9 – Quadro multipágina sintético.", source: "Fonte: Autor (2021).", confidence: "high", reasons: [], logicalVisualId: "quadro-9-page-11" },
+    ];
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(visualInput(blocks, regions, { paragraphCount: 3, captionCount: 1, sourceCount: 1, unresolvedCount: 1 })));
     const text = documentText(documentXml);
     expect(text).not.toContain("Linha interna da primeira página do quadro.");
@@ -1047,6 +1049,103 @@ describe("supressao de conteudo interno de regioes visuais pdf", () => {
     const text = documentText(documentXml);
     expect(text).toContain("Parágrafo isolado sem região visual associada que deve aparecer no documento final.");
     expect(text).toContain("a) Item de lista isolado sem região visual que deve aparecer.");
+  });
+
+  it("FALHA 5: legenda de quadro multipagina aparece uma unica vez (continuacoes suprimidas)", async () => {
+    const lid = "quadro-16-page-100";
+    const blocks: Block[] = [
+      { type: "paragraph", text: "Parágrafo de contexto antes do quadro multipágina.", pageStart: 99, pageEnd: 99, sourceLines: [{ pageNumber: 99, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Quadro 16 – Título.", pageStart: 100, pageEnd: 100, sourceLines: [{ pageNumber: 100, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Cabeçalho A", pageStart: 100, pageEnd: 100, sourceLines: [{ pageNumber: 100, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-100-16" },
+      { type: "caption", text: "Quadro 16 – (continuação).", pageStart: 101, pageEnd: 101, sourceLines: [{ pageNumber: 101, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Célula B", pageStart: 101, pageEnd: 101, sourceLines: [{ pageNumber: 101, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-101-16" },
+      { type: "caption", text: "Quadro 16 – (continuação).", pageStart: 102, pageEnd: 102, sourceLines: [{ pageNumber: 102, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Célula C", pageStart: 102, pageEnd: 102, sourceLines: [{ pageNumber: 102, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-102-16" },
+      { type: "caption", text: "Quadro 16 – (conclusão).", pageStart: 104, pageEnd: 104, sourceLines: [{ pageNumber: 104, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Célula D", pageStart: 104, pageEnd: 104, sourceLines: [{ pageNumber: 104, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-104-16" },
+    ];
+    const regions: Region[] = [
+      { id: "layout-100-16", pageStart: 100, pageEnd: 100, startLineIndex: 3, endLineIndex: 3, kind: "quadro", caption: "Quadro 16 – Título.", confidence: "high", reasons: [], logicalVisualId: lid },
+      { id: "layout-101-16", pageStart: 101, pageEnd: 101, startLineIndex: 3, endLineIndex: 3, kind: "quadro", caption: "Quadro 16 – (continuação).", confidence: "high", reasons: [], logicalVisualId: lid },
+      { id: "layout-102-16", pageStart: 102, pageEnd: 102, startLineIndex: 3, endLineIndex: 3, kind: "quadro", caption: "Quadro 16 – (continuação).", confidence: "high", reasons: [], logicalVisualId: lid },
+      { id: "layout-104-16", pageStart: 104, pageEnd: 104, startLineIndex: 3, endLineIndex: 3, kind: "quadro", caption: "Quadro 16 – (conclusão).", confidence: "high", reasons: [], logicalVisualId: lid },
+    ];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(visualInput(blocks, regions, { paragraphCount: 1, captionCount: 4, unresolvedCount: 4 })));
+    const text = documentText(documentXml);
+    expect((text.match(/Quadro 16 – Título\./g) ?? []).length).toBe(1);
+    expect(text).not.toContain("Quadro 16 – (continuação).");
+    expect(text).not.toContain("Quadro 16 – (conclusão).");
+    expect((documentXml.match(new RegExp(MARKER, "g")) ?? []).length).toBe(1);
+  });
+
+  it("FALHA 6: fonte do quadro multipagina aparece uma unica vez", async () => {
+    const lid = "quadro-16-fonte-page-100";
+    const blocks: Block[] = [
+      { type: "paragraph", text: "Parágrafo de contexto antes do quadro multipágina.", pageStart: 99, pageEnd: 99, sourceLines: [{ pageNumber: 99, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Quadro 16 – Título.", pageStart: 100, pageEnd: 100, sourceLines: [{ pageNumber: 100, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Cabeçalho A", pageStart: 100, pageEnd: 100, sourceLines: [{ pageNumber: 100, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-100-16f" },
+      { type: "source", text: "Fonte: Autor (2025).", pageStart: 100, pageEnd: 100, sourceLines: [{ pageNumber: 100, lineIndex: 5 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Célula B", pageStart: 101, pageEnd: 101, sourceLines: [{ pageNumber: 101, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-101-16f" },
+      { type: "source", text: "Fonte: Autor (2025).", pageStart: 101, pageEnd: 101, sourceLines: [{ pageNumber: 101, lineIndex: 5 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Célula C", pageStart: 102, pageEnd: 102, sourceLines: [{ pageNumber: 102, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-102-16f" },
+      { type: "source", text: "Fonte: Autor (2025).", pageStart: 102, pageEnd: 102, sourceLines: [{ pageNumber: 102, lineIndex: 5 }], confidence: "high", reasons: [] },
+    ];
+    const regions: Region[] = [
+      { id: "layout-100-16f", pageStart: 100, pageEnd: 100, startLineIndex: 3, endLineIndex: 4, kind: "quadro", caption: "Quadro 16 – Título.", source: "Fonte: Autor (2025).", confidence: "high", reasons: [], logicalVisualId: lid },
+      { id: "layout-101-16f", pageStart: 101, pageEnd: 101, startLineIndex: 3, endLineIndex: 4, kind: "quadro", caption: "Quadro 16 – Título.", source: "Fonte: Autor (2025).", confidence: "high", reasons: [], logicalVisualId: lid },
+      { id: "layout-102-16f", pageStart: 102, pageEnd: 102, startLineIndex: 3, endLineIndex: 4, kind: "quadro", caption: "Quadro 16 – Título.", source: "Fonte: Autor (2025).", confidence: "high", reasons: [], logicalVisualId: lid },
+    ];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(visualInput(blocks, regions, { paragraphCount: 1, captionCount: 1, sourceCount: 3, unresolvedCount: 3 })));
+    const text = documentText(documentXml);
+    expect((text.match(/Fonte: Autor \(2025\)\./g) ?? []).length).toBe(1);
+  });
+
+  it("FALHA 7: conteudo interno do grupo multipagina e suprimido; texto externo ao intervalo permanece", async () => {
+    const lid = "quadro-mp-page-100";
+    const blocks: Block[] = [
+      { type: "caption", text: "Quadro MP – Multipágina.", pageStart: 100, pageEnd: 100, sourceLines: [{ pageNumber: 100, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Célula início", pageStart: 100, pageEnd: 100, sourceLines: [{ pageNumber: 100, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-100-mp" },
+      { type: "paragraph", text: "Texto interno da primeira página que deve ser suprimido.", pageStart: 100, pageEnd: 100, sourceLines: [{ pageNumber: 100, lineIndex: 4 }], confidence: "medium", reasons: [] },
+      { type: "paragraph", text: "Texto acadêmico estritamente fora do intervalo do quadro preservado.", pageStart: 101, pageEnd: 101, sourceLines: [{ pageNumber: 101, lineIndex: 5 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Quadro MP – (conclusão).", pageStart: 102, pageEnd: 102, sourceLines: [{ pageNumber: 102, lineIndex: 0 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Célula fim", pageStart: 102, pageEnd: 102, sourceLines: [{ pageNumber: 102, lineIndex: 1 }], confidence: "low", reasons: [], layoutRegionId: "layout-102-mp" },
+      { type: "paragraph", text: "Texto interno da página final que deve ser suprimido.", pageStart: 102, pageEnd: 102, sourceLines: [{ pageNumber: 102, lineIndex: 2 }], confidence: "medium", reasons: [] },
+    ];
+    const regions: Region[] = [
+      { id: "layout-100-mp", pageStart: 100, pageEnd: 100, startLineIndex: 3, endLineIndex: 4, kind: "quadro", caption: "Quadro MP – Multipágina.", confidence: "high", reasons: [], logicalVisualId: lid },
+      { id: "layout-102-mp", pageStart: 102, pageEnd: 102, startLineIndex: 1, endLineIndex: 2, kind: "quadro", caption: "Quadro MP – (conclusão).", confidence: "high", reasons: [], logicalVisualId: lid },
+    ];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(visualInput(blocks, regions, { paragraphCount: 2, captionCount: 2, unresolvedCount: 2 })));
+    const text = documentText(documentXml);
+    expect(text).not.toContain("Texto interno da primeira página que deve ser suprimido.");
+    expect(text).not.toContain("Texto interno da página final que deve ser suprimido.");
+    expect(text).toContain("Texto acadêmico estritamente fora do intervalo do quadro preservado.");
+    expect((documentXml.match(new RegExp(MARKER, "g")) ?? []).length).toBe(1);
+  });
+
+  it("FALHA 9: contagem de marcadores na nota de revisao igual a marcadores no corpo", async () => {
+    const blocks: Block[] = [
+      { type: "paragraph", text: "Parágrafo de contexto antes dos quadros.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Quadro 1 – A.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Célula A", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-a" },
+      { type: "caption", text: "Quadro 2 – B.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Célula B", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-12-b" },
+      { type: "caption", text: "Quadro 3 – C.", pageStart: 13, pageEnd: 13, sourceLines: [{ pageNumber: 13, lineIndex: 2 }], confidence: "high", reasons: [] },
+      { type: "unresolved", text: "Célula C", pageStart: 13, pageEnd: 13, sourceLines: [{ pageNumber: 13, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-13-c" },
+    ];
+    const regions: Region[] = [
+      { id: "layout-11-a", pageStart: 11, pageEnd: 11, startLineIndex: 3, endLineIndex: 3, kind: "quadro", caption: "Quadro 1 – A.", confidence: "high", reasons: [], logicalVisualId: "quadro-a" },
+      { id: "layout-12-b", pageStart: 12, pageEnd: 12, startLineIndex: 3, endLineIndex: 3, kind: "quadro", caption: "Quadro 2 – B.", confidence: "high", reasons: [], logicalVisualId: "quadro-b" },
+      { id: "layout-13-c", pageStart: 13, pageEnd: 13, startLineIndex: 3, endLineIndex: 3, kind: "quadro", caption: "Quadro 3 – C.", confidence: "high", reasons: [], logicalVisualId: "quadro-c" },
+    ];
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(visualInput(blocks, regions, { paragraphCount: 1, captionCount: 3, unresolvedCount: 3 })));
+    const text = documentText(documentXml);
+    const noteMatch = text.match(/Elementos visuais representados por marcadores:\s*(\d+)/);
+    expect(noteMatch).not.toBeNull();
+    const noteCount = Number(noteMatch![1]);
+    const bodyCount = (documentXml.match(new RegExp(MARKER, "g")) ?? []).length;
+    expect(noteCount).toBe(bodyCount);
+    expect(bodyCount).toBe(3);
   });
 });
 
@@ -1201,6 +1300,28 @@ describe("ativos visuais de regioes pdf", () => {
     const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
     expect(documentXml).toContain("<w:drawing");
     expect(documentXml).toContain("Figura 1 – Exemplo.");
+    expect(documentXml).toContain("Fonte: Autor.");
+    expect(documentXml).not.toContain("Elemento visual não inserido");
+    expect(documentXml).toContain("Parágrafo anterior.");
+    expect(documentXml).toContain("Parágrafo posterior.");
+  });
+
+  it("FALHA 8: grafico com ativo e inserido como imagem (nao como marcador)", async () => {
+    const input = visualInput([
+      { type: "paragraph", text: "Parágrafo anterior.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Gráfico 10 – Exemplo.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-g" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-g" },
+      { type: "paragraph", text: "Parágrafo posterior.", pageStart: 12, pageEnd: 12, sourceLines: [{ pageNumber: 12, lineIndex: 1 }], confidence: "medium", reasons: [] },
+    ], [{
+      id: "layout-11-g", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 3, kind: "grafico",
+      caption: "Gráfico 10 – Exemplo.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "grafico-10-page-11",
+    }], {
+      visualAssets: { "grafico-10-page-11": asset("grafico-10-page-11") },
+      statistics: { paragraphCount: 2, captionCount: 1, sourceCount: 1, layoutRegionCount: 1 },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("<w:drawing");
+    expect(documentXml).toContain("Gráfico 10 – Exemplo.");
     expect(documentXml).toContain("Fonte: Autor.");
     expect(documentXml).not.toContain("Elemento visual não inserido");
     expect(documentXml).toContain("Parágrafo anterior.");
