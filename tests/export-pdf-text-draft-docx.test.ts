@@ -4,6 +4,8 @@ import { join } from "node:path";
 import JSZip from "jszip";
 import {
   buildPdfTextDraftDocxBlob,
+  buildLogicalVisualDecisions,
+  planVisualEmissions,
   pdfTextDraftFileName,
   validatePdfTextDraftExport,
 } from "../src/export-pdf-text-draft-docx";
@@ -1284,6 +1286,29 @@ describe("ativos visuais de regioes pdf", () => {
     });
   }
 
+  it("Q2: recorte de duas colunas é considerado pelo plano de emissão (com e sem ativo)", () => {
+    const q2Region: Region = {
+      id: "layout-11-q2", pageStart: 11, pageEnd: 11, startLineIndex: 2, endLineIndex: 4, kind: "quadro",
+      caption: "Quadro 2 – Sem ativo.", source: "Fonte: Autor.", confidence: "high", reasons: [], logicalVisualId: "quadro-2-page-11",
+    };
+    const q2Blocks: Block[] = [
+      { type: "caption", text: "Quadro 2 – Sem ativo.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-q2" },
+      { type: "unresolved", text: "TEXTO INTERNO DO QUADRO", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-q2" },
+      { type: "source", text: "Fonte: Autor.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 4 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-q2" },
+    ];
+    const semAtivo = visualInput(q2Blocks, [q2Region], { logo: undefined, statistics: { paragraphCount: 0, captionCount: 1, sourceCount: 1, layoutRegionCount: 1 } });
+    const decSem = buildLogicalVisualDecisions(semAtivo);
+    const planSem = planVisualEmissions(semAtivo, decSem);
+    expect(decSem.regionsByLogical.has("quadro-2-page-11")).toBe(true);
+    expect(planSem.markerLids.has("quadro-2-page-11")).toBe(true);
+    expect(planSem.imageLids.has("quadro-2-page-11")).toBe(false);
+
+    const comAtivo = visualInput(q2Blocks, [q2Region], { visualAssets: { "quadro-2-page-11": asset("quadro-2-page-11") }, statistics: { paragraphCount: 0, captionCount: 1, sourceCount: 1, layoutRegionCount: 1 } });
+    const planCom = planVisualEmissions(comAtivo, buildLogicalVisualDecisions(comAtivo));
+    expect(planCom.imageLids.has("quadro-2-page-11")).toBe(true);
+    expect(planCom.markerLids.has("quadro-2-page-11")).toBe(false);
+  });
+
   it("regiao com ativo insere imagem, mantem legenda e fonte, e nao insere marcador", async () => {
     const input = visualInput([
       { type: "paragraph", text: "Parágrafo anterior.", pageStart: 10, pageEnd: 10, sourceLines: [{ pageNumber: 10, lineIndex: 1 }], confidence: "medium", reasons: [] },
@@ -2544,5 +2569,380 @@ describe("ativos visuais compostos por recorte (chave multipagina)", () => {
       expect(documentXml).not.toContain("páginas originais 63-63");
       expect(documentXml).not.toContain("páginas originais 64-64");
     });
+  });
+});
+
+describe("correcoes de defects confirmados (integracao pdf)", () => {
+  type Block = PdfTextDraftExportInput["reconstruction"]["blocks"][number];
+  type Region = PdfTextDraftExportInput["reconstruction"]["layoutRegions"][number];
+
+  const logo = readFileSync(join(process.cwd(), "public", "assets", "ufla-logo.jpeg"));
+  function asset(key: string, width = 170, height = 69): PdfTextDraftVisualAsset {
+    return { data: logo, width, height, altText: { title: `Imagem ${key}`, description: `Descrição ${key}`, name: key } };
+  }
+  function visualInput(blocks: Block[], layoutRegions: Region[], overrides: Partial<PdfTextDraftExportInput> & { statistics?: Partial<PdfTextDraftExportInput["reconstruction"]["statistics"]> } = {}): PdfTextDraftExportInput {
+    return baseInput({
+      reconstruction: {
+        ...baseInput().reconstruction,
+        blocks,
+        layoutRegions,
+        statistics: { ...baseInput().reconstruction.statistics, ...overrides.statistics },
+      },
+      ...overrides,
+    });
+  }
+  const MARKER = "Elemento visual não inserido";
+
+  it("DEF5/DEF8: quadro de duas colunas emite imagem e nao deixa coluna irma como prosa", async () => {
+    const lid = "quadro-2-page-27";
+    const blocks: Block[] = [
+      { type: "caption", text: "Quadro 2 – Modelo de implementação do teletrabalho proposto.", pageStart: 27, pageEnd: 27, sourceLines: [{ pageNumber: 27, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "layout-27-1" },
+      { type: "unresolved", text: "Projeto as ações de implementação; possíveis ganhos devem ser mensurados.", pageStart: 27, pageEnd: 27, sourceLines: [{ pageNumber: 27, lineIndex: 3 }], confidence: "low", reasons: [], layoutRegionId: "layout-27-1" },
+      { type: "unresolved", text: "Convencimento da alta administração convincentes, quando a adesão é voluntária.", pageStart: 27, pageEnd: 27, sourceLines: [{ pageNumber: 27, lineIndex: 7 }], confidence: "low", reasons: [], layoutRegionId: "layout-27-1" },
+      { type: "paragraph", text: "Parágrafo normal após o quadro que deve permanecer no documento.", pageStart: 28, pageEnd: 28, sourceLines: [{ pageNumber: 28, lineIndex: 1 }], confidence: "medium", reasons: [] },
+    ];
+    const regions: Region[] = [{
+      id: "layout-27-1", pageStart: 27, pageEnd: 27, startLineIndex: 2, endLineIndex: 9, kind: "quadro",
+      caption: "Quadro 2 – Modelo de implementação do teletrabalho proposto.", confidence: "medium", reasons: [], logicalVisualId: lid,
+    }];
+    const input = visualInput(blocks, regions, { visualAssets: { [lid]: asset(lid) }, statistics: { captionCount: 1, unresolvedCount: 2, layoutRegionCount: 1, paragraphCount: 1 } });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("<w:drawing");
+    expect(documentXml).toContain("Quadro 2 – Modelo de implementação");
+    // Coluna direita suprimida (não vaza como prosa).
+    expect(documentXml).not.toContain("Convencimento da alta administração");
+    // Parágrafo seguinte permanece.
+    expect(documentText(documentXml)).toContain("Parágrafo normal após o quadro");
+  });
+
+  it("DEF9: quadro 16 multipagina emite um unico marcador e nao deixa texto interno", async () => {
+    const lid = "quadro-16-page-100";
+    const makeBlocks = (pageNumber: number): Block[] => ([
+      { type: "caption", text: `Quadro 16 – Considerações dos gestores (continua).`, pageStart: pageNumber, pageEnd: pageNumber, sourceLines: [{ pageNumber, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: `layout-${pageNumber}-1` },
+      { type: "unresolved", text: "Entrevistado “Minha consideração, como eu disse, foi muito importante para todos nós.”", pageStart: pageNumber, pageEnd: pageNumber, sourceLines: [{ pageNumber, lineIndex: 1 }], confidence: "low", reasons: [], layoutRegionId: `layout-${pageNumber}-1` },
+      { type: "unresolved", text: "A estratégia funcionou bem e trouxe resultados positivos para a instituição inteira agora.", pageStart: pageNumber, pageEnd: pageNumber, sourceLines: [{ pageNumber, lineIndex: 2 }], confidence: "low", reasons: [], layoutRegionId: `layout-${pageNumber}-1` },
+    ]);
+    const regions: Region[] = [100, 102, 104].map((p) => ({
+      id: `layout-${p}-1`, pageStart: p, pageEnd: p, startLineIndex: 1, endLineIndex: 2, kind: "quadro",
+      caption: `Quadro 16 – Considerações dos gestores (continua).`, confidence: "medium", reasons: [], logicalVisualId: lid,
+    }));
+    const input = visualInput([...makeBlocks(100), ...makeBlocks(102), ...makeBlocks(104), { type: "paragraph", text: "Introdução ao capítulo sobre teletrabalho na instituição.", pageStart: 1, pageEnd: 1, sourceLines: [{ pageNumber: 1, lineIndex: 0 }], confidence: "medium", reasons: [] }], regions, {
+      statistics: { captionCount: 3, unresolvedCount: 6, layoutRegionCount: 3, paragraphCount: 1 },
+    });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    // Exatamente um marcador para todo o grupo multipágina.
+    expect((documentXml.match(new RegExp(MARKER, "g")) ?? []).length).toBe(1);
+    // Nenhum texto interno da transcrição vaza.
+    expect(documentText(documentXml)).not.toContain("Minha consideração");
+    expect(documentText(documentXml)).not.toContain("estratégia funcionou bem");
+  });
+
+  it("DEF9: quadro 16 multipagina emite todas as imagens quando os recortes sao validos", async () => {
+    const lid = "quadro-16-page-100";
+    const makeBlocks = (pageNumber: number): Block[] => ([
+      { type: "caption", text: `Quadro 16 – Considerações dos gestores (continua).`, pageStart: pageNumber, pageEnd: pageNumber, sourceLines: [{ pageNumber, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: `layout-${pageNumber}-1` },
+      { type: "unresolved", text: "Entrevistado “Minha consideração, como eu disse, foi muito importante.”", pageStart: pageNumber, pageEnd: pageNumber, sourceLines: [{ pageNumber, lineIndex: 1 }], confidence: "low", reasons: [], layoutRegionId: `layout-${pageNumber}-1` },
+    ]);
+    const regions: Region[] = [100, 102, 104].map((p) => ({
+      id: `layout-${p}-1`, pageStart: p, pageEnd: p, startLineIndex: 1, endLineIndex: 1, kind: "quadro",
+      caption: `Quadro 16 – Considerações dos gestores (continua).`, confidence: "medium", reasons: [], logicalVisualId: lid,
+    }));
+    const visualAssets = {
+      [pdfRegionCropKey(lid, 100, "layout-100-1")]: asset(`${lid}-100`),
+      [pdfRegionCropKey(lid, 102, "layout-102-1")]: asset(`${lid}-102`),
+      [pdfRegionCropKey(lid, 104, "layout-104-1")]: asset(`${lid}-104`),
+    };
+    const input = visualInput([...makeBlocks(100), ...makeBlocks(102), ...makeBlocks(104), { type: "paragraph", text: "Introdução ao capítulo sobre teletrabalho na instituição.", pageStart: 1, pageEnd: 1, sourceLines: [{ pageNumber: 1, lineIndex: 0 }], confidence: "medium", reasons: [] }], regions, {
+      visualAssets, statistics: { captionCount: 3, unresolvedCount: 3, layoutRegionCount: 3, paragraphCount: 1 },
+    });
+    const zip = await JSZip.loadAsync(await buildPdfTextDraftDocxBlob(input).then((b) => b.arrayBuffer()));
+    const mediaFiles = Object.keys(zip.files).filter((e) => e.startsWith("word/media/") && !e.endsWith("/"));
+    // 3 imagens do grupo multipágina + 1 logo padrão do baseInput.
+    expect(mediaFiles.length).toBe(4);
+    // Cada recorte multipágina ficou como imagem (altText nomeado por região).
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    for (const p of [100, 102, 104]) {
+      expect(documentXml).toContain(`${lid}-${p}`);
+    }
+    expect(documentText(documentXml)).not.toContain("Minha consideração");
+  });
+
+  it("DEF10: quando emitido como marcador, o conteudo interno nao e duplicado", async () => {
+    const lid = "quadro-2-page-27";
+    const blocks: Block[] = [
+      { type: "caption", text: "Quadro 2 – Modelo de implementação.", pageStart: 27, pageEnd: 27, sourceLines: [{ pageNumber: 27, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "layout-27-1" },
+      { type: "unresolved", text: "Convencimento da alta administração convincentes, quando a adesão é voluntária.", pageStart: 27, pageEnd: 27, sourceLines: [{ pageNumber: 27, lineIndex: 7 }], confidence: "low", reasons: [], layoutRegionId: "layout-27-1" },
+      { type: "paragraph", text: "Texto interno que tambem apareceria como paragrafo.", pageStart: 27, pageEnd: 27, sourceLines: [{ pageNumber: 27, lineIndex: 8 }], confidence: "medium", reasons: [] },
+    ];
+    const regions: Region[] = [{
+      id: "layout-27-1", pageStart: 27, pageEnd: 27, startLineIndex: 2, endLineIndex: 9, kind: "quadro",
+      caption: "Quadro 2 – Modelo de implementação.", confidence: "medium", reasons: [], logicalVisualId: lid,
+    }];
+    // Sem ativo -> marcador. O bloco "paragraph" interno (mesma página/linha do
+    // intervalo) deve ser suprimido junto com o bloco unresolved.
+    const input = visualInput(blocks, regions, { statistics: { captionCount: 1, unresolvedCount: 1, layoutRegionCount: 1, paragraphCount: 1 } });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect((documentXml.match(new RegExp(MARKER, "g")) ?? []).length).toBe(1);
+    expect(documentText(documentXml)).not.toContain("Convencimento da alta administração");
+    expect(documentText(documentXml)).not.toContain("Texto interno que tambem apareceria");
+  });
+
+  it("DEF11: a fonte do elemento permanece no rascunho quando emitido", async () => {
+    const lid = "quadro-1-page-11";
+    const blocks: Block[] = [
+      { type: "caption", text: "Quadro 1 – Síntese.", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-1" },
+      { type: "unresolved", text: "Indicador Resultado Autor", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 1 }], confidence: "low", reasons: [], layoutRegionId: "layout-11-1" },
+      { type: "source", text: "Fonte: Autor (2025).", pageStart: 11, pageEnd: 11, sourceLines: [{ pageNumber: 11, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-11-1" },
+      { type: "paragraph", text: "Texto normal do rascunho fora do quadro.", pageStart: 1, pageEnd: 1, sourceLines: [{ pageNumber: 1, lineIndex: 0 }], confidence: "medium", reasons: [] },
+    ];
+    const regions: Region[] = [{
+      id: "layout-11-1", pageStart: 11, pageEnd: 11, startLineIndex: 1, endLineIndex: 1, kind: "quadro",
+      caption: "Quadro 1 – Síntese.", source: "Fonte: Autor (2025).", confidence: "high", reasons: [], logicalVisualId: lid,
+    }];
+    const input = visualInput(blocks, regions, { visualAssets: { [lid]: asset(lid) }, statistics: { captionCount: 1, sourceCount: 1, unresolvedCount: 1, layoutRegionCount: 1, paragraphCount: 1 } });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("Fonte: Autor (2025).");
+  });
+});
+
+describe("Q16 multipagina: legenda primaria formal + fonte do grupo (REQ 1-30)", () => {
+  type Block = PdfTextDraftExportInput["reconstruction"]["blocks"][number];
+  type Region = PdfTextDraftExportInput["reconstruction"]["layoutRegions"][number];
+
+  const logo = readFileSync(join(process.cwd(), "public", "assets", "ufla-logo.jpeg"));
+  function asset(key: string, width = 170, height = 69): PdfTextDraftVisualAsset {
+    return { data: logo, width, height, altText: { title: `Imagem ${key}`, description: `Descrição ${key}`, name: key } };
+  }
+  function visualInput(
+    blocks: Block[],
+    layoutRegions: Region[],
+    overrides: { visualAssets?: Record<string, PdfTextDraftVisualAsset>; statistics?: Partial<PdfTextDraftExportInput["reconstruction"]["statistics"]> } = {},
+  ): PdfTextDraftExportInput {
+    return baseInput({
+      reconstruction: {
+        ...baseInput().reconstruction,
+        blocks,
+        layoutRegions,
+        statistics: { ...baseInput().reconstruction.statistics, ...overrides.statistics },
+      },
+      ...(overrides.visualAssets ? { visualAssets: overrides.visualAssets } : {}),
+    });
+  }
+  function region(id: string, lid: string, page: number, captionOverride?: string): Region {
+    return {
+      id, pageStart: page, pageEnd: page, startLineIndex: 1, endLineIndex: 2, kind: "quadro",
+      caption: captionOverride ?? `Quadro 16 – Considerações dos gestores sobre o PGD (continua).`,
+      confidence: "medium", reasons: [], logicalVisualId: lid,
+    };
+  }
+
+  const Q16_LID = "quadro-16-page-100";
+  const Q16_BASE = "Quadro 16 – Considerações dos gestores sobre o PGD";
+  const Q16_FORMAL = `${Q16_BASE}.`;
+  const Q16_CAPTIONS = [
+    `${Q16_BASE} (continua).`,
+    `${Q16_BASE} (continua).`,
+    `${Q16_BASE} (conclusão).`,
+  ];
+
+  function q16Blocks(opts: { withSource: boolean }): Block[] {
+    const blocks: Block[] = [];
+    blocks.push({ type: "paragraph", text: "Introdução ao capítulo sobre teletrabalho na instituição.", pageStart: 1, pageEnd: 1, sourceLines: [{ pageNumber: 1, lineIndex: 0 }], confidence: "medium", reasons: [] });
+    [100, 102, 104].forEach((p, i) => {
+      blocks.push({ type: "caption", text: Q16_CAPTIONS[i], pageStart: p, pageEnd: p, sourceLines: [{ pageNumber: p, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: `layout-${p}-1` });
+      blocks.push({ type: "unresolved", text: `Texto interno da parte ${p} que não deve vazar como prosa.`, pageStart: p, pageEnd: p, sourceLines: [{ pageNumber: p, lineIndex: 1 }], confidence: "low", reasons: [], layoutRegionId: `layout-${p}-1` });
+    });
+    if (opts.withSource) {
+      blocks.push({ type: "source", text: "Fonte: IBGE (2024).", pageStart: 104, pageEnd: 104, sourceLines: [{ pageNumber: 104, lineIndex: 2 }], confidence: "high", reasons: [], layoutRegionId: "layout-104-1" });
+    }
+    blocks.push({ type: "paragraph", text: "Texto posterior ao quadro que deve permanecer no rascunho.", pageStart: 105, pageEnd: 105, sourceLines: [{ pageNumber: 105, lineIndex: 0 }], confidence: "medium", reasons: [] });
+    return blocks;
+  }
+  function q16Regions(): Region[] {
+    return [100, 102, 104].map((p, i) => region(`layout-${p}-1`, Q16_LID, p, Q16_CAPTIONS[i]));
+  }
+  function q16Assets(): Record<string, PdfTextDraftVisualAsset> {
+    return {
+      [pdfRegionCropKey(Q16_LID, 100, "layout-100-1")]: asset(`${Q16_LID}-100`),
+      [pdfRegionCropKey(Q16_LID, 102, "layout-102-1")]: asset(`${Q16_LID}-102`),
+      [pdfRegionCropKey(Q16_LID, 104, "layout-104-1")]: asset(`${Q16_LID}-104`),
+    };
+  }
+  function drawingIndices(documentXml: string): number[] {
+    const re = /<w:drawing/g;
+    const out: number[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(documentXml))) {
+      out.push(m.index);
+      if (m.index === re.lastIndex) re.lastIndex++;
+    }
+    return out;
+  }
+  function occurrences(haystack: string, needle: string): number {
+    return haystack.split(needle).length - 1;
+  }
+
+  it("REQ1/REQ4/REQ18: grupo multipagina emite a legenda exatamente uma vez", async () => {
+    const input = visualInput(q16Blocks({ withSource: false }), q16Regions(), { visualAssets: q16Assets(), statistics: { captionCount: 3, unresolvedCount: 3, layoutRegionCount: 3, paragraphCount: 2 } });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(occurrences(documentXml, Q16_FORMAL)).toBe(1);
+  });
+
+  it("REQ2/REQ27: legenda formal (sem qualificador) emitida antes da primeira imagem", async () => {
+    const input = visualInput(q16Blocks({ withSource: false }), q16Regions(), { visualAssets: q16Assets(), statistics: { captionCount: 3, unresolvedCount: 3, layoutRegionCount: 3, paragraphCount: 2 } });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    const captionIdx = documentXml.indexOf(Q16_FORMAL);
+    const firstImg = documentXml.indexOf("quadro-16-page-100-100");
+    expect(captionIdx).toBeGreaterThanOrEqual(0);
+    expect(firstImg).toBeGreaterThan(captionIdx);
+    expect(documentXml).toContain("Quadro 16");
+  });
+
+  it("REQ3: legenda de continuação não substitui legenda formal anterior", async () => {
+    const lid = "quadro-7-page-50";
+    const blocks: Block[] = [
+      { type: "paragraph", text: "Intro.", pageStart: 1, pageEnd: 1, sourceLines: [{ pageNumber: 1, lineIndex: 0 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Quadro 7 – Síntese de dados.", pageStart: 50, pageEnd: 50, sourceLines: [{ pageNumber: 50, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "layout-50-1" },
+      { type: "unresolved", text: "interno 50", pageStart: 50, pageEnd: 50, sourceLines: [{ pageNumber: 50, lineIndex: 1 }], confidence: "low", reasons: [], layoutRegionId: "layout-50-1" },
+      { type: "caption", text: "Quadro 7 – Síntese de dados (continua).", pageStart: 51, pageEnd: 51, sourceLines: [{ pageNumber: 51, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "layout-51-1" },
+      { type: "unresolved", text: "interno 51", pageStart: 51, pageEnd: 51, sourceLines: [{ pageNumber: 51, lineIndex: 1 }], confidence: "low", reasons: [], layoutRegionId: "layout-51-1" },
+    ];
+    const regions: Region[] = [
+      region("layout-50-1", lid, 50, "Quadro 7 – Síntese de dados."),
+      region("layout-51-1", lid, 51, "Quadro 7 – Síntese de dados (continua)."),
+    ];
+    const input = visualInput(blocks, regions, { visualAssets: { [pdfRegionCropKey(lid, 50, "layout-50-1")]: asset(`${lid}-50`), [pdfRegionCropKey(lid, 51, "layout-51-1")]: asset(`${lid}-51`) }, statistics: { captionCount: 2, unresolvedCount: 2, layoutRegionCount: 2, paragraphCount: 1 } });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("Quadro 7 – Síntese de dados.");
+    expect(occurrences(documentXml, "Quadro 7 – Síntese de dados.")).toBe(1);
+    expect(documentXml).not.toContain("(continua)");
+  });
+
+  it("REQ5: marcador multipagina mostra intervalo 'páginas originais 100-104'", async () => {
+    const input = visualInput(q16Blocks({ withSource: false }), q16Regions(), { statistics: { captionCount: 3, unresolvedCount: 3, layoutRegionCount: 3, paragraphCount: 2 } });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("páginas originais 100-104");
+    expect(documentXml).not.toContain("(continua)");
+  });
+
+  it("REQ9/REQ10/REQ21: fonte do grupo emitida uma vez, após a última imagem", async () => {
+    const input = visualInput(q16Blocks({ withSource: true }), q16Regions(), { visualAssets: q16Assets(), statistics: { captionCount: 3, sourceCount: 1, unresolvedCount: 3, layoutRegionCount: 3, paragraphCount: 2 } });
+    const blob = await buildPdfTextDraftDocxBlob(input);
+    const { documentXml } = await loadDocxParts(blob);
+    // drawings[0] é o logo de capa; os 3 seguintes são as partes do Q16.
+    const drawings = drawingIndices(documentXml);
+    expect(drawings.length).toBe(4);
+    expect(occurrences(documentXml, "Fonte: IBGE (2024).")).toBe(1);
+    const captionIdx = documentXml.indexOf(Q16_FORMAL);
+    const sourceIdx = documentXml.indexOf("Fonte: IBGE (2024).");
+    expect(captionIdx).toBeLessThan(drawings[1]);
+    expect(drawings[1]).toBeLessThan(drawings[2]);
+    expect(drawings[2]).toBeLessThan(drawings[3]);
+    expect(drawings[3]).toBeLessThan(sourceIdx);
+  });
+
+  it("REQ11/REQ12: fonte omitida quando o grupo não tem bloco Fonte:", async () => {
+    const input = visualInput(q16Blocks({ withSource: false }), q16Regions(), { visualAssets: q16Assets(), statistics: { captionCount: 3, unresolvedCount: 3, layoutRegionCount: 3, paragraphCount: 2 } });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).not.toContain("Fonte:");
+  });
+
+  it("REQ13/REQ14/REQ29: qualificadores (continua)/(conclusão) não vazam; título-base legível", async () => {
+    const input = visualInput(q16Blocks({ withSource: false }), q16Regions(), { visualAssets: q16Assets(), statistics: { captionCount: 3, unresolvedCount: 3, layoutRegionCount: 3, paragraphCount: 2 } });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).not.toContain("(continua)");
+    expect(documentXml).not.toContain("(conclusão)");
+    expect(documentXml).toContain(Q16_BASE);
+    expect(documentXml).toContain("Quadro 16");
+  });
+
+  it("REQ15/REQ16/REQ28: legenda só com '(conclusão)' ainda produz título-base formal", async () => {
+    const lid = "quadro-9-page-70";
+    const cap = "Quadro 9 – Indicadores de desempenho (conclusão).";
+    const blocks: Block[] = [
+      { type: "paragraph", text: "Intro.", pageStart: 1, pageEnd: 1, sourceLines: [{ pageNumber: 1, lineIndex: 0 }], confidence: "medium", reasons: [] },
+      ...[70, 71].map((p) => ([
+        { type: "caption", text: cap, pageStart: p, pageEnd: p, sourceLines: [{ pageNumber: p, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: `layout-${p}-1` },
+        { type: "unresolved", text: `interno ${p}`, pageStart: p, pageEnd: p, sourceLines: [{ pageNumber: p, lineIndex: 1 }], confidence: "low", reasons: [], layoutRegionId: `layout-${p}-1` },
+      ] as Block[])).flat(),
+    ];
+    const regions: Region[] = [70, 71].map((p) => region(`layout-${p}-1`, lid, p, cap));
+    const input = visualInput(blocks, regions, { visualAssets: { [pdfRegionCropKey(lid, 70, "layout-70-1")]: asset(`${lid}-70`), [pdfRegionCropKey(lid, 71, "layout-71-1")]: asset(`${lid}-71`) }, statistics: { captionCount: 2, unresolvedCount: 2, layoutRegionCount: 2, paragraphCount: 1 } });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("Quadro 9 – Indicadores de desempenho.");
+    expect(occurrences(documentXml, "Quadro 9 – Indicadores de desempenho.")).toBe(1);
+    expect(documentXml).not.toContain("(conclusão)");
+  });
+
+  it("REQ17: legenda formal em página posterior é escolhida (continuação vem primeiro)", async () => {
+    const lid = "quadro-3-page-30";
+    const blocks: Block[] = [
+      { type: "paragraph", text: "Intro.", pageStart: 1, pageEnd: 1, sourceLines: [{ pageNumber: 1, lineIndex: 0 }], confidence: "medium", reasons: [] },
+      { type: "caption", text: "Quadro 3 – Resumo (continua).", pageStart: 30, pageEnd: 30, sourceLines: [{ pageNumber: 30, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "layout-30-1" },
+      { type: "unresolved", text: "interno 30", pageStart: 30, pageEnd: 30, sourceLines: [{ pageNumber: 30, lineIndex: 1 }], confidence: "low", reasons: [], layoutRegionId: "layout-30-1" },
+      { type: "caption", text: "Quadro 3 – Resumo.", pageStart: 31, pageEnd: 31, sourceLines: [{ pageNumber: 31, lineIndex: 0 }], confidence: "high", reasons: [], layoutRegionId: "layout-31-1" },
+      { type: "unresolved", text: "interno 31", pageStart: 31, pageEnd: 31, sourceLines: [{ pageNumber: 31, lineIndex: 1 }], confidence: "low", reasons: [], layoutRegionId: "layout-31-1" },
+    ];
+    const regions: Region[] = [
+      region("layout-30-1", lid, 30, "Quadro 3 – Resumo (continua)."),
+      region("layout-31-1", lid, 31, "Quadro 3 – Resumo."),
+    ];
+    const input = visualInput(blocks, regions, { visualAssets: { [pdfRegionCropKey(lid, 30, "layout-30-1")]: asset(`${lid}-30`), [pdfRegionCropKey(lid, 31, "layout-31-1")]: asset(`${lid}-31`) }, statistics: { captionCount: 2, unresolvedCount: 2, layoutRegionCount: 2, paragraphCount: 1 } });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain("Quadro 3 – Resumo.");
+    expect(documentXml).not.toContain("Quadro 3 – Resumo (continua).");
+  });
+
+  it("REQ19: marcador mantém legenda normalizada do grupo", async () => {
+    const input = visualInput(q16Blocks({ withSource: false }), q16Regions(), { statistics: { captionCount: 3, unresolvedCount: 3, layoutRegionCount: 3, paragraphCount: 2 } });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(occurrences(documentXml, Q16_FORMAL)).toBe(1);
+    expect((documentXml.match(/Elemento visual não inserido/g) ?? []).length).toBe(1);
+  });
+
+  it("REQ20: imagens mantêm legenda e fonte do grupo", async () => {
+    const input = visualInput(q16Blocks({ withSource: true }), q16Regions(), { visualAssets: q16Assets(), statistics: { captionCount: 3, sourceCount: 1, unresolvedCount: 3, layoutRegionCount: 3, paragraphCount: 2 } });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentXml).toContain(Q16_FORMAL);
+    expect(documentXml).toContain("Fonte: IBGE (2024).");
+    // 1 logo de capa + 3 partes do Q16.
+    expect(drawingIndices(documentXml).length).toBe(4);
+  });
+
+  it("REQ22/REQ23: sem legenda fantasma antes de cada parte (só a primeira); nenhuma imagem sem legenda à frente", async () => {
+    const input = visualInput(q16Blocks({ withSource: false }), q16Regions(), { visualAssets: q16Assets(), statistics: { captionCount: 3, unresolvedCount: 3, layoutRegionCount: 3, paragraphCount: 2 } });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(occurrences(documentXml, Q16_FORMAL)).toBe(1);
+    const captionIdx = documentXml.indexOf(Q16_FORMAL);
+    const drawings = drawingIndices(documentXml);
+    // drawings[0] é o logo de capa; a primeira imagem do Q16 é drawings[1].
+    expect(captionIdx).toBeLessThan(drawings[1]);
+  });
+
+  it("REQ24: fonte não duplicada entre partes do grupo", async () => {
+    const input = visualInput(q16Blocks({ withSource: true }), q16Regions(), { visualAssets: q16Assets(), statistics: { captionCount: 3, sourceCount: 1, unresolvedCount: 3, layoutRegionCount: 3, paragraphCount: 2 } });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(occurrences(documentXml, "Fonte: IBGE (2024).")).toBe(1);
+  });
+
+  it("REQ25: conteúdo textual interno das partes não vaza como prosa", async () => {
+    const input = visualInput(q16Blocks({ withSource: false }), q16Regions(), { visualAssets: q16Assets(), statistics: { captionCount: 3, unresolvedCount: 3, layoutRegionCount: 3, paragraphCount: 2 } });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentText(documentXml)).not.toContain("Texto interno da parte");
+  });
+
+  it("REQ26: prosa adjacente não é engolida pelo grupo multipagina", async () => {
+    const input = visualInput(q16Blocks({ withSource: false }), q16Regions(), { visualAssets: q16Assets(), statistics: { captionCount: 3, unresolvedCount: 3, layoutRegionCount: 3, paragraphCount: 2 } });
+    const { documentXml } = await loadDocxParts(await buildPdfTextDraftDocxBlob(input));
+    expect(documentText(documentXml)).toContain("Texto posterior ao quadro");
+  });
+
+  it("REQ30: export gera DOCX válido para grupo multipagina", async () => {
+    const input = visualInput(q16Blocks({ withSource: true }), q16Regions(), { visualAssets: q16Assets(), statistics: { captionCount: 3, sourceCount: 1, unresolvedCount: 3, layoutRegionCount: 3, paragraphCount: 2 } });
+    const blob = await buildPdfTextDraftDocxBlob(input);
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    expect(zip.file("word/document.xml")).not.toBeNull();
+    const { documentXml } = await loadDocxParts(blob);
+    expect(documentXml.length).toBeGreaterThan(0);
   });
 });

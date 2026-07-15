@@ -40,7 +40,8 @@ export interface PdfVisualCropSkip {
     | "implausible-crop-height"
     | "implausible-crop-aspect-ratio"
     | "caption-only-region"
-    | "incomplete-structural-crop";
+    | "incomplete-structural-crop"
+    | "incomplete-horizontal-coverage";
 }
 
 export interface PdfVisualCropGeometryResult {
@@ -64,6 +65,15 @@ const MIN_PLAUSIBLE_CROP_HEIGHT = 40;
 const MAX_CROP_ASPECT_RATIO = 25;
 const CROP_EDGE_GAP = 4;
 const BLOCK_EXTEND_MAX_GAP = 18;
+// Margem de segurança (pt) usada para derivar a extensão vertical de um gráfico
+// sem texto interno a partir da legenda e da fonte.
+const GRAPHIC_CONTENT_MARGIN = 4;
+// Folga (pt) aceitável entre o topo do recorte e a primeira linha estrutural,
+// garantindo que o cabeçalho da tabela/quadro não seja cortado.
+const HEADER_SAFE_PAD = 1;
+// Tolerância (pt) de cobertura horizontal: o recorte deve abranger toda a
+// largura do conteúdo estrutural; fora dessa tolerância a parte falha.
+const HORIZONTAL_COVERAGE_TOLERANCE = 4;
 // Janela (em linhas) ao redor do intervalo estrutural usada para localizar a
 // legenda/fonte mais próxima de cada região, sem capturar a de um visual vizinho.
 const CAPTION_SOURCE_SEARCH = 8;
@@ -374,6 +384,7 @@ export function computePdfVisualCropGeometry(
       let bottom: number;
       let left: number;
       let right: number;
+      let content: ContentExtent | null = null;
 
       if (!structural) {
         const indices = selectedIndexRange(region, pageNumber, page.lines.length);
@@ -399,10 +410,32 @@ export function computePdfVisualCropGeometry(
       } else {
         const captionBlock: CaptionSourceBlock | null = findCaptionBlock(page, region, pageNumber);
         const sourceBlock: CaptionSourceBlock | null = findSourceBlock(page, region, pageNumber);
-        const content = contentExtentForRegion(page, region, pageNumber, captionBlock, sourceBlock);
+        content = contentExtentForRegion(page, region, pageNumber, captionBlock, sourceBlock);
         if (content.empty) {
-          skipped.push({ regionId: region.id, pageNumber, reason: "incomplete-structural-crop" });
-          continue;
+          // Gráficos/figuras sem texto interno (linhas vetoriais ou raster)
+          // não fornecem linhas de conteúdo. Nesses casos, deriva-se a extensão
+          // vertical a partir da legenda e da fonte, desde que plausível.
+          if (GRAPHIC_LIKE_KINDS.has(region.kind) && captionBlock) {
+            // A extensão vertical vai do fim da legenda até o início da fonte,
+            // independentemente de a legenda estar acima ou abaixo do gráfico.
+            const upper = Math.min(captionBlock.bottom, sourceBlock ? sourceBlock.top : page.height);
+            const lower = Math.max(captionBlock.bottom, sourceBlock ? sourceBlock.top : page.height);
+            const top = upper + GRAPHIC_CONTENT_MARGIN;
+            const bottom = lower - GRAPHIC_CONTENT_MARGIN;
+            const left = manchaIsValid(bodyLayoutMetrics, page.width)
+              ? bodyLayoutMetrics!.dominantLeft
+              : 0;
+            const right = manchaIsValid(bodyLayoutMetrics, page.width)
+              ? bodyLayoutMetrics!.dominantRight
+              : page.width;
+            if (bottom > top + MIN_PLAUSIBLE_CROP_HEIGHT && bottom <= page.height && top >= 0) {
+              content = { empty: false, top, bottom, left, right };
+            }
+          }
+          if (content.empty) {
+            skipped.push({ regionId: region.id, pageNumber, reason: "incomplete-structural-crop" });
+            continue;
+          }
         }
         const isFirst = pageNumber === region.pageStart;
         const isLast = pageNumber === region.pageEnd;
@@ -420,7 +453,12 @@ export function computePdfVisualCropGeometry(
         // recua pela altura mediana para preservar a borda superior / área
         // gráfica acima do primeiro texto interno reconhecido.
         if ((isFirst || isOnePage) && captionBlock && captionBlock.top < content.top) {
-          top = captionBlock.bottom + CROP_EDGE_GAP;
+          // Legenda acima do conteúdo: o topo exclui a legenda, mas deve incluir
+          // toda a primeira linha estrutural (cabeçalho) sem cortá-la.
+          const forcedTop = captionBlock.bottom + CROP_EDGE_GAP;
+          const headerSafeTop = content.top - HEADER_SAFE_PAD;
+          top = Math.min(forcedTop, headerSafeTop);
+          if (top <= captionBlock.bottom) top = forcedTop;
         } else {
           top = content.top - verticalPadding;
         }
@@ -459,6 +497,23 @@ export function computePdfVisualCropGeometry(
           bottom = content.bottom;
         }
 
+        // Guardas defensivas: o recorte nunca deve engolir a legenda nem a fonte
+        // do elemento visual. Só se aplica quando a legenda está ACIMA do conteúdo
+        // (caso contrário, para figuras/gráficos a legenda fica abaixo e o recorte
+        // deve incluir o conteúdo acima dela) e quando a fonte está ABAIXO.
+        // Em caso de colisão irrecuperável, a parte falha e o grupo vira marcador
+        // (nunca gera PNG com legenda/fonte embutidas).
+        if (captionBlock && captionBlock.top < content.top && top <= captionBlock.bottom) {
+          top = captionBlock.bottom + CROP_EDGE_GAP;
+        }
+        if (sourceBlock && sourceBlock.top > content.bottom && bottom >= sourceBlock.top) {
+          bottom = sourceBlock.top - sourceSafetyGap(page, sourceBlock);
+        }
+        if (bottom <= top) {
+          skipped.push({ regionId: region.id, pageNumber, reason: "incomplete-structural-crop" });
+          continue;
+        }
+
         // Página única: rejeitar fragmentos (<80% do intervalo estrutural real).
         if (isOnePage && expectedSpan > 0) {
           const capturedSpan = bottom - top;
@@ -476,7 +531,14 @@ export function computePdfVisualCropGeometry(
       const manchaValid = manchaIsValid(bodyLayoutMetrics, page.width);
       const graphicLike = GRAPHIC_LIKE_KINDS.has(region.kind);
 
-      if (manchaValid && graphicLike) {
+      if (manchaValid && graphicLike && content) {
+        // O recorte deve abranger TODA a largura do conteúdo estrutural. Tabelas
+        // e quadros paisagem podem ultrapassar a margem de texto dominante; por
+        // isso o limite é o máximo entre o conteúdo e a mancha dominante (nunca
+        // encolhe abaixo da largura real do elemento visual).
+        left = Math.min(content.left, bodyLayoutMetrics!.dominantLeft);
+        right = Math.max(content.right, bodyLayoutMetrics!.dominantRight);
+      } else if (manchaValid && graphicLike) {
         left = bodyLayoutMetrics!.dominantLeft;
         right = bodyLayoutMetrics!.dominantRight;
       } else if (manchaValid && region.kind === "unknown") {
@@ -498,6 +560,15 @@ export function computePdfVisualCropGeometry(
 
       const x = clampRange(left, 0, page.width);
       const rightEdge = clampRange(right, x, page.width);
+
+      // Cobertura horizontal: o recorte (já limitado à página) deve conter todo
+      // o conteúdo estrutural. Se não cobrir (ex.: conteúdo mais largo que a
+      // página), a parte falha e o grupo vira marcador.
+      if (content && (content.right > rightEdge + HORIZONTAL_COVERAGE_TOLERANCE || content.left < x - HORIZONTAL_COVERAGE_TOLERANCE)) {
+        skipped.push({ regionId: region.id, pageNumber, reason: "incomplete-horizontal-coverage" });
+        continue;
+      }
+
       if (rightEdge <= x) {
         skipped.push({ regionId: region.id, pageNumber, reason: "empty-crop" });
         continue;

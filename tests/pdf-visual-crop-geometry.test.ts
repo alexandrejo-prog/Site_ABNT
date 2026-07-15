@@ -1102,7 +1102,195 @@ describe("regressoes de delimitacao por regiao (FALHA 1-4, 8)", () => {
     const regions = [region({ id: "g10", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 2, kind: "grafico", caption: "Gráfico 10 – Título.", source: "Fonte: Autor (2024)." })];
     const { crops, skipped } = computePdfVisualCropGeometry(pages, regions);
     expect(skipped).toHaveLength(0);
+      expect(crops).toHaveLength(1);
+      expect(crops[0].regionId).toBe("g10");
+  });
+});
+
+describe("correcoes de defects confirmados (geometria)", () => {
+  const metrics: PdfBodyLayoutMetrics = {
+    dominantLeft: 72,
+    dominantRight: 523,
+    medianLineHeight: 12,
+    medianLineGap: 4,
+    probableFirstLineIndent: 36,
+    probableBodyFontHeight: 12,
+    confidence: "high",
+  };
+
+  it("DEF5: grafico sem texto interno gera recorte aceito (legenda/fonte)", () => {
+    // Gráfico raster/vetorial sem linhas de texto entre legenda e fonte.
+    const pages = [page(1, 595, 842, [
+      line(1, { text: "Gráfico 7 – Distribuição por categoria.", left: 72, right: 320, top: 100, bottom: 112, height: 12 }),
+      line(1, { text: "Fonte: Autor (2025).", left: 72, right: 200, top: 700, bottom: 712, height: 12 }),
+    ])];
+    const regions = [region({
+      id: "g7", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 1, kind: "grafico",
+      caption: "Gráfico 7 – Distribuição por categoria.", source: "Fonte: Autor (2025).", logicalVisualId: "grafico-7-page-1",
+    })];
+    const { crops, skipped } = computePdfVisualCropGeometry(pages, regions, metrics);
+    expect(skipped.filter((s) => s.reason === "incomplete-structural-crop").length).toBe(0);
     expect(crops).toHaveLength(1);
-    expect(crops[0].regionId).toBe("g10");
+    expect(crops[0].regionId).toBe("g7");
+    // O recorte cobre do fim da legenda até o início da fonte (legenda excluída,
+    // fonte fora do PNG).
+    expect(crops[0].sourceRect.y).toBeGreaterThan(112);
+    expect(crops[0].sourceRect.y + crops[0].sourceRect.height).toBeLessThan(700);
+  });
+
+  it("DEF5: grafico sem texto interno com legenda abaixo do conteudo nao gera recorte invalido", () => {
+    // Legenda abaixo do gráfico: topo recua para conter a área gráfica.
+    const pages = [page(1, 595, 842, [
+      line(1, { text: "Fonte: Autor (2025).", left: 72, right: 200, top: 100, bottom: 112, height: 12 }),
+      line(1, { text: "Gráfico 10 – Título.", left: 72, right: 320, top: 700, bottom: 712, height: 12 }),
+    ])];
+    const regions = [region({
+      id: "g10", pageStart: 1, pageEnd: 1, startLineIndex: 0, endLineIndex: 1, kind: "grafico",
+      caption: "Gráfico 10 – Título.", source: "Fonte: Autor (2025).", logicalVisualId: "grafico-10-page-1",
+    })];
+    const { crops, skipped } = computePdfVisualCropGeometry(pages, regions, metrics);
+    expect(skipped.filter((s) => s.reason === "incomplete-structural-crop").length).toBe(0);
+    expect(crops).toHaveLength(1);
+  });
+
+  it("DEF6: tabela paisagem abrange toda a largura do conteudo (nao trunca em dominantRight)", () => {
+    // Página paisagem (842x595); conteúdo estrutural ultrapassa a margem dominante.
+    const pages = [page(1, 842, 595, [
+      line(1, { text: "Quadro 7 – Tabela larga.", left: 72, right: 300, top: 60, bottom: 72, height: 12 }),
+      line(1, { text: "célula esquerda conteúdo extenso da tabela", left: 72, right: 767, top: 90, bottom: 102, height: 12 }),
+      line(1, { text: "célula direita conteúdo extenso da tabela", left: 72, right: 760, top: 110, bottom: 122, height: 12 }),
+      line(1, { text: "Fonte: Autor (2025).", left: 72, right: 200, top: 540, bottom: 552, height: 12 }),
+    ])];
+    const regions = [region({
+      id: "q7", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 2, kind: "quadro",
+      caption: "Quadro 7 – Tabela larga.", source: "Fonte: Autor (2025).", logicalVisualId: "quadro-7-page-1",
+    })];
+    const landscapeMetrics: PdfBodyLayoutMetrics = { ...metrics, dominantLeft: 72, dominantRight: 548 };
+    const { crops } = computePdfVisualCropGeometry(pages, regions, landscapeMetrics);
+    expect(crops).toHaveLength(1);
+    const rightEdge = crops[0].sourceRect.x + crops[0].sourceRect.width;
+    // O conteúdo vai até ~767; o recorte deve cobri-lo (não parar em 548).
+    expect(rightEdge).toBeGreaterThan(760);
+    expect(crops[0].sourceRect.x).toBeLessThanOrEqual(72 + 1);
+  });
+
+  it("DEF6: quadro paisagem (Q8 p63/p64) abrange toda a largura do conteudo", () => {
+    const cases = [
+      { right: 799, id: "q8p63" },
+      { right: 753, id: "q8p64" },
+    ];
+    for (const c of cases) {
+      const pages = [page(1, 842, 595, [
+        line(1, { text: "Quadro 8 – Tabela larga.", left: 72, right: 300, top: 60, bottom: 72, height: 12 }),
+        line(1, { text: "conteúdo extenso da tabela paisagem", left: 72, right: c.right, top: 90, bottom: 102, height: 12 }),
+        line(1, { text: "Fonte: Autor (2025).", left: 72, right: 200, top: 540, bottom: 552, height: 12 }),
+      ])];
+      const regions = [region({
+        id: c.id, pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 1, kind: "quadro",
+        caption: "Quadro 8 – Tabela larga.", source: "Fonte: Autor (2025).", logicalVisualId: `${c.id}-page-1`,
+      })];
+      const landscapeMetrics: PdfBodyLayoutMetrics = { ...metrics, dominantLeft: 72, dominantRight: 548 };
+      const { crops } = computePdfVisualCropGeometry(pages, regions, landscapeMetrics);
+      expect(crops, c.id).toHaveLength(1);
+      const rightEdge = crops[0].sourceRect.x + crops[0].sourceRect.width;
+      expect(rightEdge, c.id).toBeGreaterThan(c.right - 4);
+    }
+  });
+
+  it("DEF6: falta de cobertura horizontal faz a parte falhar (recorte incompleto)", () => {
+    // Conteúdo mais largo que a página inteira: impossível cobrir -> skip.
+    const pages = [page(1, 842, 595, [
+      line(1, { text: "Quadro X – Tabela.", left: 72, right: 300, top: 60, bottom: 72, height: 12 }),
+      line(1, { text: "conteúdo muito largo demais", left: 72, right: 900, top: 90, bottom: 102, height: 12 }),
+      line(1, { text: "segunda linha larga demais", left: 72, right: 900, top: 120, bottom: 132, height: 12 }),
+      line(1, { text: "terceira linha larga demais", left: 72, right: 900, top: 150, bottom: 162, height: 12 }),
+      line(1, { text: "quarta linha larga demais", left: 72, right: 900, top: 180, bottom: 192, height: 12 }),
+      line(1, { text: "Fonte: Autor (2025).", left: 72, right: 200, top: 540, bottom: 552, height: 12 }),
+    ])];
+    const regions = [region({
+      id: "qx", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 4, kind: "quadro",
+      caption: "Quadro X – Tabela.", source: "Fonte: Autor (2025).", logicalVisualId: "quadro-x-page-1",
+    })];
+    const landscapeMetrics: PdfBodyLayoutMetrics = { ...metrics, dominantLeft: 72, dominantRight: 548 };
+    const { skipped } = computePdfVisualCropGeometry(pages, regions, landscapeMetrics);
+    expect(skipped.some((s) => s.reason === "incomplete-horizontal-coverage")).toBe(true);
+  });
+
+  it("DEF7: cabecalho da tabela nao e cortado pelo topo do recorte", () => {
+    // Legenda acima; primeira linha estrutural (cabeçalho) muito próxima.
+    const pages = [page(1, 595, 842, [
+      line(1, { text: "Quadro 1 – Síntese.", left: 72, right: 300, top: 100, bottom: 112, height: 12 }),
+      line(1, { text: "Indicador Resultado", left: 100, right: 500, top: 114, bottom: 126, height: 12 }),
+      line(1, { text: "Valor 1 Observação", left: 100, right: 500, top: 140, bottom: 152, height: 12 }),
+      line(1, { text: "Valor 2 Observação", left: 100, right: 500, top: 160, bottom: 172, height: 12 }),
+      line(1, { text: "Fonte: Autor (2025).", left: 72, right: 200, top: 320, bottom: 332, height: 12 }),
+    ])];
+    const regions = [region({
+      id: "q1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 3, kind: "quadro",
+      caption: "Quadro 1 – Síntese.", source: "Fonte: Autor (2025).", logicalVisualId: "quadro-1-page-1",
+    })];
+    const { crops } = computePdfVisualCropGeometry(pages, regions, metrics);
+    expect(crops).toHaveLength(1);
+    const crop = crops[0];
+    // topo <= content.top - folga e permanece abaixo da legenda.
+    expect(crop.sourceRect.y).toBeLessThanOrEqual(114 - 0.5);
+    expect(crop.sourceRect.y).toBeGreaterThan(112);
+  });
+
+  it("DEF11: fonte permanece fora do PNG (recorte nao ultrapassa a linha de fonte)", () => {
+    const pages = [page(1, 595, 842, [
+      line(1, { text: "Quadro 1 – Síntese.", left: 72, right: 300, top: 100, bottom: 112, height: 12 }),
+      line(1, { text: "Indicador Resultado", left: 100, right: 500, top: 140, bottom: 152, height: 12 }),
+      line(1, { text: "Fonte: Autor (2025).", left: 72, right: 200, top: 320, bottom: 332, height: 12 }),
+    ])];
+    const regions = [region({
+      id: "q1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 1, kind: "quadro",
+      caption: "Quadro 1 – Síntese.", source: "Fonte: Autor (2025).", logicalVisualId: "quadro-1-page-1",
+    })];
+    const { crops } = computePdfVisualCropGeometry(pages, regions, metrics);
+    expect(crops).toHaveLength(1);
+    const bottomEdge = crops[0].sourceRect.y + crops[0].sourceRect.height;
+    expect(bottomEdge).toBeLessThanOrEqual(320);
+  });
+});
+
+describe("Q16 regression: recorte nao inclui legenda nem fonte (REQ 6-8)", () => {
+  it("REQ6/REQ7/REQ8: recorte fica estritamente entre a legenda e a fonte", () => {
+    const pages = [page(1, PAGE_W, PAGE_H, [
+      line(1, { left: 100, right: 900, top: 100, bottom: 130, height: 30, text: "Quadro 1 – Exemplo." }),
+      line(1, { left: 100, right: 900, top: 140, bottom: 170, height: 30, text: "Valor A" }),
+      line(1, { left: 100, right: 900, top: 180, bottom: 210, height: 30, text: "Valor B" }),
+      line(1, { left: 100, right: 900, top: 240, bottom: 270, height: 30, text: "Fonte: Autor (2025)." }),
+    ])];
+    const regions = [region({
+      id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 2, kind: "quadro",
+      caption: "Quadro 1 – Exemplo.", source: "Fonte: Autor (2025).",
+    })];
+    const { crops, skipped } = computePdfVisualCropGeometry(pages, regions);
+    expect(skipped).toHaveLength(0);
+    expect(crops).toHaveLength(1);
+    const { sourceRect } = crops[0];
+    const captionBottom = 130;
+    const sourceTop = 240;
+    // O recorte nunca engole a legenda nem a fonte (mesmo com guardas defensivas).
+    expect(sourceRect.y).toBeGreaterThan(captionBottom);
+    expect(sourceRect.y + sourceRect.height).toBeLessThan(sourceTop);
+  });
+
+  it("REQ6/REQ8: recorte de quadro com legenda de continuação não inclui a legenda", () => {
+    const pages = [page(1, PAGE_W, PAGE_H, [
+      line(1, { left: 100, right: 900, top: 90, bottom: 120, height: 30, text: "Quadro 2 – Modelo (continua)." }),
+      line(1, { left: 100, right: 900, top: 130, bottom: 160, height: 30, text: "Linha 1" }),
+      line(1, { left: 100, right: 900, top: 170, bottom: 200, height: 30, text: "Linha 2" }),
+    ])];
+    const regions = [region({
+      id: "r1", pageStart: 1, pageEnd: 1, startLineIndex: 1, endLineIndex: 2, kind: "quadro",
+      caption: "Quadro 2 – Modelo (continua).",
+    })];
+    const { crops, skipped } = computePdfVisualCropGeometry(pages, regions);
+    expect(skipped).toHaveLength(0);
+    expect(crops).toHaveLength(1);
+    // topo do recorte abaixo da legenda (bottom=120).
+    expect(crops[0].sourceRect.y).toBeGreaterThan(120);
   });
 });

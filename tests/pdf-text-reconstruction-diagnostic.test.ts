@@ -1032,3 +1032,79 @@ describe("reconstrução de continuações de títulos (heading continuation)", 
     }
   });
 });
+
+describe("correcoes de defects confirmados (reconstrucao)", () => {
+  it("DEF8: quadro de duas colunas sem fonte abrange a coluna irma (nao corta no primeiro texto longo)", () => {
+    const result = reconstructPdfParagraphBlocks([page(27, [
+      "Quadro 2 – Modelo de implementação do teletrabalho proposto por Nilles (1998).",
+      "Fases Características",
+      "formação de um grupo de trabalho; detalhar o escopo do projeto com todas as fases previstas.",
+      "Projeto as ações de implementação; possíveis ganhos devem ser mensurados.",
+      "apresentar o projeto; mostrar razões convincentes para a alta administração.",
+      "Selecionar cuidadosamente os teletrabalhadores aspectos comportamentais dos potenciais.",
+      "Estruturar ambientes e tecnologia de trabalho apropriados para todos os envolvidos.",
+      "Convencimento da alta administração convincentes, quando a adesão é voluntária e parcial.",
+      "fornecer aos teletrabalhadores padrões específicos, mensuráveis e atingíveis no tempo.",
+      "Estabelecer em conjunto os procedimentos de avaliação que privilegiem o desempenho da equipe.",
+      "Este parágrafo normal depois do quadro não pode ser absorvido pela região visual.",
+    ], {
+      1: { left: 182 },
+      2: { left: 311 },
+      3: { left: 100 },
+      4: { left: 311 },
+      5: { left: 100 },
+      6: { left: 311 },
+      7: { left: 100 },
+      8: { left: 311 },
+      9: { left: 100 },
+      10: { left: 72, top: 80 + 10 * 18 + 40 },
+    })]);
+    const region = result.layoutRegions.find((r) => r.logicalVisualId === "quadro-2-page-27");
+    expect(region).toBeTruthy();
+    // A coluna direita (linhas 2,4,6,8) deve estar dentro do intervalo; o
+    // parágrafo seguinte (linha 10) deve ficar de fora.
+    expect(region!.endLineIndex).toBeGreaterThanOrEqual(9);
+    expect(region!.endLineIndex).toBeLessThan(10);
+    // O texto da coluna direita não vaza como parágrafo.
+    expect(result.blocks.some((b) => b.type === "paragraph" && b.text.includes("Convencimento da alta administração"))).toBe(false);
+    // O parágrafo seguinte permanece.
+    expect(result.blocks.some((b) => b.type === "paragraph" && b.text.includes("Este parágrafo normal depois do quadro"))).toBe(true);
+  });
+
+  it("DEF9: quadro 16 multipagina abrange a transcrição em cada pagina e agrupa por logicalVisualId", () => {
+    const mk = (pageNumber: number, suffix: string) => page(pageNumber, [
+      `Quadro 16 – Considerações dos gestores sobre o teletrabalho (${suffix}).`,
+      "Entrevistado “Minha consideração, como eu disse, foi muito importante para todos nós da unidade.”",
+      "A estratégia funcionou bem e trouxe resultados positivos para a instituição inteira agora.",
+      "Outro ponto relevante foi a evolução do ambiente de trabalho e a cultura organizacional local.",
+      "O gestor precisa ter pulso firme para conduzir o processo sem gerar atrito desnecessário entre as equipes.",
+      "A comunicação deve ser clara, direta e constante para evitar ruídos durante a implementação do modelo.",
+      "Os indicadores de desempenho ajudam a mensurar ganhos e a corrigir desvios antes que se tornem problemas.",
+      "O treinamento específico prepara os servidores para exercer suas funções em regime de teletrabalho com qualidade.",
+    ]);
+    const result = reconstructPdfParagraphBlocks([mk(100, "continua"), mk(102, "continua"), mk(104, "conclusão")]);
+    const regions = result.layoutRegions.filter((r) => r.logicalVisualId === "quadro-16-page-100" && [100, 102, 104].includes(r.pageStart));
+    expect(regions.length).toBe(3);
+    for (const r of regions) {
+      // Não corta no primeiro texto longo: cobre toda a transcrição da página.
+      expect(r.endLineIndex).toBeGreaterThanOrEqual(7);
+    }
+    // Todas as páginas compartilham o mesmo logicalVisualId (grupo multipágina).
+    expect(new Set(regions.map((r) => r.logicalVisualId)).size).toBe(1);
+  });
+
+  it("DEF12: entradas de lista (com linhas de pontos e numero de pagina) nao viram regiao visual", () => {
+    const result = reconstructPdfParagraphBlocks([page(10, [
+      "1 INTRODUÇÃO",
+      "Texto introdutório do corpo do documento acadêmico normal.",
+      "a) primeira subopção detalhada com conteúdo descritivo longo;",
+      "b) segunda subopção detalhada com conteúdo descritivo longo;",
+      "II - item romano com conteúdo descritivo longo e estruturado;",
+      "Texto seguinte do corpo do documento acadêmico normal.",
+    ])]);
+    // Nenhuma região visual deve ser criada a partir de entradas de lista.
+    expect(result.layoutRegions.length).toBe(0);
+    // As entradas de lista permanecem como blocos de texto.
+    expect(result.blocks.some((b) => b.type === "list-item" && b.text.includes("primeira subopção"))).toBe(true);
+  });
+});

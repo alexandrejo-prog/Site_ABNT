@@ -618,6 +618,8 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
             maxAssets: 80,
             maxPagePixels: 20_000_000,
           },
+          undefined,
+          pdfDiagnostic!.reconstruction.layoutRegions,
         );
         visualAssets = rendered.assets;
         visualWarnings = rendered.warnings;

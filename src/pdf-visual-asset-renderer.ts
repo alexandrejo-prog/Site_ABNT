@@ -1,7 +1,40 @@
 import type { PdfTextDraftVisualAsset } from "./pdf-text-draft-contract";
 import type { PdfVisualCropGeometry } from "./pdf-visual-crop-geometry";
+import type { PdfLayoutSensitiveRegionDiagnostic } from "./imported-pdf-diagnostic";
 
 export type PdfVisualAssetImageType = "image/png" | "image/jpeg";
+
+export type PdfVisualAssetWarningStage =
+  | "document-open"
+  | "page-render"
+  | "crop-validation"
+  | "crop-pixels"
+  | "canvas-export"
+  | "asset-construction";
+
+export interface PdfVisualAssetRenderWarning {
+  pageNumber?: number;
+  cropKey?: string;
+  regionId?: string;
+  logicalVisualId?: string;
+  kind?: string;
+  stage: PdfVisualAssetWarningStage;
+  message: string;
+  convertedToMarker: boolean;
+}
+
+function formatVisualWarning(warning: PdfVisualAssetRenderWarning): string {
+  const parts = ["[elemento-visual]"];
+  if (warning.pageNumber != null) parts.push(`pagina=${warning.pageNumber}`);
+  if (warning.cropKey) parts.push(`cropKey=${warning.cropKey}`);
+  if (warning.regionId) parts.push(`regiao=${warning.regionId}`);
+  if (warning.logicalVisualId) parts.push(`id=${warning.logicalVisualId}`);
+  if (warning.kind) parts.push(`tipo=${warning.kind}`);
+  parts.push(`estagio=${warning.stage}`);
+  parts.push(`mensagem=${warning.message}`);
+  parts.push(`marcador=${warning.convertedToMarker ? "sim" : "nao"}`);
+  return parts.join(" ");
+}
 
 export interface PdfVisualAssetRenderOptions {
   scale?: number;
@@ -241,6 +274,7 @@ export async function renderPdfVisualAssets(
   crops: PdfVisualCropGeometry[],
   options: PdfVisualAssetRenderOptions = {},
   dependencies: PdfVisualAssetRendererDependencies = {},
+  regions: PdfLayoutSensitiveRegionDiagnostic[] = [],
 ): Promise<PdfVisualAssetRenderResult> {
   const warnings: string[] = [];
   const rendered = new Map<string, PdfTextDraftVisualAsset>();
@@ -257,49 +291,73 @@ export async function renderPdfVisualAssets(
   const jpegQuality = clamp(options.jpegQuality ?? 0.9, 0.1, 1);
   const createCanvas = dependencies.createCanvas ?? defaultCreateCanvas;
   const openPdfDocument = dependencies.openPdfDocument ?? defaultOpenPdfDocument;
+  const regionById = new Map(regions.map((region) => [region.id, region]));
+
+  const pushWarning = (warning: PdfVisualAssetRenderWarning): void => {
+    warnings.push(formatVisualWarning(warning));
+  };
+  const contextForCrop = (
+    crop: PdfVisualCropGeometry,
+  ): Omit<PdfVisualAssetRenderWarning, "stage" | "message" | "convertedToMarker"> => ({
+    pageNumber: crop.pageNumber,
+    cropKey: pdfVisualCropKey(crop),
+    regionId: crop.regionId,
+    logicalVisualId: crop.logicalVisualId ?? crop.visualKey,
+    kind: regionById.get(crop.regionId)?.kind,
+  });
 
   const sorted = sortCrops(crops);
   const selected = sorted.slice(0, maxAssets);
   for (const omitted of sorted.slice(maxAssets)) {
-    warnings.push(`Recorte ${pdfVisualCropKey(omitted)} não renderizado: limite de ${maxAssets} ativos atingido.`);
+    pushWarning({ ...contextForCrop(omitted), stage: "document-open", message: `limite de ${maxAssets} ativos atingido`, convertedToMarker: false });
   }
 
-  let pdf: PdfDocumentLike | undefined;
+  let pdf: PdfDocumentLike | null = null;
   try {
     pdf = await openPdfDocument(copyPdfBytes(pdfData));
     const groups = groupCropsByPage(selected);
     await runWorkers(groups, concurrency, async ([pageNumber, pageCrops]) => {
       if (pageNumber < 1 || pageNumber > pdf!.numPages) {
-        for (const crop of pageCrops) warnings.push(`Recorte ${pdfVisualCropKey(crop)} não renderizado: página inexistente.`);
+        for (const crop of pageCrops) {
+          pushWarning({ ...contextForCrop(crop), stage: "page-render", message: "página inexistente", convertedToMarker: false });
+        }
         return;
       }
 
       let page: PdfPageLike | undefined;
       let pageCanvas: CanvasLike | undefined;
+      let viewport: PdfViewportLike | undefined;
       try {
         page = await pdf!.getPage(pageNumber);
-        const viewport = viewportForLimits(page, requestedScale, maxPagePixels);
+        viewport = viewportForLimits(page, requestedScale, maxPagePixels);
         const pageWidth = Math.max(1, Math.ceil(viewport.width));
         const pageHeight = Math.max(1, Math.ceil(viewport.height));
         pageCanvas = createCanvas(pageWidth, pageHeight);
         const pageContext = pageCanvas.getContext("2d");
         if (!pageContext) throw new Error("Contexto 2D indisponível.");
         await page.render({ canvasContext: pageContext, viewport }).promise;
-
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "falha desconhecida";
         for (const crop of pageCrops) {
-          const key = pdfVisualCropKey(crop);
-          if (rendered.has(key)) {
-            warnings.push(`Recorte ${key} ignorado por duplicidade.`);
-            continue;
-          }
-          if (!validNormalizedCrop(crop)) {
-            warnings.push(`Recorte ${key} não renderizado: geometria normalizada inválida.`);
-            continue;
-          }
+          pushWarning({ ...contextForCrop(crop), stage: "page-render", message, convertedToMarker: false });
+        }
+        return;
+      }
 
-          const source = cropPixels(crop, viewport);
+      for (const crop of pageCrops) {
+        const key = pdfVisualCropKey(crop);
+        if (rendered.has(key)) {
+          pushWarning({ ...contextForCrop(crop), stage: "crop-validation", message: "recorte ignorado por duplicidade", convertedToMarker: false });
+          continue;
+        }
+        try {
+          if (!validNormalizedCrop(crop)) {
+            pushWarning({ ...contextForCrop(crop), stage: "crop-validation", message: "geometria normalizada inválida", convertedToMarker: false });
+            continue;
+          }
+          const source = cropPixels(crop, viewport!);
           if (!source) {
-            warnings.push(`Recorte ${key} não renderizado: área vazia.`);
+            pushWarning({ ...contextForCrop(crop), stage: "crop-pixels", message: "área de recorte vazia", convertedToMarker: false });
             continue;
           }
           const output = outputDimensions(source.width, source.height, maxOutputWidth, maxOutputHeight);
@@ -331,37 +389,30 @@ export async function renderPdfVisualAssets(
                 name: key,
               },
             });
-          } catch (error) {
-            const message = error instanceof Error ? error.message : "falha desconhecida";
-            warnings.push(`Recorte ${key} não renderizado: ${message}`);
           } finally {
             releaseCanvas(outputCanvas);
           }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "falha desconhecida";
+          pushWarning({ ...contextForCrop(crop), stage: "canvas-export", message, convertedToMarker: false });
         }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "falha desconhecida";
-        for (const crop of pageCrops) {
-          const key = pdfVisualCropKey(crop);
-          if (!rendered.has(key)) warnings.push(`Recorte ${key} não renderizado: ${message}`);
-        }
-      } finally {
-        page?.cleanup?.();
-        if (pageCanvas) releaseCanvas(pageCanvas);
       }
+
+      page?.cleanup?.();
+      if (pageCanvas) releaseCanvas(pageCanvas);
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "falha desconhecida";
-    warnings.push(`Não foi possível abrir o PDF para renderizar os elementos visuais: ${message}`);
+    pushWarning({ stage: "document-open", message, convertedToMarker: false });
   } finally {
     try {
       await pdf?.destroy?.();
     } catch {
-      warnings.push("O documento PDF foi processado, mas a liberação final de recursos falhou.");
+      pushWarning({ stage: "document-open", message: "O documento PDF foi processado, mas a liberação final de recursos falhou.", convertedToMarker: false });
     }
   }
 
   const assets: Record<string, PdfTextDraftVisualAsset> = {};
   for (const key of [...rendered.keys()].sort()) assets[key] = rendered.get(key)!;
-  warnings.sort();
   return { assets, warnings };
 }

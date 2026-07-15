@@ -259,6 +259,92 @@ function isGraphicLikeKind(kind: PdfLayoutSensitiveRegionDiagnostic["kind"]): bo
   return kind === "grafico" || kind === "figura" || kind === "imagem" || kind === "mapa" || kind === "ilustracao";
 }
 
+// Lacuna vertical (em pt) que indica uma quebra de parágrafo fora do elemento
+// visual. Valores menores são considerados espaçamento entre linhas/células.
+const PARAGRAPH_BREAK_GAP = 18;
+
+function roundColumnLeft(left: number): number {
+  return Math.round(left / 12) * 12;
+}
+
+// Identifica legendas cujo mesmo "tipo + número" aparece em mais de uma página,
+// caracterizando um elemento visual multipágina (ex.: Quadro 16 dividido em
+// várias páginas com legendas de continuação/conclusão).
+function findMultiPageCaptionKeys(pages: PdfPageDiagnostic[]): Set<string> {
+  const byKey = new Map<string, Set<number>>();
+  for (const page of pages) {
+    for (const line of page.lines) {
+      const match = CAPTION_RE.exec(line.text.trim());
+      if (!match) continue;
+      const key = `${match[1].toLowerCase()}:${match[2]}`;
+      let set = byKey.get(key);
+      if (!set) {
+        set = new Set<number>();
+        byKey.set(key, set);
+      }
+      set.add(page.pageNumber);
+    }
+  }
+  const multi = new Set<string>();
+  for (const [key, set] of byKey) {
+    if (set.size > 1) multi.add(key);
+  }
+  return multi;
+}
+
+// Estende o intervalo estrutural de um elemento visual que não possui "Fonte:",
+// de modo a abranger colunas irmãs contíguas (tabelas/quadros de múltiplas
+// colunas) e transcrições multipágina, sem absorver o parágrafo subsequente.
+function extendVisualRange(
+  page: PdfPageDiagnostic,
+  captionIndex: number,
+  currentEnd: number,
+  captionLine: PdfLineDiagnostic,
+  multiPageKeys: Set<string>,
+): number {
+  const captionMatch = CAPTION_RE.exec(captionLine.text.trim());
+  const captionKey = captionMatch ? `${captionMatch[1].toLowerCase()}:${captionMatch[2]}` : undefined;
+  const isMultiPage = captionKey != null && multiPageKeys.has(captionKey);
+
+  const stopAtBoundary = (lineIndex: number): boolean => {
+    const text = page.lines[lineIndex].text.trim();
+    if (CAPTION_RE.test(text) && !isContinuationCaption(text)) return true;
+    if (HEADING_RE.test(text)) return true;
+    return false;
+  };
+
+  if (isMultiPage) {
+    // Cada página é uma parte do mesmo elemento: inclui todas as linhas da
+    // página até a próxima legenda distinta ou título de seção.
+    let end = currentEnd;
+    for (let i = currentEnd + 1; i < page.lines.length; i += 1) {
+      if (stopAtBoundary(i)) break;
+      end = i;
+    }
+    return end;
+  }
+
+  // Página única: estende para abranger colunas irmãs / células de múltiplas
+  // linhas que foram cortadas pelo heurístico anterior (primeiro texto longo).
+  // A extensão só é mantida quando o bloco resultante é estruturado
+  // (multi-coluna); parágrafos subsequentes de coluna única não são absorvidos.
+  const colLefts = new Set<number>();
+  for (let i = captionIndex + 1; i <= currentEnd; i += 1) colLefts.add(roundColumnLeft(page.lines[i].left));
+  const extended: number[] = [];
+  for (let i = currentEnd + 1; i < page.lines.length; i += 1) {
+    if (stopAtBoundary(i)) break;
+    const gap = page.lines[i].top - page.lines[i - 1].bottom;
+    // Quebra de parágrafo clara (espaçamento maior que o entre linhas/células)
+    // indica texto fora do elemento visual.
+    if (gap > PARAGRAPH_BREAK_GAP) break;
+    extended.push(i);
+    colLefts.add(roundColumnLeft(page.lines[i].left));
+  }
+  if (extended.length === 0) return currentEnd;
+  if (colLefts.size >= 2) return extended[extended.length - 1];
+  return currentEnd;
+}
+
 function pageHasSubstantialBodyText(page: PdfPageDiagnostic): boolean {
   return page.lines.some((line) => {
     const text = line.text.trim();
@@ -335,6 +421,7 @@ function bridgeMultiPageRegions(regions: PdfLayoutSensitiveRegionDiagnostic[], p
 export function findLayoutRegions(pages: PdfPageDiagnostic[]): { regions: PdfLayoutSensitiveRegionDiagnostic[]; alerts: string[] } {
   const regions: PdfLayoutSensitiveRegionDiagnostic[] = [];
   const firstIdByKindNumber = new Map<string, string>();
+  const multiPageCaptionKeys = findMultiPageCaptionKeys(pages);
   for (const page of pages) {
     let regionIndex = 0;
     for (let index = 0; index < page.lines.length; index += 1) {
@@ -347,6 +434,8 @@ export function findLayoutRegions(pages: PdfPageDiagnostic[]): { regions: PdfLay
       let endLineIndex = sourceIndex > -1 ? sourceIndex - 1 : page.lines.length - 1;
       if (nextCaptionIndex > -1) endLineIndex = Math.min(endLineIndex, nextCaptionIndex - 1);
       if (sourceIndex < 0) {
+        // Corte conservador: o primeiro texto longo alinhado à esquerda marca o
+        // início de um parágrafo posterior (evita absorver o texto seguinte).
         const paragraphAfterVisual = page.lines.findIndex((candidate, candidateIndex) => {
           const text = candidate.text.trim();
           return candidateIndex > index + 1
@@ -358,6 +447,10 @@ export function findLayoutRegions(pages: PdfPageDiagnostic[]): { regions: PdfLay
             && !SOURCE_RE.test(text);
         });
         if (paragraphAfterVisual > -1) endLineIndex = paragraphAfterVisual - 1;
+        // Re-extensão controlada: recupera colunas irmãs contíguas (tabelas de
+        // múltiplas colunas) e transcrições multipágina que o corte acima teria
+        // separado indevidamente, sem absorver o parágrafo subsequente real.
+        endLineIndex = extendVisualRange(page, index, endLineIndex, line, multiPageCaptionKeys);
       }
 
       const kind = kindFromCaption(line.text);

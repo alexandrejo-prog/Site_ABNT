@@ -213,8 +213,12 @@ describe("fluxo de ativos visuais do PDF no App", () => {
     await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1), { timeout: 8000 });
     const blob = saveAsMock.mock.calls[0][0] as Blob;
     const { documentXml } = await loadDocxParts(blob);
+    // O quadro com ativo rasterizado vira desenho no DOCX.
     expect(documentXml).toContain("<w:drawing");
-    expect(documentXml).not.toContain("Elemento visual não inserido");
+    // O multicolumn é excluído da rasterização (sem ativo) e, portanto, vira
+    // marcador de texto em vez de ser omitido silenciosamente (garantia de
+    // não-omissão). Antes desta correção ele era descartado sem aviso.
+    expect(documentXml).toContain("Elemento visual não inserido");
   }, 20_000);
 
   it("erro do renderer nao bloqueia a geracao do DOCX", async () => {

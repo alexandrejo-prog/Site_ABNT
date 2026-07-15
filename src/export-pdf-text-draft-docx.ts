@@ -180,13 +180,58 @@ function originalPagesLabel(pageStart: number, pageEnd: number): string {
   return pageStart === pageEnd ? `página original ${pageStart}` : `páginas originais ${pageStart}-${pageEnd}`;
 }
 
+const MARKER = "Elemento visual não inserido neste rascunho textual";
+
+// Qualificadores de continuação/conclusão que podem acompanhar a legenda de
+// uma parte de um elemento visual multipágina (ex.: "Quadro 16 – ... (continua)").
+// A pontuação de fim de frase (ex.: o ponto final) NÃO é consumida — só o
+// qualificador entre parênteses (ou similar) é removido, preservando a
+// pontuação formal da legenda.
+const CONTINUATION_QUALIFIER_RE =
+  /\s*[([\]]?\s*(continua|continua[çc][ãa]o|conclus[ãa]o)\s*[)\]]?/iu;
+
+function isContinuationCaptionText(text: string): boolean {
+  return /\b(continua|continua[çc][ãa]o|conclus[ãa]o)\b/iu.test(text);
+}
+
+// Remove o qualificador de continuação/conclusão preservando o título-base
+// formal do elemento (normalização estrutural segura, não inventa título).
+function stripContinuationQualifier(text: string): string {
+  return text.replace(CONTINUATION_QUALIFIER_RE, "").replace(/\s+/g, " ").trim();
+}
+
+// Seleção da legenda primária de um grupo lógico (logicalVisualId), usada para
+// emitir UMA legenda formal externa antes da primeira imagem.
+//
+// Regras:
+// - prefere a primeira legenda formal (sem qualificador de continuação);
+// - uma legenda de continuação/conclusão NUNCA substitui uma formal anterior;
+// - se só houver legendas com qualificador (o PDF original rotula todas as
+//   partes como continuação/conclusão), usa o texto-base da primeira parte sem
+//   o sufixo, desde que isso resulte de normalização estrutural segura.
+function primaryCaptionForLogical(
+  lid: string,
+  regionsByLogical: Map<string, PdfLayoutSensitiveRegionDiagnostic[]>,
+): string | undefined {
+  const regions = regionsByLogical.get(lid);
+  if (!regions || regions.length === 0) return undefined;
+  const captions = [...regions]
+    .sort((a, b) => a.pageStart - b.pageStart || a.startLineIndex - b.startLineIndex)
+    .map((region) => region.caption)
+    .filter((caption): caption is string => typeof caption === "string" && caption.trim().length > 0);
+  if (captions.length === 0) return undefined;
+  const formal = captions.find((caption) => !isContinuationCaptionText(caption));
+  if (formal) return formal.trim();
+  return stripContinuationQualifier(captions[0]);
+}
+
 function markerForBlock(block: PdfReconstructedBlockDiagnostic, regions: Map<string, PdfLayoutSensitiveRegionDiagnostic>, logicalRange?: { pageStart: number; pageEnd: number }): string {
   if (!block.layoutRegionId) return `[Conteúdo com estrutura visual não resolvida, página original ${block.pageStart}. Consulte o PDF.]`;
   const region = regions.get(block.layoutRegionId);
   if (!region) return `[Conteúdo com estrutura visual não resolvida, página original ${block.pageStart}. Consulte o PDF.]`;
   const pageStart = logicalRange?.pageStart ?? region.pageStart;
   const pageEnd = logicalRange?.pageEnd ?? region.pageEnd;
-  return `[Elemento visual não inserido neste rascunho textual - ${visualKindLabel(region.kind)}, ${originalPagesLabel(pageStart, pageEnd)}. Consulte o PDF original.]`;
+  return `[${MARKER} - ${visualKindLabel(region.kind)}, ${originalPagesLabel(pageStart, pageEnd)}. Consulte o PDF original.]`;
 }
 
 interface LogicalVisualDecisions {
@@ -198,7 +243,7 @@ interface LogicalVisualDecisions {
 // Calcula a decisão de emissão UMA vez por logicalVisualId. O exportador nunca
 // decide região a região: todas as regiões que compartilham o mesmo identificador
 // lógico são resolvidas em conjunto (todas as imagens ou um único marcador).
-function buildLogicalVisualDecisions(input: PdfTextDraftExportInput): LogicalVisualDecisions {
+export function buildLogicalVisualDecisions(input: PdfTextDraftExportInput): LogicalVisualDecisions {
   const visualAssets = input.visualAssets ?? {};
   const allKeys = new Set(Object.keys(visualAssets));
   const regionsByLogical = new Map<string, PdfLayoutSensitiveRegionDiagnostic[]>();
@@ -219,58 +264,104 @@ function buildLogicalVisualDecisions(input: PdfTextDraftExportInput): LogicalVis
         cropKeys.add(pdfRegionCropKey(vk, region.pageStart, region.id));
       }
     }
-    emissionByLogical.set(lid, decideLogicalVisualEmission(regs, cropKeys));
-    entriesByLogical.set(lid, visualAssetEntriesForLogicalVisual(regs, visualAssets));
+    let emission = decideLogicalVisualEmission(regs, cropKeys);
+    const entries = visualAssetEntriesForLogicalVisual(regs, visualAssets);
+    emissionByLogical.set(lid, emission);
+    entriesByLogical.set(lid, entries);
   }
   return { emissionByLogical, entriesByLogical, regionsByLogical };
 }
 
-interface EmissionPlan {
+export interface EmissionPlan {
   markerLids: Set<string>;
   imageLids: Set<string>;
+  ignoredLids: Set<string>;
+  warnings: string[];
+  markerText: string;
 }
 
 // Plano de emissão calculado UMA vez e compartilhado entre o sumário (nota de
 // revisão) e o corpo do documento. Garante que a contagem de marcadores na nota
 // seja exatamente a quantidade de marcadores efetivamente emitidos no corpo.
-function buildEmissionPlan(input: PdfTextDraftExportInput, decisions: LogicalVisualDecisions): EmissionPlan {
+//
+// O plano é centrado no identificador lógico (logicalVisualId) e NUNCA deixa um
+// grupo elegível sem estado: ou todas as imagens esperadas são emitidas, ou um
+// único marcador de fallback é emitido (ver garantia contra ausência silenciosa
+// ao final da função).
+export function planVisualEmissions(input: PdfTextDraftExportInput, decisions: LogicalVisualDecisions): EmissionPlan {
   const regions = new Map(input.reconstruction.layoutRegions.map((region) => [region.id, region]));
   const blocks = input.reconstruction.blocks;
   const regionSpans = buildRegionVisualSpans(input.reconstruction.layoutRegions);
   const imageLids = new Set<string>();
   const markerLids = new Set<string>();
+  const warnings: string[] = [];
   const markerEmitted = new Set<string>();
+
+  // Entradas da Lista de Quadros/Gráficos são deliberadamente ignoradas: são
+  // blocos list-item dentro de spans visuais cujo único vínculo é a própria
+  // lista (não geram imagem nem marcador).
+  const ignoredLids = new Set<string>();
+  for (const block of blocks) {
+    if (block.type !== "list-item") continue;
+    if (!blockInsideRegionSpan(block, regionSpans)) continue;
+    const lid = visualLidForBlock(block, regions, regionSpans);
+    if (lid) ignoredLids.add(lid);
+  }
+
+  const lidFor = (block: PdfReconstructedBlockDiagnostic): string | undefined =>
+    visualLidForBlock(block, regions, regionSpans);
+  const hasUnresolvedForLid = (lid: string): boolean =>
+    blocks.some((b) => b.type === "unresolved" && lidFor(b) === lid);
+
   for (const block of blocks) {
     if (block.type === "caption") {
-      const lid = visualLidForBlock(block, regions, regionSpans);
-      if (!lid) continue;
-      const region = block.layoutRegionId ? regions.get(block.layoutRegionId) : undefined;
-      if (region && !markerEmitted.has(lid)) {
-        const hasUnresolved = blocks.some((b) => b.type === "unresolved" && b.layoutRegionId === block.layoutRegionId);
-        const emission = decisions.emissionByLogical.get(lid);
-        if (emission?.mode === "images") {
-          imageLids.add(lid);
-          markerEmitted.add(lid);
-        } else if (!hasUnresolved && (isGraphicLikeKind(region.kind) || (decisions.entriesByLogical.get(lid)?.length ?? 0) > 0)) {
-          markerLids.add(lid);
-          markerEmitted.add(lid);
-        }
-      }
-    } else if (block.type === "unresolved") {
-      const lid = visualLidForBlock(block, regions, regionSpans)
-        ?? `unresolved-${block.pageStart}-${block.sourceLines[0]?.lineIndex ?? 0}`;
-      const region = block.layoutRegionId ? regions.get(block.layoutRegionId) : undefined;
+      const lid = lidFor(block);
+      if (!lid || markerEmitted.has(lid)) continue;
       const emission = decisions.emissionByLogical.get(lid);
-      if (region && emission?.mode === "images") {
+      const groupRegions = decisions.regionsByLogical.get(lid) ?? [];
+      const kind = groupRegions[0]?.kind;
+      if (emission?.mode === "images") {
         imageLids.add(lid);
         markerEmitted.add(lid);
-      } else if (!markerEmitted.has(lid)) {
+      } else if (!hasUnresolvedForLid(lid) && (isGraphicLikeKind(kind) || (decisions.entriesByLogical.get(lid)?.length ?? 0) > 0)) {
+        markerLids.add(lid);
+        markerEmitted.add(lid);
+      }
+    } else if (block.type === "unresolved") {
+      const lid = lidFor(block)
+        ?? `unresolved-${block.pageStart}-${block.sourceLines[0]?.lineIndex ?? 0}`;
+      if (markerEmitted.has(lid)) continue;
+      const emission = decisions.emissionByLogical.get(lid);
+      if (emission?.mode === "images") {
+        imageLids.add(lid);
+        markerEmitted.add(lid);
+      } else {
         markerLids.add(lid);
         markerEmitted.add(lid);
       }
     }
   }
-  return { markerLids, imageLids };
+
+  // Garantia contra ausência silenciosa: todo logicalVisualId elegível (com
+  // região detectada E pelo menos um bloco de texto referenciando-o) deve
+  // terminar como imagem ou marcador. Caso contrário, converte em marcador de
+  // fallback e emite warning explícito (nunca silencioso).
+  for (const [lid, emission] of decisions.emissionByLogical) {
+    if (imageLids.has(lid) || markerLids.has(lid)) continue;
+    if (ignoredLids.has(lid)) continue;
+    const hasReferencingBlock = blocks.some((b) => lidFor(b) === lid);
+    if (!hasReferencingBlock) continue;
+    const groupRegions = decisions.regionsByLogical.get(lid) ?? [];
+    const kind = groupRegions[0]?.kind;
+    warnings.push(
+      `[elemento-visual] id=${lid} tipo=${kind ?? "desconhecido"} ` +
+      `estagio=emission-plan marcador=sim ` +
+      `mensagem="Elemento visual sem estado de emissão definido; convertido em marcador de fallback para ${originalPagesLabel(emission.pageStart, emission.pageEnd)}."`,
+    );
+    markerLids.add(lid);
+  }
+
+  return { markerLids, imageLids, ignoredLids, warnings, markerText: MARKER };
 }
 
 function technicalSummary(input: PdfTextDraftExportInput, plan: EmissionPlan): string[] {
@@ -571,10 +662,20 @@ function bodyParagraphs(
         paragraphs.push(left(text, { size: 22, keepNext: true, keepLines: true, widowControl: true }));
         continue;
       }
-      // Emite a PRIMEIRA legenda de cada logicalVisualId; suprime as legendas
-      // seguintes (continuação/conclusão) para não duplicar o elemento.
+      // Emite UMA legenda formal externa por logicalVisualId, antes da primeira
+      // imagem. Para grupos multipágina, seleciona a legenda primária (formal se
+      // houver; caso contrário, a primeira sem o qualificador de continuação).
+      // Suprime as legendas seguintes (continuação/conclusão) para não duplicar.
       if (!emittedCaptionLids.has(lid)) {
-        paragraphs.push(left(text, { size: 22, keepNext: true, keepLines: true, widowControl: true }));
+        const primaryCaption = primaryCaptionForLogical(lid, decisions.regionsByLogical) ?? text;
+        paragraphs.push(
+          left(primaryCaption, {
+            size: 22,
+            keepNext: true,
+            keepLines: true,
+            widowControl: true,
+          }),
+        );
         emittedCaptionLids.add(lid);
       }
       if (region && !emittedMarkerKeys.has(lid)) {
@@ -668,7 +769,8 @@ export async function buildPdfTextDraftDocxBlob(input: PdfTextDraftExportInput):
   const logo = input.includeReconstructedPretextuals === false ? undefined : await resolveLogo(input);
   const entries = makeTocEntries(input.reconstruction.blocks);
   const decisions = buildLogicalVisualDecisions(input);
-  const plan = buildEmissionPlan(input, decisions);
+  const plan = planVisualEmissions(input, decisions);
+  for (const warning of plan.warnings) console.warn(warning);
   const pretextualChildren = input.includeReconstructedPretextuals === false
     ? [...noteParagraphs(input, plan), ...tocParagraphs(entries)]
     : [
