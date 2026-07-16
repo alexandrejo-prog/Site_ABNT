@@ -16,6 +16,9 @@ export interface NormalizedReference {
   confidence: ReferenceConfidence;
   warnings: string[];
   detectedHighlight?: string;
+  // "capitulo" aqui significa "capitulo de livro" (tipo de referencia ABNT),
+  // e DEVE ser preservado. Nao confundir com "secoes" da estrutura do
+  // documento (6a ed. do Manual UFLA adota secoes, nao capitulos, no corpo).
   detectedType:
     | "artigo"
     | "livro"

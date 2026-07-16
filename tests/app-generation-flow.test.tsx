@@ -34,6 +34,16 @@ function getGenerateAnywayCheckbox(): HTMLInputElement {
   return screen.getByRole("checkbox", { name: /Gerar rascunho/i }) as HTMLInputElement;
 }
 
+// Preenche os elementos obrigatorios para monografia/dissertacao/tese segundo
+// a 6a ed. do Manual UFLA (bloqueio normativo essencial do gerador DOCX).
+function fillLongFormThesisFields(): void {
+  fireEvent.change(screen.getByLabelText("Resumo"), { target: { value: "Resumo do trabalho." } });
+  fireEvent.change(screen.getByLabelText("Abstract"), { target: { value: "Abstract text." } });
+  fireEvent.change(screen.getByLabelText("Referências"), { target: { value: "SILVA, M. Texto. Lavras: UFLA, 2024." } });
+  fireEvent.change(screen.getByLabelText("Introdução"), { target: { value: "Introdução do trabalho." } });
+  fireEvent.change(screen.getByLabelText("Conclusão"), { target: { value: "Conclusão do trabalho." } });
+}
+
 describe("fluxo real de bloqueio de geração (App)", () => {
   beforeEach(() => {
     generateMock.mockClear();
@@ -90,6 +100,7 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
     fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "Administração" } });
     fireEvent.change(screen.getByLabelText("Orientador"), { target: { value: "Prof. Dr. João da Silva" } });
+    fillLongFormThesisFields();
     fireEvent.click(getGenerateAnywayCheckbox());
     await user.click(getButtonByText(/Gerar DOCX/));
 
@@ -127,6 +138,7 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     await user.selectOptions(screen.getByLabelText("Tipo de trabalho"), "tese");
     fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "Administração" } });
     fireEvent.change(screen.getByLabelText("Orientador"), { target: { value: "Prof. Dr. João da Silva" } });
+    fillLongFormThesisFields();
     fireEvent.click(getGenerateAnywayCheckbox());
     await user.click(getButtonByText(/Gerar DOCX/));
 
@@ -214,6 +226,7 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     fireEvent.change(getTitleInput(), { target: { value: "Título de teste" } });
     fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
     fireEvent.change(screen.getByLabelText("Orientador"), { target: { value: "Orientador Teste" } });
+    fillLongFormThesisFields();
     fireEvent.click(getGenerateAnywayCheckbox());
     fireEvent.click(getButtonByText(/Gerar DOCX/));
     await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));
@@ -319,6 +332,7 @@ describe("fluxo real de bloqueio de geração (App)", () => {
     fireEvent.change(screen.getByLabelText("Autor"), { target: { value: "Maria Silva" } });
     fireEvent.change(screen.getByLabelText("Programa"), { target: { value: "ECA" } });
     fireEvent.change(screen.getByLabelText("Orientador"), { target: { value: "[nome do orientador]" } });
+    fillLongFormThesisFields();
     fireEvent.click(getGenerateAnywayCheckbox());
     await user.click(getButtonByText(/Gerar DOCX/));
     await waitFor(() => expect(saveAsMock).toHaveBeenCalledTimes(1));

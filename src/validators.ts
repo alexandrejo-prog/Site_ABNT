@@ -1,11 +1,14 @@
 import {
   AcademicFields,
+  AcademicFieldKey,
   WorkTypeValue,
   isAdvisorRequired,
   isCpgWork,
+  isLongFormThesis,
   isResearchProject,
   isUflaCollectionWork,
 } from "./ufla-rules";
+import { normalizeWorkType } from "./work-type-resolver";
 import { validateReferencesText } from "./references-validator";
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
 import {
@@ -21,6 +24,23 @@ import { assessAbstractHeuristics, assessResumoHeuristics } from "./text-diagnos
 import { hasSufficientImpactIndicators } from "./impact-indicators";
 import { findUflaPpgProgram, findUflaPpgPrograms, resolveUflaPpgProgram, type UflaPpgProgram } from "./ufla-ppg-programs";
 import { getWorkTypeRequirements } from "./work-type-requirements";
+import { outputPolicyFor } from "./work-type-output-policy";
+import { getSectionKeyFromTitle } from "./section-aliases";
+import { collectDocxAccessibilityWarnings } from "./docx-accessibility";
+
+// Seções obrigatórias (modelo de seções, 6ª ed.) por tipo documental.
+// Chaves em ACADEMIC_FIELD_KEYS; mapeadas via section-aliases.
+const SECTION_LABEL_BY_KEY: Record<string, string> = {
+  introducao: "Introdução",
+  conclusao: "Conclusão",
+  referencias: "Referências",
+};
+
+const REQUIRED_SECTION_KEYS_BY_TYPE: Partial<Record<WorkTypeValue, string[]>> = {
+  monografia: ["introducao", "conclusao"],
+  dissertacao: ["introducao", "conclusao"],
+  tese: ["introducao", "conclusao"],
+};
 
 export type ValidationSeverity = "error" | "warning" | "info";
 
@@ -382,7 +402,7 @@ function addUflaCollectionIssues(fields: AcademicFields, issues: ValidationIssue
     message: ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE,
     what: "O formato foi cadastrado no sistema com suporte inicial.",
     why: "Os exportadores especificos da Colecao Producao Academica UFLA ainda serao evoluidos incrementalmente.",
-    action: "Confira estrutura, campos, sumário e paginação no DOCX final antes de exportar o PDF pelo Word ou LibreOffice.",
+    action: "Confira estrutura, campos, sumório e paginação no DOCX final antes de exportar o PDF pelo Word ou LibreOffice.",
   });
 
   for (const fieldKey of productionType.requiredFields) {
@@ -395,6 +415,123 @@ function addUflaCollectionIssues(fields: AcademicFields, issues: ValidationIssue
         why: "A Colecao Producao Academica UFLA exige revisao da estrutura e dos metadados antes da submissao.",
         action: "Preencha o campo indicado ou confirme manualmente se o guia especifico dispensa esse item.",
       });
+    }
+  }
+}
+
+// Extrai titulos de secao (linhas iniciadas por # 1..5) do texto do editor.
+function extractEditorSectionTitles(editorText: string): string[] {
+  const titles: string[] = [];
+  const lines = editorText.split(/\r?\n/);
+  for (const line of lines) {
+    const match = /^\s*#{1,5}\s+(.+?)\s*$/.exec(line);
+    if (match) titles.push(match[1].trim());
+  }
+  return titles;
+}
+
+// Valida a conformidade normativa estrutural essencial (6a ed. do Manual UFLA).
+// Bloqueia quando a nao conformidade e essencial, conforme diretriz de bloqueio.
+function addStructuralNormativeIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
+  const workType = normalizeWorkType(fields.workType);
+  if (!workType) return;
+
+  // Tipo documental sem perfil normativo resolvido -> bloqueio.
+  const policy = outputPolicyFor(workType);
+  if (!policy) {
+    issues.push({
+      severity: "error",
+      code: "worktype-profile-unresolved",
+      message: "O tipo de trabalho nao possui perfil normativo resolvido.",
+      what: "Nao foi encontrada uma politica de saida para o tipo selecionado.",
+      why: "Cada tipo documental precisa de um perfil normativo explicito (fonte unica) para gerar o DOCX conforme a UFLA.",
+      action: "Selecione um tipo de trabalho com perfil definido (monografia, dissertacao, tese ou da Colecao Producao Academica UFLA).",
+    });
+    return;
+  }
+
+  const isThesis = isLongFormThesis(workType);
+
+  // Elementos pre-textuais obrigatorios ausentes (monografia/dissertacao/tese).
+  if (isThesis) {
+    if (!hasValue(fields.resumo)) {
+      issues.push({
+        severity: "error",
+        code: "pretextual-missing",
+        message: "Elemento pre-textual obrigatorio ausente: resumo.",
+        what: "O resumo e obrigatorio para monografia, dissertacao e tese.",
+        why: "A 6a ed. do Manual UFLA exige resumo entre os elementos pre-textuais.",
+        action: "Preencha o campo Resumo antes de gerar o DOCX.",
+      });
+    }
+    if (!hasValue(fields.abstractText)) {
+      issues.push({
+        severity: "error",
+        code: "pretextual-missing",
+        message: "Elemento pre-textual obrigatorio ausente: abstract.",
+        what: "O abstract e obrigatorio para monografia, dissertacao e tese.",
+        why: "A 6a ed. do Manual UFLA exige abstract (versao estrangeira do resumo).",
+        action: "Preencha o campo Abstract antes de gerar o DOCX.",
+      });
+    }
+  }
+
+  // Referencias obrigatorias ausentes (rigido para monografia/dissertacao/tese).
+  if (isThesis && !hasValue(fields.referencias)) {
+    issues.push({
+      severity: "error",
+      code: "references-missing",
+      message: "Referencias obrigatorias ausentes.",
+      what: "O bloco de referencias esta vazio para um trabalho que exige referencias.",
+      why: "Monografia, dissertacao e tese exigem secao de referencias na parte pos-textual.",
+      action: "Adicione as referencias no campo Referencias, uma por linha.",
+    });
+  }
+
+  // Secoes obrigatorias ausentes (modelo de secoes, nao capitulos).
+  const sectionTitles = extractEditorSectionTitles(editorText);
+  const presentKeys = new Set<string>();
+  for (const title of sectionTitles) {
+    const key = getSectionKeyFromTitle(title);
+    if (key) presentKeys.add(key);
+  }
+
+  const requiredSectionKeys = REQUIRED_SECTION_KEYS_BY_TYPE[workType] ?? [];
+  if (isThesis) {
+    for (const key of requiredSectionKeys) {
+      const fieldKey = key as AcademicFieldKey;
+      if (!presentKeys.has(key) && !hasValue(fields[fieldKey])) {
+        issues.push({
+          severity: "error",
+          code: "required-section-missing",
+          message: `Secao obrigatoria ausente: ${SECTION_LABEL_BY_KEY[key] ?? key}.`,
+          what: `A secao '${SECTION_LABEL_BY_KEY[key] ?? key}' nao foi encontrada no editor nem no campo correspondente.`,
+          why: "A 6a ed. do Manual UFLA organiza o trabalho em secoes; introducao e conclusao sao obrigatorias para monografia, dissertacao e tese.",
+          action: `Adicione a secao '${SECTION_LABEL_BY_KEY[key] ?? key}' no editor (ex.: '# 1 ${SECTION_LABEL_BY_KEY[key] ?? key}').`,
+        });
+      }
+    }
+  }
+
+  // Hierarquia estrutural invalida: titulos de secao com numeracao pulando niveis.
+  const levels = sectionTitles
+    .map((t) => /^\d+(?:\.\d+)*\s/.test(t) ? t.trim().split(/\s+/)[0].split(".").length : 0)
+    .filter((l) => l > 0);
+  if (levels.length >= 2) {
+    let previous = levels[0];
+    for (let i = 1; i < levels.length; i++) {
+      if (levels[i] > previous + 1) {
+        issues.push({
+          severity: "error",
+          code: "invalid-hierarchy",
+          message: "Hierarquia de secoes invalida: ha salto de nivel (ex.: 1 para 1.1.1).",
+          what: "Um titulo de secao aparece em nivel superior ao imediatamente anterior mais de uma unidade.",
+          why: "A 6a ed. do Manual UFLA adota hierarquia de secoes continua, sem saltos.",
+          action: "Renumere as secoes de forma continua (1, 1.1, 1.1.1) sem pular niveis.",
+        });
+        break;
+      }
+      previous = levels[i];
     }
   }
 }
@@ -514,6 +651,17 @@ export function validateWork(fields: AcademicFields, editorText = ""): Validatio
   addCpgWarnings(fields, editorText, issues);
   addResearchProjectIssues(fields, editorText, issues);
   addUflaCollectionIssues(fields, issues);
+  addStructuralNormativeIssues(fields, editorText, issues);
+  for (const a11y of collectDocxAccessibilityWarnings(fields, editorText)) {
+    issues.push({
+      severity: a11y.severity,
+      code: `docx-a11y-${a11y.id}`,
+      message: a11y.message,
+      what: a11y.message,
+      why: a11y.why,
+      action: a11y.action,
+    });
+  }
   addRequiredFieldIssues(fields, issues);
   addPlaceholderIssues(fields, editorText, issues);
   addNaturalPlaceholderIssues(fields, editorText, issues);

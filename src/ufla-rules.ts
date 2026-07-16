@@ -260,6 +260,8 @@ export const UFLA_RULES = {
     beforePrimaryTitleTwip: 240,
     afterPrimaryTitleTwip: 240,
   },
+  // A 6a edicao do Manual organiza o trabalho em SECOES (nao capitulos).
+  // A ordem textual e expressa como sequencia de sessoes, nao "desenvolvimento".
   structure: {
     preTextualOrder: [
       "capa",
@@ -277,8 +279,11 @@ export const UFLA_RULES = {
       "lista de tabelas",
       "sumário",
     ],
-    textualOrder: ["introdução", "desenvolvimento", "conclusão"],
+    // Secoes textuais obrigatorias (a 6a ed. adota "secoes", nao "capitulos").
+    textualSections: ["introdução", "conclusão"],
     postTextualOrder: ["referências", "glossário", "apêndices", "anexos", "índice"],
+    // Profundidade maxima de hierarquia de sessoes conforme maxProgressiveLevel.
+    maxSessionLevel: 5,
   },
   titles: {
     primaryUppercase: true,
@@ -351,6 +356,51 @@ export function isResearchProject(workType: WorkTypeValue): boolean {
 export function isUflaCollectionWork(workType: WorkTypeValue): workType is UflaAcademicProductionTypeId {
   return UFLA_ACADEMIC_PRODUCTION_TYPE_IDS.includes(workType as UflaAcademicProductionTypeId);
 }
+
+// Predicados de tipo documental centralizados (fonte unica) para eliminar
+// duplicacao entre editores, validadores e exportadores DOCX.
+// monografia + dissertacao + tese (trabalhos longos com pre-textuais completos).
+export function isLongFormThesis(workType: WorkTypeValue): boolean {
+  return workType === "monografia" || workType === "dissertacao" || workType === "tese";
+}
+
+// dissertacao + tese (grau de pos-graduacao stricto sensu); exclui monografia.
+export function isGraduateDegreeWork(workType: WorkTypeValue): boolean {
+  return workType === "dissertacao" || workType === "tese";
+}
+
+export function requiresApprovalPage(workType: WorkTypeValue): boolean {
+  return isLongFormThesis(workType);
+}
+
+export function requiresCatalogCard(workType: WorkTypeValue): boolean {
+  return isLongFormThesis(workType);
+}
+
+export function requiresFullUflaPreTextual(workType: WorkTypeValue): boolean {
+  return (
+    isLongFormThesis(workType) ||
+    workType === "projeto_pesquisa" ||
+    isUflaCollectionWork(workType) ||
+    workType === "outro"
+  );
+}
+
+export function requiresTableOfContents(workType: WorkTypeValue): boolean {
+  return requiresFullUflaPreTextual(workType) && !isCpgWork(workType) && workType !== "artigo";
+}
+
+// Requisitos minimos de acessibilidade digital do DOCX (6a ed. reforca
+// acessibilidade). Estes itens geram AVISO, nao bloqueio, no primeiro recorte.
+export const UFLA_DOCX_ACCESSIBILITY = {
+  source: "Manual de normalizacao UFLA, 6. ed. (acessibilidade digital) + ABNT NBR 14724:2024",
+  rules: {
+    documentLanguageRequired: true,
+    continuousHeadingOutline: true,
+    altTextOnIllustrations: true,
+    maxHeadingLevel: UFLA_RULES.structure.maxSessionLevel,
+  },
+} as const;
 
 export function emptyAcademicFields(): AcademicFields {
   return {

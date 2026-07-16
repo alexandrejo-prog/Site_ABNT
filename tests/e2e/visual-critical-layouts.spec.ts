@@ -37,6 +37,12 @@ test.describe("Fase 2C - regressao visual das regioes criticas do fluxo", () => 
     await page.locator("#author").fill("Autor Exemplo da Silva");
     await page.locator("#advisor").fill("Prof. Orientador Exemplo");
 
+    await page.locator("#resumo").fill("Resumo de exemplo do trabalho de conclusao de curso.");
+    await page.locator("#abstractText").fill("Example abstract of the undergraduate final paper.");
+    await page.locator("#referencias").fill("SILVA, M. Exemplo de referencia. Lavras: UFLA, 2024.");
+    await page.locator("#introducao").fill("Introducao de exemplo do trabalho.");
+    await page.locator("#conclusao").fill("Conclusao de exemplo do trabalho.");
+
     await expect(page.getByRole("button", { name: "Gerar DOCX editável" })).toBeEnabled();
 
     const [download] = await Promise.all([

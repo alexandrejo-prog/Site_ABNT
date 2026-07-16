@@ -13,12 +13,22 @@ const NON_OVERRIDABLE_ERROR_CODES = [
   "program-conflict",
   "abstract-topic-conflict",
   "program-degree-incompatible",
+  "required-section-missing",
+  "references-missing",
+  "invalid-hierarchy",
+  "worktype-profile-unresolved",
+  "pretextual-missing",
 ] as const;
 
 const ABSOLUTE_GENERATION_BLOCKER_CODES = [
   "work-type-required",
   "draft-placeholder-detected",
   "natural-placeholder-detected",
+  "required-section-missing",
+  "references-missing",
+  "invalid-hierarchy",
+  "worktype-profile-unresolved",
+  "pretextual-missing",
 ] as const;
 
 export function isNonOverridableError(issue: ValidationIssue): boolean {

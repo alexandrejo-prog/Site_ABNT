@@ -20,7 +20,7 @@ import {
 import type { IParagraphOptions, IStylesOptions } from "docx";
 import "./docx-toc-field-patch";
 import { pageMargins, ibgeTable, BODY_SIZE, SINGLE_LINE, ONE_AND_HALF_LINE, BLACK, AUTHOR_SIZE as COVER_AUTHOR_SIZE, TITLE_SIZE as COVER_TITLE_SIZE } from "./docx-shared";
-import { AcademicFields, UFLA_RULES } from "./ufla-rules";
+import { AcademicFields, UFLA_RULES, isGraduateDegreeWork, requiresApprovalPage } from "./ufla-rules";
 import { getWorkTypeRequirements } from "./work-type-requirements";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { buildFlowingImpactText } from "./impact-indicators";
@@ -34,6 +34,8 @@ export type EditorBlockType =
   | "heading1"
   | "heading2"
   | "heading3"
+  | "heading4"
+  | "heading5"
   | "longQuote"
   | "scheduleTable"
   | "markdownTable"
@@ -128,6 +130,38 @@ const DOCUMENT_STYLES: IStylesOptions = {
       },
     },
     {
+      id: "TOC4",
+      name: "toc 4",
+      basedOn: "Normal",
+      next: "Normal",
+      quickFormat: true,
+      run: {
+        font: "Times New Roman",
+        size: 24,
+        bold: true,
+        color: BLACK,
+      },
+      paragraph: {
+        spacing: { before: 0, after: 0 },
+      },
+    },
+    {
+      id: "TOC5",
+      name: "toc 5",
+      basedOn: "Normal",
+      next: "Normal",
+      quickFormat: true,
+      run: {
+        font: "Times New Roman",
+        size: 24,
+        bold: false,
+        color: BLACK,
+      },
+      paragraph: {
+        spacing: { before: 0, after: 0 },
+      },
+    },
+    {
       id: "Heading1",
       name: "Heading 1",
       basedOn: "Normal",
@@ -175,13 +209,49 @@ const DOCUMENT_STYLES: IStylesOptions = {
         spacing: { before: 0, after: 0 },
       },
     },
+    {
+      id: "Heading4",
+      name: "Heading 4",
+      basedOn: "Normal",
+      next: "Normal",
+      quickFormat: true,
+      run: {
+        font: "Times New Roman",
+        size: 24,
+        bold: true,
+        color: BLACK,
+      },
+      paragraph: {
+        spacing: { before: 0, after: 0 },
+      },
+    },
+    {
+      id: "Heading5",
+      name: "Heading 5",
+      basedOn: "Normal",
+      next: "Normal",
+      quickFormat: true,
+      run: {
+        font: "Times New Roman",
+        size: 24,
+        bold: false,
+        color: BLACK,
+      },
+      paragraph: {
+        spacing: { before: 0, after: 0 },
+      },
+    },
   ],
 };
 
 function headingTypeFromNumberedTitle(text: string, fallback: EditorBlockType): EditorBlockType {
   const normalized = text.trim();
 
-  if (/^\d+(?:\.\d+){2,}(?:\s|$)/.test(normalized)) return "heading3";
+  // Profundidade de sessao ate o nivel 5 (maxProgressiveLevel). Ordem do mais
+  // profundo para o mais raso para evitar saltos de hierarquia.
+  if (/^\d+(?:\.\d+){4}(?:\s|$)/.test(normalized)) return "heading5";
+  if (/^\d+(?:\.\d+){3}(?:\s|$)/.test(normalized)) return "heading4";
+  if (/^\d+(?:\.\d+){2}(?:\s|$)/.test(normalized)) return "heading3";
   if (/^\d+\.\d+(?:\s|$)/.test(normalized)) return "heading2";
   if (/^\d+(?:\s|$)/.test(normalized)) return "heading1";
 
@@ -1190,6 +1260,42 @@ function blockToParagraph(
     ];
   }
 
+  if (block.type === "heading4") {
+    return [
+      new Paragraph({
+        heading: HeadingLevel.HEADING_4,
+        spacing: { before: 240, after: 240, line: ONE_AND_HALF_LINE },
+        children: [
+          new TextRun({
+            text: block.text,
+            bold: true,
+            font: UFLA_RULES.typography.fontFamily,
+            size: BODY_SIZE,
+            color: BLACK,
+          }),
+        ],
+      }),
+    ];
+  }
+
+  if (block.type === "heading5") {
+    return [
+      new Paragraph({
+        heading: HeadingLevel.HEADING_5,
+        spacing: { before: 240, after: 240, line: ONE_AND_HALF_LINE },
+        children: [
+          new TextRun({
+            text: block.text,
+            bold: false,
+            font: UFLA_RULES.typography.fontFamily,
+            size: BODY_SIZE,
+            color: BLACK,
+          }),
+        ],
+      }),
+    ];
+  }
+
   if (block.type === "longQuote") {
     return [
       new Paragraph({
@@ -1248,13 +1354,15 @@ function buildSimpleParagraphs(value: string): Paragraph[] {
 
 interface SummaryEntry {
   text: string;
-  level: 1 | 2 | 3;
+  level: 1 | 2 | 3 | 4 | 5;
 }
 
 function summaryLevelForBlock(block: EditorBlock): SummaryEntry["level"] | null {
   if (block.type === "heading1") return 1;
   if (block.type === "heading2") return 2;
   if (block.type === "heading3") return 3;
+  if (block.type === "heading4") return 4;
+  if (block.type === "heading5") return 5;
   return null;
 }
 
@@ -1400,7 +1508,7 @@ function renumberBodySections(blocks: EditorBlock[], removedImpactNumber?: numbe
 }
 
 function removeDuplicateIndicatorsSection(blocks: EditorBlock[], fields: AcademicFields): { blocks: EditorBlock[]; removedImpactNumber?: number } {
-  const isGraduateThesis = fields.workType === "dissertacao" || fields.workType === "tese";
+  const isGraduateThesis = isGraduateDegreeWork(fields.workType);
   const hasPreTextualIndicators =
     isGraduateThesis || hasText(fields.indicadoresImpacto) || hasText(fields.impactoSocial) || hasText(fields.impactoCientifico);
   if (!hasPreTextualIndicators) return { blocks };
@@ -1444,7 +1552,7 @@ function buildSummary(
   const entries = collectSummaryEntries(bodyBlocks, references, fields);
   if (!entries.length) return [];
 
-  const isGraduateThesis = fields.workType === "dissertacao" || fields.workType === "tese";
+  const isGraduateThesis = isGraduateDegreeWork(fields.workType);
 
   if (isGraduateThesis) {
     return [
@@ -1478,7 +1586,7 @@ export function ensureTrailingPeriod(value: string): string {
 }
 
 function hasApprovalPage(fields: AcademicFields): boolean {
-  return fields.workType === "monografia" || fields.workType === "dissertacao" || fields.workType === "tese";
+  return requiresApprovalPage(fields.workType);
 }
 
 export function calculateTextualStartPage(
@@ -1555,7 +1663,7 @@ function coverChildren(fields: AcademicFields, logo?: DocxLogoAsset): Paragraph[
 
 function buildTitlePageSupplementalLines(fields: AcademicFields, nature: string): string[] {
   const normalizedNature = normalizeForDetection(nature);
-  const isGraduateThesis = fields.workType === "dissertacao" || fields.workType === "tese";
+  const isGraduateThesis = isGraduateDegreeWork(fields.workType);
 
   return [
     !isGraduateThesis && fields.course && !normalizedNature.includes("CURSO")
@@ -1925,7 +2033,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
     ),
     fields,
   );
-  const isGraduateThesis = fields.workType === "dissertacao" || fields.workType === "tese";
+  const isGraduateThesis = isGraduateDegreeWork(fields.workType);
   const bodyBlocks = renumberBodySections(
     dedupedBlocks,
     isGraduateThesis ? removedImpactNumber : undefined,
