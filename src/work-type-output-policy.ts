@@ -154,14 +154,15 @@ export const WORK_TYPE_OUTPUT_POLICIES: Partial<Record<WorkType, WorkTypeOutputP
     hasPageHeader: false,
     finalCheck: ["guia da Coleção Produção Acadêmica UFLA (nº 1)", "estrutura de artigo", "resumo", "palavras-chave", "referências"],
     sourceGuide: "Coleção Produção Acadêmica UFLA — Guia nº 1: Artigo científico (www.tcc.ufla.br)",
-    requiredSections: ["Introdução", "Metodologia ou material e métodos", "Resultados e discussão", "Conclusão", "Referências"],
+    requiredSections: ["Introdução", "Metodologia", "Resultados e discussão", "Conclusão", "Referências"],
     // Perfil de saida do DOCX (Guia nº 1): resumo estruturado + palavras-chave
     // em PT, titulo bilíngue opcional, abstract em EN, secoes numericas.
     outputPolicy: [
       "Resumo estruturado (propósito, método, resultados, conclusão) com palavras-chave em PT-BR",
       "Abstract bilíngue (EN) correspondente ao resumo",
-      "Seções em numeração contínua (1, 1.1, 1.1.1), sem saltos",
-      "Referências no padrão ABNT ao final",
+      "Título do artigo e das seções em numeração contínua (1, 1.1, 1.1.1), sem saltos de nível",
+      "Citações e referências no padrão ABNT ao final (tipo [1], [2])",
+      "Formatação da revista-alvo respeitada quando houver guia específico",
     ],
   },
   patente_ufla: {
@@ -199,9 +200,10 @@ export const WORK_TYPE_OUTPUT_POLICIES: Partial<Record<WorkType, WorkTypeOutputP
     // de selecao, tabela de extracao e sintese narrativa/quantitativa.
     outputPolicy: [
       "Protocolo registrado (ex.: PRISMA) e pergunta estruturada (PICO)",
-      "Estratégia de busca com string completa e bases consultadas",
-      "Fluxo de seleção de estudos (identificados, elegíveis, incluídos)",
-      "Síntese dos achados com tabela de extração e limitações",
+      "Estratégia de busca com string completa, bases consultadas e período",
+      "Fluxo de seleção de estudos (identificados, elegíveis, incluídos) em figura",
+      "Tabela de extração de dados e síntese (narrativa ou meta-análise) com limitações",
+      "Qualidade/metodologia (ex.: risco de viés) das fontes primárias",
       "Referências das fontes primárias no padrão ABNT",
     ],
   },
@@ -239,10 +241,10 @@ export const WORK_TYPE_OUTPUT_POLICIES: Partial<Record<WorkType, WorkTypeOutputP
     // Perfil de saida (Guia nº 5): documentacao tecnica + manual do usuario,
     // diagramas (casos de uso/classes), evidencia de execucao e licenca.
     outputPolicy: [
-      "Especificação de requisitos (funcionais e não funcionais)",
-      "Diagramas de arquitetura e de casos de uso",
-      "Relato de testes (casos, cobertura, resultados)",
-      "Manual de uso com capturas de tela e exemplos",
+      "Especificação de requisitos (funcionais e não funcionais) com histórias/rituais",
+      "Diagramas de arquitetura e de casos de uso (+ classes quando aplicável)",
+      "Relato de testes (casos, cobertura, evidência de execução)",
+      "Manual de uso com capturas de tela, exemplos e instalação",
       "Informação de licença e repositório, se aplicável",
     ],
   },

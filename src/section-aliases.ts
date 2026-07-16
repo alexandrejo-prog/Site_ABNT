@@ -85,3 +85,32 @@ export function sectionLevelsFromEditorText(editorText: string): number[] {
     .map(sectionLevelFromHeadingLine)
     .filter((level): level is number => level !== null);
 }
+
+// --- Criterio semantico compartilhado para o XML do DOCX (OOXML) ---
+
+// Extrai o nivel (1..5) de um paragrafo OOXML se ele for um titulo de secao
+// (Heading1..Heading5). O criterio espelha sectionLevelFromHeadingLine:
+// ambos validacao e exportacao consideram "heading" da mesma forma, evitando
+// drift. Retorna null se o paragrafo nao for titulo de secao.
+export function headingLevelFromParagraphXml(paragraphXml: string): number | null {
+  const styleMatch = /<w:pStyle\b[^>]*\bw:val="(Heading[1-5])"/i.exec(paragraphXml);
+  if (!styleMatch) return null;
+  return Number(styleMatch[1].replace(/\D/g, ""));
+}
+
+export function isHeadingParagraphXml(paragraphXml: string): boolean {
+  return headingLevelFromParagraphXml(paragraphXml) !== null;
+}
+
+// Divide o document.xml em paragrafos <w:p>...</w:p> completos, de forma
+// robusta a atributos fora de ordem. Evita regex guloso que poderia fundir
+// paragrafos adjacentes.
+export function splitParagraphs(documentXml: string): string[] {
+  const paragraphs: string[] = [];
+  const regex = /<w:p\b[\s\S]*?<\/w:p>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(documentXml)) !== null) {
+    paragraphs.push(match[0]);
+  }
+  return paragraphs;
+}

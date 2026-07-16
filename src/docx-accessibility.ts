@@ -1,5 +1,6 @@
 import type { AcademicFields } from "./ufla-rules";
 import { UFLA_DOCX_ACCESSIBILITY } from "./ufla-rules";
+import { headingLevelFromParagraphXml, splitParagraphs } from "./section-aliases";
 
 export interface DocxAccessibilityIssue {
   id: string;
@@ -10,7 +11,15 @@ export interface DocxAccessibilityIssue {
 }
 
 // Camada minima de acessibilidade digital do DOCX (6a ed. do Manual UFLA).
-// Gera AVISOS, nunca bloqueia a geracao, no primeiro recorte.
+// Gera AVISOS, nunca bloqueia a geracao, nesta rodada.
+//
+// Status explicito (Rodada 3):
+//  - GARANTIDO: idioma pt-BR em docDefaults (emitido pelo exportador via
+//    default.document.run.language); titulos Heading1..5 no outline.
+//  - APENAS AVISADO: idioma ausente/divergente, saltos de outline, figuras
+//    sem alt. Nenhum deles bloqueia a geracao.
+//  - PENDENTE (proximas rodadas): alt text automatico a partir de legenda;
+//    verificacao de contraste/estrutura de tabelas; idioma por trecho.
 export function collectDocxAccessibilityWarnings(
   fields: AcademicFields,
   editorText: string,
@@ -58,9 +67,10 @@ export function collectDocxAccessibilityWarnings(
 export interface ExportedDocxAccessibilityResult {
   issues: DocxAccessibilityIssue[];
   inspected: boolean;
+  // Sinais explicitos de conformidade (garantido vs ausente).
+  languageDetected?: string | null;
+  languageOk?: boolean;
 }
-
-const HEADING_STYLE_RE = /w:val="(Heading[1-5]|TOC[1-5])"/i;
 
 export function analyzeExportedDocxAccessibility(documentXml: string): ExportedDocxAccessibilityResult {
   const issues: DocxAccessibilityIssue[] = [];
@@ -69,32 +79,41 @@ export function analyzeExportedDocxAccessibility(documentXml: string): ExportedD
     return { issues, inspected: false };
   }
 
-  // 1) Idioma do documento (w:lang, em docDefaults ou rPr).
-  const hasLang = /<w:lang\b[^>]*\bw:val="([^"]+)"/i.test(documentXml) ||
-    /<w:lang\b[^>]*>/i.test(documentXml);
-  if (!hasLang) {
+  // 1) Idioma do documento (GARANTIDO quando pt-BR em docDefaults/rPr padrao).
+  // Para evitar falso positivo, consideramos o idioma "do documento" apenas se
+  // w:lang aparecer em docDefaults (w:rPrDefault/w:lang) ou em rPrDefault.
+  // Um run isolado com idioma estrangeiro (citacao) nao conta como idioma do
+  // documento.
+  const defaultsLang = /<w:rPrDefault\b[\s\S]*?<w:lang\b[^>]*\bw:val="([^"]+)"/i.exec(documentXml) ||
+    /<w:docDefaults\b[\s\S]*?<w:lang\b[^>]*\bw:val="([^"]+)"/i.exec(documentXml);
+  const languageDetected = defaultsLang ? defaultsLang[1] : null;
+  const languageOk = languageDetected != null;
+  if (!languageOk) {
     issues.push({
       id: "doc-language-missing",
       severity: "warning",
-      message: "O documento nao define idioma (w:lang). Leitores de tela podem nao configurar a pronuncia correta.",
+      message: "O documento nao define idioma (w:lang) em docDefaults. Leitores de tela podem nao configurar a pronuncia correta.",
       why: UFLA_DOCX_ACCESSIBILITY.source,
       action: "Defina o idioma pt-BR do documento (docDefaults/rPr) no exportador.",
+    });
+  } else if (languageDetected!.toLowerCase() !== "pt-br") {
+    issues.push({
+      id: "doc-language-divergent",
+      severity: "warning",
+      message: `O idioma do documento esta definido como "${languageDetected}" (esperado pt-BR).`,
+      why: UFLA_DOCX_ACCESSIBILITY.source,
+      action: "Ajuste o idioma do documento para pt-BR no exportador ou no Word/LibreOffice.",
     });
   }
 
   // 2) Continuidade do outline: detecta saltos de nivel (ex.: 1 -> 1.1.1).
-  const styleMatches = documentXml.match(/<w:pStyle\b[^>]*>/gi) || [];
+  // Leitura por paragrafo completo <w:p>, usando o criterio semantico
+  // compartilhado (headingLevelFromParagraphXml). TOC nao conta como salto.
+  const paragraphs = splitParagraphs(documentXml);
   const levelsInOrder: number[] = [];
-  for (const tag of styleMatches) {
-    const m = tag.match(HEADING_STYLE_RE);
-    if (m) {
-      const name = m[1].toLowerCase();
-      const isToc = name.startsWith("toc");
-      const level = Number(name.replace(/\D/g, ""));
-      // TOC nao conta como salto de hierarquia estrutural; consideramos
-      // apenas titulos de secao (Heading).
-      if (!isToc) levelsInOrder.push(level);
-    }
+  for (const p of paragraphs) {
+    const lvl = headingLevelFromParagraphXml(p);
+    if (lvl !== null) levelsInOrder.push(lvl);
   }
   let previous = 0;
   for (const lvl of levelsInOrder) {
@@ -112,14 +131,14 @@ export function analyzeExportedDocxAccessibility(documentXml: string): ExportedD
   }
 
   // 3) Texto alternativo nos desenhos (figuras). Cada <w:drawing> deve ter
-  // docPr com title ou desc (alt). Falso positivo evitado: se houver docPr
-  // com title/desc, a figura tem alt.
+  // docPr com title ou <a:title>/<a:desc> (alt). Falso positivo evitado:
+  // se houver docPr com title/desc, a figura tem alt. Leitura por desenho
+  // individual (split seguro), sem regex guloso.
   const drawings = documentXml.match(/<w:drawing\b[\s\S]*?<\/w:drawing>/gi) || [];
   if (drawings.length > 0) {
     const withoutAlt = drawings.filter((d) => {
-      // docPr pode vir como <wp:docPr ... title="..."> ou <a:title>...</a:title>/<a:desc>...</a:desc>
       const hasTitleAttr = /<wp:docPr\b[^>]*\btitle="[^"]+/i.test(d);
-      const hasDescElem = /<a:(title|desc)\b[\s\S]*?<\/a:(title|desc)>/i.test(d);
+      const hasDescElem = /<a:(?:title|desc)\b[\s\S]*?<\/a:(?:title|desc)>/i.test(d);
       return !(hasTitleAttr || hasDescElem);
     });
     if (withoutAlt.length > 0) {
@@ -133,5 +152,5 @@ export function analyzeExportedDocxAccessibility(documentXml: string): ExportedD
     }
   }
 
-  return { issues, inspected: true };
+  return { issues, inspected: true, languageDetected, languageOk };
 }

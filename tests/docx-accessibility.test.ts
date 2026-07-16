@@ -33,9 +33,28 @@ describe("acessibilidade real do DOCX (6a ed. UFLA)", () => {
     expect(result.issues).toEqual([]);
   });
 
-  it("detecta idioma ausente no XML", () => {
+  it("detecta idioma ausente no XML (sem docDefaults)", () => {
     const result = analyzeExportedDocxAccessibility("<w:document/>");
+    expect(result.languageOk).toBe(false);
     expect(result.issues.some((i) => i.id === "doc-language-missing")).toBe(true);
+  });
+
+  it("nao considera idioma de run isolado como idioma do documento", () => {
+    // w:lang dentro de um run comum (citacao estrangeira) nao conta.
+    const xml =
+      '<w:document><w:body><w:p><w:r><w:rPr><w:lang w:val="en-US"/></w:rPr></w:r></w:p></w:body></w:document>';
+    const result = analyzeExportedDocxAccessibility(xml);
+    expect(result.languageOk).toBe(false);
+    expect(result.issues.some((i) => i.id === "doc-language-missing")).toBe(true);
+  });
+
+  it("considera idioma divergente (nao pt-BR) como aviso, nao como ausente", () => {
+    const xml =
+      '<w:docDefaults><w:rPrDefault><w:rPr><w:lang w:val="en-US"/></w:rPr></w:rPrDefault></w:docDefaults>';
+    const result = analyzeExportedDocxAccessibility(xml);
+    expect(result.languageDetected).toBe("en-US");
+    expect(result.issues.some((i) => i.id === "doc-language-divergent")).toBe(true);
+    expect(result.issues.some((i) => i.id === "doc-language-missing")).toBe(false);
   });
 
   it("detecta salto de hierarquia no outline (1 -> 1.1.1)", () => {
@@ -66,7 +85,7 @@ describe("acessibilidade real do DOCX (6a ed. UFLA)", () => {
     expect(result.issues.some((i) => i.id === "doc-outline-jump")).toBe(false);
   });
 
-  it("detecta figura sem texto alternativo", () => {
+  it("detecta figura sem texto alternativo (por desenho)", () => {
     const xml = '<w:drawing><wp:inline><wp:docPr id="1" name="fig"/><a:graphic/></wp:inline></w:drawing>';
     const result = analyzeExportedDocxAccessibility(xml);
     expect(result.issues.some((i) => i.id === "doc-illustration-alt-missing")).toBe(true);
@@ -77,6 +96,17 @@ describe("acessibilidade real do DOCX (6a ed. UFLA)", () => {
       '<w:drawing><wp:inline><wp:docPr id="1" name="fig" title="Grafico de barras"/><a:graphic/></wp:inline></w:drawing>';
     const result = analyzeExportedDocxAccessibility(xml);
     expect(result.issues.some((i) => i.id === "doc-illustration-alt-missing")).toBe(false);
+  });
+
+  it("contabiliza corretamente multiplos desenhos (um com alt, outro sem)", () => {
+    const xml = [
+      '<w:drawing><wp:inline><wp:docPr id="1" title="Ok"/><a:graphic/></wp:inline></w:drawing>',
+      '<w:drawing><wp:inline><wp:docPr id="2" name="sem"/><a:graphic/></wp:inline></w:drawing>',
+    ].join("");
+    const result = analyzeExportedDocxAccessibility(xml);
+    const issue = result.issues.find((i) => i.id === "doc-illustration-alt-missing");
+    expect(issue).toBeDefined();
+    expect(issue?.message).toContain("1 figura(s)");
   });
 
   it("nao emite aviso de alt para imagem importada com legenda preservada", () => {

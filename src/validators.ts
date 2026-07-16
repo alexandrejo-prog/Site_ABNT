@@ -25,7 +25,7 @@ import { hasSufficientImpactIndicators } from "./impact-indicators";
 import { findUflaPpgProgram, findUflaPpgPrograms, resolveUflaPpgProgram, type UflaPpgProgram } from "./ufla-ppg-programs";
 import { getWorkTypeRequirements } from "./work-type-requirements";
 import { getPolicyRequiredSections, outputPolicyFor } from "./work-type-output-policy";
-import { getSectionKeyFromTitle, sectionLevelsFromEditorText } from "./section-aliases";
+import { getSectionKeyFromTitle, normalizeSectionTitle, sectionLevelsFromEditorText } from "./section-aliases";
 import { collectDocxAccessibilityWarnings } from "./docx-accessibility";
 
 // Seções obrigatórias (modelo de seções, 6ª ed.) por tipo documental.
@@ -424,10 +424,13 @@ function addUflaCollectionIssues(fields: AcademicFields, editorText: string, iss
   // desalinhamento estrutural com o guia correspondente.
   const requiredSections = getPolicyRequiredSections(fields.workType);
   if (requiredSections.length > 0) {
-    const presentKeys = collectEditorSectionKeys(editorText);
-    const missing = requiredSections.filter(
-      (s) => !presentKeys.has(String(getSectionKeyFromTitle(s))),
-    );
+    const presentHeadings = collectEditorSectionTexts(editorText);
+    // Casa por substring normalizada: evita falso positivo quando o titulo
+    // real e uma variacao aceita (ex.: "Material e Metodos", "Metodologia").
+    const missing = requiredSections.filter((req) => {
+      const needed = normalizeSectionTitle(req);
+      return !presentHeadings.some((h) => h.includes(needed) || needed.includes(h));
+    });
     if (missing.length > 0) {
       issues.push({
         severity: "warning",
@@ -441,16 +444,16 @@ function addUflaCollectionIssues(fields: AcademicFields, editorText: string, iss
   }
 }
 
-// Coleta as chaves normalizadas de todas as secoes do editor (markdown # ou
-// numeracao 1 / 1.1), para comparar com as secoes obrigatorias do perfil.
-function collectEditorSectionKeys(editorText: string): Set<string> {
-  const keys = new Set<string>();
+// Coleta os titulos normalizados de todas as secoes do editor (markdown # ou
+// numeracao 1 / 1.1), para comparar por substring com as secoes obrigatorias.
+function collectEditorSectionTexts(editorText: string): string[] {
+  const texts: string[] = [];
   const lines = (editorText || "").split(/\r?\n/);
   for (const line of lines) {
     const m = /^\s*(#{1,5}|\d+(?:\.\d+)*)\s+(.+?)\s*$/.exec(line);
-    if (m && m[2]) keys.add(String(getSectionKeyFromTitle(m[2].trim())));
+    if (m && m[2]) texts.push(normalizeSectionTitle(m[2].trim()));
   }
-  return keys;
+  return texts;
 }
 
 // Extrai titulos de secao (linhas iniciadas por # 1..5) do texto do editor.
