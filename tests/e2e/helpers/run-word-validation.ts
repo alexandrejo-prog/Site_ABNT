@@ -29,6 +29,11 @@ export async function fileSize(target: string): Promise<number> {
   return (await stat(target)).size;
 }
 
+function parseJson(content: string): unknown {
+  const cleaned = content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
+  return JSON.parse(cleaned);
+}
+
 async function commandExists(command: string): Promise<boolean> {
   return new Promise((resolveCommand) => {
     const child = spawn(command, ["-NoProfile", "-Command", "$PSVersionTable.PSVersion.ToString()"], {
@@ -77,7 +82,15 @@ export async function runWordValidation(options: {
   outputDirectory: string;
   timeoutMs?: number;
 }): Promise<WordValidationResult> {
+  if (!options.powerShell) {
+    throw new Error("PowerShell nao encontrado; validacao Word requer Windows com PowerShell.");
+  }
+
   const scriptPath = resolve(process.cwd(), "scripts/acceptance/run-docx-acceptance.ps1");
+  if (!(await pathExists(scriptPath))) {
+    throw new Error(`Script de aceite Word nao localizado: ${scriptPath}`);
+  }
+
   const args = [
     "-NoProfile",
     "-ExecutionPolicy",
@@ -120,11 +133,22 @@ export async function runWordValidation(options: {
   });
 
   const reportPath = await findAcceptanceReport(options.outputDirectory);
-  const report = JSON.parse(await readFile(reportPath, "utf8")) as Record<string, unknown>;
-  const wordJson = (report.wordManifest ?? {}) as Record<string, unknown>;
+  const report = parseJson(await readFile(reportPath, "utf8")) as Record<string, unknown>;
 
   const pagesValue = report.pagesAfterToc ?? report.pagesAfterFields ?? report.pagesBeforeFields;
-  const wordPid = wordJson.wordPid;
+
+  let wordOpened = false;
+  try {
+    const runDirectory = join(reportPath, "..");
+    const wordManifestPath = join(runDirectory, "docx-word-manifest.json");
+    if (await pathExists(wordManifestPath)) {
+      const wordManifest = parseJson(await readFile(wordManifestPath, "utf8")) as Record<string, unknown>;
+      const wordPid = wordManifest.wordPid;
+      wordOpened = typeof wordPid === "number" && wordPid > 0;
+    }
+  } catch {
+    wordOpened = false;
+  }
 
   return {
     command: options.powerShell,
@@ -137,6 +161,6 @@ export async function runWordValidation(options: {
     approved: Boolean(report.approved),
     pdfExported: Boolean(report.pdfExported),
     pages: typeof pagesValue === "number" ? pagesValue : null,
-    wordOpened: typeof wordPid === "number" && (wordPid as number) > 0,
+    wordOpened,
   };
 }

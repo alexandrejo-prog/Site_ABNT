@@ -11,6 +11,7 @@
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test tests/e2e/smoke.spec.ts",
     "test:e2e:import": "playwright test tests/e2e/import-docx.spec.ts tests/e2e/reject-pdf.spec.ts",
+    "test:e2e:word": "playwright test tests/e2e/word-validation.spec.ts",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:trace": "playwright show-trace",
     "acceptance:docx": "node scripts/acceptance/audit-docx.mjs",

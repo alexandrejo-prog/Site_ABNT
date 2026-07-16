@@ -49,3 +49,24 @@ jobs:
 
       - name: Run E2E
         run: npm run test:e2e
+
+  e2e-word:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+
+      - name: Run E2E (Fase 2B - validacao Word)
+        run: npx playwright test tests/e2e/word-validation.spec.ts

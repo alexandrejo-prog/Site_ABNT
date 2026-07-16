@@ -71,6 +71,8 @@ Os testes end-to-end ficam em `tests/e2e/` e usam Playwright (`npm run test:e2e`
 - **rejeicao de PDF** (`reject-pdf.spec.ts`): confirma que selecionar um PDF exibe a mensagem "Formato nao suportado. Use .docx, .txt ou .md." (comportamento esperado; a importacao direta de PDF nao existe na main).
 - **integracao Word (futura)**: o helper isolado `tests/e2e/helpers/run-word-validation.ts` localiza o PowerShell e executa `scripts/acceptance/run-docx-acceptance.ps1`, retornando `approved`, `pdfExported`, `pages` e `wordOpened`. Ele nao e chamado automaticamente e sera usado na Fase 2B.
 
+**Fase 2B (integrada):** `word-validation.spec.ts` importa um DOCX pela interface, gera o DOCX, baixa-o e executa o helper do Word via PowerShell, validando apenas os sinais `approved`, `pdfExported`, `pages` e `wordOpened`. Requer Windows com Microsoft Word; o teste e ignorado automaticamente onde esses requisitos nao existem. O job `e2e-word` no CI roda apenas esse spec em `windows-latest`.
+
 ## Fluxo recomendado
 
 1. Preencha os campos no navegador.
