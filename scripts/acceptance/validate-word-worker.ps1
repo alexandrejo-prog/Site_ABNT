@@ -5,6 +5,8 @@
 # sumario, exporta PDF e grava um arquivo de controle JSON em todas as fases.
 #
 # O worker captura seu proprio PID e o PID exato do Word via Hwnd+GetWindowThreadProcessId.
+# Se o HWND falhar, faz fallback por diferenca de processos WINWORD.EXE criados apos
+# o inicio do worker, aceitando apenas quando ha exatamente um candidato.
 # O encerramento normal soh usa o PID capturado. O pai encerra este worker e o
 # wordPid em caso de timeout, nunca outros processos Word.
 #
@@ -55,6 +57,7 @@ $manifest = [ordered]@{
   workerPid               = $workerPid
   wordHwnd                = $null
   wordPid                 = $null
+  pidCaptureMethod        = $null
   wordProcessWasAlreadyRunningBefore = $null
   forcedTerminationUsed   = $false
   forcedTerminationPid    = $null
@@ -95,20 +98,23 @@ try {
 
   try { $manifest.windowsVersion = (Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue).Version } catch {}
 
+  # Capture WINWORD.EXE processes already running BEFORE we create our instance.
+  $preExisting = @{}
+  try {
+    $existingProcs = Get-CimInstance Win32_Process -Filter "Name='WINWORD.EXE'" -ErrorAction SilentlyContinue
+    foreach ($p in $existingProcs) { $preExisting[[int]$p.ProcessId] = $p }
+  } catch { $preExisting = @{} }
+  $workerStartedUtc = (Get-Date).ToUniversalTime()
+
   Write-Control "creating-word" $null
   $word = New-Object -ComObject Word.Application
   $word.Visible = $false
   $word.DisplayAlerts = 0
   try { $manifest.wordVersion = $word.Version } catch {}
 
-  # Detect whether a Word instance was already running BEFORE we created ours,
-  # by checking the count of WINWORD processes before vs after creation.
-  # (Best-effort; used only for diagnostics, never for killing.)
-  try {
-    $beforeCount = [int](Get-CimInstance Win32_Process -Filter "Name='WINWORD.EXE'" -ErrorAction SilentlyContinue | Measure-Object).Count
-  } catch { $beforeCount = $null }
+  $pidCaptureMethod = $null
 
-  # Capture the exact PID of THIS instance via its window handle.
+  # Primary: capture the exact PID of THIS instance via its window handle.
   $hwnd = $null
   try { $hwnd = $word.Hwnd } catch {}
   $manifest.wordHwnd = $hwnd
@@ -119,11 +125,47 @@ try {
     Add-Type -MemberDefinition $sig -Name "WinApi" -Namespace "Acceptance" -ErrorAction SilentlyContinue
     $pidOut = 0
     try { [Acceptance.WinApi]::GetWindowThreadProcessId([IntPtr]$hwnd, [ref]$pidOut) | Out-Null } catch {}
-    if ($pidOut -gt 0) { $wordPid = [int]$pidOut }
+    if ($pidOut -gt 0) { $wordPid = [int]$pidOut; $pidCaptureMethod = "hwnd" }
   }
+
+  # Fallback: if HWND did not yield a PID, poll briefly for NEW WINWORD processes
+  # created after this worker started. Accept only when exactly one candidate exists.
+  if (-not $wordPid) {
+    $pollMs = 1500
+    $stepMs = 150
+    $elapsed = 0
+    while (-not $wordPid -and $elapsed -lt $pollMs) {
+      try {
+        $candidates = @()
+        $all = Get-CimInstance Win32_Process -Filter "Name='WINWORD.EXE'" -ErrorAction SilentlyContinue
+        foreach ($p in $all) {
+          $pidInt = [int]$p.ProcessId
+          if ($preExisting.ContainsKey($pidInt)) { continue }
+          $startUtc = $null
+          try {
+            $dt = $p.CreationDate
+            if ($dt) { $startUtc = ([System.Management.ManagementDateTimeConverter]::ToDateTime($dt)).ToUniversalTime() }
+          } catch { $startUtc = $null }
+          if ($startUtc -and $startUtc -ge $workerStartedUtc) { $candidates += $pidInt }
+          elseif (-not $startUtc) { $candidates += $pidInt }
+        }
+        if ($candidates.Count -eq 1) {
+          $wordPid = $candidates[0]
+          $pidCaptureMethod = "process-delta"
+        } else {
+          # zero or multiple candidates -> do NOT approximate.
+          $wordPid = $null
+          $pidCaptureMethod = $null
+        }
+      } catch { $wordPid = $null; $pidCaptureMethod = $null }
+      if (-not $wordPid) { Start-Sleep -Milliseconds $stepMs; $elapsed += $stepMs }
+    }
+  }
+
   $manifest.wordPid = $wordPid
-  $manifest.wordProcessWasAlreadyRunningBefore = $null  # unknown at this point; see below
-  Write-Control "creating-word" $wordPid
+  $manifest.pidCaptureMethod = $pidCaptureMethod
+  $manifest.wordProcessWasAlreadyRunningBefore = ($preExisting.Count -gt 0)
+  Write-Control "creating-word" $wordPid @{ pidCaptureMethod = $pidCaptureMethod }
 
   if (-not $wordPid) {
     AddWarning "Nao foi possivel capturar o PID exato do Word; encerramento forcado estara desabilitado."

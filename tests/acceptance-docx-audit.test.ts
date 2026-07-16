@@ -24,6 +24,16 @@ const {
 } = core;
 
 const TMP = path.join(os.tmpdir(), "opencode-acceptance-tests-v2");
+
+function runPsFile(scriptPath: string): number {
+  try {
+    execFileSync("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath], { stdio: "pipe" });
+    return 0;
+  } catch (e: any) {
+    return typeof e.status === "number" ? e.status : 1;
+  }
+}
+
 const DOCUMENT = (body: string) =>
   `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${body}</w:document>`;
 const PAR = (inner: string) => `<w:p>${inner}</w:p>`;
@@ -765,5 +775,34 @@ describe("4. imagem interna fora de word/media", () => {
     expect(m.orphanMediaCount).toBe(0);
     expect(m.media[0].zipPath).toBe("media/f.png");
     expect(m.issues.warnings.some((w: any) => w.code === "NONSTANDARD_IMAGE_PART_LOCATION")).toBe(true);
+  });
+});
+
+describe("6. captura segura de PID do Word (worker)", () => {
+  const workerPath = path.join(__dirname, "..", "scripts", "acceptance", "validate-word-worker.ps1");
+  const pidTestPath = path.join(__dirname, "..", "scripts", "acceptance", "Test-PidCapture.ps1");
+
+  it("teste isolado de selecao de PID aprova todos os casos", () => {
+    const code = runPsFile(pidTestPath);
+    expect(code).toBe(0);
+  });
+
+  it("worker nao contem encerramento por nome de processo", () => {
+    const src = fs.readFileSync(workerPath, "utf8");
+    expect(/Stop-Process\s+-Name\s+WINWORD/i.test(src)).toBe(false);
+    expect(/Get-Process\s+WINWORD\s*\|\s*Stop-Process/i.test(src)).toBe(false);
+    expect(/taskkill\s+\/IM\s+WINWORD\.EXE/i.test(src)).toBe(false);
+  });
+
+  it("worker registra pidCaptureMethod e usa apenas Stop-Process -Id", () => {
+    const src = fs.readFileSync(workerPath, "utf8");
+    expect(src).toContain("pidCaptureMethod");
+    expect(src).toContain('"hwnd"');
+    expect(src).toContain('"process-delta"');
+    // every Stop-Process must use -Id
+    const stopMatches = src.match(/Stop-Process[^\n]*/g) || [];
+    for (const m of stopMatches) {
+      expect(/-Id\b/.test(m)).toBe(true);
+    }
   });
 });

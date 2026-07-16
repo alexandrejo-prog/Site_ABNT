@@ -37,6 +37,7 @@ $manifest = [ordered]@{
   workerPid               = $null
   wordHwnd                = $null
   wordPid                 = $null
+  pidCaptureMethod        = $null
   wordProcessWasAlreadyRunningBefore = $null
   forcedTerminationUsed   = $false
   forcedTerminationPid    = $null
@@ -110,7 +111,7 @@ try {
   # Worker finished; merge its manifest if present.
   if (Test-Path -LiteralPath $ManifestOutput) {
     $w = Get-Content -LiteralPath $ManifestOutput -Raw | ConvertFrom-Json
-    foreach ($k in @("wordHwnd","wordPid","openedReadOnly","openedByRepair","approved","metrics","pagesBeforeFields","pagesAfterFields","pagesAfterToc","pdfExported","pdfSizeBytes","wordVersion","windowsVersion","forcedTerminationUsed","forcedTerminationPid","wordProcessWasAlreadyRunningBefore")) {
+    foreach ($k in @("wordHwnd","wordPid","pidCaptureMethod","openedReadOnly","openedByRepair","approved","metrics","pagesBeforeFields","pagesAfterFields","pagesAfterToc","pdfExported","pdfSizeBytes","wordVersion","windowsVersion","forcedTerminationUsed","forcedTerminationPid","wordProcessWasAlreadyRunningBefore")) {
       if ($null -ne $w.$k) { $manifest[$k] = $w.$k }
     }
     if ($w.failures) { foreach ($f in $w.failures) { $manifest.failures += $f } }
