@@ -1444,7 +1444,7 @@ function normalizedHeadingBase(text: string): string {
 }
 
 function isConclusionEquivalentHeading(text: string): boolean {
-  return ["CONCLUSAO", "CONSIDERACOES FINAIS"].includes(normalizedHeadingBase(text));
+  return ["CONCLUSAO", "CONCLUSÃO", "CONCLUSOES", "CONCLUSÕES", "CONSIDERACOES FINAIS", "CONSIDERAÇÕES FINAIS"].includes(normalizedHeadingBase(text));
 }
 
 function hasEditorConclusionHeading(blocks: EditorBlock[]): boolean {
@@ -2102,7 +2102,9 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   return new Document({
     creator: "UFLA DOCX Acadêmico",
     title: fields.title || "Trabalho acadêmico",
+    subject: "Trabalho acadêmico UFLA",
     description: "Documento acadêmico gerado conforme regras centrais da UFLA.",
+    keywords: fields.palavrasChave || fields.keywords || undefined,
     features: {
       updateFields: true,
     },

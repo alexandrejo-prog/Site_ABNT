@@ -150,6 +150,36 @@ function sectionKeyForBlock(block: ImportedBlock): AcademicFieldKey | undefined 
   return getSectionKeyFromTitle(blockText(block));
 }
 
+const SECTION_HEADING_PREFIXES = [
+  "CONCLUSAO", "CONCLUSÃO", "CONCLUSOES", "CONCLUSÕES",
+  "CONSIDERACOES FINAIS", "CONSIDERAÇÕES FINAIS", "CONSIDERACOES GERAIS", "CONSIDERAÇÕES GERAIS",
+  "CONCLUSAO FINAL", "CONCLUSÃO FINAL",
+  "REFERENCIAS", "REFERÊNCIAS", "BIBLIOGRAFIA", "BIBLIOGRAFIAS",
+];
+
+function stripSectionHeadingLine(text: string): string {
+  const lines = text.split("\n");
+  if (!lines.length) return text;
+  const firstLine = lines[0].replace(/^#+\s*/, "").replace(/^\d+(?:\.\d+)*\.?\s*/, "");
+  const normalized = normalizeForDetection(firstLine);
+  const matchingPrefix = SECTION_HEADING_PREFIXES.find(
+    (prefix) => normalized === prefix || normalized.startsWith(`${prefix} `),
+  );
+  if (!matchingPrefix) return text.trim();
+  let remainder = "";
+  if (lines.length > 1) {
+    remainder = lines.slice(1).join("\n").replace(/^\n+/, "");
+  } else {
+    const after = firstLine.replace(new RegExp(`^\\s*${escapeRegex(normalizeForDetection(matchingPrefix))}\\s*`, "i"), "");
+    remainder = after;
+  }
+  return remainder.replace(/^\s*\n+/, "").trim();
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function looksLikePrimaryHeading(block: ImportedBlock, text = blockText(block)): boolean {
   const normalized = normalizeForDetection(text);
   return (
@@ -241,11 +271,18 @@ function collectAfterSectionTitle(
 
   const startText = textFromBlockForSection(blocks[startIndex]).trim();
   if (startText) {
-    const lower = startText.toLowerCase().replace(/^#+\s*/, "");
+    const cleaned = startText.replace(/^#+\s*/, "");
+    const lowerCleaned = cleaned.toLowerCase();
     const match = titleTargets
       .map((target) => target.toLowerCase())
-      .find((target) => lower.startsWith(target));
-    const remainder = match ? startText.slice(match.length).trim() : startText;
+      .find((target) => lowerCleaned === target || lowerCleaned.startsWith(`${target} `));
+    let remainder = startText;
+    if (match) {
+      const at = cleaned.toLowerCase().indexOf(match);
+      remainder = cleaned.slice(at + match.length).trim();
+    } else {
+      remainder = cleaned.trim();
+    }
     if (remainder) collected.push(remainder);
   }
 
@@ -745,6 +782,24 @@ function findIntroductionIndex(blocks: ImportedBlock[]): number {
   });
 }
 
+function collectConclusion(blocks: ImportedBlock[]): string {
+  const start = findHeadingIndex(blocks, (block) =>
+    isEquivalentSectionTitle(blockText(block), "conclusao") ||
+    sectionKeyForBlock(block) === "conclusao",
+  );
+  if (start >= 0) {
+    return stripSectionHeadingLine(collectAfterHeading(blocks, start, (block) => isReferenceHeading(block)));
+  }
+  const fallback = blocks.findIndex((block) =>
+    startsWithSectionTitle(blockText(block), ["CONCLUSAO", "CONCLUSÃO", "CONCLUSOES", "CONCLUSÕES", "CONSIDERACOES FINAIS", "CONSIDERAÇÕES FINAIS", "CONSIDERACOES GERAIS", "CONSIDERAÇÕES GERAIS", "CONCLUSAO FINAL", "CONCLUSÃO FINAL"]) ||
+    sectionKeyForBlock(block) === "conclusao",
+  );
+  if (fallback < 0) return "";
+  return stripSectionHeadingLine(collectAfterSectionTitle(blocks, fallback, (block) => isReferenceHeading(block), [
+    "CONCLUSAO", "CONCLUSÃO", "CONCLUSOES", "CONCLUSÕES", "CONSIDERACOES FINAIS", "CONSIDERAÇÕES FINAIS", "CONSIDERACOES GERAIS", "CONSIDERAÇÕES GERAIS", "CONCLUSAO FINAL", "CONCLUSÃO FINAL",
+  ]));
+}
+
 function collectIntroduction(blocks: ImportedBlock[]): string {
   const start = findIntroductionIndex(blocks);
   if (start < 0) return "";
@@ -759,24 +814,6 @@ function collectIntroduction(blocks: ImportedBlock[]): string {
   });
 }
 
-function collectConclusion(blocks: ImportedBlock[]): string {
-  const start = findHeadingIndex(blocks, (block) =>
-    isEquivalentSectionTitle(blockText(block), "conclusao") ||
-    sectionKeyForBlock(block) === "conclusao",
-  );
-  if (start >= 0) {
-    return collectAfterHeading(blocks, start, (block) => isReferenceHeading(block));
-  }
-  const fallback = blocks.findIndex((block) =>
-    startsWithSectionTitle(blockText(block), ["CONCLUSAO", "CONCLUSÃO", "CONSIDERACOES FINAIS", "CONSIDERAÇÕES FINAIS", "CONSIDERACOES GERAIS", "CONSIDERAÇÕES GERAIS", "CONCLUSAO FINAL", "CONCLUSÃO FINAL"]) ||
-    sectionKeyForBlock(block) === "conclusao",
-  );
-  if (fallback < 0) return "";
-  return collectAfterSectionTitle(blocks, fallback, (block) => isReferenceHeading(block), [
-    "CONCLUSAO", "CONCLUSÃO", "CONSIDERACOES FINAIS", "CONSIDERAÇÕES FINAIS", "CONSIDERACOES GERAIS", "CONSIDERAÇÕES GERAIS", "CONCLUSAO FINAL", "CONCLUSÃO FINAL",
-  ]);
-}
-
 function collectReferences(blocks: ImportedBlock[]): string {
   const referenceCandidates = blocks
     .map((block, index) => ({ block, index }))
@@ -785,13 +822,14 @@ function collectReferences(blocks: ImportedBlock[]): string {
   const introductionIndex = findIntroductionIndex(blocks);
   const start = referenceCandidates
     .filter(({ index }) => introductionIndex < 0 || index > introductionIndex)
-    .at(-1)?.index ?? -1;
+    .at(0)?.index ?? -1;
 
   const collected: string[] = [];
 
   if (start >= 0) {
     for (let index = start + 1; index < blocks.length; index += 1) {
       const block = blocks[index];
+      if (isReferenceHeading(block)) break;
       if (isAnnexHeading(block) || isAppendixHeading(block)) break;
       const normalized = normalizeForDetection(blockText(block));
       if (/^1\s+INTRODUCAO$/i.test(normalized) || normalized === "INTRODUCAO") break;
@@ -805,7 +843,7 @@ function collectReferences(blocks: ImportedBlock[]): string {
     }
   }
 
-  if (collected.length > 0) return collected.join("\n\n").trim();
+  if (collected.length > 0) return stripSectionHeadingLine(collected.join("\n\n").trim());
 
   const fallbackStart = blocks.findIndex((block) =>
     isReferenceHeading(block) || isSectionTitleText(blockText(block), ["REFERENCIAS", "REFERÊNCIAS", "BIBLIOGRAFIA"]),
@@ -815,6 +853,7 @@ function collectReferences(blocks: ImportedBlock[]): string {
   const fallbackCollected: string[] = [];
   for (let index = fallbackStart + 1; index < blocks.length; index += 1) {
     const block = blocks[index];
+    if (isReferenceHeading(block)) break;
     if (isAnnexHeading(block) || isAppendixHeading(block)) break;
     const normalized = normalizeForDetection(blockText(block));
     if (/^1\s+INTRODUCAO$/i.test(normalized) || normalized === "INTRODUCAO") break;
@@ -827,7 +866,7 @@ function collectReferences(blocks: ImportedBlock[]): string {
     fallbackCollected.push(text);
   }
 
-  return fallbackCollected.join("\n\n").trim();
+  return stripSectionHeadingLine(fallbackCollected.join("\n\n").trim());
 }
 
 function findPostReferencesHeadingIndex(
@@ -1169,6 +1208,11 @@ export function detectAcademicFieldsFromStructure(
       if (!cpgResult.fields.referencias) {
         cpgResult.fields.referencias = cleanReferences(collectReferences(structure.blocks));
       }
+      for (const key of ["introducao", "conclusao", "referencias"] as AcademicFieldKey[]) {
+        if (cpgResult.fields[key]) {
+          markConfidence(cpgResult.confidence, key, cpgResult.fields[key], "alta");
+        }
+      }
       return cpgResult;
     }
   }
@@ -1346,7 +1390,7 @@ export function detectAcademicFieldsFromStructure(
       confidence,
       key,
       fields[key],
-      fields[key] ? (["resumo", "abstractText", "introducao", "referencias"].includes(key) ? "alta" : "media") : "nao-identificado",
+      fields[key] ? (["resumo", "abstractText", "introducao", "referencias", "conclusao"].includes(key) ? "alta" : "media") : "nao-identificado",
     );
   }
 

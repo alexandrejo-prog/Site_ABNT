@@ -279,4 +279,28 @@ describe("importacao diagnostica de PDF", () => {
     expect(result.fields.conclusao.length).toBeGreaterThan(0);
     expect(result.fields.conclusao).toContain("consideracoes finais");
   });
+
+  it("PDF textual com CONCLUSOES (plural) preenche conclusao", async () => {
+    const lines = [
+      "UNIVERSIDADE FEDERAL DE LAVRAS",
+      "Dissertacao de Mestrado",
+      "Maria Silva Santos",
+      "Titulo do Trabalho",
+      "Orientador: Prof. Joao Souza",
+      "Lavras",
+      "2024",
+      "1 INTRODUCAO",
+      "Texto introdutorio.",
+      "5 CONCLUSOES",
+      "Estas sao as conclusoes do trabalho.",
+      "REFERENCIAS",
+      "SILVA, A. Titulo. Revista, 2020.",
+    ];
+    const result = await importDocumentFile(new File([buildSinglePagePdf(lines)], "conclusoes.pdf", {
+      type: "application/pdf",
+    }));
+
+    expect(result.fields.conclusao.length).toBeGreaterThan(0);
+    expect(result.fields.conclusao).toContain("conclusoes do trabalho");
+  });
 });
