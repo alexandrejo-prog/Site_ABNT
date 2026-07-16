@@ -918,65 +918,6 @@ textarea:focus-visible,
   padding: 6px 8px;
 }
 
-.pdf-diagnostic-panel {
-  display: grid;
-  gap: 0.75rem;
-  margin-bottom: 14px;
-  padding: 12px;
-  background: #f8fafc;
-  border: 1px solid #d5dbe7;
-  border-radius: 8px;
-}
-
-.pdf-diagnostic-panel h2 {
-  margin: 0;
-  font-size: 0.95rem;
-}
-
-.pdf-diagnostic-panel dl {
-  display: grid;
-  gap: 0.5rem;
-  margin: 0;
-}
-
-.pdf-diagnostic-panel dl div {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.pdf-diagnostic-panel dt {
-  font-weight: 750;
-}
-
-.pdf-diagnostic-panel dd {
-  margin: 0;
-  text-align: right;
-}
-
-.pdf-diagnostic-preview {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.pdf-diagnostic-preview section {
-  border-top: 1px solid #e2e8f0;
-  padding-top: 0.5rem;
-}
-
-.pdf-diagnostic-preview h3 {
-  margin: 0 0 0.25rem;
-  font-size: 0.86rem;
-}
-
-.pdf-diagnostic-preview p {
-  max-height: 8rem;
-  overflow: hidden;
-  margin: 0;
-  color: #34495e;
-  font-size: 0.82rem;
-}
-
 .work-type-selector {
   margin-bottom: 14px;
 }

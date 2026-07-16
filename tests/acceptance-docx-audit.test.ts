@@ -782,7 +782,16 @@ describe("6. captura segura de PID do Word (worker)", () => {
   const workerPath = path.join(__dirname, "..", "scripts", "acceptance", "validate-word-worker.ps1");
   const pidTestPath = path.join(__dirname, "..", "scripts", "acceptance", "Test-PidCapture.ps1");
 
-  it("teste isolado de selecao de PID aprova todos os casos", () => {
+  function powershellAvailable(): boolean {
+    try {
+      execFileSync("powershell", ["-NoProfile", "-Command", "exit 0"], { stdio: "pipe" });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it.skipIf(!powershellAvailable())("teste isolado de selecao de PID aprova todos os casos", () => {
     const code = runPsFile(pidTestPath);
     expect(code).toBe(0);
   });

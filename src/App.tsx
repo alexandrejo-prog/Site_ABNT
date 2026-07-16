@@ -9,9 +9,6 @@ import { UFLA_PPG_PROGRAMS } from "./ufla-ppg-programs";
 import { editorHtmlToMarkup, editorMarkupToHtml } from "./editor-markup";
 import { templateForWorkType } from "./document-template";
 import { buildDownloadFileName } from "./download-filename";
-import { buildPdfTextDraftDocxBlob, pdfTextDraftFileName, validatePdfTextDraftExport } from "./export-pdf-text-draft-docx";
-import { computePdfVisualCropGeometry } from "./pdf-visual-crop-geometry";
-import { rasterizablePdfCrops, renderPdfVisualAssets } from "./pdf-visual-asset-integration";
 import { stripCpgForbiddenSections, hasCpgForbiddenSections } from "./cpg-content-filter";
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
 import { buildDraftFromFields, hasUnfilledPlaceholders, draftWorkTypeSupportsIndicators } from "./draft-builder";
@@ -29,9 +26,6 @@ import { useTiptapExperimentalEditor } from "./editor-feature-flags";
 import type { TiptapEditorCommand } from "./tiptap-command-bridge";
 import type { ImportedDocumentImage } from "./imported-images";
 import type { ImportedTable } from "./imported-tables";
-import type { DocumentMode, SourceKind } from "./import-contract";
-import type { ImportedPdfDiagnostic } from "./imported-pdf-diagnostic";
-import type { PdfTextDraftExportInput, PdfTextDraftVisualAsset } from "./pdf-text-draft-contract";
 
 const FIELD_LABELS: Record<AcademicFieldKey, string> = {
   author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho", course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador", location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave", abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão", referencias: "Referências", anexos: "Anexos", apendices: "Apêndices", dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators", imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema", problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese", objetivoGeral: "Objetivo Geral", objetivosEspecificos: "Objetivos Específicos", justificativa: "Justificativa", referencialTeorico: "Referencial Teórico", metodologia: "Metodologia", cronograma: "Cronograma", recursosOrcamento: "Recursos/Orçamento", resultadosEsperados: "Resultados Esperados", corpusDados: "Corpus/Dados", contextoInstitucional: "Contexto Institucional", conclusaoProvisoria: "Conclusão Provisória", contribuicoesImpactos: "Contribuições/Impactos", impactoSocial: "Impacto social", impactoCientifico: "Impacto científico", impactoEducacional: "Impacto educacional", impactoAmbiental: "Impacto ambiental", impactoTecnologico: "Impacto tecnológico/econômico", publicoBeneficiado: "Público beneficiado", aderenciaOds: "Aderência a ODS/política institucional",
@@ -118,15 +112,6 @@ export default function App() {
   const [editorText, setEditorText] = useState("");
   const [importedImages, setImportedImages] = useState<ImportedDocumentImage[]>([]);
   const [importedTables, setImportedTables] = useState<ImportedTable[]>([]);
-  const [pdfDiagnostic, setPdfDiagnostic] = useState<ImportedPdfDiagnostic | null>(null);
-  const [pdfSourceBytes, setPdfSourceBytes] = useState<Uint8Array | null>(null);
-  const [includePdfPretextuals, setIncludePdfPretextuals] = useState(true);
-  const [allowMissingPdfPretextualFields, setAllowMissingPdfPretextualFields] = useState(false);
-  const [selectedPdfPageNumber, setSelectedPdfPageNumber] = useState(1);
-  const [pdfDiagnosticViewMode, setPdfDiagnosticViewMode] = useState<"lines" | "blocks">("lines");
-  const [pdfBlockFilter, setPdfBlockFilter] = useState<"all" | "paragraphs" | "headings" | "unresolved" | "low-confidence">("all");
-  const [importedSourceKind, setImportedSourceKind] = useState<SourceKind | null>(null);
-  const [importedDocumentMode, setImportedDocumentMode] = useState<DocumentMode | null>(null);
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
   const [status, setStatus] = useState("Pronto para editar.");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -154,72 +139,6 @@ export default function App() {
     ? "Modo experimental de edição. Use para testar a nova experiência. O DOCX continua sendo gerado pelo exportador estável."
     : "Editor acadêmico: edite o conteúdo e marque a estrutura do texto. Fonte, tamanho, recuos e espaçamentos seguem automaticamente o padrão UFLA/ABNT no DOCX.";
   const finalPending = useMemo(() => finalVersionPendingReport(fields, activeEditorText), [fields, activeEditorText]);
-  const isPdfDiagnosticMode = importedSourceKind === "pdf" && importedDocumentMode === "pdf-diagnostic";
-  const selectedPdfPage = useMemo(() => {
-    if (!pdfDiagnostic) return null;
-    return pdfDiagnostic.pages.find((page) => page.pageNumber === selectedPdfPageNumber) ?? pdfDiagnostic.pages[0] ?? null;
-  }, [pdfDiagnostic, selectedPdfPageNumber]);
-  const pdfLineCount = useMemo(() => pdfDiagnostic?.pages.reduce((sum, page) => sum + page.lines.length, 0) ?? 0, [pdfDiagnostic]);
-  const pdfPagesWithoutText = useMemo(() => pdfDiagnostic?.pages.filter((page) => page.textItemCount === 0).length ?? 0, [pdfDiagnostic]);
-  const selectedPdfBlocks = useMemo(() => {
-    if (!pdfDiagnostic) return [];
-    return pdfDiagnostic.reconstruction.blocks
-      .filter((block) => block.pageStart <= selectedPdfPageNumber && block.pageEnd >= selectedPdfPageNumber)
-      .filter((block) => {
-        if (pdfBlockFilter === "paragraphs") return block.type === "paragraph";
-        if (pdfBlockFilter === "headings") return block.type === "heading";
-        if (pdfBlockFilter === "unresolved") return block.type === "unresolved";
-        if (pdfBlockFilter === "low-confidence") return block.confidence === "low";
-        return true;
-      })
-      .slice(0, 30);
-  }, [pdfBlockFilter, pdfDiagnostic, selectedPdfPageNumber]);
-  const selectedPdfLayoutRegions = useMemo(() => {
-    if (!pdfDiagnostic) return [];
-    return pdfDiagnostic.reconstruction.layoutRegions.filter((region) => region.pageStart <= selectedPdfPageNumber && region.pageEnd >= selectedPdfPageNumber);
-  }, [pdfDiagnostic, selectedPdfPageNumber]);
-  const selectedPdfHyphenation = useMemo(() => {
-    if (!pdfDiagnostic) return [];
-    return pdfDiagnostic.reconstruction.hyphenation.filter((entry) => entry.pageNumber === selectedPdfPageNumber);
-  }, [pdfDiagnostic, selectedPdfPageNumber]);
-  const pdfTextDraftInput = useMemo<PdfTextDraftExportInput | null>(() => {
-    if (!pdfDiagnostic) return null;
-    return {
-      sourceKind: "pdf",
-      documentMode: "pdf-text-draft",
-      fileName: pdfDiagnostic.fileName,
-      pageCount: pdfDiagnostic.pageCount,
-      pretextual: pdfDiagnostic.pretextual,
-      reconstruction: pdfDiagnostic.reconstruction,
-      includeReconstructedPretextuals: includePdfPretextuals,
-      allowMissingPretextualFields: allowMissingPdfPretextualFields,
-    };
-  }, [allowMissingPdfPretextualFields, includePdfPretextuals, pdfDiagnostic]);
-  const pdfVisualCropResult = useMemo(() => {
-    if (!pdfDiagnostic) return { crops: [], skipped: [] };
-    return computePdfVisualCropGeometry(
-      pdfDiagnostic.pages,
-      pdfDiagnostic.reconstruction.layoutRegions,
-      pdfDiagnostic.reconstruction.bodyLayoutMetrics,
-    );
-  }, [pdfDiagnostic]);
-  const pdfRasterizableCrops = useMemo(
-    () => (pdfDiagnostic ? rasterizablePdfCrops(pdfDiagnostic, pdfVisualCropResult.crops) : []),
-    [pdfDiagnostic, pdfVisualCropResult],
-  );
-  const pdfTextDraftValidation = useMemo(() => (
-    pdfTextDraftInput ? validatePdfTextDraftExport(pdfTextDraftInput) : null
-  ), [pdfTextDraftInput]);
-  const pdfPretextualStatus = useMemo(() => {
-    const pre = pdfDiagnostic?.pretextual;
-    const elementStatus = (found: boolean, confident: boolean) => (found ? (confident ? "encontrada" : "revisão necessária") : "ausente");
-    return {
-      cover: elementStatus(Boolean(pre?.cover), pre?.cover?.confidence === "high"),
-      titlePage: elementStatus(Boolean(pre?.titlePage), pre?.titlePage?.confidence === "high"),
-      resumo: elementStatus(Boolean(pre?.resumo), pre?.resumo?.confidence === "high"),
-      abstract: elementStatus(Boolean(pre?.abstract), pre?.abstract?.confidence === "high"),
-    };
-  }, [pdfDiagnostic]);
 
   useEffect(() => installEditorScrollFix(), []);
 
@@ -285,13 +204,6 @@ export default function App() {
     }
   }, [activeEditorText, editorMode]);
 
-  useEffect(() => {
-    if (isPdfDiagnosticMode || !editorRef.current) return;
-    editorRef.current.innerHTML = editorMarkupToHtml(activeEditorText);
-    lastAppliedEditorTextRef.current = activeEditorText;
-    editorContentVersionRef.current += 1;
-  }, [isPdfDiagnosticMode]);
-
   function updateField(key: AcademicFieldKey, value: string) {
     setFields((current) => {
       const next = { ...current, [key]: value };
@@ -354,8 +266,6 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
 }
 
   async function handleImport(result: {
-    sourceKind: SourceKind;
-    documentMode: DocumentMode;
     fields: ReturnType<typeof emptyAcademicFields>;
     confidence: ReturnType<typeof emptyConfidenceMap>;
     editorText: string;
@@ -363,35 +273,16 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     fileName: string;
     importedImages?: ImportedDocumentImage[];
     importedTables?: ImportedTable[];
-    pdfDiagnostic?: ImportedPdfDiagnostic;
-    pdfBytes?: Uint8Array;
   }) {
     try {
       setStatus("Importando arquivo...");
-      setImportedSourceKind(result.sourceKind);
-      setImportedDocumentMode(result.documentMode);
-      const previousWorkType = fields.workType;
-      if (result.documentMode === "pdf-diagnostic") {
-        setPdfDiagnostic(result.pdfDiagnostic ?? null);
-        setPdfSourceBytes(result.pdfBytes ?? null);
-        setSelectedPdfPageNumber(1);
-        setPdfDiagnosticViewMode("lines");
-        setPdfBlockFilter("all");
-        setIncludePdfPretextuals(true);
-        setAllowMissingPdfPretextualFields(false);
-        setStatus("O PDF foi lido para diagnóstico. O rascunho DOCX estruturado pode ser gerado para revisão.");
-        return;
-      }
-
-      setPdfSourceBytes(null);
-
       if (autosaveTimeoutRef.current) {
         clearTimeout(autosaveTimeoutRef.current);
         autosaveTimeoutRef.current = null;
       }
       clearDraft(window.localStorage);
       setHasStoredDraft(false);
-      setPdfDiagnostic(null);
+      const previousWorkType = fields.workType;
       replaceFieldsWithImportedDocument(result.fields, result.confidence);
       setImportedFileName(result.fileName);
       setEditorMode("body");
@@ -413,17 +304,6 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
   }
 
   function handleRemoveImport() {
-    if (isPdfDiagnosticMode) {
-      setImportedSourceKind(null);
-      setImportedDocumentMode(null);
-      setPdfDiagnostic(null);
-      setPdfSourceBytes(null);
-      setSelectedPdfPageNumber(1);
-      setPdfDiagnosticViewMode("lines");
-      setPdfBlockFilter("all");
-      setStatus("Diagnóstico de PDF removido. O documento acadêmico anterior foi preservado.");
-      return;
-    }
     setFields(emptyAcademicFields());
     setConfidence(emptyConfidenceMap());
     setEditorText("");
@@ -432,13 +312,6 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setImportedFileName(null);
     setImportedImages([]);
     setImportedTables([]);
-    setPdfDiagnostic(null);
-    setPdfSourceBytes(null);
-    setSelectedPdfPageNumber(1);
-    setPdfDiagnosticViewMode("lines");
-    setPdfBlockFilter("all");
-    setImportedSourceKind(null);
-    setImportedDocumentMode(null);
     setEditorMode("body");
     lastAppliedEditorTextRef.current = "";
     editorContentVersionRef.current += 1;
@@ -458,14 +331,6 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setGenerateAnyway(false);
     setImportedFileName(null);
     setImportedImages([]);
-    setImportedTables([]);
-    setPdfDiagnostic(null);
-    setPdfSourceBytes(null);
-    setSelectedPdfPageNumber(1);
-    setPdfDiagnosticViewMode("lines");
-    setPdfBlockFilter("all");
-    setImportedSourceKind(null);
-    setImportedDocumentMode(null);
     setEditorMode("body");
     lastAppliedEditorTextRef.current = "";
     if (editorRef.current) editorRef.current.innerHTML = "";
@@ -555,10 +420,6 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
   }
 
   async function handleGenerateDocx() {
-    if (isPdfDiagnosticMode) {
-      setStatus("O PDF está em modo diagnóstico. Nenhum DOCX é gerado a partir de PDF nesta etapa.");
-      return;
-    }
     const generationFields = normalizeFieldsForSelectedModel(fields);
     const nextIssues = runValidation(generationFields);
     const nonOverridable = nextIssues.some((issue) => issue.severity === "error" && isNonOverridableError(issue));
@@ -590,65 +451,6 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     }
   }
 
-  async function handleTextDraftDocxFromPdf() {
-    if (!pdfTextDraftInput) {
-      setStatus("Não foi possível gerar o rascunho textual do PDF.");
-      return;
-    }
-    const validation = validatePdfTextDraftExport(pdfTextDraftInput);
-    if (!validation.canExport) {
-      setStatus(`Não foi possível gerar o rascunho textual do PDF. ${validation.blockers.join(" ")}`);
-      return;
-    }
-    let visualAssets: Record<string, PdfTextDraftVisualAsset> = {};
-    let visualWarnings: string[] = [];
-    if (pdfSourceBytes && pdfRasterizableCrops.length > 0) {
-      try {
-        setStatus("Preparando elementos visuais do PDF...");
-        const rendered = await renderPdfVisualAssets(
-          pdfSourceBytes,
-          pdfRasterizableCrops,
-          {
-            scale: 2,
-            maxOutputWidth: 1600,
-            maxOutputHeight: 2400,
-            docxMaxWidth: 605,
-            imageType: "image/png",
-            concurrency: 2,
-            maxAssets: 80,
-            maxPagePixels: 20_000_000,
-          },
-          undefined,
-          pdfDiagnostic!.reconstruction.layoutRegions,
-        );
-        visualAssets = rendered.assets;
-        visualWarnings = rendered.warnings;
-      } catch {
-        visualAssets = {};
-        visualWarnings = [];
-      }
-    }
-    try {
-      setIsGenerating(true);
-      const exportInput = { ...pdfTextDraftInput, visualAssets };
-      const blob = await buildPdfTextDraftDocxBlob(exportInput);
-      saveAs(blob, pdfTextDraftFileName(pdfTextDraftInput.fileName));
-      const assetCount = Object.keys(visualAssets).length;
-      const warningCount = visualWarnings.length;
-      if (assetCount > 0 && warningCount === 0) {
-        setStatus(`Rascunho textual DOCX gerado com ${assetCount} elemento(s) visual(is) inserido(s). Revise no Word ou LibreOffice.`);
-      } else if (assetCount > 0 && warningCount > 0) {
-        setStatus(`Rascunho textual DOCX gerado com ${assetCount} elemento(s) visual(is) inserido(s) e ${warningCount} aviso(s). Os elementos restantes permaneceram como marcadores.`);
-      } else {
-        setStatus("Rascunho textual DOCX gerado. Alguns elementos visuais permaneceram como marcadores para revisão.");
-      }
-    } catch {
-      setStatus("Não foi possível gerar o rascunho textual do PDF.");
-    } finally {
-      setIsGenerating(false);
-    }
-  }
-
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -657,234 +459,17 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
           <p className="eyebrow">Ferramenta de apoio UFLA/ABNT</p>
           <h1>Assistente de estruturação e normalização acadêmica</h1>
         </div>
-        {!isPdfDiagnosticMode && <div className="header-actions">
+        <div className="header-actions">
           <DraftStatus draftStatus={draftStatus} hasDraft={hasStoredDraft} onClearDraft={handleClearDraft} />
           <button className="primary-action" type="button" onClick={() => runValidation()}><FileCheck2 size={18} aria-hidden="true" />Validar trabalho</button>
-          <button className="primary-action strong" type="button" onClick={handleGenerateDocx} disabled={isGenerating || isPdfDiagnosticMode}><FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar DOCX editável"}</button>
-        </div>}
+          <button className="primary-action strong" type="button" onClick={handleGenerateDocx} disabled={isGenerating}><FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar DOCX editável"}</button>
+        </div>
       </header>
 
-      {!isPdfDiagnosticMode && <p className="global-draft-notice" role="note">O DOCX é rascunho técnico. Sumário, ficha catalográfica, paginação final e PDF devem ser conferidos no Word/LibreOffice. Após abrir no Word/LibreOffice, clique com o botão direito no sumário e selecione &ldquo;Atualizar campo&rdquo;.</p>}
+      <p className="global-draft-notice" role="note">O DOCX é rascunho técnico. Sumário, ficha catalográfica, paginação final e PDF devem ser conferidos no Word/LibreOffice. Após abrir no Word/LibreOffice, clique com o botão direito no sumário e selecione &ldquo;Atualizar campo&rdquo;.</p>
 
       <a href="#main-content" className="skip-link">Pular para o conte&uacute;do principal</a>
       <main id="main-content" className="workspace" tabIndex={-1} aria-busy={isGenerating}>
-        {isPdfDiagnosticMode ? (
-        <section className="metadata-pane pdf-diagnostic-workspace" aria-label="Diagnóstico de PDF">
-          <ImportBlock onImport={handleImport} onRemove={handleRemoveImport} importedFileName={pdfDiagnostic?.fileName ?? null} workType={fields.workType} />
-          {pdfDiagnostic && (
-            <div className="pdf-diagnostic-panel" role="status" aria-live="polite">
-              <h2>Leitura de PDF — diagnóstico experimental</h2>
-              <p>O PDF foi lido para diagnóstico. O rascunho DOCX estruturado pode ser gerado para revisão humana.</p>
-              <dl>
-                <div><dt>Arquivo</dt><dd>{pdfDiagnostic.fileName}</dd></div>
-                <div><dt>Páginas</dt><dd>{pdfDiagnostic.pageCount}</dd></div>
-                <div><dt>Itens textuais</dt><dd>{pdfDiagnostic.pages.reduce((sum, page) => sum + page.textItemCount, 0)}</dd></div>
-                <div><dt>Linhas visuais</dt><dd>{pdfLineCount}</dd></div>
-                <div><dt>Páginas sem texto</dt><dd>{pdfPagesWithoutText}</dd></div>
-                <div><dt>Parágrafos</dt><dd>{pdfDiagnostic.reconstruction.statistics.paragraphCount}</dd></div>
-                <div><dt>Títulos</dt><dd>{pdfDiagnostic.reconstruction.statistics.headingCount}</dd></div>
-                <div><dt>Listas</dt><dd>{pdfDiagnostic.reconstruction.statistics.listItemCount}</dd></div>
-                <div><dt>Legendas</dt><dd>{pdfDiagnostic.reconstruction.statistics.captionCount}</dd></div>
-                <div><dt>Fontes</dt><dd>{pdfDiagnostic.reconstruction.statistics.sourceCount}</dd></div>
-                <div><dt>Blocos não resolvidos</dt><dd>{pdfDiagnostic.reconstruction.statistics.unresolvedCount}</dd></div>
-                <div><dt>Números de página ignorados</dt><dd>{pdfDiagnostic.reconstruction.statistics.removedPageNumberCount}</dd></div>
-                <div><dt>Cabeçalhos ignorados</dt><dd>{pdfDiagnostic.reconstruction.statistics.removedHeaderCount}</dd></div>
-                <div><dt>Rodapés ignorados</dt><dd>{pdfDiagnostic.reconstruction.statistics.removedFooterCount}</dd></div>
-                <div><dt>Regiões de layout</dt><dd>{pdfDiagnostic.reconstruction.statistics.layoutRegionCount}</dd></div>
-                <div><dt>Média de linhas por parágrafo</dt><dd>{pdfDiagnostic.reconstruction.statistics.averageLinesPerParagraph}</dd></div>
-                <div><dt>Mediana de linhas por parágrafo</dt><dd>{pdfDiagnostic.reconstruction.statistics.medianLinesPerParagraph}</dd></div>
-                <div><dt>Parágrafos de uma linha</dt><dd>{pdfDiagnostic.reconstruction.statistics.singleLineParagraphCount}</dd></div>
-                <div><dt>Parágrafos multipágina</dt><dd>{pdfDiagnostic.reconstruction.statistics.multiPageParagraphCount}</dd></div>
-                <div><dt>Blocos de baixa confiança</dt><dd>{pdfDiagnostic.reconstruction.statistics.lowConfidenceBlockCount}</dd></div>
-                <div><dt>Hifenizações incertas</dt><dd>{pdfDiagnostic.reconstruction.statistics.uncertainHyphenationCount}</dd></div>
-                <div><dt>Títulos em caixa mista</dt><dd>{pdfDiagnostic.reconstruction.statistics.mixedCaseHeadingCount}</dd></div>
-                <div><dt>Títulos multilinha</dt><dd>{pdfDiagnostic.reconstruction.statistics.combinedHeadingCount}</dd></div>
-              </dl>
-              <section className="pdf-diagnostic-summary" aria-label="Métricas do corpo do PDF">
-                <h3>Métricas do corpo</h3>
-                <dl>
-                  <div><dt>Margem esquerda dominante</dt><dd>{Math.round(pdfDiagnostic.reconstruction.bodyLayoutMetrics.dominantLeft)}</dd></div>
-                  <div><dt>Margem direita dominante</dt><dd>{Math.round(pdfDiagnostic.reconstruction.bodyLayoutMetrics.dominantRight)}</dd></div>
-                  <div><dt>Altura mediana da linha</dt><dd>{Number(pdfDiagnostic.reconstruction.bodyLayoutMetrics.medianLineHeight.toFixed(2))}</dd></div>
-                  <div><dt>Intervalo mediano</dt><dd>{Number(pdfDiagnostic.reconstruction.bodyLayoutMetrics.medianLineGap.toFixed(2))}</dd></div>
-                  <div><dt>Recuo provável da primeira linha</dt><dd>{Math.round(pdfDiagnostic.reconstruction.bodyLayoutMetrics.probableFirstLineIndent)}</dd></div>
-                  <div><dt>Confiança das métricas</dt><dd>{pdfDiagnostic.reconstruction.bodyLayoutMetrics.confidence}</dd></div>
-                </dl>
-              </section>
-              {pdfDiagnostic.reconstruction.alerts.length > 0 && (
-                <section className="pdf-diagnostic-summary" aria-label="Alertas da reconstrução PDF">
-                  <h3>Alertas diagnósticos</h3>
-                  <ul>
-                    {pdfDiagnostic.reconstruction.alerts.map((alert) => <li key={alert}>{alert}</li>)}
-                  </ul>
-                </section>
-              )}
-              {pdfDiagnostic.bodyStart.found && (
-                <p className="import-note">Candidato de início do corpo: página {pdfDiagnostic.bodyStart.pageNumber}, linha {(pdfDiagnostic.bodyStart.lineIndex ?? 0) + 1}: {pdfDiagnostic.bodyStart.text}. {pdfDiagnostic.bodyStart.reason}</p>
-              )}
-              <p className="import-note">Esta reconstrução é diagnóstica. O DOCX gerado continua sendo rascunho de revisão e nenhum conteúdo original do PDF é apagado.</p>
-              <p className="import-note" role="status" aria-live="polite">{status}</p>
-              <div className="pdf-diagnostic-summary">
-                <label className="assisted-toggle">
-                  <input
-                    type="checkbox"
-                    checked={includePdfPretextuals}
-                    onChange={(event) => setIncludePdfPretextuals(event.target.checked)}
-                  />
-                  <span>Incluir elementos pré-textuais reconstruídos</span>
-                </label>
-                <dl>
-                  <div><dt>Capa</dt><dd>{pdfPretextualStatus.cover}</dd></div>
-                  <div><dt>Folha de rosto</dt><dd>{pdfPretextualStatus.titlePage}</dd></div>
-                  <div><dt>Resumo</dt><dd>{pdfPretextualStatus.resumo}</dd></div>
-                  <div><dt>Abstract</dt><dd>{pdfPretextualStatus.abstract}</dd></div>
-                  <div><dt>Sumário</dt><dd>será gerado a partir dos títulos reconstruídos</dd></div>
-                  <div><dt>Logo UFLA</dt><dd>será usada a identidade institucional do sistema</dd></div>
-                </dl>
-                {pdfTextDraftValidation?.blockers.some((blocker) => blocker.includes("campos essenciais ausentes")) && (
-                  <label className="assisted-toggle">
-                    <input
-                      type="checkbox"
-                      checked={allowMissingPdfPretextualFields}
-                      onChange={(event) => setAllowMissingPdfPretextualFields(event.target.checked)}
-                    />
-                    <span>Gerar com campos ausentes</span>
-                  </label>
-                )}
-                <p id="pdf-text-draft-generation-status" className="import-note" role="status" aria-live="polite">
-                  {pdfTextDraftValidation?.canExport ? "Pronto para gerar" : "Revise os bloqueadores abaixo"}
-                </p>
-                <button
-                  className="primary-action strong"
-                  type="button"
-                  onClick={handleTextDraftDocxFromPdf}
-                  disabled={isGenerating}
-                  title="Gerar rascunho textual DOCX a partir do PDF diagnosticado"
-                  aria-describedby="pdf-text-draft-generation-status"
-                >
-                  <FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar rascunho textual DOCX"}
-                </button>
-                <p className="import-note">Este arquivo terá pré-textuais reconstruídos quando encontrados. Quadros, tabelas, figuras e gráficos do PDF serão representados por marcadores de revisão.</p>
-                {pdfTextDraftValidation && pdfTextDraftValidation.blockers.length > 0 && (
-                  <div role="alert" aria-label="Bloqueadores do rascunho textual PDF">
-                    <strong>Bloqueadores</strong>
-                    <ul>
-                      {pdfTextDraftValidation.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
-                    </ul>
-                  </div>
-                )}
-                {pdfTextDraftValidation && pdfTextDraftValidation.warnings.length > 0 && (
-                  <div role="status" aria-label="Avisos do rascunho textual PDF">
-                    <strong>Avisos</strong>
-                    <ul>
-                      {pdfTextDraftValidation.warnings.map((warning) => <li key={warning}>{warning}</li>)}
-                    </ul>
-                  </div>
-                )}
-              </div>
-              <div className="field-group">
-                <label htmlFor="pdf-page-selector">Página do PDF</label>
-                <input
-                  id="pdf-page-selector"
-                  type="number"
-                  min={1}
-                  max={pdfDiagnostic.pageCount}
-                  value={selectedPdfPageNumber}
-                  onChange={(event) => {
-                    const nextPage = Number(event.target.value);
-                    if (Number.isFinite(nextPage)) setSelectedPdfPageNumber(Math.min(pdfDiagnostic.pageCount, Math.max(1, Math.trunc(nextPage))));
-                  }}
-                />
-              </div>
-              <div className="toolbar editor-mode-toolbar" aria-label="Visualização do diagnóstico PDF">
-                <button className={`text-button ${pdfDiagnosticViewMode === "lines" ? "active" : ""}`} type="button" onClick={() => setPdfDiagnosticViewMode("lines")}>Linhas visuais</button>
-                <button className={`text-button ${pdfDiagnosticViewMode === "blocks" ? "active" : ""}`} type="button" onClick={() => setPdfDiagnosticViewMode("blocks")}>Blocos reconstruídos</button>
-              </div>
-              {pdfDiagnosticViewMode === "blocks" && (
-                <div className="toolbar editor-mode-toolbar" aria-label="Filtro de blocos reconstruídos">
-                  <button className={`text-button ${pdfBlockFilter === "all" ? "active" : ""}`} type="button" onClick={() => setPdfBlockFilter("all")}>Todos</button>
-                  <button className={`text-button ${pdfBlockFilter === "paragraphs" ? "active" : ""}`} type="button" onClick={() => setPdfBlockFilter("paragraphs")}>Parágrafos</button>
-                  <button className={`text-button ${pdfBlockFilter === "headings" ? "active" : ""}`} type="button" onClick={() => setPdfBlockFilter("headings")}>Títulos</button>
-                  <button className={`text-button ${pdfBlockFilter === "unresolved" ? "active" : ""}`} type="button" onClick={() => setPdfBlockFilter("unresolved")}>Não resolvidos</button>
-                  <button className={`text-button ${pdfBlockFilter === "low-confidence" ? "active" : ""}`} type="button" onClick={() => setPdfBlockFilter("low-confidence")}>Baixa confiança</button>
-                </div>
-              )}
-              {selectedPdfPage && (
-                <div className="pdf-diagnostic-preview">
-                  <section>
-                    <h3>Página {selectedPdfPage.pageNumber}</h3>
-                    <dl>
-                      <div><dt>Tamanho</dt><dd>{Math.round(selectedPdfPage.width)} × {Math.round(selectedPdfPage.height)}</dd></div>
-                      <div><dt>Rotação</dt><dd>{selectedPdfPage.rotation}°</dd></div>
-                      <div><dt>Itens da página</dt><dd>{selectedPdfPage.textItemCount}</dd></div>
-                      <div><dt>Linhas da página</dt><dd>{selectedPdfPage.lines.length}</dd></div>
-                    </dl>
-                    {pdfDiagnosticViewMode === "lines" ? (
-                      <>
-                        <p className="import-note">As linhas abaixo representam linhas visuais do PDF, não parágrafos reconstruídos.</p>
-                        <ol className="pdf-line-preview">
-                          {selectedPdfPage.lines.slice(0, 30).map((line, index) => (
-                            <li key={`${selectedPdfPage.pageNumber}-${index}`}>{line.text || "[linha sem texto]"}</li>
-                          ))}
-                        </ol>
-                      </>
-                    ) : (
-                      <>
-                        <p className="import-note">Blocos que começam, terminam ou atravessam a página selecionada. A prévia é limitada aos primeiros 30 blocos relacionados.</p>
-                        {selectedPdfLayoutRegions.length > 0 && (
-                          <section className="pdf-diagnostic-summary" aria-label="Regiões de layout da página">
-                            <h4>Regiões de layout da página</h4>
-                            <ul>
-                              {selectedPdfLayoutRegions.map((region) => (
-                                <li key={region.id}>
-                                  <strong>{region.kind}</strong> · linhas {region.startLineIndex + 1}-{region.endLineIndex + 1} · confiança {region.confidence}
-                                  {region.logicalVisualId && <span> · grupo {region.logicalVisualId}</span>}
-                                  {region.caption && <p>{region.caption}</p>}
-                                  {region.source && <small>{region.source}</small>}
-                                  {region.reasons.length > 0 && <small>{region.reasons.join(" ")}</small>}
-                                </li>
-                              ))}
-                            </ul>
-                          </section>
-                        )}
-                        <ol className="pdf-block-preview">
-                          {selectedPdfBlocks.map((block, index) => (
-                            <li key={`${block.pageStart}-${block.pageEnd}-${index}`}>
-                              <strong>{block.type}</strong> · páginas {block.pageStart}{block.pageEnd !== block.pageStart ? `-${block.pageEnd}` : ""} · confiança {block.confidence} · {block.sourceLines.length} linha(s)
-                              {block.layoutRegionId && <span> · região {block.layoutRegionId}</span>}
-                              <p>{block.text}</p>
-                              {block.reasons.length > 0 && <small>{block.reasons.join(" ")}</small>}
-                            </li>
-                          ))}
-                        </ol>
-                        {selectedPdfHyphenation.length > 0 && (
-                          <section className="pdf-diagnostic-summary" aria-label="Ações de hifenização da página">
-                            <h4>Hifenização da página</h4>
-                            <ul>
-                              {selectedPdfHyphenation.map((entry) => (
-                                <li key={`${entry.pageNumber}-${entry.lineIndex}-${entry.action}`}>
-                                  <strong>{entry.action}</strong> · linha {entry.lineIndex + 1}: {entry.originalEnd} / {entry.nextStart}
-                                  <small>{entry.reason}</small>
-                                </li>
-                              ))}
-                            </ul>
-                          </section>
-                        )}
-                      </>
-                    )}
-                    <details>
-                      <summary>Texto bruto da página</summary>
-                      <p>{selectedPdfPage.rawText.slice(0, 1400) || "Nenhum texto bruto extraível foi encontrado nesta página."}</p>
-                    </details>
-                  </section>
-                </div>
-              )}
-              {pdfDiagnostic.warnings.map((warning) => <p className="import-note" key={warning}>{warning}</p>)}
-            </div>
-          )}
-        </section>
-        ) : (
-        <>
         <section className="metadata-pane" aria-label="Campos acadêmicos">
           <ImportBlock onImport={handleImport} onRemove={handleRemoveImport} importedFileName={importedFileName} workType={fields.workType} />
           <div className="work-type-section">
@@ -1056,8 +641,6 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
           warnings={warnings}
           finalPending={finalPending}
         />
-        </>
-        )}
       </main>
     </div>
   );
