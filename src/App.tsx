@@ -1,4 +1,4 @@
-import { ClipboardEvent as ReactClipboardEvent, Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { ClipboardEvent as ReactClipboardEvent, MouseEvent as ReactMouseEvent, Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { saveAs } from "file-saver";
 import { FileCheck2, FileDown } from "lucide-react";
 import { ACADEMIC_FIELD_KEYS, AcademicFieldKey, type AcademicFields, CONFIDENCE_LABELS, Confidence, emptyAcademicFields, emptyConfidenceMap, isCpgWork, isResearchProject, isUflaCollectionWork } from "./ufla-rules";
@@ -419,6 +419,14 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     return nextIssues;
   }
 
+  function handleSkipToMain(event: ReactMouseEvent<HTMLAnchorElement>) {
+    event.preventDefault();
+    const main = document.getElementById("main-content");
+    if (!main) return;
+    main.focus({ preventScroll: true });
+    main.scrollIntoView?.({ block: "start" });
+    window.history.replaceState(null, "", "#main-content");
+  }
   async function handleGenerateDocx() {
     const generationFields = normalizeFieldsForSelectedModel(fields);
     const nextIssues = runValidation(generationFields);
@@ -453,6 +461,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
 
   return (
     <div className="app-shell">
+      <a href="#main-content" className="skip-link" onClick={handleSkipToMain}>Pular para o conte&uacute;do principal</a>
       <header className="app-header">
         <img src="/assets/ufla-logo.jpeg" alt="Marca UFLA" className="ufla-logo" />
         <div>
@@ -468,7 +477,6 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
 
       <p className="global-draft-notice" role="note">O DOCX é rascunho técnico. Sumário, ficha catalográfica, paginação final e PDF devem ser conferidos no Word/LibreOffice. Após abrir no Word/LibreOffice, clique com o botão direito no sumário e selecione &ldquo;Atualizar campo&rdquo;.</p>
 
-      <a href="#main-content" className="skip-link">Pular para o conte&uacute;do principal</a>
       <main id="main-content" className="workspace" tabIndex={-1} aria-busy={isGenerating}>
         <section className="metadata-pane" aria-label="Campos acadêmicos">
           <ImportBlock onImport={handleImport} onRemove={handleRemoveImport} importedFileName={importedFileName} workType={fields.workType} />
