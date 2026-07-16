@@ -18,6 +18,9 @@ export interface WorkTypeOutputPolicy {
   // e secoes obrigatorias minimas. Ausente para formatos tradicionais.
   sourceGuide?: string;
   requiredSections?: string[];
+  // Politica de saida do DOCX para o perfil (ex.: resumo estruturado,
+  // palavras-chave, abstract bilíngue). Orienta a revisao final.
+  outputPolicy?: string[];
 }
 
 export const WORK_TYPE_OUTPUT_POLICIES: Partial<Record<WorkType, WorkTypeOutputPolicy>> = {
@@ -152,6 +155,14 @@ export const WORK_TYPE_OUTPUT_POLICIES: Partial<Record<WorkType, WorkTypeOutputP
     finalCheck: ["guia da Coleção Produção Acadêmica UFLA (nº 1)", "estrutura de artigo", "resumo", "palavras-chave", "referências"],
     sourceGuide: "Coleção Produção Acadêmica UFLA — Guia nº 1: Artigo científico (www.tcc.ufla.br)",
     requiredSections: ["Introdução", "Metodologia ou material e métodos", "Resultados e discussão", "Conclusão", "Referências"],
+    // Perfil de saida do DOCX (Guia nº 1): resumo estruturado + palavras-chave
+    // em PT, titulo bilíngue opcional, abstract em EN, secoes numericas.
+    outputPolicy: [
+      "Resumo estruturado (propósito, método, resultados, conclusão) com palavras-chave em PT-BR",
+      "Abstract bilíngue (EN) correspondente ao resumo",
+      "Seções em numeração contínua (1, 1.1, 1.1.1), sem saltos",
+      "Referências no padrão ABNT ao final",
+    ],
   },
   patente_ufla: {
     workType: "patente_ufla",
@@ -183,7 +194,16 @@ export const WORK_TYPE_OUTPUT_POLICIES: Partial<Record<WorkType, WorkTypeOutputP
     hasPageHeader: false,
     finalCheck: ["guia da Coleção Produção Acadêmica UFLA (nº 3)", "protocolo", "string de busca", "referências"],
     sourceGuide: "Coleção Produção Acadêmica UFLA — Guia nº 3: Revisão sistemática e aprofundada (www.tcc.ufla.br)",
-    requiredSections: ["Pergunta de pesquisa", "Critérios de inclusão e exclusão", "Bases de dados", "Estratégia de busca", "Síntese dos achados"],
+    requiredSections: ["Pergunta de pesquisa", "Critérios de inclusão e exclusão", "Bases de dados", "Estratégia de busca", "Seleção de estudos", "Síntese dos achados"],
+    // Perfil de saida (Guia nº 3): protocolo PRISMA, pergunta PICO, fluxo
+    // de selecao, tabela de extracao e sintese narrativa/quantitativa.
+    outputPolicy: [
+      "Protocolo registrado (ex.: PRISMA) e pergunta estruturada (PICO)",
+      "Estratégia de busca com string completa e bases consultadas",
+      "Fluxo de seleção de estudos (identificados, elegíveis, incluídos)",
+      "Síntese dos achados com tabela de extração e limitações",
+      "Referências das fontes primárias no padrão ABNT",
+    ],
   },
   estudo_caso_ufla: {
     workType: "estudo_caso_ufla",
@@ -216,6 +236,15 @@ export const WORK_TYPE_OUTPUT_POLICIES: Partial<Record<WorkType, WorkTypeOutputP
     finalCheck: ["guia da Coleção Produção Acadêmica UFLA (nº 5)", "requisitos", "arquitetura", "referências"],
     sourceGuide: "Coleção Produção Acadêmica UFLA — Guia nº 5: Desenvolvimento de software e aplicativos (www.tcc.ufla.br)",
     requiredSections: ["Requisitos", "Tecnologias utilizadas", "Arquitetura", "Funcionalidades", "Testes", "Manual de uso"],
+    // Perfil de saida (Guia nº 5): documentacao tecnica + manual do usuario,
+    // diagramas (casos de uso/classes), evidencia de execucao e licenca.
+    outputPolicy: [
+      "Especificação de requisitos (funcionais e não funcionais)",
+      "Diagramas de arquitetura e de casos de uso",
+      "Relato de testes (casos, cobertura, resultados)",
+      "Manual de uso com capturas de tela e exemplos",
+      "Informação de licença e repositório, se aplicável",
+    ],
   },
   cultivar_ufla: {
     workType: "cultivar_ufla",
@@ -298,6 +327,10 @@ const GENERIC_UFLA_POLICY: WorkTypeOutputPolicy = {
 
 export function outputPolicyFor(workType: WorkType): WorkTypeOutputPolicy {
   return WORK_TYPE_OUTPUT_POLICIES[workType] ?? { ...GENERIC_UFLA_POLICY, workType };
+}
+
+export function getPolicyRequiredSections(workType: WorkType): string[] {
+  return outputPolicyFor(workType).requiredSections ?? [];
 }
 
 export function shouldShowCatalogCard(workType: WorkType): boolean {

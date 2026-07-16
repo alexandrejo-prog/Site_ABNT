@@ -25,6 +25,7 @@ import { getWorkTypeRequirements } from "./work-type-requirements";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { buildFlowingImpactText } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
+import { sectionLevelFromHeadingLine } from "./section-aliases";
 import { captionParagraph, cleanMojibakeText, detectCaption, tabbedTableBlock } from "./docx-render-core";
 import { ImportedDocumentImage, IMPORTED_IMAGE_MARKER_PATTERN } from "./imported-images";
 import { ImportedTable, IMPORTED_TABLE_MARKER_PATTERN, buildStructuredTextFromTable } from "./imported-tables";
@@ -80,6 +81,16 @@ const UFLA_LOGO_WIDTH_PX = 265;
 const UFLA_LOGO_HEIGHT_PX = 108;
 
 const DOCUMENT_STYLES: IStylesOptions = {
+  // Idioma institucional do documento (acessibilidade digital, 6a ed. UFLA).
+  // Define <w:lang w:val="pt-BR"/> em docDefaults, herdado por todo o texto,
+  // permitindo leitura por tecnologias assistivas.
+  default: {
+    document: {
+      run: {
+        language: { value: "pt-BR" },
+      },
+    },
+  },
   paragraphStyles: [
     {
       id: "TOC1",
@@ -245,16 +256,12 @@ const DOCUMENT_STYLES: IStylesOptions = {
 };
 
 function headingTypeFromNumberedTitle(text: string, fallback: EditorBlockType): EditorBlockType {
-  const normalized = text.trim();
-
-  // Profundidade de sessao ate o nivel 5 (maxProgressiveLevel). Ordem do mais
-  // profundo para o mais raso para evitar saltos de hierarquia.
-  if (/^\d+(?:\.\d+){4}(?:\s|$)/.test(normalized)) return "heading5";
-  if (/^\d+(?:\.\d+){3}(?:\s|$)/.test(normalized)) return "heading4";
-  if (/^\d+(?:\.\d+){2}(?:\s|$)/.test(normalized)) return "heading3";
-  if (/^\d+\.\d+(?:\s|$)/.test(normalized)) return "heading2";
-  if (/^\d+(?:\s|$)/.test(normalized)) return "heading1";
-
+  const level = sectionLevelFromHeadingLine(text);
+  if (level === 1) return "heading1";
+  if (level === 2) return "heading2";
+  if (level === 3) return "heading3";
+  if (level === 4) return "heading4";
+  if (level === 5) return "heading5";
   return fallback;
 }
 
@@ -1594,19 +1601,22 @@ export function calculateTextualStartPage(
   hasSummary: boolean,
 ): number {
   const impactRequired = fields.workType === "dissertacao" || fields.workType === "tese";
-  let countedPreTextualPages = 1; // Folha de rosto. Capa e ficha catalográfica não contam.
+  const weights = UFLA_RULES.structure.preTextualPageWeights;
 
-  if (hasApprovalPage(fields)) countedPreTextualPages += 1;
-  if (hasText(fields.dedicatoria)) countedPreTextualPages += 1;
-  if (hasText(fields.agradecimentos)) countedPreTextualPages += 1;
-  if (hasText(fields.epigrafe)) countedPreTextualPages += 1;
+  // Folha de rosto e a pagina base contada (capa e ficha nao contam).
+  let countedPreTextualPages = UFLA_RULES.structure.preTextualBasePage;
 
-  countedPreTextualPages += 1; // Resumo gerado pelo exportador.
-  countedPreTextualPages += 1; // Abstract gerado pelo exportador.
+  if (hasApprovalPage(fields)) countedPreTextualPages += weights.folhaDeAprovacao;
+  if (hasText(fields.dedicatoria)) countedPreTextualPages += weights.dedicatória;
+  if (hasText(fields.agradecimentos)) countedPreTextualPages += weights.agradecimentos;
+  if (hasText(fields.epigrafe)) countedPreTextualPages += weights.epígrafe;
 
-  if (hasText(fields.indicadoresImpacto) || impactRequired) countedPreTextualPages += 1;
-  if (hasText(fields.impactIndicators) || impactRequired) countedPreTextualPages += 1;
-  if (hasSummary) countedPreTextualPages += 1;
+  countedPreTextualPages += weights.resumo; // Resumo gerado pelo exportador.
+  countedPreTextualPages += weights.abstract; // Abstract gerado pelo exportador.
+
+  if (hasText(fields.indicadoresImpacto) || impactRequired) countedPreTextualPages += weights.indicadoresDeImpacto;
+  if (hasText(fields.impactIndicators) || impactRequired) countedPreTextualPages += weights.impactIndicators;
+  if (hasSummary) countedPreTextualPages += weights.sumário;
 
   return countedPreTextualPages + 1;
 }

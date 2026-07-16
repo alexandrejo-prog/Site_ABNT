@@ -24,8 +24,8 @@ import { assessAbstractHeuristics, assessResumoHeuristics } from "./text-diagnos
 import { hasSufficientImpactIndicators } from "./impact-indicators";
 import { findUflaPpgProgram, findUflaPpgPrograms, resolveUflaPpgProgram, type UflaPpgProgram } from "./ufla-ppg-programs";
 import { getWorkTypeRequirements } from "./work-type-requirements";
-import { outputPolicyFor } from "./work-type-output-policy";
-import { getSectionKeyFromTitle } from "./section-aliases";
+import { getPolicyRequiredSections, outputPolicyFor } from "./work-type-output-policy";
+import { getSectionKeyFromTitle, sectionLevelsFromEditorText } from "./section-aliases";
 import { collectDocxAccessibilityWarnings } from "./docx-accessibility";
 
 // Seções obrigatórias (modelo de seções, 6ª ed.) por tipo documental.
@@ -391,10 +391,11 @@ function addResearchProjectIssues(fields: AcademicFields, editorText: string, is
   issues.push({ severity: "info", code: "research-toc-update", message: "Após gerar o DOCX, abra no Word ou LibreOffice e atualize o sumário para preencher a paginação real.", what: "O sumário do Projeto de pesquisa é atualizável.", why: "O campo TOC precisa ser atualizado no editor de texto para refletir a paginação final.", action: "No Word: Ctrl+A e F9, depois 'Atualizar o índice inteiro'. No LibreOffice: Ferramentas > Atualizar > Atualizar tudo." });
 }
 
-function addUflaCollectionIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
+function addUflaCollectionIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
   if (!isUflaCollectionWork(fields.workType)) return;
   const productionType = academicProductionTypeById(fields.workType);
   if (!productionType) return;
+  const sourceGuide = outputPolicyFor(fields.workType).sourceGuide;
 
   issues.push({
     severity: "warning",
@@ -417,6 +418,39 @@ function addUflaCollectionIssues(fields: AcademicFields, issues: ValidationIssue
       });
     }
   }
+
+  // Aviso forte quando faltam secoes obrigatorias do perfil da Colecao.
+  // Nao bloqueia (os exportadores especificos ainda evoluem), mas sinaliza
+  // desalinhamento estrutural com o guia correspondente.
+  const requiredSections = getPolicyRequiredSections(fields.workType);
+  if (requiredSections.length > 0) {
+    const presentKeys = collectEditorSectionKeys(editorText);
+    const missing = requiredSections.filter(
+      (s) => !presentKeys.has(String(getSectionKeyFromTitle(s))),
+    );
+    if (missing.length > 0) {
+      issues.push({
+        severity: "warning",
+        code: "ufla-collection-sections-missing",
+        message: `Secoes recomendadas ausentes para ${productionType.label}: ${missing.join(", ")}.`,
+        what: "O texto do editor nao contem todas as secoes esperadas pelo guia da Colecao Producao Academica UFLA.",
+        why: sourceGuide || "A 6a ed. do Manual UFLA segue o guia da Colecao para este formato.",
+        action: "Inclua as secoes indicadas no editor (ex.: '# 1 Introducao') ou confira o guia especifico antes da versao final.",
+      });
+    }
+  }
+}
+
+// Coleta as chaves normalizadas de todas as secoes do editor (markdown # ou
+// numeracao 1 / 1.1), para comparar com as secoes obrigatorias do perfil.
+function collectEditorSectionKeys(editorText: string): Set<string> {
+  const keys = new Set<string>();
+  const lines = (editorText || "").split(/\r?\n/);
+  for (const line of lines) {
+    const m = /^\s*(#{1,5}|\d+(?:\.\d+)*)\s+(.+?)\s*$/.exec(line);
+    if (m && m[2]) keys.add(String(getSectionKeyFromTitle(m[2].trim())));
+  }
+  return keys;
 }
 
 // Extrai titulos de secao (linhas iniciadas por # 1..5) do texto do editor.
@@ -513,10 +547,10 @@ function addStructuralNormativeIssues(fields: AcademicFields, editorText: string
     }
   }
 
-  // Hierarquia estrutural invalida: titulos de secao com numeracao pulando niveis.
-  const levels = sectionTitles
-    .map((t) => /^\d+(?:\.\d+)*\s/.test(t) ? t.trim().split(/\s+/)[0].split(".").length : 0)
-    .filter((l) => l > 0);
+  // Hierarquia estrutural invalida: titulos de secao com salto de nivel.
+  // Usa o mesmo criterio do exportador (numeracao explicita OU prefixo #),
+  // aceitando secoes nao numeradas sem gerar falso positivo.
+  const levels = sectionLevelsFromEditorText(editorText);
   if (levels.length >= 2) {
     let previous = levels[0];
     for (let i = 1; i < levels.length; i++) {
@@ -527,7 +561,7 @@ function addStructuralNormativeIssues(fields: AcademicFields, editorText: string
           message: "Hierarquia de secoes invalida: ha salto de nivel (ex.: 1 para 1.1.1).",
           what: "Um titulo de secao aparece em nivel superior ao imediatamente anterior mais de uma unidade.",
           why: "A 6a ed. do Manual UFLA adota hierarquia de secoes continua, sem saltos.",
-          action: "Renumere as secoes de forma continua (1, 1.1, 1.1.1) sem pular niveis.",
+          action: "Organize as secoes de forma continua (1, 1.1, 1.1.1) sem pular niveis.",
         });
         break;
       }
@@ -650,7 +684,7 @@ export function validateWork(fields: AcademicFields, editorText = ""): Validatio
 
   addCpgWarnings(fields, editorText, issues);
   addResearchProjectIssues(fields, editorText, issues);
-  addUflaCollectionIssues(fields, issues);
+  addUflaCollectionIssues(fields, editorText, issues);
   addStructuralNormativeIssues(fields, editorText, issues);
   for (const a11y of collectDocxAccessibilityWarnings(fields, editorText)) {
     issues.push({

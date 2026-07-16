@@ -284,6 +284,24 @@ export const UFLA_RULES = {
     postTextualOrder: ["referências", "glossário", "apêndices", "anexos", "índice"],
     // Profundidade maxima de hierarquia de sessoes conforme maxProgressiveLevel.
     maxSessionLevel: 5,
+    // Peso (em paginas contadas) de cada elemento pre-textual para o calculo
+    // da pagina inicial da parte textual. Capa e ficha catalografica nao
+    // contam (ver pagination). Centralizado aqui como unica fonte normativa.
+    preTextualPageWeights: {
+      folhaDeRosto: 1,
+      folhaDeAprovacao: 1,
+      dedicatória: 1,
+      agradecimentos: 1,
+      epígrafe: 1,
+      resumo: 1,
+      abstract: 1,
+      indicadoresDeImpacto: 1,
+      impactIndicators: 1,
+      sumário: 1,
+    },
+    // A folha de rosto e a pagina 1 contada; a parte textual inicia em
+    // (soma das pre-textuais contadas) + 1.
+    preTextualBasePage: 1,
   },
   titles: {
     primaryUppercase: true,

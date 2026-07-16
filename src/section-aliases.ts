@@ -54,3 +54,34 @@ export function isEquivalentSectionTitle(title: string, expectedKey: AcademicFie
 export function getKnownSectionHeadings(): string[] {
   return SECTION_ALIASES.flatMap((alias) => alias.headings);
 }
+
+// Nivel de secao (1..5) derivado de uma linha de titulo do editor,
+// espelhando o criterio do exportador DOCX. Aceita tanto numeracao
+// explicita (1, 1.1, 1.1.1, ...) quanto prefixos markdown (#, ##, ###),
+// para que validacao e exportacao compartilhem a mesma hierarquia.
+export function sectionLevelFromHeadingLine(line: string): number | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+
+  // Numeracao explicita tem precedencia sobre o prefixo markdown.
+  if (/^\d+(?:\.\d+){4}(?:\s|$)/.test(trimmed)) return 5;
+  if (/^\d+(?:\.\d+){3}(?:\s|$)/.test(trimmed)) return 4;
+  if (/^\d+(?:\.\d+){2}(?:\s|$)/.test(trimmed)) return 3;
+  if (/^\d+\.\d+(?:\s|$)/.test(trimmed)) return 2;
+  if (/^\d+(?:\s|$)/.test(trimmed)) return 1;
+
+  // Prefixos markdown (sem numero): mapeiam para o nivel correspondente.
+  const markdown = /^(#{1,5})\s+/.exec(trimmed);
+  if (markdown) return markdown[1].length;
+
+  return null;
+}
+
+// Lista de niveis de secao presentes no texto do editor, na ordem de leitura.
+// Usada por validacao (hierarquia continua) e pelo exportador (se desejado).
+export function sectionLevelsFromEditorText(editorText: string): number[] {
+  return editorText
+    .split(/\r?\n/)
+    .map(sectionLevelFromHeadingLine)
+    .filter((level): level is number => level !== null);
+}
