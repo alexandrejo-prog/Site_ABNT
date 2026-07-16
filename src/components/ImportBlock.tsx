@@ -1,17 +1,25 @@
-import { useRef, useState } from "react";
+﻿import { useRef, useState } from "react";
 import { Upload, XCircle } from "lucide-react";
 import { importDocumentFile } from "../import-docx";
 import type { ImportedDocumentImage } from "../imported-images";
+import type { ImportedTable } from "../imported-tables";
+import type { DocumentMode, SourceKind } from "../import-contract";
+import type { ImportedPdfDiagnostic } from "../imported-pdf-diagnostic";
 import { emptyAcademicFields, emptyConfidenceMap, WORK_TYPE_LABELS } from "../ufla-rules";
 
 interface ImportBlockProps {
   onImport: (result: {
+    sourceKind: SourceKind;
+    documentMode: DocumentMode;
     fields: ReturnType<typeof emptyAcademicFields>;
     confidence: ReturnType<typeof emptyConfidenceMap>;
     editorText: string;
     messages: string[];
     fileName: string;
     importedImages?: ImportedDocumentImage[];
+    importedTables?: ImportedTable[];
+    pdfDiagnostic?: ImportedPdfDiagnostic;
+    pdfBytes?: Uint8Array;
   }) => void;
   onRemove: () => void;
   importedFileName: string | null;
@@ -32,7 +40,11 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
     try {
       setStatus("Importando arquivo...");
       const result = await importDocumentFile(file);
-      onImport({ ...result, fileName: file.name });
+      const extra: { fileName: string; pdfBytes?: Uint8Array } = { fileName: file.name };
+      if (result.sourceKind === "pdf") {
+        extra.pdfBytes = new Uint8Array(await file.arrayBuffer());
+      }
+      onImport({ ...result, ...extra });
       setStatus(`Arquivo importado: ${file.name}`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Falha ao importar.");
@@ -46,7 +58,7 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
       <div className="import-header">
         <div>
           <h2>Importar arquivo existente</h2>
-          <p>Importe DOCX, TXT ou Markdown para extrair texto e metadados. Revise tudo antes de gerar.</p>
+          <p>Importe DOCX, TXT, Markdown ou PDF para extrair texto e metadados. Para PDF, o sistema gera um diagn├│stico de reconstru├º├úo ABNT. Revise tudo antes de gerar.</p>
         </div>
         <label className="upload-button primary">
           <Upload size={18} aria-hidden="true" />
@@ -54,7 +66,7 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
           <input
             ref={inputRef}
             type="file"
-            accept=".docx,.txt,.md"
+            accept=".docx,.txt,.md,.pdf"
             onChange={handleChange}
             style={{ display: "none" }}
           />
@@ -64,15 +76,15 @@ export function ImportBlock({ onImport, onRemove, importedFileName, workType }: 
         <div className="import-status">
           <span className="import-file-name">Arquivo: {importedFileName}</span>
           <span className="import-work-type">Tipo selecionado: {selectedWorkTypeLabel(workType)}</span>
-          <p className="import-confirm">Confira se o tipo de trabalho selecionado está correto antes de gerar o DOCX.</p>
-          <button className="secondary-action" type="button" onClick={onRemove} title={`Remover importação: ${importedFileName}`}>
+          <p className="import-confirm">Confira se o tipo de trabalho selecionado est├í correto antes de gerar o DOCX.</p>
+          <button className="secondary-action" type="button" onClick={onRemove} title={`Remover importa├º├úo: ${importedFileName}`}>
             <XCircle size={18} aria-hidden="true" />
-            <span>Remover importação</span>
+            <span>Remover importa├º├úo</span>
           </button>
         </div>
       ) : (
         <p className="import-disclaimer">
-          Importante: o tipo de trabalho não é alterado automaticamente pelo nome do arquivo. Confira se o modelo selecionado corresponde ao documento.
+          Importante: o tipo de trabalho n├úo ├® alterado automaticamente pelo nome do arquivo. Confira se o modelo selecionado corresponde ao documento.
         </p>
       )}
       {status && <p className="import-note" role="status" aria-live="polite">{status}</p>}

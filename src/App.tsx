@@ -112,6 +112,7 @@ export default function App() {
   const [editorText, setEditorText] = useState("");
   const [importedImages, setImportedImages] = useState<ImportedDocumentImage[]>([]);
   const [importedTables, setImportedTables] = useState<ImportedTable[]>([]);
+  const [importedPdfDiagnostic, setImportedPdfDiagnostic] = useState<import("./imported-pdf-diagnostic").ImportedPdfDiagnostic | null>(null);
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
   const [status, setStatus] = useState("Pronto para editar.");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -266,6 +267,8 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
 }
 
   async function handleImport(result: {
+    sourceKind?: "pdf" | "docx" | "txt" | "markdown";
+    documentMode?: "ufla-structured" | "pdf-diagnostic" | "pdf-text-draft";
     fields: ReturnType<typeof emptyAcademicFields>;
     confidence: ReturnType<typeof emptyConfidenceMap>;
     editorText: string;
@@ -273,6 +276,8 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     fileName: string;
     importedImages?: ImportedDocumentImage[];
     importedTables?: ImportedTable[];
+    pdfDiagnostic?: import("./imported-pdf-diagnostic").ImportedPdfDiagnostic;
+    pdfBytes?: Uint8Array;
   }) {
     try {
       setStatus("Importando arquivo...");
@@ -290,14 +295,18 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
       setGenerateAnyway(false);
       setImportedImages(result.importedImages ?? []);
       setImportedTables(result.importedTables ?? []);
+      setImportedPdfDiagnostic(result.pdfDiagnostic ?? null);
       const newEditorText = result.editorText || result.fields.introducao;
       setEditorText(newEditorText);
       if (editorRef.current) editorRef.current.innerHTML = editorMarkupToHtml(newEditorText);
       lastAppliedEditorTextRef.current = newEditorText;
       editorContentVersionRef.current += 1;
       const importWarnings = result.messages.length ? `Arquivo importado com ${result.messages.length} aviso(s). Metadados anteriores foram substituídos.` : "Arquivo importado. Metadados anteriores foram substituídos; revise os campos antes de gerar.";
+      const pdfNote = importedPdfDiagnostic
+        ? " PDF importado: o sistema gerou diagnóstico de reconstrução ABNT. Revise as sugestões antes de gerar o DOCX."
+        : "";
       const fileNameConflict = importedFileNameSuggestsOtherType(result.fileName, previousWorkType) ? " O tipo atual é Projeto de pesquisa. O nome do arquivo importado não será usado para alterar o modelo." : "";
-      setStatus(importWarnings + fileNameConflict);
+      setStatus(importWarnings + fileNameConflict + pdfNote);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Falha ao importar.");
     }
@@ -312,6 +321,7 @@ function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: st
     setImportedFileName(null);
     setImportedImages([]);
     setImportedTables([]);
+    setImportedPdfDiagnostic(null);
     setEditorMode("body");
     lastAppliedEditorTextRef.current = "";
     editorContentVersionRef.current += 1;

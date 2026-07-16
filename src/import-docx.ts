@@ -1,10 +1,12 @@
-import * as mammoth from "mammoth/mammoth.browser";
+﻿import * as mammoth from "mammoth/mammoth.browser";
 import { detectAcademicFieldsFromStructure } from "./field-detector";
 import {
   AcademicFieldKey,
   AcademicFields,
   Confidence,
   WorkTypeValue,
+  emptyAcademicFields,
+  emptyConfidenceMap,
 } from "./ufla-rules";
 import {
   ImportedBlock,
@@ -21,6 +23,9 @@ import { sanitizeImportedTitle } from "./title-sanitizer";
 import { ImportedDocumentImage, importedImageMarker, looksLikeAcademicImageLabel, looksLikeAcademicImageCaption, looksLikeImageSource } from "./imported-images";
 import { ImportedTable, importedTableMarker, normalizePhantomColumns, isTableUnreadable, buildStructuredTextFromTable, removeTrailingEmptyColumn, detectGroupColumn, normalizeGroupColumn } from "./imported-tables";
 import { reconstructAcademicTable } from "./academic-table-reconstructor";
+import type { DocumentMode, SourceKind } from "./import-contract";
+import { importPdfDiagnostic } from "./import-pdf-diagnostic";
+import type { ImportedPdfDiagnostic } from "./imported-pdf-diagnostic";
 
 function estimateColumnWidths(gridWidths: number[], columnCount: number): number[] {
   const safeWidths = gridWidths.slice(0, columnCount);
@@ -67,8 +72,8 @@ function normalizeRowLength(row: string[], targetCount: number): string[] {
   return result;
 }
 
-const ARTIFICIAL_BREAK_PATTERN = /([a-zà-úç])\n([a-zà-úç])/gu;
-const PRESERVE_BREAK_BEFORE = /^(?:[-•*]\s|\d+[.)]\s|\.\s|:\s|—\s|–\s)/u;
+const ARTIFICIAL_BREAK_PATTERN = /([a-z├á-├║├º])\n([a-z├á-├║├º])/gu;
+const PRESERVE_BREAK_BEFORE = /^(?:[-ÔÇó*]\s|\d+[.)]\s|\.\s|:\s|ÔÇö\s|ÔÇô\s)/u;
 
 function cleanCellText(value: string): string {
   const trimmed = value.trim();
@@ -94,6 +99,8 @@ export interface WorkTypeSuggestion {
 }
 
 export interface ImportResult {
+  sourceKind: SourceKind;
+  documentMode: DocumentMode;
   text: string;
   editorText: string;
   fields: AcademicFields;
@@ -102,6 +109,7 @@ export interface ImportResult {
   blocks: ImportedBlock[];
   importedImages: ImportedDocumentImage[];
   importedTables: ImportedTable[];
+  pdfDiagnostic?: ImportedPdfDiagnostic;
   workTypeSuggestion?: WorkTypeSuggestion;
 }
 
@@ -169,7 +177,7 @@ function blockText(block: ImportedBlock): string {
 }
 
 function looksLikeTableCaption(text: string): boolean {
-  return /^(Quadro|Tabela|Graf|Grafico)\s+\d+\s*[-–—:.]?/i.test(text.trim());
+  return /^(Quadro|Tabela|Graf|Grafico)\s+\d+\s*[-ÔÇôÔÇö:.]?/i.test(text.trim());
 }
 
 function looksLikeTableSource(text: string): boolean {
@@ -201,7 +209,7 @@ function findBodyStartIndex(blocks: ImportedBlock[]): number {
   return blocks.findIndex(
     (block) =>
       block.type === "heading" &&
-      /^(\d+\s+)?INTRODU[ÇC][AÃ]O\b/i.test(block.text.trim()),
+      /^(\d+\s+)?INTRODU[├çC][A├â]O\b/i.test(block.text.trim()),
   );
 }
 
@@ -212,8 +220,8 @@ function findBodyEndIndex(blocks: ImportedBlock[]): number {
   });
 }
 
-// Busca, em ambas as direções (janela de até 10 blocos), o rótulo/legenda e a fonte
-// mais próximos da imagem. Cobre os padrões de DOCX convertido de PDF em que a
+// Busca, em ambas as dire├º├Áes (janela de at├® 10 blocos), o r├│tulo/legenda e a fonte
+// mais pr├│ximos da imagem. Cobre os padr├Áes de DOCX convertido de PDF em que a
 // legenda pode vir antes ou depois da imagem e a fonte aparece em bloco vizinho.
 function nearestAcademicImageContext(
   blocks: ImportedBlock[],
@@ -419,7 +427,7 @@ function chooseTableRenderMode(table: ImportedTable): ImportedTable {
       reconstructedTable: reconstructed,
       reconstructionConfidence: "low",
       reconstructionWarnings: reconstructed.warnings,
-      layoutWarning: "Quadro/tabela importado de DOCX convertido de PDF foi renderizado como texto estruturado para evitar tabela ilegível. Revise manualmente.",
+      layoutWarning: "Quadro/tabela importado de DOCX convertido de PDF foi renderizado como texto estruturado para evitar tabela ileg├¡vel. Revise manualmente.",
     };
   }
 
@@ -438,7 +446,7 @@ function chooseTableRenderMode(table: ImportedTable): ImportedTable {
     reconstructedTable: reconstructed,
     reconstructionConfidence: "low",
     reconstructionWarnings: reconstructed.warnings,
-    layoutWarning: "Tabela detectada, mas a estrutura não pôde ser reconstruída com confiança. Revise manualmente.",
+    layoutWarning: "Tabela detectada, mas a estrutura n├úo p├┤de ser reconstru├¡da com confian├ºa. Revise manualmente.",
   };
 }
 
@@ -515,13 +523,13 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
       layoutWarning:
         (normalized.layoutWarning || rawTable.layoutWarning) ||
         (hadTrailingRemoval ? "Coluna artificial final do PDF convertido foi removida." : undefined) ||
-        (hadGroupNormalization ? "Coluna de grupo reconstruída com mesclagem vertical lógica." : undefined) ||
+        (hadGroupNormalization ? "Coluna de grupo reconstru├¡da com mesclagem vertical l├│gica." : undefined) ||
         (hadPhantomRemoval ? "Colunas artificiais do PDF convertido foram colapsadas." : undefined),
     };
 
     if (isTableUnreadable(finalTable)) {
       finalTable.status = "rendered-as-structured-text";
-      finalTable.layoutWarning = "Quadro importado de DOCX convertido de PDF foi renderizado como texto estruturado para evitar tabela ilegível. Revise o layout manualmente.";
+      finalTable.layoutWarning = "Quadro importado de DOCX convertido de PDF foi renderizado como texto estruturado para evitar tabela ileg├¡vel. Revise o layout manualmente.";
     }
 
     imported.push(chooseTableRenderMode(finalTable));
@@ -604,7 +612,7 @@ function editorTextWithImageMarkers(
   for (let index = start; index < blocks.length; index += 1) {
     const block = blocks[index];
     const normalized = normalizeForDetection(blockText(block));
-    if (/^(CONCLUSAO|CONCLUSÃO|CONSIDERACOES FINAIS|CONSIDERAÇÕES FINAIS)\b/.test(normalized)) {
+    if (/^(CONCLUSAO|CONCLUS├âO|CONSIDERACOES FINAIS|CONSIDERA├ç├òES FINAIS)\b/.test(normalized)) {
       sawConclusion = true;
     }
     if (/^(REFERENCIAS|ANEXOS|ANEXO|APENDICES|APENDICE)\b/.test(normalized)) {
@@ -612,7 +620,7 @@ function editorTextWithImageMarkers(
       if (!tocArtifactMode) {
         const nextBlocks = blocks.slice(index + 1, index + 6);
         const looksLikeTocArtifact = nextBlocks.some(
-          (next) => /^(Na Introdução|Na seção|Nos Resultados|Já na Conclusão|Na Introducao|Na secao|REFERENCIAL TEORICO|REFERENCIAL TEÓRICO)\b/i.test(blockText(next)),
+          (next) => /^(Na Introdu├º├úo|Na se├º├úo|Nos Resultados|J├í na Conclus├úo|Na Introducao|Na secao|REFERENCIAL TEORICO|REFERENCIAL TE├ôRICO)\b/i.test(blockText(next)),
         );
         if (looksLikeTocArtifact) {
           tocArtifactMode = true;
@@ -678,6 +686,7 @@ function buildImportResult(
   normalized: ReturnType<typeof normalizePlainAcademicText>,
   detected: ReturnType<typeof detectAcademicFieldsFromStructure>,
   messages: string[],
+  sourceKind: SourceKind,
 ): ImportResult {
   const text = repairHeadingFragments(normalized.text);
   const importedImages = importedImagesFromStructure(normalized.structure);
@@ -728,6 +737,8 @@ function buildImportResult(
   );
 
   return {
+    sourceKind,
+    documentMode: "ufla-structured",
     text,
     editorText,
     fields,
@@ -752,6 +763,8 @@ export function identifyAcademicFields(
   return {
     fields,
     confidence,
+    sourceKind: "txt",
+    documentMode: "ufla-structured",
     workTypeSuggestion,
   };
 }
@@ -792,7 +805,7 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
         ...messages,
         ...normalized.messages,
         ...detected.messages,
-      ]);
+      ], "docx");
     } catch {
       if (mammothText.trim()) {
         const normalized = normalizePlainAcademicText(mammothText);
@@ -802,7 +815,7 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
           "Nao foi possivel ler a estrutura OOXML; o arquivo foi importado apenas como texto bruto.",
           ...normalized.messages,
           ...detected.messages,
-        ]);
+        ], "docx");
       }
 
       throw docxOpenError(file.name);
@@ -816,8 +829,25 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
     return buildImportResult(normalized, detected, [
       ...normalized.messages,
       ...detected.messages,
-    ]);
+    ], extension === "md" ? "markdown" : "txt");
   }
 
-  throw new Error("Formato nao suportado. Use .docx, .txt ou .md.");
+  if (extension === "pdf") {
+    const pdfDiagnostic = await importPdfDiagnostic(file);
+    return {
+      sourceKind: "pdf",
+      documentMode: "pdf-diagnostic",
+      text: "",
+      editorText: "",
+      fields: emptyAcademicFields(),
+      confidence: emptyConfidenceMap(),
+      messages: pdfDiagnostic.warnings,
+      blocks: [],
+      importedImages: [],
+      importedTables: [],
+      pdfDiagnostic,
+    };
+  }
+
+  throw new Error("Formato nao suportado. Use .docx, .txt, .md ou .pdf.");
 }

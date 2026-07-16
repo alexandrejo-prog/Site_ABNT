@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 function writeSamplePdf(): string {
-  const path = join(tmpdir(), `site-abnt-reject-${Date.now()}.pdf`);
+  const path = join(tmpdir(), `site-abnt-accept-${Date.now()}.pdf`);
   const pdf = [
     "%PDF-1.4",
     "1 0 obj",
@@ -32,9 +32,15 @@ function writeSamplePdf(): string {
   return path;
 }
 
-test("selecionar um PDF exibe a mensagem de formato nao suportado", async ({ page }) => {
-  const pdfPath = writeSamplePdf();
+test("o seletor de importacao aceita arquivos PDF", async ({ page }) => {
+  await page.goto("/#main-content");
+  const fileInput = page.locator('input[type="file"]');
+  await expect(fileInput).toHaveCount(1);
+  await expect(fileInput).toHaveAttribute("accept", /(^|.*,\s*)\.pdf(,|$)/);
+});
 
+test("selecionar um PDF nao exibe mais a rejeicao de formato nao suportado", async ({ page }) => {
+  const pdfPath = writeSamplePdf();
   await page.goto("/#main-content");
 
   const fileInput = page.locator('input[type="file"]');
@@ -42,7 +48,10 @@ test("selecionar um PDF exibe a mensagem de formato nao suportado", async ({ pag
   await fileInput.setInputFiles(pdfPath);
 
   const importNote = page.locator(".import-note");
-  await expect(importNote).toContainText("Formato nao suportado. Use .docx, .txt ou .md.", {
+  // O produto agora suporta PDF: o erro de formato nao suportado nao deve
+  // aparecer. Pode haver diagnostico de PDF ou falha de parse do PDF stub,
+  // mas nunca a mensagem de formato nao suportado.
+  await expect(importNote).not.toContainText("Formato nao suportado. Use .docx, .txt ou .md.", {
     timeout: 30_000,
   });
 });

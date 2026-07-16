@@ -72,12 +72,21 @@ describe("Erros de importação", () => {
   });
 
   describe("2. Extensão não suportada", () => {
-    it("rejeita .pdf com mensagem clara", async () => {
+    it("nao rejeita .pdf como formato nao suportado (agora e suportado)", async () => {
       const file = createMockFile("dummy pdf content", "documento.pdf");
 
-      await expect(importDocumentFile(file)).rejects.toThrow(
-        "Formato nao suportado",
-      );
+      // PDF passou a ser suportado: nao deve cair no erro generico de
+      // formato nao suportado. Pode falhar no parse do PDF mock, mas a
+      // rejeicao por formato ausente nao ocorre.
+      let threwUnsupported = false;
+      try {
+        await importDocumentFile(file);
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("Formato nao suportado")) {
+          threwUnsupported = true;
+        }
+      }
+      expect(threwUnsupported).toBe(false);
     });
 
     it("rejeita .odt com mensagem clara", async () => {
