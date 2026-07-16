@@ -812,7 +812,9 @@ function buildPdfEditorText(diagnostic: ImportedPdfDiagnostic): string {
     }
   }
 
+  const bodyStartPage = reconstruction.bodyStart.found ? (reconstruction.bodyStart.pageNumber ?? 1) : 1;
   for (const block of reconstruction.blocks) {
+    if (block.pageStart < bodyStartPage) continue;
     const text = block.text.trim();
     if (!text) continue;
     if (block.type === "heading") {

@@ -36,6 +36,35 @@ function buildSyntheticPdf(pages: string[]): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
+function buildSinglePagePdf(lines: string[]): ArrayBuffer {
+  const stream = lines
+    .map((line, index) => `BT /F1 18 Tf 150 ${(720 - index * 26)} Td (${line.replace(/[()\\]/g, "")}) Tj ET`)
+    .join("\n");
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>`,
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  offsets.slice(1).forEach((offset) => {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  });
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+  const bytes = new TextEncoder().encode(pdf);
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
 async function makeSyntheticDocx(): Promise<ArrayBuffer> {
   const zip = new JSZip();
   zip.file(
@@ -121,5 +150,51 @@ describe("importacao diagnostica de PDF", () => {
     expect(result.messages.join(" ")).toContain("rascunho DOCX estruturado");
     expect(result.fields.author.length).toBeGreaterThan(0);
     expect(result.fields.title.length).toBeGreaterThan(0);
+  });
+
+  it("PDF textual com folha de rosto ABNT preenche autor, titulo, natureza e orientador sem poluir campos", async () => {
+    const lines = [
+      "UNIVERSIDADE FEDERAL DE LAVRAS",
+      "Trabalho de Conclusao de Curso",
+      "Maria Silva Santos",
+      "Titulo do Trabalho de Conclusao",
+      "Orientador: Prof. Joao Souza",
+      "Lavras",
+      "2024",
+    ];
+    const result = await importDocumentFile(new File([buildSinglePagePdf(lines)], "folha-rosto.pdf", {
+      type: "application/pdf",
+    }));
+
+    expect(result.fields.author).toBe("Maria Silva Santos");
+    expect(result.fields.title).toBe("Titulo do Trabalho de Conclusao");
+    expect(result.fields.workNature).toBe("Trabalho de Conclusao de Curso");
+    expect(result.fields.advisor).toContain("Joao Souza");
+    expect(result.fields.year).toBe("2024");
+    expect(result.fields.workNature).not.toContain("Maria Silva Santos");
+    expect(result.fields.workNature).not.toContain("Titulo do Trabalho");
+    expect(result.fields.title).not.toContain("Orientador");
+  });
+
+  it("PDF com pouco texto extraivel mantem campos vazios e expoe avisos do diagnostico (sem preenchimento falso)", async () => {
+    const result = await importDocumentFile(new File([buildSinglePagePdf(["Lavras", "2024"])], "pouco-texto.pdf", {
+      type: "application/pdf",
+    }));
+
+    expect(result.fields.author).toBe("");
+    expect(result.fields.title).toBe("");
+    expect(result.fields.advisor).toBe("");
+    expect(result.messages.join(" ")).toContain("diagnóstico");
+    expect(result.pdfDiagnostic?.warnings.length).toBeGreaterThan(0);
+  });
+
+  it("PDF sem texto extraivel (imagem/scan) produz aviso e nao preenche campos nem editor", async () => {
+    const file = new File([buildSyntheticPdf(["   ", " "])], "scan.pdf", { type: "application/pdf" });
+    const result = await importDocumentFile(file);
+
+    expect(result.fields.title).toBe("");
+    expect(result.fields.author).toBe("");
+    const noText = result.pdfDiagnostic?.warnings.some((warning) => /Nenhum texto bruto extraível/i.test(warning));
+    expect(noText).toBe(true);
   });
 });

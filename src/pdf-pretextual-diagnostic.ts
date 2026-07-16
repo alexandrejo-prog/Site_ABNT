@@ -201,7 +201,7 @@ function detectCover(pages: PdfPageDiagnostic[], bodyPage?: number): PdfPretextu
     const hasLargeGap = verticalGaps.some((gap) => gap > 38);
     const yearLine = [...lines].reverse().find((line) => isYear(line.text));
     const cityLine = yearLine
-      ? [...lines.slice(0, lines.indexOf(yearLine))].reverse().find((line) => isCentered(line) && !isLikelyInstitution(line.text) && !isLikelyPersonName(line.text))
+      ? [...lines.slice(0, lines.indexOf(yearLine))].reverse().find((line) => isCentered(line) && clean(line.text).length <= 24 && !isLikelyInstitution(line.text) && !isLikelyPersonName(line.text))
       : undefined;
     const authorIndex = authorLine ? lines.indexOf(authorLine) : -1;
     const probableTitle = titleBlock(lines, authorIndex, cityLine ?? yearLine);
@@ -334,7 +334,7 @@ function detectTitlePage(pages: PdfPageDiagnostic[], coverPage?: number, bodyPag
   const programLine = best.lines.find((line) => isProgramLine(line.text));
   const yearLine = [...best.lines].reverse().find((line) => isYear(line.text));
   const cityLine = yearLine
-    ? [...best.lines.slice(0, best.lines.indexOf(yearLine))].reverse().find((line) => isCentered(line) && !isNatureAnchor(line.text) && !isProgramLine(line.text) && !isAdvisorLine(line.text))
+    ? [...best.lines.slice(0, best.lines.indexOf(yearLine))].reverse().find((line) => isCentered(line) && clean(line.text).length <= 24 && !isNatureAnchor(line.text) && !isProgramLine(line.text) && !isAdvisorLine(line.text))
     : undefined;
   // Search for the institution line only within the region after the nature text and
   // before advisor/coadvisor/city/year, so a title that happens to contain
@@ -356,14 +356,23 @@ function detectTitlePage(pages: PdfPageDiagnostic[], coverPage?: number, bodyPag
   // Stop nature extraction before the institution line so a standalone institution name is
   // not absorbed into natureText (which would otherwise make the institution deduplication
   // check below incorrectly drop a legitimate institution).
-  const stopCandidates = [advisorLine, advisorNameLine, coadvisorLine, institutionLine, cityLine, yearLine]
+  const stopCandidates = [authorLine, advisorLine, advisorNameLine, coadvisorLine, institutionLine, cityLine, yearLine]
     .filter((line): line is LineRef => Boolean(line))
     .map((line) => best.lines.indexOf(line))
     .filter((index) => index > natureStart);
   const natureEnd = stopCandidates.length ? Math.min(...stopCandidates) : best.lines.length;
   const natureLines = natureStart >= 0 ? best.lines.slice(natureStart, natureEnd).map((line) => line.text) : [];
   const natureText = natureLines.length ? deduplicateNatureLines(natureLines) : undefined;
-  const title = titleBlock(best.lines, authorIndex, natureLine);
+  const titleStopLines = [advisorLine, advisorNameLine, coadvisorLine, cityLine, yearLine]
+    .filter((line): line is LineRef => Boolean(line))
+    .filter((line) => authorIndex < 0 || best.lines.indexOf(line) > authorIndex);
+  const titleStop = titleStopLines.length
+    ? titleStopLines.reduce((earliest, line) => {
+        const index = best.lines.indexOf(line);
+        return index < earliest ? index : earliest;
+      }, Number.MAX_SAFE_INTEGER)
+    : undefined;
+  const title = titleBlock(best.lines, authorIndex, titleStop === undefined ? undefined : best.lines[titleStop]);
 
   let program: string | undefined;
   if (programLine) {
