@@ -131,6 +131,21 @@ function isPageHeading(block: ImportedBlock, targets: string[]): boolean {
   return normalizedTargets.includes(normalized);
 }
 
+function isSectionTitleText(text: string, targets: string[]): boolean {
+  const normalized = normalizeForDetection(text).replace(/^\d+(?:\.\d+)*\s*/, "").trim();
+  const normalizedTargets = targets.map((target) => normalizeForDetection(target));
+  return normalizedTargets.includes(normalized);
+}
+
+function startsWithSectionTitle(text: string, targets: string[]): boolean {
+  const normalized = normalizeForDetection(text)
+    .replace(/^#+\s*/, "")
+    .replace(/^\d+(?:\.\d+)*\s*/, "")
+    .trim();
+  const normalizedTargets = targets.map((target) => normalizeForDetection(target));
+  return normalizedTargets.some((target) => normalized === target || normalized.startsWith(`${target} `));
+}
+
 function sectionKeyForBlock(block: ImportedBlock): AcademicFieldKey | undefined {
   return getSectionKeyFromTitle(blockText(block));
 }
@@ -208,6 +223,35 @@ function collectAfterHeading(
     const block = blocks[index];
     if (shouldStop(block)) break;
 
+    const text = textFromBlockForSection(block).trim();
+    if (text) collected.push(text);
+  }
+
+  return joinLines(collected);
+}
+
+function collectAfterSectionTitle(
+  blocks: ImportedBlock[],
+  startIndex: number,
+  shouldStop: (block: ImportedBlock) => boolean,
+  titleTargets: string[],
+): string {
+  if (startIndex < 0) return "";
+  const collected: string[] = [];
+
+  const startText = textFromBlockForSection(blocks[startIndex]).trim();
+  if (startText) {
+    const lower = startText.toLowerCase().replace(/^#+\s*/, "");
+    const match = titleTargets
+      .map((target) => target.toLowerCase())
+      .find((target) => lower.startsWith(target));
+    const remainder = match ? startText.slice(match.length).trim() : startText;
+    if (remainder) collected.push(remainder);
+  }
+
+  for (let index = startIndex + 1; index < blocks.length; index += 1) {
+    const block = blocks[index];
+    if (shouldStop(block)) break;
     const text = textFromBlockForSection(block).trim();
     if (text) collected.push(text);
   }
@@ -717,11 +761,20 @@ function collectIntroduction(blocks: ImportedBlock[]): string {
 
 function collectConclusion(blocks: ImportedBlock[]): string {
   const start = findHeadingIndex(blocks, (block) =>
-    isPageHeading(block, ["CONCLUSAO", "CONCLUSÃO", "CONSIDERACOES FINAIS", "CONSIDERAÇÕES FINAIS"]) ||
+    isEquivalentSectionTitle(blockText(block), "conclusao") ||
     sectionKeyForBlock(block) === "conclusao",
   );
-  if (start < 0) return "";
-  return collectAfterHeading(blocks, start, (block) => isReferenceHeading(block));
+  if (start >= 0) {
+    return collectAfterHeading(blocks, start, (block) => isReferenceHeading(block));
+  }
+  const fallback = blocks.findIndex((block) =>
+    startsWithSectionTitle(blockText(block), ["CONCLUSAO", "CONCLUSÃO", "CONSIDERACOES FINAIS", "CONSIDERAÇÕES FINAIS", "CONSIDERACOES GERAIS", "CONSIDERAÇÕES GERAIS", "CONCLUSAO FINAL", "CONCLUSÃO FINAL"]) ||
+    sectionKeyForBlock(block) === "conclusao",
+  );
+  if (fallback < 0) return "";
+  return collectAfterSectionTitle(blocks, fallback, (block) => isReferenceHeading(block), [
+    "CONCLUSAO", "CONCLUSÃO", "CONSIDERACOES FINAIS", "CONSIDERAÇÕES FINAIS", "CONSIDERACOES GERAIS", "CONSIDERAÇÕES GERAIS", "CONCLUSAO FINAL", "CONCLUSÃO FINAL",
+  ]);
 }
 
 function collectReferences(blocks: ImportedBlock[]): string {
@@ -752,7 +805,29 @@ function collectReferences(blocks: ImportedBlock[]): string {
     }
   }
 
-  return collected.join("\n\n").trim();
+  if (collected.length > 0) return collected.join("\n\n").trim();
+
+  const fallbackStart = blocks.findIndex((block) =>
+    isReferenceHeading(block) || isSectionTitleText(blockText(block), ["REFERENCIAS", "REFERÊNCIAS", "BIBLIOGRAFIA"]),
+  );
+  if (fallbackStart < 0) return "";
+
+  const fallbackCollected: string[] = [];
+  for (let index = fallbackStart + 1; index < blocks.length; index += 1) {
+    const block = blocks[index];
+    if (isAnnexHeading(block) || isAppendixHeading(block)) break;
+    const normalized = normalizeForDetection(blockText(block));
+    if (/^1\s+INTRODUCAO$/i.test(normalized) || normalized === "INTRODUCAO") break;
+    if (/^(OBJETIVO GERAL|OBJETIVOS ESPECIFICOS|JUSTIFICATIVAS|ORGANIZACAO DO TRABALHO|REFERENCIAL TEORICO|METODOLOGIA|RESULTADOS E DISCUSSAO|CONCLUSAO|CONSIDERACOES FINAIS)\b/.test(normalized)) break;
+    if (/^(APENDICE|APÊNDICE|ANEXO)\b/i.test(normalized)) break;
+
+    const text = textFromBlockForSection(block).trim();
+    if (!text) continue;
+    if (isLikelyNoiseReferenceItem(text)) continue;
+    fallbackCollected.push(text);
+  }
+
+  return fallbackCollected.join("\n\n").trim();
 }
 
 function findPostReferencesHeadingIndex(
@@ -1085,6 +1160,15 @@ export function detectAcademicFieldsFromStructure(
     const cpgResult = detectCpgAcademicFieldsFromStructure(structure);
     if (cpgResult.fields.title || cpgResult.fields.author || cpgResult.fields.abstractText) {
       cpgResult.fields.workType = fields.workType || cpgResult.fields.workType;
+      if (!cpgResult.fields.introducao) {
+        cpgResult.fields.introducao = collectIntroduction(structure.blocks);
+      }
+      if (!cpgResult.fields.conclusao) {
+        cpgResult.fields.conclusao = collectConclusion(structure.blocks);
+      }
+      if (!cpgResult.fields.referencias) {
+        cpgResult.fields.referencias = cleanReferences(collectReferences(structure.blocks));
+      }
       return cpgResult;
     }
   }

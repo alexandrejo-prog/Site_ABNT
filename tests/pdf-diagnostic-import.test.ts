@@ -231,4 +231,52 @@ describe("importacao diagnostica de PDF", () => {
     expect(result.confidence.advisor).toBe("nao-identificado");
     expect(result.confidence.title).toBe("nao-identificado");
   });
+
+  it("PDF textual com secao REFERENCIAS preenche referencias mesmo quando roteado como documento CPG", async () => {
+    const lines = [
+      "UNIVERSIDADE FEDERAL DE LAVRAS",
+      "Dissertacao de Mestrado",
+      "Maria Silva Santos",
+      "Titulo do Trabalho de Conclusao",
+      "Orientador: Prof. Joao Souza",
+      "Lavras",
+      "2024",
+      "1 INTRODUCAO",
+      "Texto introdutorio do trabalho.",
+      "REFERENCIAS",
+      "SILVA, A. Titulo do artigo. Revista, 2020.",
+      "SOUZA, B. Outro trabalho. Editora, 2021.",
+    ];
+    const result = await importDocumentFile(new File([buildSinglePagePdf(lines)], "referencias.pdf", {
+      type: "application/pdf",
+    }));
+
+    expect(result.fields.referencias.length).toBeGreaterThan(0);
+    expect(result.fields.referencias).toContain("SILVA, A.");
+    expect(result.fields.referencias).toContain("SOUZA, B.");
+  });
+
+  it("PDF textual com CONSIDERACOES FINAIS/GERAIS preenche conclusao", async () => {
+    const lines = [
+      "UNIVERSIDADE FEDERAL DE LAVRAS",
+      "Trabalho de Conclusao de Curso",
+      "Maria Silva Santos",
+      "Titulo do Trabalho de Conclusao",
+      "Orientador: Prof. Joao Souza",
+      "Lavras",
+      "2024",
+      "1 INTRODUCAO",
+      "Texto introdutorio.",
+      "CONSIDERACOES FINAIS",
+      "Estas sao as consideracoes finais do trabalho.",
+      "REFERENCIAS",
+      "SILVA, A. Titulo. Revista, 2020.",
+    ];
+    const result = await importDocumentFile(new File([buildSinglePagePdf(lines)], "conclusao.pdf", {
+      type: "application/pdf",
+    }));
+
+    expect(result.fields.conclusao.length).toBeGreaterThan(0);
+    expect(result.fields.conclusao).toContain("consideracoes finais");
+  });
 });

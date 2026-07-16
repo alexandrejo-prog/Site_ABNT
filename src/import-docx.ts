@@ -870,32 +870,55 @@ function mapDiagnosticConfidence(
 function pdfPretextualConfidence(diagnostic: ImportedPdfDiagnostic): Partial<Record<AcademicFieldKey, Confidence>> {
   const { pretextual } = diagnostic;
   const conf: Partial<Record<AcademicFieldKey, Confidence>> = {};
-  const pageLevel = mapDiagnosticConfidence(
-    pretextual.titlePage?.confidence || pretextual.cover?.confidence,
-  );
   const tp = pretextual.titlePage;
   const cover = pretextual.cover;
-  const setIf = (key: AcademicFieldKey, present: boolean) => {
-    if (present && pageLevel) conf[key] = pageLevel;
+  const levelFromDiagnostic = mapDiagnosticConfidence(
+    tp?.confidence || cover?.confidence,
+  );
+
+  const fieldConfidence = (present: boolean, strong: boolean): Confidence | undefined => {
+    if (!present) return undefined;
+    if (strong) return "alta";
+    return levelFromDiagnostic ?? "media";
   };
-  setIf("author", Boolean(tp?.author || cover?.author));
-  setIf("title", Boolean(tp?.title || cover?.title));
-  setIf("workNature", Boolean(tp?.natureText));
-  setIf("program", Boolean(tp?.program));
-  setIf("advisor", Boolean(tp?.advisor));
-  setIf("coadvisor", Boolean(tp?.coadvisor));
-  setIf("course", Boolean(tp?.institution || cover?.institution));
-  setIf("location", Boolean(tp?.city || cover?.city));
-  setIf("year", Boolean(tp?.year || cover?.year));
+
+  conf.author = fieldConfidence(
+    Boolean(tp?.author || cover?.author),
+    /^[A-ZÀ-Ý][a-zà-ÿ]+(?: [A-ZÀ-Ý][a-zà-ÿ]+){1,}$/u.test((tp?.author || cover?.author || "").trim()),
+  );
+  conf.title = fieldConfidence(
+    Boolean(tp?.title || cover?.title),
+    (tp?.title || cover?.title || "").trim().length >= 10,
+  );
+  conf.workNature = fieldConfidence(
+    Boolean(tp?.natureText),
+    /\b(?:dissertac?a?o|tese|trabalho)\b/i.test(tp?.natureText || ""),
+  );
+  conf.program = fieldConfidence(Boolean(tp?.program), /\bprograma\b/i.test(tp?.program || ""));
+  conf.advisor = fieldConfidence(
+    Boolean(tp?.advisor),
+    /\borientador|a\b/i.test(tp?.advisor || ""),
+  );
+  conf.coadvisor = fieldConfidence(Boolean(tp?.coadvisor), /\bcoorientador|a\b/i.test(tp?.coadvisor || ""));
+  conf.course = fieldConfidence(Boolean(tp?.institution || cover?.institution), true);
+  conf.location = fieldConfidence(
+    Boolean(tp?.city || cover?.city),
+    /lavras/i.test((tp?.city || cover?.city || "")),
+  );
+  conf.year = fieldConfidence(
+    Boolean(tp?.year || cover?.year),
+    /^(?:19|20)\d{2}$/.test((tp?.year || cover?.year || "").trim()),
+  );
+
   const resLevel = mapDiagnosticConfidence(pretextual.resumo?.confidence);
-  if (pretextual.resumo?.text && resLevel) {
-    conf.resumo = resLevel;
-    conf.palavrasChave = resLevel;
+  if (pretextual.resumo?.text) {
+    conf.resumo = resLevel ?? "alta";
+    conf.palavrasChave = resLevel ?? "alta";
   }
   const absLevel = mapDiagnosticConfidence(pretextual.abstract?.confidence);
-  if (pretextual.abstract?.text && absLevel) {
-    conf.abstractText = absLevel;
-    conf.keywords = absLevel;
+  if (pretextual.abstract?.text) {
+    conf.abstractText = absLevel ?? "alta";
+    conf.keywords = absLevel ?? "alta";
   }
   return conf;
 }
