@@ -64,6 +64,7 @@ export const QUANTITATIVE_METRICS = [
   "inlineDrawings",
   "anchoredDrawings",
   "mediaFiles",
+  "externalImageRelationships",
   "brokenRelationships",
   "orphanMedia",
   "duplicateMedia",
@@ -117,16 +118,18 @@ function reconstructFields(docXml) {
   };
   if (!docXml) return result;
 
-  const begin = count(/<w:fldChar\b[^>]*\bw:fldCharType="begin"/g, docXml);
-  const sep = count(/<w:fldChar\b[^>]*\bw:fldCharType="separate"/g, docXml);
-  const end = count(/<w:fldChar\b[^>]*\bw:fldCharType="end"/g, docXml);
+  const begin = count(/<w:fldChar\b[^>]*?w:fldCharType="begin"[^>]*>/g, docXml);
+  const sep = count(/<w:fldChar\b[^>]*?w:fldCharType="separate"[^>]*>/g, docXml);
+  const end = count(/<w:fldChar\b[^>]*?w:fldCharType="end"[^>]*>/g, docXml);
   result.fldCharBeginCount = begin;
   result.fldCharSeparateCount = sep;
   result.fldCharEndCount = end;
 
   // State machine across the document (preserving order).
+  // Non-greedy [^>]*? so the fldCharType is captured even when other
+  // attributes (e.g. w:dirty) appear after it.
   const tokens = [...docXml.matchAll(
-    /<w:fldChar\b[^>]*\bw:fldCharType="(begin|separate|end)"\s*\/?>|<w:instrText[^>]*>([\s\S]*?)<\/w:instrText>/g
+    /<w:fldChar\b[^>]*?w:fldCharType="(begin|separate|end)"[^>]*?\/?>|<w:instrText[^>]*>([\s\S]*?)<\/w:instrText>/g
   )];
   let building = false;
   let acc = "";
@@ -503,7 +506,15 @@ export async function auditDocx(buffer, options = {}) {
   }
 
   // ---- Relationships (body + headers + footers) ----
-  const relAnalyses = await analyzeRelationships(zip, names, docXml, "body", null, null, minImageBytes);
+  const relAnalyses = await analyzeRelationships(
+    zip,
+    names,
+    docXml,
+    "body",
+    "word/document.xml",
+    "word/_rels/document.xml.rels",
+    minImageBytes
+  );
 
   // headers / footers
   const headerRels = [];
@@ -525,38 +536,58 @@ export async function auditDocx(buffer, options = {}) {
     }
   }
 
-  // Aggregate media from body + headers + footers
-  const allMedia = new Map(); // relName -> media info
-  const registerMedia = (m) => allMedia.set(m.name, m);
-  relAnalyses.media.forEach(registerMedia);
-  headerRels.forEach((h) => h.media.forEach(registerMedia));
-  footerRels.forEach((f) => f.media.forEach(registerMedia));
+  // Aggregate ALL physical media from body + headers + footers, keyed by
+  // zipPath, so orphan files (referenced by no relationship) are still listed.
+  // The same physical file referenced by multiple relationships counts once.
+  const allMedia = new Map(); // zipPath -> media info
+  const registerMedia = (info) => {
+    if (info && info.zipPath && !allMedia.has(info.zipPath)) {
+      allMedia.set(info.zipPath, {
+        name: info.name,
+        zipPath: info.zipPath,
+        sizeBytes: info.sizeBytes,
+        sha256: info.sha256,
+        format: info.format,
+        dimensions: info.dimensions,
+        pngHeaderError: info.pngHeaderError || null,
+        small: info.small,
+      });
+    }
+  };
+  [relAnalyses, ...headerRels, ...footerRels].forEach((part) => {
+    const pm = part.physicalMedia;
+    if (pm) for (const info of pm.values()) registerMedia(info);
+    // Also register media referenced by relationships that live outside word/media.
+    if (part && Array.isArray(part.media)) {
+      for (const info of part.media) registerMedia(info);
+    }
+  });
 
-  // Merge relationship analytics
+  // Merge relationship analytics (uniform contract across body/headers/footers)
   const embeddedImageRels = [
     ...relAnalyses.embeddedImageRelationships,
-    ...headerRels.flatMap((h) => h.embeddedImageRels),
-    ...footerRels.flatMap((f) => f.embeddedImageRels),
+    ...headerRels.flatMap((h) => h.embeddedImageRelationships || []),
+    ...footerRels.flatMap((f) => f.embeddedImageRelationships || []),
   ];
   const externalImageRels = [
     ...relAnalyses.externalImageRelationships,
-    ...headerRels.flatMap((h) => h.externalImageRels),
-    ...footerRels.flatMap((f) => f.externalImageRels),
+    ...headerRels.flatMap((h) => h.externalImageRelationships || []),
+    ...footerRels.flatMap((f) => f.externalImageRelationships || []),
   ];
   const brokenEmbeddedRels = [
     ...relAnalyses.brokenEmbeddedRelationships,
-    ...headerRels.flatMap((h) => h.brokenEmbeddedRels),
-    ...footerRels.flatMap((f) => f.brokenEmbeddedRels),
+    ...headerRels.flatMap((h) => h.brokenEmbeddedRelationships || []),
+    ...footerRels.flatMap((f) => f.brokenEmbeddedRelationships || []),
   ];
   const unresolvedBlipRefs = [
     ...relAnalyses.unresolvedBlipReferences,
-    ...headerRels.flatMap((h) => h.unresolvedBlipRefs),
-    ...footerRels.flatMap((f) => f.unresolvedBlipRefs),
+    ...headerRels.flatMap((h) => h.unresolvedBlipReferences || []),
+    ...footerRels.flatMap((f) => f.unresolvedBlipReferences || []),
   ];
   const usedRids = new Set([
-    ...relAnalyses.usedRids,
-    ...headerRels.flatMap((h) => h.usedRids),
-    ...footerRels.flatMap((f) => f.usedRids),
+    ...(Array.isArray(relAnalyses.usedRids) ? relAnalyses.usedRids : []),
+    ...headerRels.flatMap((h) => (Array.isArray(h.usedRids) ? h.usedRids : [])),
+    ...footerRels.flatMap((f) => (Array.isArray(f.usedRids) ? f.usedRids : [])),
   ]);
 
   manifest.body = relAnalyses.summary;
@@ -573,23 +604,22 @@ export async function auditDocx(buffer, options = {}) {
   manifest.unusedImageRelationships = embeddedImageRels
     .filter((r) => !usedRids.has(r.id))
     .map((r) => r.id);
-  manifest.brokenEmbeddedRelationships = brokenEmbeddedRels.length;
-  manifest.brokenRelationships = brokenEmbeddedRels.length;
+  // Broken relationships: keep the list AND the count as separate fields.
+  manifest.brokenEmbeddedRelationships = brokenEmbeddedRels;
+  manifest.brokenEmbeddedRelationshipCount = brokenEmbeddedRels.length;
+  manifest.brokenRelationships = manifest.brokenEmbeddedRelationshipCount;
   manifest.unresolvedBlipReferences = unresolvedBlipRefs;
 
-  // Orphan media across body + headers + footers
-  const referencedTargets = new Set();
-  for (const r of embeddedImageRels) {
-    let t = r.target.replace(/\\/g, "/");
-    if (!t.startsWith("/")) t = "word/" + t.replace(/^\.\//, "");
-    referencedTargets.add(t);
-  }
+  // Orphan media: physical media not referenced by any embedded relationship.
+  const referencedEmbeddedMediaPaths = new Set(
+    embeddedImageRels.map((r) => r.resolvedTarget).filter(Boolean)
+  );
   manifest.orphanMedia = [...allMedia.values()]
-    .filter((m) => !referencedTargets.has("word/" + m.name))
+    .filter((m) => !referencedEmbeddedMediaPaths.has(m.zipPath))
     .map((m) => m.name);
   manifest.orphanMediaCount = manifest.orphanMedia.length;
 
-  // Duplicate media by sha256
+  // Duplicate media by sha256 (two different physical files, same hash)
   const byHash = {};
   for (const m of allMedia.values()) {
     (byHash[m.sha256] ||= []).push(m.name);
@@ -613,6 +643,14 @@ export async function auditDocx(buffer, options = {}) {
         code: m.dimensions.error,
         message: `Imagem ${m.name}: ${m.dimensions.error}`,
       });
+    }
+  }
+
+  // Relationship-level warnings (e.g. internal image outside word/media).
+  const relWarningSources = [relAnalyses, ...headerRels, ...footerRels];
+  for (const part of relWarningSources) {
+    if (part && Array.isArray(part.relationshipWarnings)) {
+      for (const w of part.relationshipWarnings) manifest.issues.warnings.push(w);
     }
   }
 
@@ -645,7 +683,124 @@ function buildSequence(paras, getText, origin, markers) {
   return out;
 }
 
+/**
+ * Resolve an internal OOXML relationship target relative to the source part.
+ * source: e.g. "word/document.xml", "word/header1.xml"
+ * target: e.g. "media/image1.png", "./media/image1.png", "../media/image1.png",
+ *              "media\\image2.png" (backslashes)
+ * Returns a normalized package-relative path (always with forward slashes),
+ * e.g. "word/media/image1.png". Returns null for external/absolute targets.
+ */
+export function resolveTarget(source, target) {
+  if (!target) return null;
+  let t = String(target).replace(/\\/g, "/").trim();
+  if (!t) return null;
+  // External indicators: absolute URI with scheme, or explicit External mode
+  // handled by caller; here we just attempt to normalize internal paths.
+  const isAbsoluteExternal =
+    /^[a-z][a-z0-9+.-]*:/i.test(t) || t.startsWith("/");
+  if (/^(https?:|mailto:|file:)/i.test(t) || isAbsoluteExternal) {
+    // Do not normalize absolute/external targets as package paths.
+    return null;
+  }
+  const sourceDir = path.posix.dirname(source); // e.g. "word"
+  const joined = path.posix.normalize(path.posix.join(sourceDir, t)); // "word/media/image1.png"
+  // Reject paths that escape the package root.
+  if (!joined || joined.startsWith("..") || joined.startsWith("/")) {
+    return null;
+  }
+  return joined;
+}
+
+/**
+ * Build a physical inventory of all files under word/media (independent of relationships).
+ * Returns a Map: zipPath -> media info. Also exposes names for fast lookup.
+ */
+async function inventoryPhysicalMedia(zip, minImageBytes = 0) {
+  const inventory = new Map();
+  const mediaFolder = zip.folder("word/media");
+  if (!mediaFolder) return inventory;
+  for (const [key, entry] of Object.entries(mediaFolder.files)) {
+    if (entry.dir) continue;
+    if (!/^word\/media\//i.test(key)) continue;
+    const relName = key.replace(/^word\//, ""); // e.g. "media/image1.png"
+    let buf;
+    try {
+      buf = await entry.async("nodebuffer");
+    } catch {
+      continue;
+    }
+    if (!Buffer.isBuffer(buf)) continue;
+    const lower = relName.toLowerCase();
+    const dims = parseImageSize(buf, lower);
+    const isPng = /\.png$/i.test(lower);
+    const headerError = isPng ? dims && dims.error ? dims.error : null : null;
+    inventory.set(key, {
+      name: relName,
+      zipPath: key, // full zip path, e.g. "word/media/image1.png"
+      sizeBytes: buf.length,
+      sha256: sha256(buf),
+      format: imageFormat(lower),
+      dimensions: dims && dims.error ? { error: dims.error } : dims,
+      pngHeaderError: headerError,
+      small: minImageBytes > 0 && buf.length < minImageBytes,
+      _buf: buf,
+    });
+  }
+  return inventory;
+}
+
+/**
+ * Load media info for a referenced internal zip entry (any location).
+ * Returns the media info object, or null if the entry does not exist.
+ * Emits a NONSTANDARD_IMAGE_PART_LOCATION warning via the optional
+ * warningsBucket when the part is outside the canonical word/media folder.
+ */
+async function loadMediaInfoFromZip(zip, zipPath, names, minImageBytes, warningsBucket) {
+  if (!zipPath || !names.includes(zipPath)) return null;
+  const entry = zip.file(zipPath);
+  if (!entry || entry.dir) return null;
+  let buf;
+  try {
+    buf = await entry.async("nodebuffer");
+  } catch {
+    return null;
+  }
+  if (!Buffer.isBuffer(buf)) return null;
+  const relName = zipPath.replace(/^word\//, "");
+  const lower = relName.toLowerCase();
+  const dims = parseImageSize(buf, lower);
+  const isPng = /\.png$/i.test(lower);
+  const pngHeaderError = isPng ? (dims && dims.error ? dims.error : null) : null;
+  const isStandardLocation = /^word\/media\//i.test(zipPath);
+  if (!isStandardLocation && warningsBucket) {
+    warningsBucket.push({
+      code: "NONSTANDARD_IMAGE_PART_LOCATION",
+      message: `Imagem interna fora de word/media: ${zipPath}`,
+    });
+  }
+  return {
+    name: relName,
+    zipPath,
+    sizeBytes: buf.length,
+    sha256: sha256(buf),
+    format: imageFormat(lower),
+    dimensions: dims && dims.error ? { error: dims.error } : dims,
+    pngHeaderError,
+    small: minImageBytes > 0 && buf.length < minImageBytes,
+  };
+}
+
 async function analyzeRelationships(zip, names, xml, origin, partName, relPath, minImageBytes = 0) {
+  const emptySummary = {
+    drawings: 0,
+    inlineDrawings: 0,
+    anchoredDrawings: 0,
+    imageRelationships: 0,
+    embeddedImageRelationships: 0,
+    externalImageRelationships: 0,
+    mediaCount: 0,
+  };
   if (!xml) {
     return {
       embeddedImageRelationships: [],
@@ -654,20 +809,39 @@ async function analyzeRelationships(zip, names, xml, origin, partName, relPath, 
       unresolvedBlipReferences: [],
       usedRids: [],
       media: [],
-      summary: { drawings: 0, inlineDrawings: 0, anchoredDrawings: 0, imageRelationships: 0, embeddedImageRelationships: 0, externalImageRelationships: 0, mediaCount: 0 },
+      summary: emptySummary,
     };
   }
-  const relsXml = relPath && names.includes(relPath) ? await zip.file(relPath).async("string") : null;
+
+  // Physical inventory of word/media (independent of relationships).
+  const physicalMedia = await inventoryPhysicalMedia(zip, minImageBytes);
+  const physicalMediaPaths = new Set(physicalMedia.keys());
+
+  const relsXml =
+    partName && relPath && names.includes(relPath)
+      ? await zip.file(relPath).async("string")
+      : null;
+
   const embeddedImageRels = [];
   const externalImageRels = [];
   const usedRids = new Set();
   const brokenEmbeddedRels = [];
+  const unresolvedEmbeddedReferences = [];
+  const unresolvedLinkedReferences = [];
   const unresolvedBlipRefs = [];
 
-  // Collect r:embed referenced in the XML
-  const embeds = [...xml.matchAll(/r:embed="([^"]+)"/g)].map((m) => m[1]);
-  const links = [...xml.matchAll(/r:link="([^"]+)"/g)].map((m) => m[1]);
+  // Collect r:embed and r:link referenced in the XML.
+  const embeds = [...xml.matchAll(/r:embed="([^"]+)"/g)]
+    .map((m) => m[1])
+    .filter((v) => !!v);
+  const links = [...xml.matchAll(/r:link="([^"]+)"/g)]
+    .map((m) => m[1])
+    .filter((v) => !!v);
   embeds.forEach((r) => usedRids.add(r));
+  links.forEach((r) => usedRids.add(r));
+
+  const embeddedRids = new Set(embeds);
+  const linkedRids = new Set(links);
 
   if (relsXml) {
     const relMatches = [...relsXml.matchAll(/<Relationship\b([^>]*)\/?>/g)];
@@ -679,52 +853,85 @@ async function analyzeRelationships(zip, names, xml, origin, partName, relPath, 
       const targetMode = (attrs.match(/TargetMode="([^"]+)"/) || [])[1] || "Internal";
       const isImage = /image$/i.test(type);
       if (!isImage) continue;
-      // External when TargetMode=External, or target is an absolute external URI
-      // (http/https, scheme:, or absolute path). Otherwise treat as embedded.
+
       const isExternal =
         targetMode === "External" ||
         /^(https?:|mailto:|file:)/i.test(target) ||
         /^[a-z][a-z0-9+.-]*:/i.test(target) ||
         target.startsWith("/");
+
       if (isExternal) {
-        externalImageRels.push({ id, type, target, targetMode, used: usedRids.has(id) });
+        externalImageRels.push({
+          id,
+          type,
+          target,
+          targetMode,
+          used: usedRids.has(id),
+          resolvedTarget: null,
+        });
       } else {
-        embeddedImageRels.push({ id, type, target, targetMode, used: usedRids.has(id) });
+        const resolved = partName ? resolveTarget(partName, target) : null;
+        // Existence considers any internal ZIP entry (incl. outside word/media).
+        const exists = !!resolved && names.includes(resolved);
+        if (!exists) {
+          brokenEmbeddedRels.push({
+            id,
+            target,
+            resolvedTarget: resolved,
+            reason: resolved ? "midia_referenciada_inexistente" : "target_invalido_ou_externo",
+          });
+        }
+        embeddedImageRels.push({
+          id,
+          type,
+          target,
+          targetMode,
+          used: usedRids.has(id),
+          resolvedTarget: resolved,
+        });
       }
     }
   }
 
-  // Resolve embedded media files (load only those actually referenced to limit memory)
+  // Load media info only for referenced embedded relationships (single load per physical file).
   const media = [];
-  const mediaFolder = zip.folder("word/media");
+  const loadedZipPaths = new Set();
+  const relationshipWarnings = [];
   for (const r of embeddedImageRels) {
-    let target = r.target.replace(/\\/g, "/");
-    if (!target.startsWith("/")) target = "word/" + target.replace(/^\.\//, "");
-    // mediaFolder.files keys are full paths (e.g. "word/media/img1.png")
-    const entry = mediaFolder && mediaFolder.files[target];
-    const exists = !!entry && entry.dir === false;
-    if (!exists) {
-      brokenEmbeddedRels.push({ id: r.id, target: r.target, reason: "midia_referenciada_inexistente" });
-      continue;
+    const zipPath = r.resolvedTarget;
+    if (!zipPath) continue;
+    if (loadedZipPaths.has(zipPath)) continue; // don't double-load the same physical file
+    let info = physicalMedia.get(zipPath);
+    if (!info) {
+      // Internal image located outside the canonical word/media folder.
+      info = await loadMediaInfoFromZip(zip, zipPath, names, minImageBytes, relationshipWarnings);
     }
-    const buf = await entry.async("nodebuffer");
-    const relName = target.replace(/^word\//, "");
-    const dims = parseImageSize(buf, relName.toLowerCase());
+    if (!info) continue;
+    loadedZipPaths.add(zipPath);
     media.push({
-      name: relName,
-      sizeBytes: buf.length,
-      sha256: sha256(buf),
-      format: imageFormat(relName.toLowerCase()),
-      dimensions: dims && dims.error ? { error: dims.error } : dims,
-      small: minImageBytes > 0 && buf.length < minImageBytes,
+      name: info.name,
+      zipPath: info.zipPath,
+      sizeBytes: info.sizeBytes,
+      sha256: info.sha256,
+      format: info.format,
+      dimensions: info.dimensions,
+      pngHeaderError: info.pngHeaderError || null,
+      small: info.small,
     });
   }
 
-  // unresolved blip references (r:embed without relationship)
+  // Unresolved references: referenced id has no matching relationship.
+  const relIds = new Set([
+    ...embeddedImageRels.map((r) => r.id),
+    ...externalImageRels.map((r) => r.id),
+  ]);
   for (const r of embeds) {
-    const found = embeddedImageRels.some((x) => x.id === r) || externalImageRels.some((x) => x.id === r);
-    if (!found) unresolvedBlipRefs.push(r);
+    if (!relIds.has(r)) unresolvedEmbeddedReferences.push(r);
   }
+  for (const r of links) {
+    if (!relIds.has(r)) unresolvedLinkedReferences.push(r);
+  }
+  unresolvedBlipRefs.push(...unresolvedEmbeddedReferences, ...unresolvedLinkedReferences);
 
   const summary = {
     drawings: count(/<w:drawing>/g, xml),
@@ -740,9 +947,14 @@ async function analyzeRelationships(zip, names, xml, origin, partName, relPath, 
     embeddedImageRelationships: embeddedImageRels,
     externalImageRelationships: externalImageRels,
     brokenEmbeddedRelationships: brokenEmbeddedRels,
+    unresolvedEmbeddedReferences,
+    unresolvedLinkedReferences,
     unresolvedBlipReferences: unresolvedBlipRefs,
     usedRids: [...usedRids],
     media,
+    physicalMedia,
+    physicalMediaPaths,
+    relationshipWarnings,
     summary,
   };
 }
@@ -800,7 +1012,7 @@ export function evaluateManifest(manifest, profile = "general", expectRaw = {}) 
       inlineDrawings: manifest.wpInline,
       anchoredDrawings: manifest.wpAnchor,
       mediaFiles: manifest.mediaCount,
-      brokenRelationships: manifest.brokenEmbeddedRelationships,
+      brokenRelationships: manifest.brokenEmbeddedRelationshipCount,
       orphanMedia: manifest.orphanMediaCount,
       duplicateMedia: manifest.duplicateMediaCount,
       smallImages: manifest.smallImagesCount,

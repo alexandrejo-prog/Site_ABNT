@@ -179,6 +179,20 @@ O manifesto distingue `embeddedImageRelationships`, `externalImageRelationships`
 ou URI absoluta) é registrada separadamente e **reprovada por padrão** (DOCX
 autocontido). `r:link` é tratado como relação externa, não como arquivo ausente.
 
+Contrato de relações quebradas: `brokenEmbeddedRelationships` é a **lista detalhada**
+(array de `{id, target, resolvedTarget, reason}`); `brokenEmbeddedRelationshipCount`
+é a **quantidade numérica**; `brokenRelationships` replica a quantidade para
+compatibilidade de métricas. A métrica de avaliação e a saída da CLI (`metrics.brokenRelationships`)
+usam a quantidade, nunca o array.
+
+Imagens internas fora de `word/media/**` (por exemplo `media/f.png`) não são
+tratadas como relação quebrada quando o arquivo existe no pacote: são registradas
+como mídia interna referenciada (tamanho, hash, formato, dimensões) e recebem o
+warning informativo `NONSTANDARD_IMAGE_PART_LOCATION`. Apenas um perfil que
+decida rejeitar explicitamente essa localização deve reprová-las; por padrão a
+auditoria aceita e apenas emite o aviso. O mesmo arquivo físico nunca é carregado
+ou hasheado mais de uma vez.
+
 ## Proteção ZIP
 
 Limites configuráveis (padrão): 10.000 entradas; 500 MB descompactados; 100 MB por

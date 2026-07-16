@@ -181,7 +181,7 @@ function main() {
           markerCount: manifest.markerCount,
           pagesSections: manifest.sections,
           externalImageRelationships: manifest.externalImageRelationships,
-          brokenRelationships: manifest.brokenEmbeddedRelationships,
+          brokenRelationships: manifest.brokenEmbeddedRelationshipCount,
           orphanMediaCount: manifest.orphanMediaCount,
           duplicateMediaCount: manifest.duplicateMediaCount,
         },
@@ -205,7 +205,7 @@ function main() {
       console.error(`Perfil: ${profile}`);
       console.error(`Paragrafos: ${manifest.paragraphs} | Desenhos: ${manifest.drawing} | Imagens: ${manifest.mediaCount}`);
       console.error(`Tabelas: ${manifest.tables} | Bookmarks: ${manifest.bookmarkStart}/${manifest.bookmarkEnd} | PAGEREF: ${manifest.pagerefFields} | TOC: ${manifest.tocFields}`);
-      console.error(`Marcadores: ${manifest.markerCount} | Secoes: ${manifest.sections} | Externas: ${manifest.externalImageRelationships} | Quebradas: ${manifest.brokenEmbeddedRelationships} | Orfas: ${manifest.orphanMediaCount}`);
+      console.error(`Marcadores: ${manifest.markerCount} | Secoes: ${manifest.sections} | Externas: ${manifest.externalImageRelationships} | Quebradas: ${manifest.brokenEmbeddedRelationshipCount} | Orfas: ${manifest.orphanMediaCount}`);
       if (evaluation.failures.length) {
         console.error(`Falhas (${evaluation.failures.length}):`);
         for (const f of evaluation.failures) console.error(`  - [${f.code}] ${f.message}`);

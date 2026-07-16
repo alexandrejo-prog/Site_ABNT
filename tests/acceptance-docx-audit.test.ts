@@ -19,6 +19,7 @@ const {
   evaluateManifest,
   validateExpectSpec,
   parseExpectationsBytes,
+  resolveTarget,
   DEFAULT_MARKER,
 } = core;
 
@@ -130,7 +131,8 @@ describe("Cenários estruturais básicos", () => {
     expect(m.drawing).toBe(1);
     expect(m.blip).toBe(1);
     expect(m.mediaCount).toBe(1);
-    expect(m.brokenEmbeddedRelationships).toBe(0);
+    expect(m.brokenEmbeddedRelationships.length).toBe(0);
+    expect(m.brokenEmbeddedRelationshipCount).toBe(0);
   });
 
   it("5. imagem órfã", async () => {
@@ -214,14 +216,15 @@ describe("Cenários estruturais básicos", () => {
 
   it("12/24/25. TOC fragmentado / PAGEREF fragmentado / fldSimple / campo incompleto", async () => {
     const frag = `<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r>` +
-      `<w:r><w:instrText>TO</w:instrText></w:r><w:r><w:instrText>C \o "1-3"</w:instrText></w:r>` +
+      `<w:r><w:instrText>TO</w:instrText></w:r><w:r><w:instrText>C \\o "1-3"</w:instrText></w:r>` +
       `<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`;
     const m = await auditDocx(await bufOf(minimalParts({ "word/document.xml": DOCUMENT(PAR(frag)) })));
     expect(m.tocFields).toBe(1);
     expect(m.fieldCommands).toContain("TOC \\o \"1-3\"");
+    expect(m.fieldCommands[0]).toBe("TOC \\o \"1-3\"");
 
     const fragPr = `<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r>` +
-      `<w:r><w:instrText>PAGE</w:instrText></w:r><w:r><w:instrText>REF PDFBM001 \h</w:instrText></w:r>` +
+      `<w:r><w:instrText>PAGE</w:instrText></w:r><w:r><w:instrText>REF PDFBM001 \\h</w:instrText></w:r>` +
       `<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`;
     const m2 = await auditDocx(await bufOf(minimalParts({ "word/document.xml": DOCUMENT(PAR(fragPr)) })));
     expect(m2.pagerefFields).toBe(1);
@@ -230,7 +233,7 @@ describe("Cenários estruturais básicos", () => {
     const m3 = await auditDocx(await bufOf(minimalParts({ "word/document.xml": DOCUMENT(fsimple) })));
     expect(m3.hyperlinkFields).toBe(1);
 
-    const incomplete = `<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText>TOC \o</w:instrText></w:r></w:p>`;
+    const incomplete = `<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText>TOC \\o</w:instrText></w:r></w:p>`;
     const m4 = await auditDocx(await bufOf(minimalParts({ "word/document.xml": DOCUMENT(PAR(incomplete)) })));
     expect(m4.incompleteCommands).toBeGreaterThan(0);
   });
@@ -329,7 +332,8 @@ describe("Cenários estruturais básicos", () => {
     expect(m.footers.length).toBe(1);
     expect(m.headers[0].drawings).toBe(1);
     expect(m.footers[0].drawings).toBe(1);
-    expect(m.brokenEmbeddedRelationships).toBeGreaterThan(0);
+    expect(m.brokenEmbeddedRelationships.length).toBeGreaterThan(0);
+    expect(m.brokenEmbeddedRelationshipCount).toBeGreaterThan(0);
   });
 
   it("sequência com múltiplos desenhos no mesmo parágrafo", async () => {
@@ -446,7 +450,7 @@ describe("API uniforme de expectativas", () => {
   });
 
   it("24/25. TOC fragmentado e PAGEREF fragmentado produzem 1 comando", async () => {
-    const frag = `<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText>TO</w:instrText></w:r><w:r><w:instrText>C \o "1-3"</w:instrText></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`;
+    const frag = `<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText>TO</w:instrText></w:r><w:r><w:instrText>C \\o "1-3"</w:instrText></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`;
     const m = await auditDocx(await bufOf(minimalParts({ "word/document.xml": DOCUMENT(PAR(frag)) })));
     expect(m.tocFields).toBe(1);
   });
@@ -553,5 +557,213 @@ describe("CLI (subprocesso, sem Word)", () => {
     fs.writeFileSync(expPath, Buffer.from(Uint8Array.from([0xff, 0xfe, 0x7b])));
     const code = runCli(["--docx", docxPath, "--expect", expPath, "--profile", "pdf-text-draft"], workDir);
     expect(code).toBe(6);
+  });
+
+  it("5. metrics.brokenRelationships é número (não array)", async () => {
+    const docxPath = path.join(workDir, "br.docx");
+    fs.writeFileSync(docxPath, await buildDocx(minimalParts()));
+    const outPath = path.join(workDir, "audit-br.json");
+    const code = runCli(["--docx", docxPath, "--profile", "pdf-text-draft", "--output", outPath], workDir);
+    expect(code).toBe(0);
+    const raw = fs.readFileSync(outPath, "utf8");
+    const parsed = JSON.parse(raw);
+    expect(typeof parsed.metrics.brokenRelationships).toBe("number");
+    expect(Array.isArray(parsed.metrics.brokenRelationships)).toBe(false);
+    expect(parsed.metrics.brokenRelationships).toBe(0);
+  });
+});
+
+describe("14. reforço de resolução de targets e relacionamentos", () => {
+  it("body carrega document.xml.rels (não null)", async () => {
+    const m = await auditDocx(await bufOf(minimalParts({
+      "word/document.xml": DOCUMENT(PAR(DRAW("rId1"))),
+      "word/_rels/document.xml.rels": relsXml([{ id: "rId1", type: IMG_TYPE, target: "media/a.png" }]),
+    }, { "a.png": png() })));
+    expect(m.embeddedImageRelationships).toBe(1);
+    expect(m.mediaCount).toBe(1);
+  });
+
+  it("relação de header carrega o rel correto (word/_rels/header1.xml.rels)", async () => {
+    const hRels = relsXml([{ id: "rIdH1", type: IMG_TYPE, target: "media/h.png" }]);
+    const files = minimalParts(
+      { "word/header1.xml": "<w:hdr xmlns:w=\"http://w\"><w:p><w:r><w:drawing><wp:inline/></w:drawing></w:r></w:p></w:hdr>" },
+      { "h.png": png() }
+    );
+    files["word/_rels/header1.xml.rels"] = hRels;
+    const m = await auditDocx(await bufOf(files));
+    expect(m.headers[0].embeddedImageRelationships).toBe(1);
+    expect(m.headers[0].mediaCount).toBe(1);
+  });
+
+  it("relação de footer carrega o rel correto (word/_rels/footer1.xml.rels)", async () => {
+    const fRels = relsXml([{ id: "rIdF1", type: IMG_TYPE, target: "media/f.png" }]);
+    const files = minimalParts(
+      { "word/footer1.xml": "<w:ftr xmlns:w=\"http://w\"><w:p><w:r><w:drawing><wp:inline/></w:drawing></w:r></w:p></w:ftr>" },
+      { "f.png": png() }
+    );
+    files["word/_rels/footer1.xml.rels"] = fRels;
+    const m = await auditDocx(await bufOf(files));
+    expect(m.footers[0].embeddedImageRelationships).toBe(1);
+  });
+
+  it("target 'media/a.png', './media/a.png' e barras invertidas resolvem para word/media/a.png", async () => {
+    for (const target of ["media/a.png", "./media/a.png", "media\\a.png"]) {
+      const m = await auditDocx(await bufOf(minimalParts({
+        "word/document.xml": DOCUMENT(PAR(DRAW("rId1"))),
+        "word/_rels/document.xml.rels": relsXml([{ id: "rId1", type: IMG_TYPE, target }]),
+      }, { "a.png": png() })));
+      expect(m.embeddedImageRelationships).toBe(1);
+      expect(m.mediaCount).toBe(1);
+    }
+  });
+
+  it("target relativo normalizado não gera relação quebrada", async () => {
+    const m = await auditDocx(await bufOf(minimalParts({
+      "word/document.xml": DOCUMENT(PAR(DRAW("rId1"))),
+      "word/_rels/document.xml.rels": relsXml([{ id: "rId1", type: IMG_TYPE, target: "../word/media/a.png" }]),
+    }, { "a.png": png() })));
+    expect(m.embeddedImageRelationships).toBe(1);
+    expect(m.brokenEmbeddedRelationshipCount).toBe(0);
+  });
+
+  it("r:link conta como utilizado e aprova quando allowExternalImages", async () => {
+    const files = minimalParts({
+      "word/document.xml": DOCUMENT(PAR(`<w:r><w:drawing><wp:inline><a:graphic xmlns:a="http://x"><a:graphicData><pic:pic xmlns:pic="http://y"><pic:blipFill><a:blip r:link="rIdLink" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/></pic:blipFill></pic:pic></a:graphicData></wp:inline></w:drawing></w:r>`)),
+      "word/_rels/document.xml.rels": relsXml([
+        { id: "rIdLink", type: IMG_TYPE, target: "media/linked.png", mode: "External" },
+      ]),
+    });
+    const m = await auditDocx(await bufOf(files));
+    expect(m.usedImageRelationships).toBe(1);
+    expect(m.externalImageRelationships).toBe(1);
+    expect(evaluateManifest(m, "pdf-text-draft", { expect: { allowExternalImages: true } }).approved).toBe(true);
+  });
+
+  it("relação externa não procura arquivo ZIP", async () => {
+    const files = minimalParts({
+      "word/document.xml": DOCUMENT(PAR(DRAW("rIdExt"))),
+      "word/_rels/document.xml.rels": relsXml([
+        { id: "rIdExt", type: IMG_TYPE, target: "https://example.com/img.png", mode: "External" },
+      ]),
+    }, { "img.png": png() });
+    const m = await auditDocx(await bufOf(files));
+    expect(m.externalImageRelationships).toBe(1);
+    expect(m.brokenEmbeddedRelationshipCount).toBe(0);
+  });
+
+  it("arquivo físico órfão é listado", async () => {
+    const m = await auditDocx(await bufOf(minimalParts({}, { "orphan.png": png() })));
+    expect(m.orphanMedia).toContain("media/orphan.png");
+    expect(m.orphanMediaCount).toBe(1);
+  });
+
+  it("mídia usada apenas no header não é órfã", async () => {
+    const hRels = relsXml([{ id: "rIdH1", type: IMG_TYPE, target: "media/h.png" }]);
+    const files = minimalParts(
+      { "word/header1.xml": "<w:hdr xmlns:w=\"http://w\"><w:p><w:r><w:drawing><wp:inline/></w:drawing></w:r></w:p></w:hdr>" },
+      { "h.png": png() }
+    );
+    files["word/_rels/header1.xml.rels"] = hRels;
+    const m = await auditDocx(await bufOf(files));
+    expect(m.orphanMedia).not.toContain("media/h.png");
+  });
+
+  it("duas relações para um arquivo = 2 relações e 1 mídia", async () => {
+    const m = await auditDocx(await bufOf(minimalParts({
+      "word/document.xml": DOCUMENT(PAR(DRAW("rId1")) + PAR(DRAW("rId2"))),
+      "word/_rels/document.xml.rels": relsXml([
+        { id: "rId1", type: IMG_TYPE, target: "media/a.png" },
+        { id: "rId2", type: IMG_TYPE, target: "media/a.png" },
+      ]),
+    }, { "a.png": png() })));
+    expect(m.embeddedImageRelationships).toBe(2);
+    expect(m.mediaCount).toBe(1);
+  });
+
+  it("dois arquivos com mesmo SHA-256 = duplicação", async () => {
+    const same = png();
+    const m = await auditDocx(await bufOf(minimalParts({
+      "word/document.xml": DOCUMENT(PAR(DRAW("rId1")) + PAR(DRAW("rId2"))),
+      "word/_rels/document.xml.rels": relsXml([
+        { id: "rId1", type: IMG_TYPE, target: "media/a.png" },
+        { id: "rId2", type: IMG_TYPE, target: "media/b.png" },
+      ]),
+    }, { "a.png": same, "b.png": same })));
+    expect(m.duplicateMediaCount).toBe(1);
+  });
+
+  it("relação quebrada mantém lista e count", async () => {
+    const m = await auditDocx(await bufOf(minimalParts({
+      "word/document.xml": DOCUMENT(PAR(DRAW("rId9"))),
+      "word/_rels/document.xml.rels": relsXml([{ id: "rId9", type: IMG_TYPE, target: "media/missing.png" }]),
+    })));
+    expect(Array.isArray(m.brokenEmbeddedRelationships)).toBe(true);
+    expect(m.brokenEmbeddedRelationships.length).toBeGreaterThan(0);
+    expect(m.brokenEmbeddedRelationshipCount).toBe(m.brokenEmbeddedRelationships.length);
+  });
+
+  it("nenhum array agregado contém undefined", async () => {
+    const m = await auditDocx(await bufOf(minimalParts({
+      "word/document.xml": DOCUMENT(PAR(DRAW("rId1"))),
+      "word/_rels/document.xml.rels": relsXml([{ id: "rId1", type: IMG_TYPE, target: "media/a.png" }]),
+    }, { "a.png": png() })));
+    const arrays = [
+      m.embeddedImageRelationshipList,
+      m.externalImageRelationshipList,
+      m.brokenEmbeddedRelationships,
+      m.orphanMedia,
+    ];
+    for (const arr of arrays) {
+      if (arr) expect(arr.every((x: any) => x !== undefined)).toBe(true);
+    }
+  });
+
+  it("comando TOC fragmentado preserva \\o", async () => {
+    const frag = `<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r>` +
+      `<w:r><w:instrText>TO</w:instrText></w:r><w:r><w:instrText>C \\o "1-3"</w:instrText></w:r>` +
+      `<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`;
+    const m = await auditDocx(await bufOf(minimalParts({ "word/document.xml": DOCUMENT(PAR(frag)) })));
+    expect(m.fieldCommands[0]).toBe("TOC \\o \"1-3\"");
+  });
+});
+
+describe("3. resolução de targets relativos (URI relativa)", () => {
+  it("resolve varios casos relativos corretamente", () => {
+    expect(resolveTarget("word/document.xml", "media/a.png")).toBe("word/media/a.png");
+    expect(resolveTarget("word/document.xml", "./media/a.png")).toBe("word/media/a.png");
+    expect(resolveTarget("word/header1.xml", "media/h.png")).toBe("word/media/h.png");
+    expect(resolveTarget("word/footer2.xml", "media/f.png")).toBe("word/media/f.png");
+    // ../media sobe um nível a partir de word/ -> media/f.png (fora de word/)
+    expect(resolveTarget("word/footer2.xml", "../media/f.png")).toBe("media/f.png");
+    // escapa da raiz do pacote -> invalido
+    expect(resolveTarget("word/footer2.xml", "../../escape.png")).toBeNull();
+  });
+
+  it("barras invertidas sao normalizadas", () => {
+    expect(resolveTarget("word/document.xml", "media\\a.png")).toBe("word/media/a.png");
+  });
+
+  it("URLs externas e absolutas nao sao resolvidas como pacote", () => {
+    expect(resolveTarget("word/document.xml", "https://example.com/img.png")).toBeNull();
+    expect(resolveTarget("word/document.xml", "file:///c:/img.png")).toBeNull();
+    expect(resolveTarget("word/document.xml", "/abs/img.png")).toBeNull();
+  });
+});
+
+describe("4. imagem interna fora de word/media", () => {
+  it("relação interna para media/f.png fora de word/media nao e quebrada e gera aviso", async () => {
+    const files = minimalParts({
+      "word/document.xml": DOCUMENT(PAR(DRAW("rId1"))),
+      "word/_rels/document.xml.rels": relsXml([{ id: "rId1", type: IMG_TYPE, target: "../media/f.png" }]),
+    });
+    // coloca a imagem fora de word/media (media/f.png)
+    files["media/f.png"] = png();
+    const m = await auditDocx(await bufOf(files));
+    expect(m.embeddedImageRelationships).toBe(1);
+    expect(m.brokenEmbeddedRelationshipCount).toBe(0);
+    expect(m.mediaCount).toBe(1);
+    expect(m.orphanMediaCount).toBe(0);
+    expect(m.media[0].zipPath).toBe("media/f.png");
+    expect(m.issues.warnings.some((w: any) => w.code === "NONSTANDARD_IMAGE_PART_LOCATION")).toBe(true);
   });
 });
