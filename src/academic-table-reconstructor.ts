@@ -292,7 +292,7 @@ export function reconstructGenericAcademicTable(table: ImportedTable): Reconstru
     headers: normalizedHeaders,
     rows,
     source,
-    warnings: ["Quadro/tabela reconstruÃ­do semanticamente a partir de documento convertido. Revise o layout manualmente."],
+    warnings: ["Quadro/tabela reconstruído semanticamente a partir de documento convertido. Revise o layout manualmente."],
   };
 }
 

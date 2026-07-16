@@ -1187,7 +1187,7 @@ export function detectAcademicFieldsFromStructure(
   ]);
   fields.impactIndicators = collectPreTextualSection(structure.blocks, ["IMPACT INDICATORS"]);
   fields.listaQuadros = cleanPreTextualList(fields.listaQuadros, ["Quadro"]);
-  fields.listaGraficos = cleanPreTextualList(fields.listaGraficos, ["GrÃ¡fico", "Grafico"]);
+  fields.listaGraficos = cleanPreTextualList(fields.listaGraficos, ["Gráfico", "Grafico"]);
   fields.listaTabelas = cleanPreTextualList(fields.listaTabelas, ["Tabela"]);
 
   if (!fields.agradecimentos || !fields.listaQuadros || !fields.listaGraficos || !fields.listaSiglas) {
@@ -1214,21 +1214,21 @@ export function detectAcademicFieldsFromStructure(
     }
   }
   fields.listaQuadros = cleanPreTextualList(fields.listaQuadros, ["Quadro"]);
-  fields.listaGraficos = cleanPreTextualList(fields.listaGraficos, ["GrÃ¡fico", "Grafico"]);
+  fields.listaGraficos = cleanPreTextualList(fields.listaGraficos, ["Gráfico", "Grafico"]);
   fields.listaTabelas = cleanPreTextualList(fields.listaTabelas, ["Tabela"]);
   const convertedPdfLikely = looksLikePdfConvertedDocx(structure, lines);
   if (convertedPdfLikely && (fields.workType === "dissertacao" || fields.workType === "tese")) {
     if (!fields.indicadoresImpacto) {
       fields.indicadoresImpacto = preTextualRecoveryNotice();
-      messages.push("Indicadores de impacto parecem existir no documento convertido, mas nÃ£o foram preservados como texto editÃ¡vel.");
+      messages.push("Indicadores de impacto parecem existir no documento convertido, mas não foram preservados como texto editável.");
     }
     if (!fields.impactIndicators) {
       fields.impactIndicators = preTextualRecoveryNotice();
-      messages.push("Impact indicators parecem existir no documento convertido, mas nÃ£o foram preservados como texto editÃ¡vel.");
+      messages.push("Impact indicators parecem existir no documento convertido, mas não foram preservados como texto editável.");
     }
     if (!fields.listaSiglas) {
       fields.listaSiglas = preTextualRecoveryNotice();
-      messages.push("Lista de siglas parece existir no documento convertido, mas nÃ£o foi preservada como texto editÃ¡vel.");
+      messages.push("Lista de siglas parece existir no documento convertido, mas não foi preservada como texto editável.");
     }
   }
 
