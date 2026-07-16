@@ -23,7 +23,6 @@ describe("final version pending", () => {
     );
     expect(report.hasPendingItems).toBe(true);
     const labels = report.items.map((item) => item.label);
-    console.log("labels:", labels);
     expect(labels).toContain("Orientador(a) provisorio");
     expect(labels).toContain("Ficha catalografica provisoria");
     expect(labels).toContain("Folha de aprovacao provisoria");
@@ -38,7 +37,6 @@ describe("final version pending", () => {
       "# 1 Introducao\nTexto.",
     );
     const labels = report.items.map((item) => item.label);
-    console.log("labels tese:", labels);
     expect(labels).toContain("Ficha catalografica provisoria");
     expect(labels).toContain("Folha de aprovacao provisoria");
   });
