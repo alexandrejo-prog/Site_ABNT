@@ -858,6 +858,48 @@ function pdfPretextualFields(diagnostic: ImportedPdfDiagnostic): Partial<Academi
   return fields;
 }
 
+function mapDiagnosticConfidence(
+  level: "high" | "medium" | "low" | undefined,
+): Confidence | undefined {
+  if (level === "high") return "alta";
+  if (level === "medium") return "media";
+  if (level === "low") return "baixa";
+  return undefined;
+}
+
+function pdfPretextualConfidence(diagnostic: ImportedPdfDiagnostic): Partial<Record<AcademicFieldKey, Confidence>> {
+  const { pretextual } = diagnostic;
+  const conf: Partial<Record<AcademicFieldKey, Confidence>> = {};
+  const pageLevel = mapDiagnosticConfidence(
+    pretextual.titlePage?.confidence || pretextual.cover?.confidence,
+  );
+  const tp = pretextual.titlePage;
+  const cover = pretextual.cover;
+  const setIf = (key: AcademicFieldKey, present: boolean) => {
+    if (present && pageLevel) conf[key] = pageLevel;
+  };
+  setIf("author", Boolean(tp?.author || cover?.author));
+  setIf("title", Boolean(tp?.title || cover?.title));
+  setIf("workNature", Boolean(tp?.natureText));
+  setIf("program", Boolean(tp?.program));
+  setIf("advisor", Boolean(tp?.advisor));
+  setIf("coadvisor", Boolean(tp?.coadvisor));
+  setIf("course", Boolean(tp?.institution || cover?.institution));
+  setIf("location", Boolean(tp?.city || cover?.city));
+  setIf("year", Boolean(tp?.year || cover?.year));
+  const resLevel = mapDiagnosticConfidence(pretextual.resumo?.confidence);
+  if (pretextual.resumo?.text && resLevel) {
+    conf.resumo = resLevel;
+    conf.palavrasChave = resLevel;
+  }
+  const absLevel = mapDiagnosticConfidence(pretextual.abstract?.confidence);
+  if (pretextual.abstract?.text && absLevel) {
+    conf.abstractText = absLevel;
+    conf.keywords = absLevel;
+  }
+  return conf;
+}
+
 export async function importDocumentFile(file: File): Promise<ImportResult> {
   const extension = file.name.split(".").pop()?.toLowerCase();
   const messages: string[] = [];
@@ -933,8 +975,18 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
       ...normalized.messages,
       ...detected.messages,
     ], "pdf");
+    const seedConfidence = pdfPretextualConfidence(pdfDiagnostic);
+    const confidence = { ...result.confidence };
+    for (const key of Object.keys(seed) as AcademicFieldKey[]) {
+      const value = seed[key] as unknown;
+      const hasValue = typeof value === "string" ? value.trim().length > 0 : Array.isArray(value) ? value.length > 0 : false;
+      if (hasValue && seedConfidence[key]) {
+        confidence[key] = seedConfidence[key] as Confidence;
+      }
+    }
     return {
       ...result,
+      confidence,
       sourceKind: "pdf",
       documentMode: "pdf-diagnostic",
       pdfDiagnostic,

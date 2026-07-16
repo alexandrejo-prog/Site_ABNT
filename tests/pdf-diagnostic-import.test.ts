@@ -197,4 +197,38 @@ describe("importacao diagnostica de PDF", () => {
     const noText = result.pdfDiagnostic?.warnings.some((warning) => /Nenhum texto bruto extraível/i.test(warning));
     expect(noText).toBe(true);
   });
+
+  it("PDF com folha de rosto preenchida propaga confianca para os campos semeados (sem 'nao identificado' indevido)", async () => {
+    const lines = [
+      "UNIVERSIDADE FEDERAL DE LAVRAS",
+      "Trabalho de Conclusao de Curso",
+      "Maria Silva Santos",
+      "Titulo do Trabalho de Conclusao",
+      "Orientador: Prof. Joao Souza",
+      "Lavras",
+      "2024",
+    ];
+    const result = await importDocumentFile(new File([buildSinglePagePdf(lines)], "confianca.pdf", {
+      type: "application/pdf",
+    }));
+
+    expect(result.fields.author).toBe("Maria Silva Santos");
+    expect(result.fields.advisor).toContain("Joao Souza");
+    expect(result.confidence.author).not.toBe("nao-identificado");
+    expect(result.confidence.advisor).not.toBe("nao-identificado");
+    expect(result.confidence.title).not.toBe("nao-identificado");
+    expect(result.confidence.workNature).not.toBe("nao-identificado");
+  });
+
+  it("PDF com pouco texto mantem confianca 'nao-identificado' para campos ausentes (sem confianca falsa)", async () => {
+    const result = await importDocumentFile(new File([buildSinglePagePdf(["Lavras", "2024"])], "pouco-texto-conf.pdf", {
+      type: "application/pdf",
+    }));
+
+    expect(result.fields.author).toBe("");
+    expect(result.fields.title).toBe("");
+    expect(result.confidence.author).toBe("nao-identificado");
+    expect(result.confidence.advisor).toBe("nao-identificado");
+    expect(result.confidence.title).toBe("nao-identificado");
+  });
 });
