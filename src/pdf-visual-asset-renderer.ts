@@ -1,4 +1,4 @@
-﻿import type { PdfTextDraftVisualAsset } from "./pdf-text-draft-contract";
+import type { PdfTextDraftVisualAsset } from "./pdf-text-draft-contract";
 import type { PdfVisualCropGeometry } from "./pdf-visual-crop-geometry";
 
 export type PdfVisualAssetImageType = "image/png" | "image/jpeg";
@@ -117,7 +117,7 @@ async function defaultOpenPdfDocument(data: Uint8Array): Promise<PdfDocumentLike
 }
 
 function defaultCreateCanvas(width: number, height: number): CanvasLike {
-  if (typeof document === "undefined") throw new Error("Canvas indispon├¡vel fora do navegador.");
+  if (typeof document === "undefined") throw new Error("Canvas indisponível fora do navegador.");
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -135,13 +135,13 @@ async function canvasBlob(
   if (canvas.toBlob) {
     return new Promise<Blob>((resolve, reject) => {
       canvas.toBlob?.(
-        (blob) => blob ? resolve(blob) : reject(new Error("N├úo foi poss├¡vel converter o recorte em imagem.")),
+        (blob) => blob ? resolve(blob) : reject(new Error("Não foi possível converter o recorte em imagem.")),
         imageType,
         imageType === "image/jpeg" ? jpegQuality : undefined,
       );
     });
   }
-  throw new Error("O canvas n├úo oferece convers├úo para Blob.");
+  throw new Error("O canvas não oferece conversão para Blob.");
 }
 
 function releaseCanvas(canvas: CanvasLike): void {
@@ -261,7 +261,7 @@ export async function renderPdfVisualAssets(
   const sorted = sortCrops(crops);
   const selected = sorted.slice(0, maxAssets);
   for (const omitted of sorted.slice(maxAssets)) {
-    warnings.push(`Recorte ${pdfVisualCropKey(omitted)} n├úo renderizado: limite de ${maxAssets} ativos atingido.`);
+    warnings.push(`Recorte ${pdfVisualCropKey(omitted)} não renderizado: limite de ${maxAssets} ativos atingido.`);
   }
 
   let pdf: PdfDocumentLike | undefined;
@@ -270,7 +270,7 @@ export async function renderPdfVisualAssets(
     const groups = groupCropsByPage(selected);
     await runWorkers(groups, concurrency, async ([pageNumber, pageCrops]) => {
       if (pageNumber < 1 || pageNumber > pdf!.numPages) {
-        for (const crop of pageCrops) warnings.push(`Recorte ${pdfVisualCropKey(crop)} n├úo renderizado: p├ígina inexistente.`);
+        for (const crop of pageCrops) warnings.push(`Recorte ${pdfVisualCropKey(crop)} não renderizado: página inexistente.`);
         return;
       }
 
@@ -283,7 +283,7 @@ export async function renderPdfVisualAssets(
         const pageHeight = Math.max(1, Math.ceil(viewport.height));
         pageCanvas = createCanvas(pageWidth, pageHeight);
         const pageContext = pageCanvas.getContext("2d");
-        if (!pageContext) throw new Error("Contexto 2D indispon├¡vel.");
+        if (!pageContext) throw new Error("Contexto 2D indisponível.");
         await page.render({ canvasContext: pageContext, viewport }).promise;
 
         for (const crop of pageCrops) {
@@ -293,20 +293,20 @@ export async function renderPdfVisualAssets(
             continue;
           }
           if (!validNormalizedCrop(crop)) {
-            warnings.push(`Recorte ${key} n├úo renderizado: geometria normalizada inv├ílida.`);
+            warnings.push(`Recorte ${key} não renderizado: geometria normalizada inválida.`);
             continue;
           }
 
           const source = cropPixels(crop, viewport);
           if (!source) {
-            warnings.push(`Recorte ${key} n├úo renderizado: ├írea vazia.`);
+            warnings.push(`Recorte ${key} não renderizado: área vazia.`);
             continue;
           }
           const output = outputDimensions(source.width, source.height, maxOutputWidth, maxOutputHeight);
           const outputCanvas = createCanvas(output.width, output.height);
           try {
             const outputContext = outputCanvas.getContext("2d");
-            if (!outputContext) throw new Error("Contexto 2D do recorte indispon├¡vel.");
+            if (!outputContext) throw new Error("Contexto 2D do recorte indisponível.");
             outputContext.drawImage(
               pageCanvas,
               source.x,
@@ -326,14 +326,14 @@ export async function renderPdfVisualAssets(
               width: Math.max(1, Math.round(output.width * displayFactor)),
               height: Math.max(1, Math.round(output.height * displayFactor)),
               altText: {
-                title: `Elemento visual da p├ígina ${pageNumber}`,
+                title: `Elemento visual da página ${pageNumber}`,
                 description: `Recorte ${key} do PDF original`,
                 name: key,
               },
             });
           } catch (error) {
             const message = error instanceof Error ? error.message : "falha desconhecida";
-            warnings.push(`Recorte ${key} n├úo renderizado: ${message}`);
+            warnings.push(`Recorte ${key} não renderizado: ${message}`);
           } finally {
             releaseCanvas(outputCanvas);
           }
@@ -342,7 +342,7 @@ export async function renderPdfVisualAssets(
         const message = error instanceof Error ? error.message : "falha desconhecida";
         for (const crop of pageCrops) {
           const key = pdfVisualCropKey(crop);
-          if (!rendered.has(key)) warnings.push(`Recorte ${key} n├úo renderizado: ${message}`);
+          if (!rendered.has(key)) warnings.push(`Recorte ${key} não renderizado: ${message}`);
         }
       } finally {
         page?.cleanup?.();
@@ -351,12 +351,12 @@ export async function renderPdfVisualAssets(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "falha desconhecida";
-    warnings.push(`N├úo foi poss├¡vel abrir o PDF para renderizar os elementos visuais: ${message}`);
+    warnings.push(`Não foi possível abrir o PDF para renderizar os elementos visuais: ${message}`);
   } finally {
     try {
       await pdf?.destroy?.();
     } catch {
-      warnings.push("O documento PDF foi processado, mas a libera├º├úo final de recursos falhou.");
+      warnings.push("O documento PDF foi processado, mas a liberação final de recursos falhou.");
     }
   }
 

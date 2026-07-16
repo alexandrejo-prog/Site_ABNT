@@ -1,4 +1,4 @@
-﻿export interface PdfTextItemDiagnostic {
+export interface PdfTextItemDiagnostic {
   text: string;
   x: number;
   y: number;

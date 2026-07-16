@@ -5,8 +5,6 @@ import {
   AcademicFields,
   Confidence,
   WorkTypeValue,
-  emptyAcademicFields,
-  emptyConfidenceMap,
 } from "./ufla-rules";
 import {
   ImportedBlock,
@@ -769,6 +767,95 @@ export function identifyAcademicFields(
   };
 }
 
+function buildPdfEditorText(diagnostic: ImportedPdfDiagnostic): string {
+  const sections: string[] = [];
+  const { pretextual, reconstruction } = diagnostic;
+
+  if (pretextual.titlePage?.title || pretextual.cover?.title) {
+    sections.push(`# ${pretextual.titlePage?.title || pretextual.cover?.title}`);
+  }
+  if (pretextual.titlePage?.author || pretextual.cover?.author) {
+    sections.push(`**Autor:** ${pretextual.titlePage?.author || pretextual.cover?.author}`);
+  }
+  if (pretextual.titlePage?.natureText) {
+    sections.push(`**Natureza:** ${pretextual.titlePage.natureText}`);
+  }
+  if (pretextual.titlePage?.program) {
+    sections.push(`**Programa:** ${pretextual.titlePage.program}`);
+  }
+  if (pretextual.titlePage?.advisor) {
+    sections.push(`**Orientador:** ${pretextual.titlePage.advisor}`);
+  }
+  if (pretextual.titlePage?.coadvisor) {
+    sections.push(`**Coorientador:** ${pretextual.titlePage.coadvisor}`);
+  }
+  if (pretextual.titlePage?.institution || pretextual.cover?.institution) {
+    sections.push(`**Instituição:** ${pretextual.titlePage?.institution || pretextual.cover?.institution}`);
+  }
+  if (pretextual.titlePage?.city || pretextual.cover?.city) {
+    sections.push(`**Local:** ${pretextual.titlePage?.city || pretextual.cover?.city}`);
+  }
+  if (pretextual.titlePage?.year || pretextual.cover?.year) {
+    sections.push(`**Ano:** ${pretextual.titlePage?.year || pretextual.cover?.year}`);
+  }
+
+  if (pretextual.resumo?.text) {
+    sections.push(`# RESUMO\n\n${pretextual.resumo.text}`);
+    if (pretextual.resumo.keywords) {
+      sections.push(`**Palavras-chave:** ${pretextual.resumo.keywords}`);
+    }
+  }
+  if (pretextual.abstract?.text) {
+    sections.push(`# ABSTRACT\n\n${pretextual.abstract.text}`);
+    if (pretextual.abstract.keywords) {
+      sections.push(`**Keywords:** ${pretextual.abstract.keywords}`);
+    }
+  }
+
+  for (const block of reconstruction.blocks) {
+    const text = block.text.trim();
+    if (!text) continue;
+    if (block.type === "heading") {
+      sections.push(`# ${text}`);
+    } else if (block.type === "list-item") {
+      sections.push(`- ${text}`);
+    } else if (block.type === "caption" || block.type === "source") {
+      sections.push(`_${text}_`);
+    } else {
+      sections.push(text);
+    }
+  }
+
+  return sections.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function pdfPretextualFields(diagnostic: ImportedPdfDiagnostic): Partial<AcademicFields> {
+  const { pretextual } = diagnostic;
+  const fields: Partial<AcademicFields> = {};
+  const title = pretextual.titlePage?.title || pretextual.cover?.title;
+  const author = pretextual.titlePage?.author || pretextual.cover?.author;
+  if (author) fields.author = author;
+  if (title) fields.title = title;
+  if (pretextual.titlePage?.natureText) fields.workNature = pretextual.titlePage.natureText;
+  if (pretextual.titlePage?.program) fields.program = pretextual.titlePage.program;
+  if (pretextual.titlePage?.advisor) fields.advisor = pretextual.titlePage.advisor;
+  if (pretextual.titlePage?.coadvisor) fields.coadvisor = pretextual.titlePage.coadvisor;
+  if (pretextual.titlePage?.institution || pretextual.cover?.institution) {
+    fields.course = pretextual.titlePage?.institution || pretextual.cover?.institution || "";
+  }
+  if (pretextual.titlePage?.city || pretextual.cover?.city) {
+    fields.location = pretextual.titlePage?.city || pretextual.cover?.city || "";
+  }
+  if (pretextual.titlePage?.year || pretextual.cover?.year) {
+    fields.year = pretextual.titlePage?.year || pretextual.cover?.year || "";
+  }
+  if (pretextual.resumo?.text) fields.resumo = pretextual.resumo.text;
+  if (pretextual.resumo?.keywords) fields.palavrasChave = pretextual.resumo.keywords;
+  if (pretextual.abstract?.text) fields.abstractText = pretextual.abstract.text;
+  if (pretextual.abstract?.keywords) fields.keywords = pretextual.abstract.keywords;
+  return fields;
+}
+
 export async function importDocumentFile(file: File): Promise<ImportResult> {
   const extension = file.name.split(".").pop()?.toLowerCase();
   const messages: string[] = [];
@@ -834,17 +921,20 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
 
   if (extension === "pdf") {
     const pdfDiagnostic = await importPdfDiagnostic(file);
+    const editorText = buildPdfEditorText(pdfDiagnostic);
+    const normalized = normalizePlainAcademicText(editorText);
+    const detected = detectAcademicFieldsFromStructure(normalized.structure);
+    const seed = pdfPretextualFields(pdfDiagnostic);
+    const mergedFields = { ...detected.fields, ...seed };
+    const result = buildImportResult(normalized, { ...detected, fields: mergedFields }, [
+      ...pdfDiagnostic.warnings,
+      ...normalized.messages,
+      ...detected.messages,
+    ], "pdf");
     return {
+      ...result,
       sourceKind: "pdf",
       documentMode: "pdf-diagnostic",
-      text: "",
-      editorText: "",
-      fields: emptyAcademicFields(),
-      confidence: emptyConfidenceMap(),
-      messages: pdfDiagnostic.warnings,
-      blocks: [],
-      importedImages: [],
-      importedTables: [],
       pdfDiagnostic,
     };
   }

@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   PdfBodyLayoutMetrics,
   PdfBodyStartDiagnostic,
   PdfHyphenationDiagnostic,
@@ -36,24 +36,24 @@ interface ClassifiedLine extends LineRef {
   layoutRegionId?: string;
 }
 
-const NUMBERED_INTRODUCTION = /^\s*1(?:\.)?\s+INTRODU[C├ç][A├â]O\s*$/iu;
-const UNNUMBERED_INTRODUCTION = /^\s*INTRODU[C├ç][A├â]O\s*$/iu;
-const PRETEXTUAL_MARKER = /^(SUM[├üA]RIO|LISTA DE|RESUMO|ABSTRACT|AGRADECIMENTOS|DEDICAT[├ôO]RIA|FICHA CATALOGR[├üA]FICA)$/iu;
-const CAPTION_RE = /^(Quadro|Tabela|Figura|Gr[├ía]fico|Imagem|Mapa|Ilustra[├ºc][├úa]o)\s+(\d+)\s*[-ÔÇôÔÇö.:]/iu;
+const NUMBERED_INTRODUCTION = /^\s*1(?:\.)?\s+INTRODU[CÇ][AÃ]O\s*$/iu;
+const UNNUMBERED_INTRODUCTION = /^\s*INTRODU[CÇ][AÃ]O\s*$/iu;
+const PRETEXTUAL_MARKER = /^(SUM[ÁA]RIO|LISTA DE|RESUMO|ABSTRACT|AGRADECIMENTOS|DEDICAT[ÓO]RIA|FICHA CATALOGR[ÁA]FICA)$/iu;
+const CAPTION_RE = /^(Quadro|Tabela|Figura|Gr[áa]fico|Imagem|Mapa|Ilustra[çc][ãa]o)\s+(\d+)\s*[-–—.:]/iu;
 const SOURCE_RE = /^Fonte\s*:/iu;
-const LIST_ITEM_RE = /^((?:[a-z]\))|(?:[IVXLCDM]+)\s*[-ÔÇôÔÇö]|[-ÔÇó])\s+/u;
-const HEADING_RE = /^((?:\d+(?:\.\d+)*\.?\s+)?[A-Z├ü├Ç├é├â├ë├è├ì├ô├ö├ò├Ü├£├ç][A-Z├ü├Ç├é├â├ë├è├ì├ô├ö├ò├Ü├£├ç0-9\s:.-]{2,}|REFER[├èE]NCIAS|CONCLUS[├âA]O|CONSIDERA[├çC][├òO]ES FINAIS)$/u;
+const LIST_ITEM_RE = /^((?:[a-z]\))|(?:[IVXLCDM]+)\s*[-–—]|[-•])\s+/u;
+const HEADING_RE = /^((?:\d+(?:\.\d+)*\.?\s+)?[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ0-9\s:.-]{2,}|REFER[ÊE]NCIAS|CONCLUS[ÃA]O|CONSIDERA[ÇC][ÕO]ES FINAIS)$/u;
 const NUMBERED_HEADING_RE = /^\d+(?:\.\d+)*\.?\s+\S.{1,110}$/u;
-const COMPOUND_PREFIX_RE = /(?:^|\s)(p[├│o]s|pr[├®e]|ex|n[├úa]o|rec[├®e]m|vice|t[├®e]cnico|pol[├¡i]tico|hist[├│o]rico)-$/iu;
+const COMPOUND_PREFIX_RE = /(?:^|\s)(p[óo]s|pr[ée]|ex|n[ãa]o|rec[ée]m|vice|t[ée]cnico|pol[íi]tico|hist[óo]rico)-$/iu;
 
 const REFERENCES_SECTION_KEY = "REFERENCIAS";
 const REFERENCES_END_KEYS = ["APENDICE", "APENDICES", "ANEXO", "ANEXOS"];
-const REFERENCE_AUTHOR_RE = /^\p{Lu}[\p{Lu}'ÔÇÖ.\- ]*, [\p{Lu}. ;\-]+/u;
-const REFERENCE_INSTITUTIONAL_RE = /^\p{Lu}[\p{Lu}'ÔÇÖ.\- ]*\.(?:\s|$)/u;
+const REFERENCE_AUTHOR_RE = /^\p{Lu}[\p{Lu}'’.\- ]*, [\p{Lu}. ;\-]+/u;
+const REFERENCE_INSTITUTIONAL_RE = /^\p{Lu}[\p{Lu}'’.\- ]*\.(?:\s|$)/u;
 const REFERENCE_YEAR_FIRST_RE = /^\d{4}\s*[.,]\s*\S/u;
 
 function normalizeSectionKey(text: string): string {
-  return text.normalize("NFD").replace(/[╠Ç-═»]/g, "").toUpperCase().trim();
+  return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().trim();
 }
 
 function isPersonalAuthorStart(text: string): boolean {
@@ -65,23 +65,23 @@ function isInstitutionalStart(text: string): boolean {
 }
 
 function isAllCapsTitleStart(text: string): boolean {
-  if (/[a-z├á-├┐]/.test(text)) return false;
-  if (text.replace(/[^A-Za-z├Ç-├┐]/g, "").length < 4) return false;
+  if (/[a-zà-ÿ]/.test(text)) return false;
+  if (text.replace(/[^A-Za-zÀ-ÿ]/g, "").length < 4) return false;
   if (!/^\p{Lu}/u.test(text.trim())) return false;
   return /\s/.test(text);
 }
 
 function isObviousReferenceContinuation(text: string): boolean {
   const t = text.trim();
-  if (/^[a-z├á-├┐]/u.test(t)) return true;
-  if (/^(?:Bras├¡lia|Rio de Janeiro|S├úo Paulo|Florian├│polis|Belo Horizonte|Curitiba|Salvador|Recife|Porto Alegre|Goi├ónia)\s*:/u.test(t)) return true;
+  if (/^[a-zà-ÿ]/u.test(t)) return true;
+  if (/^(?:Brasília|Rio de Janeiro|São Paulo|Florianópolis|Belo Horizonte|Curitiba|Salvador|Recife|Porto Alegre|Goiânia)\s*:/u.test(t)) return true;
   if (/^v\./u.test(t)) return true;
   if (/^n\./u.test(t)) return true;
   if (/^p\./u.test(t)) return true;
   if (/^doi:/iu.test(t)) return true;
-  if (/^dispon[├¡i]vel em:/iu.test(t)) return true;
+  if (/^dispon[íi]vel em:/iu.test(t)) return true;
   if (/^acesso em:/iu.test(t)) return true;
-  if (/^\d{4}\s*[-ÔÇôÔÇö]\s*\d{0,4}/u.test(t)) return true;
+  if (/^\d{4}\s*[-–—]\s*\d{0,4}/u.test(t)) return true;
   return false;
 }
 
@@ -250,12 +250,12 @@ function isPlausiblePageSequence(entry: LineRef, candidates: LineRef[]): boolean
 }
 
 function pageLooksPretextual(page: PdfPageDiagnostic): boolean {
-  return page.lines.some((line) => PRETEXTUAL_MARKER.test(line.text.trim()) || /SUM[├üA]RIO/i.test(line.text));
+  return page.lines.some((line) => PRETEXTUAL_MARKER.test(line.text.trim()) || /SUM[ÁA]RIO/i.test(line.text));
 }
 
 function pageLooksReferences(page: PdfPageDiagnostic): boolean {
-  return page.lines.some((line) => /^REFER[├èE]NCIAS$/iu.test(line.text.trim()))
-    || page.lines.filter((line) => /^[A-Z├ü├Ç├é├â├ë├è├ì├ô├ö├ò├Ü├£├ç]{2,}[A-Z├ü├Ç├é├â├ë├è├ì├ô├ö├ò├Ü├£├ç\s.,;-]+/.test(line.text.trim())).length >= 4;
+  return page.lines.some((line) => /^REFER[ÊE]NCIAS$/iu.test(line.text.trim()))
+    || page.lines.filter((line) => /^[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ]{2,}[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ\s.,;-]+/.test(line.text.trim())).length >= 4;
 }
 
 function repeatedEdgeRoles(lines: LineRef[]): Map<string, PdfLineRole> {
@@ -304,7 +304,7 @@ function logicalIdFromCaption(text: string, pageNumber: number, key: string, fir
 }
 
 function isContinuationCaption(text: string): boolean {
-  return /\b(continua|continua[├ºc][├úa]o|conclus[├úa]o)\b/iu.test(text);
+  return /\b(continua|continua[çc][ãa]o|conclus[ãa]o)\b/iu.test(text);
 }
 
 function isGraphicLikeKind(kind: PdfLayoutSensitiveRegionDiagnostic["kind"]): boolean {
@@ -405,7 +405,7 @@ export function findLayoutRegions(pages: PdfPageDiagnostic[]): { regions: PdfLay
             && text.length >= 58
             && candidate.left < line.left + 36
             && !/%/.test(text)
-            && !/(discordo|concordo|totalmente|parcialmente|n\/a|afirma[├ºc][├Áo]es)/iu.test(text)
+            && !/(discordo|concordo|totalmente|parcialmente|n\/a|afirma[çc][õo]es)/iu.test(text)
             && !CAPTION_RE.test(text)
             && !SOURCE_RE.test(text);
         });
@@ -572,7 +572,7 @@ export function detectPdfBodyStartContextual(pages: PdfPageDiagnostic[], classif
     const numbered = NUMBERED_INTRODUCTION.test(entry.text);
     const unnumbered = UNNUMBERED_INTRODUCTION.test(entry.text);
     if (!numbered && !unnumbered) continue;
-    if (pageLooksPretextual(entry.page) || entry.page.lines.slice(0, entry.lineIndex).some((line) => /SUM[├üA]RIO/i.test(line.text))) {
+    if (pageLooksPretextual(entry.page) || entry.page.lines.slice(0, entry.lineIndex).some((line) => /SUM[ÁA]RIO/i.test(line.text))) {
       continue;
     }
     if (!bodyLikeAfter(effectiveClassified, index)) continue;
@@ -593,7 +593,7 @@ function terminalPunctuation(text: string): boolean {
 }
 
 function isMixedCase(text: string): boolean {
-  return /[a-z├í├á├ó├ú├®├¬├¡├│├┤├Á├║├╝├º]/u.test(text) && /[A-Z├ü├Ç├é├â├ë├è├ì├ô├ö├ò├Ü├£├ç]/u.test(text);
+  return /[a-záàâãéêíóôõúüç]/u.test(text) && /[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ]/u.test(text);
 }
 
 function lineFontName(entry: LineRef): string {
@@ -637,8 +637,8 @@ function classifyHeadingsWithMetrics(classified: ClassifiedLine[], metrics: PdfB
       && (lineLooksBold(next) || next.line.height >= metrics.probableBodyFontHeight * 1.08);
     const previousIsHeading = previous?.role === "heading";
     const looksLikeSentence = /\s/.test(entry.text)
-      && /^[A-Z├ü├Ç├é├â├ë├è├ì├ô├ö├ò├Ü├£├çA-Z]/u.test(entry.text)
-      && /[a-z├í├á├ó├ú├®├¬├¡├│├┤├Á├║├╝├º]/u.test(entry.text)
+      && /^[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇA-Z]/u.test(entry.text)
+      && /[a-záàâãéêíóôõúüç]/u.test(entry.text)
       && entry.text.length > 32;
     const numbered = NUMBERED_HEADING_RE.test(entry.text);
     const upper = HEADING_RE.test(entry.text);
@@ -732,12 +732,12 @@ function appendLineText(current: string, next: string, entry: ClassifiedLine, hy
   const originalEnd = current.slice(Math.max(0, current.length - 24));
   const nextStart = next.slice(0, 24);
   const previousToken = current.split(/\s+/).pop() ?? current;
-  const lowerNext = /^[a-z├í├á├ó├ú├®├¬├¡├│├┤├Á├║├╝├º]/u.test(next);
-  const digitOrUpper = /(?:\d|[A-Z├ü├Ç├é├â├ë├è├ì├ô├ö├ò├Ü├£├ç])-$/.test(previousToken);
+  const lowerNext = /^[a-záàâãéêíóôõúüç]/u.test(next);
+  const digitOrUpper = /(?:\d|[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ])-$/.test(previousToken);
   const compoundPrefix = COMPOUND_PREFIX_RE.test(previousToken);
   const uncertainPrefix = /(?:^|\s)(inter|intra|multi|semi|super)-$/iu.test(previousToken);
-  // A corre├º├úo dependente de fronteira (composto com hifen) fica bloqueada
-  // quando a jun├º├úo atravessa p├íginas (spec 7).
+  // A correção dependente de fronteira (composto com hifen) fica bloqueada
+  // quando a junção atravessa páginas (spec 7).
   const keepCompound = !acrossPage && shouldKeepHyphenAtJoin(previousToken, next);
   if (keepCompound) {
     hyphenation.push({
@@ -780,9 +780,9 @@ function isHeadingContinuation(previous: ClassifiedLine, next: ClassifiedLine, m
   if (isObviousHeadingText(next.text)) return false;
   if (CAPTION_RE.test(next.text) || SOURCE_RE.test(next.text) || LIST_ITEM_RE.test(next.text)) return false;
   if (terminalPunctuation(previous.text)) return false;
-  // A continua├º├úo deve compartilhar exatamente a fonte do t├¡tulo (ex.: negrito do t├¡tulo
-  // vs. peso regular do par├ígrafo seguinte, que aparece na mesma margem). Linhas sem nome de
-  // fonte expl├¡cito s├úo amb├¡guas e n├úo s├úo unidas (preserva o comportamento anterior).
+  // A continuação deve compartilhar exatamente a fonte do título (ex.: negrito do título
+  // vs. peso regular do parágrafo seguinte, que aparece na mesma margem). Linhas sem nome de
+  // fonte explícito são ambíguas e não são unidas (preserva o comportamento anterior).
   const previousFont = lineFontName(previous);
   const nextFont = lineFontName(next);
   if (!previousFont || !nextFont || previousFont !== nextFont) return false;
@@ -796,8 +796,8 @@ function isHeadingContinuation(previous: ClassifiedLine, next: ClassifiedLine, m
     return true;
   }
 
-  // Continua├º├úo de t├¡tulo segura atravessando quebra de p├ígina: a linha anterior termina
-  // perto do rodap├®, a seguinte come├ºa perto do topo e a margem ├® compat├¡vel.
+  // Continuação de título segura atravessando quebra de página: a linha anterior termina
+  // perto do rodapé, a seguinte começa perto do topo e a margem é compatível.
   const previousNearEnd = previous.relativeBottom >= 0.78;
   const nextNearStart = next.relativeTop <= 0.25;
   const marginCompatible = Math.abs(previous.line.left - next.line.left) <= Math.max(24, metrics.probableFirstLineIndent + 12);
@@ -1019,8 +1019,8 @@ export function reconstructPdfParagraphBlocks(pages: PdfPageDiagnostic[]): PdfTe
     0,
   );
   if (covidOccurrences > 1) {
-    const covidAlertBase = "Poss├¡vel duplica├º├úo textual presente no documento original: COVID-19-19.";
-    const covidAlertWithCount = `Poss├¡vel duplica├º├úo textual presente no documento original: COVID-19-19 (${covidOccurrences} ocorr├¬ncias).`;
+    const covidAlertBase = "Possível duplicação textual presente no documento original: COVID-19-19.";
+    const covidAlertWithCount = `Possível duplicação textual presente no documento original: COVID-19-19 (${covidOccurrences} ocorrências).`;
     const index = alerts.indexOf(covidAlertBase);
     if (index > -1) alerts[index] = covidAlertWithCount;
   }

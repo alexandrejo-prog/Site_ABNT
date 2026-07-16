@@ -1,4 +1,4 @@
-﻿export interface PdfTextAnomalyNormalizationContext {
+export interface PdfTextAnomalyNormalizationContext {
   joinedAcrossLine?: boolean;
   joinedAcrossPage?: boolean;
 }
@@ -39,13 +39,13 @@ export function detectPdfTextAnomalyAlerts(text: string): string[] {
   const covidMatches = text.match(COVID_DUPLICATION_RE);
   if (covidMatches) {
     for (const raw of new Set(covidMatches.map((match) => match))) {
-      alerts.push(`Poss├¡vel duplica├º├úo textual presente no documento original: ${raw}.`);
+      alerts.push(`Possível duplicação textual presente no documento original: ${raw}.`);
     }
   }
   const fusedMatches = text.match(FUSED_COMPOUND_RE);
   if (fusedMatches) {
     for (const raw of new Set(fusedMatches.map((match) => match))) {
-      alerts.push(`Poss├¡vel fus├úo lexical preservada (revis├úo humana): ${raw}.`);
+      alerts.push(`Possível fusão lexical preservada (revisão humana): ${raw}.`);
     }
   }
   return alerts;

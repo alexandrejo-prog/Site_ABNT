@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   PdfBodyLayoutMetrics,
   PdfLayoutSensitiveRegionDiagnostic,
   PdfLineDiagnostic,
@@ -231,7 +231,7 @@ export function computePdfVisualCropGeometry(
       const reasons = [...region.reasons];
       if (isFiniteNumber(page.rotation) && page.rotation !== 0) {
         reasons.push(
-          "Geometria calculada no sistema de coordenadas diagn├│stico; rota├º├úo ser├í tratada pelo renderizador.",
+          "Geometria calculada no sistema de coordenadas diagnóstico; rotação será tratada pelo renderizador.",
         );
       }
 

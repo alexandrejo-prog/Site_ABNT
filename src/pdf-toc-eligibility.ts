@@ -1,4 +1,4 @@
-﻿const TERMINAL_ACADEMIC_HEADING = /^(?:REFER[├èE]NCIAS|CONCLUS[├âA]O|CONSIDERA[├çC][├òO]ES FINAIS|AP[├èE]NDICES?|ANEXOS?)(?:\s+[A-Z0-9├ü├Ç├é├â├ë├è├ì├ô├ö├ò├Ü├£├ç][^.!?;:]*)?$/iu;
+const TERMINAL_ACADEMIC_HEADING = /^(?:REFER[ÊE]NCIAS|CONCLUS[ÃA]O|CONSIDERA[ÇC][ÕO]ES FINAIS|AP[ÊE]NDICES?|ANEXOS?)(?:\s+[A-Z0-9ÁÀÂÃÉÊÍÓÔÕÚÜÇ][^.!?;:]*)?$/iu;
 const NUMBERED_HEADING = /^(\d+(?:\.\d+)*)(?:\.)?\s+(.+)$/u;
 
 function clean(text: string): string {
@@ -14,11 +14,11 @@ export function isPdfTocEligibleHeadingText(text: string): boolean {
   if (!match) return false;
   const title = match[2].trim();
   if (!title || title.length > 160) return false;
-  if (/^[a-z├í├á├ó├ú├®├¬├¡├│├┤├Á├║├╝├º]/u.test(title)) return false;
-  if (!/^[A-Z├ü├Ç├é├â├ë├è├ì├ô├ö├ò├Ü├£├ç]/u.test(title)) return false;
+  if (/^[a-záàâãéêíóôõúüç]/u.test(title)) return false;
+  if (!/^[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ]/u.test(title)) return false;
   if (/[.!?;:]\s*$/u.test(title)) return false;
   if (/\d+(?:[.,]\d+)?\s*%/u.test(title)) return false;
-  if (/^(?:funciona|funcionou|tem|t├¬m|teve|foram|foi|descreve|apresenta|indica|mostra)\b/iu.test(title)) return false;
+  if (/^(?:funciona|funcionou|tem|têm|teve|foram|foi|descreve|apresenta|indica|mostra)\b/iu.test(title)) return false;
   return true;
 }
 

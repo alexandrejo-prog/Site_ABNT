@@ -1,4 +1,4 @@
-﻿import JSZip from "jszip";
+import JSZip from "jszip";
 import { isPdfTocEligibleHeadingText, pdfTocHeadingLevel } from "./pdf-toc-eligibility";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";

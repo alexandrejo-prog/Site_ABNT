@@ -1,4 +1,4 @@
-﻿import type { ImportedPdfDiagnostic, PdfBodyStartDiagnostic, PdfLineDiagnostic, PdfPageDiagnostic, PdfTextItemDiagnostic } from "./imported-pdf-diagnostic";
+import type { ImportedPdfDiagnostic, PdfBodyStartDiagnostic, PdfLineDiagnostic, PdfPageDiagnostic, PdfTextItemDiagnostic } from "./imported-pdf-diagnostic";
 import { detectPdfPretextual } from "./pdf-pretextual-diagnostic";
 import { reconstructPdfParagraphBlocks } from "./pdf-text-reconstruction-diagnostic";
 
@@ -165,8 +165,8 @@ export function buildPdfDiagnosticLines(items: PdfTextItemDiagnostic[], pageNumb
 }
 
 export function detectPdfBodyStart(pages: PdfPageDiagnostic[]): PdfBodyStartDiagnostic {
-  const numberedIntroduction = /^\s*1(?:\.)?\s+INTRODU[C├ç][A├â]O\s*$/iu;
-  const unnumberedIntroduction = /^\s*INTRODU[C├ç][A├â]O\s*$/iu;
+  const numberedIntroduction = /^\s*1(?:\.)?\s+INTRODU[CÇ][AÃ]O\s*$/iu;
+  const unnumberedIntroduction = /^\s*INTRODU[CÇ][AÃ]O\s*$/iu;
 
   for (const page of pages) {
     for (const [lineIndex, line] of page.lines.entries()) {
@@ -184,7 +184,7 @@ export function detectPdfBodyStart(pages: PdfPageDiagnostic[]): PdfBodyStartDiag
 
 export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagnostic> {
   const warnings = [
-    "O PDF foi lido para diagn├│stico. O rascunho DOCX estruturado pode ser gerado para revis├úo humana.",
+    "O PDF foi lido para diagnóstico. O rascunho DOCX estruturado pode ser gerado para revisão humana.",
   ];
 
   type DestroyablePdfDocument = {
@@ -231,7 +231,7 @@ export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagno
     }
 
     if (!pages.some((page) => page.rawText.trim())) {
-      warnings.push("Nenhum texto bruto extra├¡vel foi encontrado. O PDF pode estar digitalizado, protegido ou exigir OCR, que n├úo ├® usado nesta etapa.");
+      warnings.push("Nenhum texto bruto extraível foi encontrado. O PDF pode estar digitalizado, protegido ou exigir OCR, que não é usado nesta etapa.");
     }
 
     const reconstruction = reconstructPdfParagraphBlocks(pages);
@@ -247,13 +247,13 @@ export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagno
       warnings: [...warnings, ...pretextual.warnings],
     };
   } catch {
-    throw new Error("N├úo foi poss├¡vel ler o PDF. O arquivo pode estar inv├ílido, protegido, corrompido ou ileg├¡vel sem OCR.");
+    throw new Error("Não foi possível ler o PDF. O arquivo pode estar inválido, protegido, corrompido ou ilegível sem OCR.");
   } finally {
     if (pdf) {
       try {
         await pdf.destroy?.();
       } catch {
-        // Falha ao liberar o documento n├úo deve substituir o diagn├│stico constru├¡do com sucesso.
+        // Falha ao liberar o documento não deve substituir o diagnóstico construído com sucesso.
       }
     }
   }

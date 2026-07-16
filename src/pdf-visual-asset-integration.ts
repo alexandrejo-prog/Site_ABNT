@@ -1,4 +1,4 @@
-﻿import type { ImportedPdfDiagnostic, PdfLayoutSensitiveRegionDiagnostic } from "./imported-pdf-diagnostic";
+import type { ImportedPdfDiagnostic, PdfLayoutSensitiveRegionDiagnostic } from "./imported-pdf-diagnostic";
 import type { PdfVisualCropGeometry } from "./pdf-visual-crop-geometry";
 import type { PdfTextDraftVisualAsset } from "./pdf-text-draft-contract";
 

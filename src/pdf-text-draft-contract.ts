@@ -1,4 +1,4 @@
-﻿import type { PdfPretextualDiagnostic, PdfTextReconstructionDiagnostic } from "./imported-pdf-diagnostic";
+import type { PdfPretextualDiagnostic, PdfTextReconstructionDiagnostic } from "./imported-pdf-diagnostic";
 
 export interface PdfTextDraftLogoAsset {
   data: ArrayBuffer | Uint8Array;

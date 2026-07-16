@@ -1,7 +1,6 @@
 ﻿import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { importDocumentFile } from "../src/import-docx";
-import { emptyAcademicFields } from "../src/ufla-rules";
 
 function buildSyntheticPdf(pages: string[]): ArrayBuffer {
   const objects: string[] = [
@@ -94,19 +93,33 @@ describe("importacao diagnostica de PDF", () => {
   it("PDF invalido gera mensagem controlada", async () => {
     const file = new File(["nao e pdf"], "invalido.pdf", { type: "application/pdf" });
 
-    await expect(importDocumentFile(file)).rejects.toThrow("N├úo foi poss├¡vel ler o PDF");
+    await expect(importDocumentFile(file)).rejects.toThrow("Não foi possível ler o PDF");
   });
 
-  it("importar PDF nao altera campos academicos nem insere texto no editor", async () => {
-    const result = await importDocumentFile(new File([buildSyntheticPdf(["Autor Maria Titulo qualquer"])], "diagnostico.pdf", {
+  it("importar PDF preenche campos academicos e texto do editor a partir do diagnostico", async () => {
+    const pages = [
+      "UNIVERSIDADE FEDERAL DE LAVRAS",
+      "Trabalho de Conclusao de Curso",
+      "Autor Maria Silva",
+      "Titulo do Trabalho Qualquer",
+      "Orientador Prof. Joao Souza",
+      "Lavras 2024",
+    ];
+    const result = await importDocumentFile(new File([buildSyntheticPdf(pages)], "diagnostico.pdf", {
       type: "application/pdf",
     }));
-    const empty = emptyAcademicFields();
 
-    expect(result.fields).toEqual(empty);
-    expect(result.editorText).toBe("");
+    expect(result.editorText.length).toBeGreaterThan(0);
+    expect(result.text.length).toBeGreaterThan(0);
+    const filled = Object.entries(result.fields).filter(([key, value]) => {
+      if (key === "workType" || key === "approvalMembers") return false;
+      return typeof value === "string" ? value.trim().length > 0 : Array.isArray(value) ? value.length > 0 : false;
+    });
+    expect(filled.length).toBeGreaterThan(0);
     expect(result.importedImages).toEqual([]);
     expect(result.importedTables).toEqual([]);
     expect(result.messages.join(" ")).toContain("rascunho DOCX estruturado");
+    expect(result.fields.author.length).toBeGreaterThan(0);
+    expect(result.fields.title.length).toBeGreaterThan(0);
   });
 });

@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   PdfAbstractDiagnostic,
   PdfPageDiagnostic,
   PdfPretextualDiagnostic,
@@ -16,16 +16,16 @@ type LineRef = PdfSourceLineReference & {
 
 const PERSON_CONNECTORS = new Set(["DA", "DAS", "DE", "DO", "DOS", "E"]);
 const TITLE_TERMS = /\b(?:ADMINISTRACAO|AMBIENTAL|ANALISE|BRASIL|DESAFIOS|DESEMPENHO|EDUCACAO|ESTUDO|GESTAO|IMPLEMENTACAO|INOVACAO|INSTITUICAO|ORGANIZACIONAL|ORGANIZACOES|PESQUISA|POLITICA|POLITICAS|PROGRAMA|PUBLICA|PUBLICAS|PUBLICO|PUBLICOS|SERVIDOR|SERVIDORES|TELETRABALHO|TRABALHO|UNIVERSIDADE)\b/u;
-const PROGRAM_RE = /PROGRAMA DE POS-GRADUACAO|PROGRAMA DE P├ôS-GRADUA├ç├âO/iu;
+const PROGRAM_RE = /PROGRAMA DE POS-GRADUACAO|PROGRAMA DE PÓS-GRADUAÇÃO/iu;
 const ADVISOR_RE = /\b(?:COORIENTADOR|ORIENTADOR)(?:A)?\b/iu;
 
 function clean(text: string): string {
   let normalized = text
-    .replace(/\b([A-Z├ü├ë├ì├ô├Ü├é├è├ö├â├ò├ç]{4,})\1\b/g, "$1")
-    .replace(/\b([A-Z├ü├ë├ì├ô├Ü├é├è├ö├â├ò├ç]+(?: [A-Z├ü├ë├ì├ô├Ü├é├è├ö├â├ò├ç]+){2,})\1\b/g, "$1")
+    .replace(/\b([A-ZÁÉÍÓÚÂÊÔÃÕÇ]{4,})\1\b/g, "$1")
+    .replace(/\b([A-ZÁÉÍÓÚÂÊÔÃÕÇ]+(?: [A-ZÁÉÍÓÚÂÊÔÃÕÇ]+){2,})\1\b/g, "$1")
     .replace(/\s+/g, " ")
     .trim();
-  normalized = normalized.replace(/\b([A-Z├ü├ë├ì├ô├Ü├é├è├ö├â├ò├ç]+(?: [A-Z├ü├ë├ì├ô├Ü├é├è├ö├â├ò├ç]+){2,})\1\b/g, "$1");
+  normalized = normalized.replace(/\b([A-ZÁÉÍÓÚÂÊÔÃÕÇ]+(?: [A-ZÁÉÍÓÚÂÊÔÃÕÇ]+){2,})\1\b/g, "$1");
   return normalized;
 }
 
@@ -96,7 +96,7 @@ function isLikelyPersonName(text: string): boolean {
   }
   const lexicalWords = words.filter((word) => !PERSON_CONNECTORS.has(fold(word)));
   if (lexicalWords.length < 2 || lexicalWords.length > 5) return false;
-  const namePattern = /^[A-Z├ü├ë├ì├ô├Ü├é├è├ö├â├ò├ç][A-Za-z├ü├ë├ì├ô├Ü├é├è├ö├â├ò├ç├í├®├¡├│├║├ó├¬├┤├ú├Á├º'.-]+$/u;
+  const namePattern = /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç'.-]+$/u;
   return words.every((word) => {
     if (PERSON_CONNECTORS.has(fold(word))) return true;
     if (HONORIFIC_ABBR.test(word)) return true;
@@ -465,8 +465,8 @@ function normalizeForTitleCompare(text: string): string {
 
 // When the cover title was truncated (its remaining part landed on another line/region and
 // was missed by cover detection), recover the complete title from the title page. This only
-// happens when the cover title is a normalized prefix of the title-page title ÔÇö i.e. the
-// title page merely appends words at the end ÔÇö and author/year agree and the title page is
+// happens when the cover title is a normalized prefix of the title-page title — i.e. the
+// title page merely appends words at the end — and author/year agree and the title page is
 // confident enough to be used as the recovery source.
 function reconcileCoverTitle(
   cover: PdfPretextualDiagnostic["cover"],
@@ -481,8 +481,8 @@ function reconcileCoverTitle(
   const pageNorm = normalizeForTitleCompare(pageTitle);
   if (!coverNorm || !pageNorm) return cover;
   if (pageNorm === coverNorm) return cover;
-  // Exige que o t├¡tulo da folha de rosto continue ap├│s um limite de palavra completo,
-  // impedindo prefixo parcial dentro de uma palavra e for├ºando ao menos uma palavra adicional.
+  // Exige que o título da folha de rosto continue após um limite de palavra completo,
+  // impedindo prefixo parcial dentro de uma palavra e forçando ao menos uma palavra adicional.
   if (!pageNorm.startsWith(`${coverNorm} `)) return cover;
 
   if (cover.author && titlePage.author
@@ -504,14 +504,14 @@ export function detectPdfPretextual(pages: PdfPageDiagnostic[], bodyPage?: numbe
   const resumo = detectAbstract(lines, "RESUMO");
   const abstract = detectAbstract(lines, "ABSTRACT");
 
-  if (!cover) warnings.push("Capa n├úo localizada com seguran├ºa.");
+  if (!cover) warnings.push("Capa não localizada com segurança.");
   if (cover && (!cover.author || !cover.title || !cover.city || !cover.year)) warnings.push("Capa localizada com campos essenciais ausentes.");
-  if (!titlePage) warnings.push("Folha de rosto n├úo localizada com seguran├ºa.");
+  if (!titlePage) warnings.push("Folha de rosto não localizada com segurança.");
   if (titlePage && (!titlePage.author || !titlePage.title || !titlePage.natureText)) warnings.push("Folha de rosto localizada com campos essenciais ausentes.");
-  if (!resumo) warnings.push("Resumo n├úo localizado com seguran├ºa.");
-  if (resumo && !resumo.keywords) warnings.push("Palavras-chave n├úo localizadas junto ao resumo.");
-  if (!abstract) warnings.push("Abstract n├úo localizado com seguran├ºa.");
-  if (abstract && !abstract.keywords) warnings.push("Keywords n├úo localizadas junto ao abstract.");
+  if (!resumo) warnings.push("Resumo não localizado com segurança.");
+  if (resumo && !resumo.keywords) warnings.push("Palavras-chave não localizadas junto ao resumo.");
+  if (!abstract) warnings.push("Abstract não localizado com segurança.");
+  if (abstract && !abstract.keywords) warnings.push("Keywords não localizadas junto ao abstract.");
 
   return { cover, titlePage, resumo, abstract, warnings };
 }
