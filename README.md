@@ -75,6 +75,8 @@ Os testes end-to-end ficam em `tests/e2e/` e usam Playwright (`npm run test:e2e`
 
 **Fase 2C (regressao visual):** `visual-critical-layouts.spec.ts` captura regioes criticas da interface (painel de metadados, editor e conteudo principal) apos importar e gerar o DOCX, com viewport fixo, e valida tamanho minimo e determinismo. A comparacao por baseline usa hash SHA-256 opcional (`tests/e2e/visual-baselines/`, gitignored); gere com `UPDATE_VISUAL_BASELINE=1`. O job `e2e-visual` no CI roda apenas esse spec em `ubuntu-latest`. Observacao: Quadros e Graficos citados ficam dentro do DOCX/Word gerado e nao na interface web; a regressao visual cobre as regioes criticas do fluxo no navegador.
 
+**Fase 2D (regressao do artefato exportado):** `artifact-critical-pages.spec.ts` gera o DOCX pela interface e analisa o artefato final (`tests/e2e/helpers/artifact-pages.ts`) extraindo uma assinatura estrutural determinística (tabelas=Quadros, desenhos=Gráficos, quebras de página/seções) e comparando com baseline SHA-256 opcional (`tests/e2e/artifact-baselines/`, gitignored; `UPDATE_VISUAL_BASELINE=1`). Sem rasterizador de PDF no ambiente, a validação atua sobre o DOCX que origina o PDF; o helper `rasterizePdfPages` permanece disponível para quando `pdftoppm` existir. O job `e2e-artifact` no CI roda apenas esse spec em `ubuntu-latest`.
+
 ## Fluxo recomendado
 
 1. Preencha os campos no navegador.

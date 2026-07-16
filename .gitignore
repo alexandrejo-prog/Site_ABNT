@@ -32,6 +32,7 @@ downloads/
 acceptance-runs/
 *.trace.zip
 tests/e2e/visual-baselines/
+tests/e2e/artifact-baselines/
 
 .continue/
 default-config.yaml

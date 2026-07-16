@@ -91,3 +91,24 @@ jobs:
 
       - name: Run E2E (Fase 2C - regressao visual)
         run: npx playwright test tests/e2e/visual-critical-layouts.spec.ts
+
+  e2e-artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E (Fase 2D - regressao do artefato)
+        run: npx playwright test tests/e2e/artifact-critical-pages.spec.ts

@@ -13,6 +13,7 @@
     "test:e2e:import": "playwright test tests/e2e/import-docx.spec.ts tests/e2e/reject-pdf.spec.ts",
     "test:e2e:word": "playwright test tests/e2e/word-validation.spec.ts",
     "test:e2e:visual": "playwright test tests/e2e/visual-critical-layouts.spec.ts",
+    "test:e2e:artifact": "playwright test tests/e2e/artifact-critical-pages.spec.ts",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:trace": "playwright show-trace",
     "acceptance:docx": "node scripts/acceptance/audit-docx.mjs",
