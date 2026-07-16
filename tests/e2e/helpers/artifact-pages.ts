@@ -3,6 +3,12 @@ import { spawn } from "node:child_process";
 import { access, readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
+// Fase 2D: regressao ESTRUTURAL (nao visual de pixels) do artefato DOCX exportado.
+// Analisa a assinatura OOXML (Quadros=tabelas, Graficos=desenhos, paginacao via
+// quebras de pagina/secao) e compara com um baseline SHA-256 opcional.
+// A rasterizacao real do PDF final (regressao visual de paginas) fica no hook
+// rasterizePdfPages, ativado apenas quando um rasterizador (pdftoppm) existir.
+
 export interface DocxArtifactAnalysis {
   tables: number;
   drawings: number;

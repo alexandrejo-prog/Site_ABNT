@@ -64,18 +64,23 @@ A v2.9.0 adiciona melhorias de acessibilidade com guardrails automatizados:
 
 ## Pipeline E2E
 
-Os testes end-to-end ficam em `tests/e2e/` e usam Playwright (`npm run test:e2e`). Eles validam apenas funcionalidades existentes no aplicativo:
+Os testes end-to-end ficam em `tests/e2e/` e usam Playwright (`npm run test:e2e`). Eles validam apenas funcionalidades existentes no aplicativo. O pipeline de aceitação é dividido em fases:
 
-- **smoke** (`smoke.spec.ts`): abre o aplicativo, verifica o carregamento da pagina, a renderizacao da interface principal e a ausencia de erros fatais.
-- **importacao DOCX** (`import-docx.spec.ts`): importa um DOCX valido, aguarda o processamento e confirma que o conteudo aparece na interface.
-- **rejeicao de PDF** (`reject-pdf.spec.ts`): confirma que selecionar um PDF exibe a mensagem "Formato nao suportado. Use .docx, .txt ou .md." (comportamento esperado; a importacao direta de PDF nao existe na main).
-- **integracao Word (futura)**: o helper isolado `tests/e2e/helpers/run-word-validation.ts` localiza o PowerShell e executa `scripts/acceptance/run-docx-acceptance.ps1`, retornando `approved`, `pdfExported`, `pages` e `wordOpened`. Ele nao e chamado automaticamente e sera usado na Fase 2B.
+- **Fase 2A — fluxo E2E funcional do app** (`smoke.spec.ts`, `import-docx.spec.ts`, `reject-pdf.spec.ts`): abre o aplicativo, verifica o carregamento e a ausência de erros fatais, importa um DOCX válido e confirma que o conteúdo aparece na interface, e confirma que selecionar um PDF exibe "Formato nao suportado. Use .docx, .txt ou .md." (a importação direta de PDF não existe na main).
+- **Fase 2B — validação Word do DOCX gerado** (`word-validation.spec.ts` + helper `run-word-validation.ts`): importa um DOCX, gera o DOCX pela interface, baixa-o e executa `scripts/acceptance/run-docx-acceptance.ps1` via PowerShell, validando os sinais `approved`, `pdfExported`, `pages` e `wordOpened`. Requer Windows com Microsoft Word; o spec é ignorado automaticamente onde esses requisitos não existem.
+- **Fase 2C — regressão visual da UI** (`visual-critical-layouts.spec.ts` + helper `visual-regression.ts`): captura regiões críticas da interface (painel de metadados, editor, conteúdo principal) após importar e gerar o DOCX, com viewport fixo, validando tamanho mínimo e determinismo via baseline SHA-256 opcional. Cobre only a UI do navegador — não o documento final.
+- **Fase 2D — regressão estrutural do artefato exportado** (`artifact-critical-pages.spec.ts` + helper `artifact-pages.ts`): gera o DOCX pela interface e extrai uma assinatura estrutural determinística do artefato DOCX (tabelas=Quadros, desenhos=Gráficos, quebras de página/seções) comparada com baseline SHA-256 opcional. É regressão **estrutural**, não visual de pixels. Inclui o hook `rasterizePdfPages` para rasterização real do PDF quando `pdftoppm` estiver disponível (ainda não usado no ambiente atual).
 
-**Fase 2B (integrada):** `word-validation.spec.ts` importa um DOCX pela interface, gera o DOCX, baixa-o e executa o helper do Word via PowerShell, validando apenas os sinais `approved`, `pdfExported`, `pages` e `wordOpened`. Requer Windows com Microsoft Word; o teste e ignorado automaticamente onde esses requisitos nao existem. O job `e2e-word` no CI roda apenas esse spec em `windows-latest`.
+Detalhes por fase:
 
-**Fase 2C (regressao visual):** `visual-critical-layouts.spec.ts` captura regioes criticas da interface (painel de metadados, editor e conteudo principal) apos importar e gerar o DOCX, com viewport fixo, e valida tamanho minimo e determinismo. A comparacao por baseline usa hash SHA-256 opcional (`tests/e2e/visual-baselines/`, gitignored); gere com `UPDATE_VISUAL_BASELINE=1`. O job `e2e-visual` no CI roda apenas esse spec em `ubuntu-latest`. Observacao: Quadros e Graficos citados ficam dentro do DOCX/Word gerado e nao na interface web; a regressao visual cobre as regioes criticas do fluxo no navegador.
+- **Coberto pela Fase 2A:** carregamento, importação DOCX e rejeição de PDF.
+- **Coberto pela Fase 2B:** aprovação do DOCX pelo pipeline Word (estrutural + Word + PDF exportado).
+- **Coberto pela Fase 2C:** estabilidade visual das regiões críticas da interface no navegador.
+- **Coberto pela Fase 2D:** assinatura estrutural do DOCX exportado (Quadros/Gráficos/paginação como elementos OOXML).
+- **Não coberto (qual fase futura cobriria):** a regressão visual de pixels do **PDF final exportado** (páginas críticas como Quadros 1, 2, 7, 8, 12, 15, 16 e Gráficos 7 e 10). Isso exigiria rasterizar o PDF (ex.: `pdftoppm`) e comparar imagens por página — uma "Fase 2E" futura, habilitada pelo hook `rasterizePdfPages` já presente no helper da Fase 2D.
 
-**Fase 2D (regressao do artefato exportado):** `artifact-critical-pages.spec.ts` gera o DOCX pela interface e analisa o artefato final (`tests/e2e/helpers/artifact-pages.ts`) extraindo uma assinatura estrutural determinística (tabelas=Quadros, desenhos=Gráficos, quebras de página/seções) e comparando com baseline SHA-256 opcional (`tests/e2e/artifact-baselines/`, gitignored; `UPDATE_VISUAL_BASELINE=1`). Sem rasterizador de PDF no ambiente, a validação atua sobre o DOCX que origina o PDF; o helper `rasterizePdfPages` permanece disponível para quando `pdftoppm` existir. O job `e2e-artifact` no CI roda apenas esse spec em `ubuntu-latest`.
+Os baselines SHA-256 são opcionais e ficam em `tests/e2e/visual-baselines/` e `tests/e2e/artifact-baselines/` (gitignored); gere-os com `UPDATE_VISUAL_BASELINE=1`. Jobs no CI: `e2e` (todas as fases, ubuntu), `e2e-word` (Fase 2B, windows-latest), `e2e-visual` (Fase 2C, ubuntu), `e2e-artifact` (Fase 2D, ubuntu).
+
 
 ## Fluxo recomendado
 
