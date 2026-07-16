@@ -25,6 +25,13 @@ testar-site.txt
 # Pasta temporária para arquivos DOCX gerados durante testes/build
 tmp/
 
+playwright-report/
+test-results/
+blob-report/
+downloads/
+acceptance-runs/
+*.trace.zip
+
 .continue/
 default-config.yaml
 

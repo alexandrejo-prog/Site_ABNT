@@ -62,6 +62,15 @@ A v2.9.0 adiciona melhorias de acessibilidade com guardrails automatizados:
 
 **Status honesto:** compatibilidade WCAG AA em evolucao, com guardrails automatizados para axe, contraste, foco e mensagens acessiveis. Revisao manual ainda recomendada antes de uso institucional amplo. O projeto nao declara conformidade WCAG total.
 
+## Pipeline E2E
+
+Os testes end-to-end ficam em `tests/e2e/` e usam Playwright (`npm run test:e2e`). Eles validam apenas funcionalidades existentes no aplicativo:
+
+- **smoke** (`smoke.spec.ts`): abre o aplicativo, verifica o carregamento da pagina, a renderizacao da interface principal e a ausencia de erros fatais.
+- **importacao DOCX** (`import-docx.spec.ts`): importa um DOCX valido, aguarda o processamento e confirma que o conteudo aparece na interface.
+- **rejeicao de PDF** (`reject-pdf.spec.ts`): confirma que selecionar um PDF exibe a mensagem "Formato nao suportado. Use .docx, .txt ou .md." (comportamento esperado; a importacao direta de PDF nao existe na main).
+- **integracao Word (futura)**: o helper isolado `tests/e2e/helpers/run-word-validation.ts` localiza o PowerShell e executa `scripts/acceptance/run-docx-acceptance.ps1`, retornando `approved`, `pdfExported`, `pages` e `wordOpened`. Ele nao e chamado automaticamente e sera usado na Fase 2B.
+
 ## Fluxo recomendado
 
 1. Preencha os campos no navegador.
