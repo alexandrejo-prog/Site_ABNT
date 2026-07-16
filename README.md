@@ -73,6 +73,8 @@ Os testes end-to-end ficam em `tests/e2e/` e usam Playwright (`npm run test:e2e`
 
 **Fase 2B (integrada):** `word-validation.spec.ts` importa um DOCX pela interface, gera o DOCX, baixa-o e executa o helper do Word via PowerShell, validando apenas os sinais `approved`, `pdfExported`, `pages` e `wordOpened`. Requer Windows com Microsoft Word; o teste e ignorado automaticamente onde esses requisitos nao existem. O job `e2e-word` no CI roda apenas esse spec em `windows-latest`.
 
+**Fase 2C (regressao visual):** `visual-critical-layouts.spec.ts` captura regioes criticas da interface (painel de metadados, editor e conteudo principal) apos importar e gerar o DOCX, com viewport fixo, e valida tamanho minimo e determinismo. A comparacao por baseline usa hash SHA-256 opcional (`tests/e2e/visual-baselines/`, gitignored); gere com `UPDATE_VISUAL_BASELINE=1`. O job `e2e-visual` no CI roda apenas esse spec em `ubuntu-latest`. Observacao: Quadros e Graficos citados ficam dentro do DOCX/Word gerado e nao na interface web; a regressao visual cobre as regioes criticas do fluxo no navegador.
+
 ## Fluxo recomendado
 
 1. Preencha os campos no navegador.
