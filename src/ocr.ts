@@ -1,5 +1,3 @@
-import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
 import type { ImportedPdfDiagnostic } from "./imported-pdf-diagnostic";
 import { safeEnv } from "./safe-env";
 
@@ -21,16 +19,32 @@ export interface OcrOptions {
 
 const DEFAULT_LANG = safeEnv.string("OCR_LANG", "por+eng");
 
-function tesseractBinaryPath(): string | undefined {
+// Acesso preguiçoso a módulos Node (não disponíveis no browser).
+let _nodeFs: typeof import("node:fs") | undefined;
+let _nodeCp: typeof import("node:child_process") | undefined;
+async function loadNodeFs(): Promise<typeof import("node:fs")> {
+  if (!_nodeFs) _nodeFs = await import("node:fs");
+  return _nodeFs;
+}
+async function loadNodeCp(): Promise<typeof import("node:child_process")> {
+  if (!_nodeCp) _nodeCp = await import("node:child_process");
+  return _nodeCp;
+}
+
+async function tesseractBinaryPath(): Promise<string | undefined> {
   const tesseractPath = safeEnv.string("TESSERACT_PATH", "");
-  if (tesseractPath && existsSync(tesseractPath)) {
-    return tesseractPath;
+  if (!tesseractPath) return undefined;
+  try {
+    const fs = await loadNodeFs();
+    if (fs.existsSync(tesseractPath)) return tesseractPath;
+  } catch {
+    /* browser: módulo node indisponível */
   }
   return undefined;
 }
 
-export function nativeCliAvailable(): boolean {
-  return Boolean(tesseractBinaryPath());
+export async function nativeCliAvailable(): Promise<boolean> {
+  return Boolean(await tesseractBinaryPath());
 }
 
 // Detecta se o backend tesseract.js (WASM) está instalado (dependência opcional).
@@ -44,7 +58,7 @@ async function tesseractJsAvailable(): Promise<boolean> {
 }
 
 export async function ocrBackendInUse(): Promise<OcrBackend> {
-  if (nativeCliAvailable()) return "native-cli";
+  if (await nativeCliAvailable()) return "native-cli";
   if (await tesseractJsAvailable()) return "tesseract.js";
   return "none";
 }
@@ -55,9 +69,10 @@ async function recognizeWithNativeCli(
   pngPath: string,
   opts: OcrOptions,
 ): Promise<OcrResult> {
-  const bin = tesseractBinaryPath()!;
+  const bin = (await tesseractBinaryPath())!;
   const lang = opts.lang || DEFAULT_LANG;
   const timeout = opts.timeoutMs ?? 60000;
+  const { spawn } = await loadNodeCp();
   return new Promise<OcrResult>((resolve) => {
     const proc = spawn(bin, [pngPath, "stdout", "--psm", "6", "-l", lang], {
       windowsHide: true,
@@ -145,7 +160,7 @@ export async function recognizePng(
   pngBuffer: Uint8Array,
   opts: OcrOptions = {},
 ): Promise<OcrResult> {
-  if (nativeCliAvailable()) {
+  if (await nativeCliAvailable()) {
     const { writeFileSync, unlinkSync } = await import("node:fs");
     const { join } = await import("node:path");
     const { tmpdir } = await import("node:os");

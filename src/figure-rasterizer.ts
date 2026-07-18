@@ -1,7 +1,24 @@
-import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+// Acesso preguiçoso a módulos Node (não disponíveis no browser).
+let _nodeFs: typeof import("node:fs") | undefined;
+let _nodeCp: typeof import("node:child_process") | undefined;
+let _nodePath: typeof import("node:path") | undefined;
+let _nodeUrl: typeof import("node:url") | undefined;
+async function loadNodeFs(): Promise<typeof import("node:fs")> {
+  if (!_nodeFs) _nodeFs = await import("node:fs");
+  return _nodeFs;
+}
+async function loadNodeCp(): Promise<typeof import("node:child_process")> {
+  if (!_nodeCp) _nodeCp = await import("node:child_process");
+  return _nodeCp;
+}
+async function loadNodePath(): Promise<typeof import("node:path")> {
+  if (!_nodePath) _nodePath = await import("node:path");
+  return _nodePath;
+}
+async function loadNodeUrl(): Promise<typeof import("node:url")> {
+  if (!_nodeUrl) _nodeUrl = await import("node:url");
+  return _nodeUrl;
+}
 
 export interface FigureRegionClip {
   x: number;
@@ -48,11 +65,14 @@ const CHROMIUM_CANDIDATES: string[] = [
   (process.env.LOCALAPPDATA || "") + "\\ms-playwright\\chromium-1228\\chrome-win\\chrome.exe",
 ];
 
-function chromiumExecutable(): string | undefined {
+async function chromiumExecutable(): Promise<string | undefined> {
   for (const candidate of CHROMIUM_CANDIDATES) {
     try {
-      if (candidate && existsSync(candidate)) {
-        return candidate;
+      if (candidate) {
+        const nodeFs = await loadNodeFs();
+        if (nodeFs.existsSync(candidate)) {
+          return candidate;
+        }
       }
     } catch {
       /* ignore */
@@ -80,9 +100,10 @@ export function resetRasterLog(): void {
   cachedBackendName = undefined;
 }
 
-function hasCommand(cmd: string): boolean {
+async function hasCommand(cmd: string): Promise<boolean> {
   try {
-    execFileSync("where", [cmd], { stdio: "ignore", windowsHide: true, timeout: 5000 });
+    const nodeCp = await loadNodeCp();
+    nodeCp.execFileSync("where", [cmd], { stdio: "ignore", windowsHide: true, timeout: 5000 });
     return true;
   } catch {
     return false;
@@ -111,11 +132,13 @@ const PdfJSCanvasBackend: RasterBackend = {
     const canvasSpec = "@napi-rs/canvas";
     const canvasMod: any = await import(canvasSpec);
     const createCanvas = canvasMod.createCanvas;
+    const nodePath = await loadNodePath();
+    const nodeUrl = await loadNodeUrl();
     const params: any = {
       data: ctx.pdfBuffer,
       disableWorker: true,
-      standardFontDataUrl: pathToFileURL(resolve("node_modules/pdfjs-dist/standard_fonts")).href + "/",
-      wasmUrl: pathToFileURL(resolve("node_modules/pdfjs-dist/wasm")).href + "/",
+      standardFontDataUrl: nodeUrl.pathToFileURL(nodePath.resolve("node_modules/pdfjs-dist/standard_fonts")).href + "/",
+      wasmUrl: nodeUrl.pathToFileURL(nodePath.resolve("node_modules/pdfjs-dist/wasm")).href + "/",
     };
     const pdf = await pdfjs.getDocument(params).promise;
     const page = await pdf.getPage(ctx.pageIndex + 1);
@@ -148,7 +171,7 @@ const ChromiumBackend: RasterBackend = {
       const { chromium } = await import("playwright");
       const probe = chromium.launch({
         headless: true,
-        executablePath: chromiumExecutable(),
+        executablePath: await chromiumExecutable(),
         args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
         timeout: 15000,
       });
@@ -210,7 +233,7 @@ async function getSharedChromium(): Promise<any> {
   const { chromium } = await import("playwright");
   sharedChromium = await chromium.launch({
     headless: true,
-    executablePath: chromiumExecutable(),
+    executablePath: await chromiumExecutable(),
     args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
     timeout: 15000,
   });
@@ -275,7 +298,8 @@ function makeCliBackend(
       const inPath = join(tmpdir(), `src-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`);
       writeFileSync(inPath, ctx.pdfBuffer);
       try {
-        execFileSync(cmd, buildArgs(ctx, out), { stdio: "ignore", timeout: 15000, windowsHide: true });
+        const nodeCp = await loadNodeCp();
+        nodeCp.execFileSync(cmd, buildArgs(ctx, out), { stdio: "ignore", timeout: 15000, windowsHide: true });
         const data = readFileSync(out);
         return { data: new Uint8Array(data), width: 0, height: 0, backend: name };
       } finally {
