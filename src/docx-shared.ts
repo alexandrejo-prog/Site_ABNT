@@ -3,6 +3,7 @@ import type { IParagraphOptions } from "docx";
 import type { DocxLogoAsset } from "./export-docx";
 import { UFLA_RULES } from "./ufla-rules";
 import { cleanMojibakeText } from "./docx-render-core";
+import { stabilizeImageRun } from "./docx-image-stabilizer";
 
 export const BLACK = "000000";
 export const BODY_SIZE = UFLA_RULES.typography.bodyFontSizePt * 2;
@@ -60,11 +61,14 @@ export function logoParagraph(logo?: DocxLogoAsset): Paragraph[] {
       alignment: AlignmentType.CENTER,
       spacing: { after: 0 },
       children: [
-        new ImageRun({
-          data: logo.data,
-          transformation: { width: logo.width ?? 265, height: logo.height ?? 108 },
-          altText: { title: "Logo UFLA", description: "Universidade Federal de Lavras", name: "Logo UFLA" },
-        }),
+        stabilizeImageRun(
+          new ImageRun({
+            data: logo.data,
+            transformation: { width: logo.width ?? 265, height: logo.height ?? 108 },
+            altText: { title: "Logo UFLA", description: "Universidade Federal de Lavras", name: "Logo UFLA" },
+          }),
+          "ufla-logo.png",
+        ),
       ],
     }),
   ];

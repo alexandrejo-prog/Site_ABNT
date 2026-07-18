@@ -178,8 +178,17 @@ export type PdfPageDiagnostic = {
   rotation: number;
   rawText: string;
   textItemCount: number;
+  imageCount: number;
   items: PdfTextItemDiagnostic[];
   lines: PdfLineDiagnostic[];
+};
+
+export type PdfOcrPageStat = {
+  pageNumber: number;
+  backend: string;
+  available: boolean;
+  confidence: number;
+  charCount: number;
 };
 
 export type ImportedPdfDiagnostic = {
@@ -190,4 +199,13 @@ export type ImportedPdfDiagnostic = {
   bodyStart: PdfBodyStartDiagnostic;
   reconstruction: PdfTextReconstructionDiagnostic;
   warnings: string[];
+  // R-OCR-3: indica se OCR de páginas foi aplicado e seu resultado.
+  ocrApplied?: boolean;
+  ocrStats?: {
+    pagesScanned: number;
+    pagesOcrSuccess: number;
+    backend: string;
+    avgConfidence: number;
+    perPage: PdfOcrPageStat[];
+  };
 };

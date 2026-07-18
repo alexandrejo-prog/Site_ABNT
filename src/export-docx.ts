@@ -10,6 +10,7 @@ import {
   PageNumber,
   PageOrientation,
   Paragraph,
+  ShadingType,
   Table,
   TableCell,
   TableOfContents,
@@ -29,6 +30,7 @@ import { sectionLevelFromHeadingLine } from "./section-aliases";
 import { captionParagraph, cleanMojibakeText, detectCaption, tabbedTableBlock } from "./docx-render-core";
 import { ImportedDocumentImage, IMPORTED_IMAGE_MARKER_PATTERN } from "./imported-images";
 import { ImportedTable, IMPORTED_TABLE_MARKER_PATTERN, buildStructuredTextFromTable } from "./imported-tables";
+import { stabilizeImageRun } from "./docx-image-stabilizer";
 
 export type EditorBlockType =
   | "paragraph"
@@ -63,6 +65,7 @@ export interface DocxGenerationInput {
   logo?: DocxLogoAsset;
   importedImages?: ImportedDocumentImage[];
   importedTables?: ImportedTable[];
+  imageWarnings?: string;
 }
 
 interface ScheduleRow {
@@ -578,18 +581,21 @@ function logoParagraph(logo?: DocxLogoAsset): Paragraph[] {
       alignment: AlignmentType.CENTER,
       spacing: { after: 0 },
       children: [
-        new ImageRun({
-          data: logo.data,
-          transformation: {
-            width: logo.width ?? UFLA_LOGO_WIDTH_PX,
-            height: logo.height ?? UFLA_LOGO_HEIGHT_PX,
-          },
-          altText: {
-            title: "Logo UFLA",
-            description: "Universidade Federal de Lavras",
-            name: "Logo UFLA",
-          },
-        }),
+        stabilizeImageRun(
+          new ImageRun({
+            data: logo.data,
+            transformation: {
+              width: logo.width ?? UFLA_LOGO_WIDTH_PX,
+              height: logo.height ?? UFLA_LOGO_HEIGHT_PX,
+            },
+            altText: {
+              title: "Logo UFLA",
+              description: "Universidade Federal de Lavras",
+              name: "Logo UFLA",
+            },
+          }),
+          "ufla-logo.png",
+        ),
       ],
     }),
   ];
@@ -645,6 +651,49 @@ function scheduleCaptionParagraph(text: string): Paragraph {
       }),
     ],
   });
+}
+
+function draftIncompleteBanner(imageWarnings?: string): Array<Paragraph | Table> {
+  if (!imageWarnings) return [];
+  const hasImageLoss = /IMAGENS NÃO PRESERVADAS|IMAGENS PARCIALMENTE PRESERVADAS/i.test(imageWarnings);
+  const hasFullImagePreservation = /IMAGENS PRESERVADAS:/i.test(imageWarnings);
+  const hasPartialTable = /TABELAS RECONSTRUÍDAS PARCIALMENTE|TABELAS DETECTADAS/i.test(imageWarnings);
+  if (!hasImageLoss && !hasPartialTable && !hasFullImagePreservation) return [];
+
+  const lines = [
+    "RASCUNHO INCOMPLETO — REVISÃO MANUAL OBRIGATÓRIA ANTES DA VERSÃO FINAL.",
+    "Este documento foi gerado automaticamente a partir de um arquivo PDF.",
+    hasImageLoss
+      ? "Imagens, figuras e gráficos do PDF original NÃO foram totalmente preservados no DOCX; as não rasterizadas encontram-se ausentes e devem ser reinseridas manualmente."
+      : hasFullImagePreservation
+        ? "Todas as figuras detectadas do PDF foram rasterizadas e inseridas, mas confira a qualidade e legibilidade de cada uma."
+        : "",
+    hasPartialTable
+      ? "Tabelas/quadros podem ter sido reconstruídos apenas parcialmente a partir de coordenadas de texto, com possíveis erros de colunas, alinhamento ou células mescladas."
+      : "",
+    "Não substitui a revisão humana: insira manualmente as ilustrações ausentes e confira todas as tabelas antes da entrega.",
+  ].filter(Boolean);
+
+  return [
+    new Paragraph({
+      spacing: { before: 0, after: 120, line: SINGLE_LINE },
+      shading: { type: ShadingType.CLEAR, color: "auto", fill: "FFF2CC" },
+      border: {
+        top: { style: BorderStyle.SINGLE, size: 12, color: "BF8F00" },
+        bottom: { style: BorderStyle.SINGLE, size: 12, color: "BF8F00" },
+        left: { style: BorderStyle.SINGLE, size: 12, color: "BF8F00" },
+        right: { style: BorderStyle.SINGLE, size: 12, color: "BF8F00" },
+      },
+      children: lines.map((text, index) => new TextRun({
+        text: (index === 0 ? "" : "\n") + text,
+        bold: index === 0,
+        font: UFLA_RULES.typography.fontFamily,
+        size: index === 0 ? 24 : BODY_SIZE,
+        color: "7F6000",
+      })),
+    }),
+    pageBreak(),
+  ];
 }
 
 function parseScheduleRow(line: string): ScheduleRow | null {
@@ -840,27 +889,38 @@ function scheduleTableBlock(text: string): Array<Paragraph | Table> {
   ];
 }
 
-function importedImageParagraph(image: ImportedDocumentImage | undefined): Paragraph[] {
-  if (!image) return [];
+// Texto alternativo acessível da figura: legenda + fonte + texto reconhecido
+// por OCR (quando houver), atendendo à exigência de acessibilidade digital.
+function buildImageAltDescription(image: ImportedDocumentImage): string {
+  const parts: string[] = [];
+  if (image.source) parts.push(image.source);
+  if (image.ocrText && image.ocrText.trim()) parts.push(`Texto na figura (OCR): ${image.ocrText.trim()}`);
+  if (!parts.length) parts.push("Imagem importada do PDF original");
+  return parts.join(" ");
+}
 
-  if (image.data?.byteLength) {
+function importedImageParagraph(image: ImportedDocumentImage | undefined): Paragraph[] {
+  if (!image) return [];  if (image.data?.byteLength) {
     return [
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { before: 120, after: 120, line: SINGLE_LINE },
         children: [
-          new ImageRun({
-            data: image.data,
-            transformation: {
-              width: image.width ?? 420,
-              height: image.height ?? 260,
-            },
-            altText: {
-              title: image.caption || image.fileName || image.id,
-              description: image.source || "Imagem importada do DOCX original",
-              name: image.fileName || image.id,
-            },
-          }),
+          ((): ImageRun => {
+            const run = new ImageRun({
+              data: image.data,
+              transformation: {
+                width: image.width ?? 420,
+                height: image.height ?? 260,
+              },
+              altText: {
+                title: image.caption || image.fileName || image.id,
+                description: buildImageAltDescription(image),
+                name: image.fileName || image.id,
+              },
+            });
+            return stabilizeImageRun(run, image.fileName || `${image.id || "figura"}.png`);
+          })(),
         ],
       }),
     ];
@@ -1348,7 +1408,8 @@ function blockToParagraph(
   return [textParagraph(cleanedText)];
 }
 
-function splitParagraphs(value: string): string[] {
+function splitParagraphs(value: string | undefined | null): string[] {
+  if (typeof value !== "string") return [];
   return value
     .split(/\n+/)
     .map((line) => line.trim())
@@ -1581,8 +1642,8 @@ function buildSummary(
   ];
 }
 
-function hasText(value: string): boolean {
-  return value.trim().length > 0;
+function hasText(value: string | undefined | null): boolean {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 export function ensureTrailingPeriod(value: string): string {
@@ -2071,6 +2132,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   ];
 
   const textualAndPostTextualChildren: Array<Paragraph | Table> = [
+    ...draftIncompleteBanner(input.fields.imageWarnings ?? input.imageWarnings),
     ...bodyBlocks.flatMap((block, index) => blockToParagraph(block, index === 0, input.importedImages ?? [], input.importedTables ?? [])),
     pageBreak(),
     sectionTitle("Referências"),

@@ -9,7 +9,9 @@ const TMP_DIR = join(process.cwd(), "tmp");
 
 function listRealPdfs(): string[] {
   try {
-    return readdirSync(TMP_DIR).filter((name) => name.toLowerCase().endsWith(".pdf"));
+    return readdirSync(TMP_DIR).filter(
+      (name) => name.toLowerCase().endsWith(".pdf") && !name.startsWith("~$"),
+    );
   } catch {
     return [];
   }

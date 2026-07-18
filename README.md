@@ -6,12 +6,37 @@ Ferramenta de apoio a normalizacao academica UFLA/ABNT para gerar documentos `.d
 
 ## Como rodar
 
+Requer **Node.js 20+** (testado em Node 24) e **npm 10+**.
+
 ```bash
 npm install
 npm run dev
 ```
 
-Depois abra o endereco exibido pelo Vite.
+Depois abra o endereco exibido pelo Vite (`http://127.0.0.1:<porta>`).
+
+## Instalacao do Playwright / Chromium (testes E2E e rasterizacao)
+
+O projeto usa **Playwright** para os testes end-to-end e como backend de rasterizacao de figuras de PDF no fluxo Cópia DOCX. O Chromium e suas dependencias devem ser instalados uma unica vez apos o `npm install`:
+
+```bash
+# Chromium + dependencias do sistema (recomendado)
+npx playwright install --with-deps chromium
+
+# Ou, somente o binario do Chromium (sem deps do SO):
+npx playwright install chromium
+```
+
+- Em **Linux (CI ou servidor sem GUI)** use `--with-deps` para instalar as bibliotecas do sistema (ex.: `libnss3`, `libatk-bridge2.0`, `libgbm`, `libasound2`). O job de CI ja faz isso.
+- Em **Windows** o `--with-deps` e ignorado (as deps do SO nao se aplicam); basta `npx playwright install chromium`.
+- A variavel de ambiente `PDF_FIGURE_RASTERIZE=0` desativa a rasterizacao por Chromium (as figuras ficam como marcadores, sem imagem).
+
+Para validar a instalacao:
+
+```bash
+npx playwright test --version
+npx playwright install chromium
+```
 
 ## Comandos
 
@@ -47,6 +72,18 @@ npm run verify
 ## Status normativo
 
 O status real de cobertura, limitacoes conhecidas e pontos que exigem validacao manual esta registrado em `STATUS_NORMATIVO.md`.
+
+## Limitacoes conhecidas
+
+As limitacoes reconhecidas (PDF, imagens, sumario, Word/LibreOffice, rasterizacao por Chromium, ambientes sem navegador/CLI, determinismo de pixels) estao consolidadas em [`LIMITACOES_CONHECIDAS.md`](./LIMITACOES_CONHECIDAS.md). Leia antes de uso institucional.
+
+## Documentacao
+
+- **Guia do usuario:** [`docs/GUIA_USUARIO.md`](./docs/GUIA_USUARIO.md) — fluxo passo a passo para gerar o DOCX.
+- **Status normativo:** [`STATUS_NORMATIVO.md`](./STATUS_NORMATIVO.md).
+- **Limitacoes:** [`LIMITACOES_CONHECIDAS.md`](./LIMITACOES_CONHECIDAS.md).
+- **Notas de verso:** [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
+- **Historico de mudancas:** [`CHANGELOG.md`](./CHANGELOG.md).
 
 ## Acessibilidade
 

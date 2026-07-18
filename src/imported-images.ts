@@ -9,6 +9,20 @@ export type ImageInsertionHint =
   | "between-caption-and-source"
   | "original-position";
 
+// Classificação de auditoria de uma região candidata. Nunca confunda
+// "região candidata" com "figura perdida": apenas regiões confirmadas como
+// figura real e que falharam a rasterização/inserção contam como perda.
+export type FigureAuditClass =
+  | "figura-real"
+  | "falso-positivo"
+  | "grafico-vetorial"
+  | "imagem-raster"
+  | "decoracao"
+  | "assinatura"
+  | "logotipo"
+  | "formula"
+  | "outro";
+
 export interface ImportedDocumentImage {
   id: string;
   relationshipId?: string;
@@ -25,6 +39,29 @@ export interface ImportedDocumentImage {
   status: ImportedImageStatus;
   insertionHint?: ImageInsertionHint;
   insertionAnchorText?: string;
+  // --- Campos de auditoria de figuras (R14) ---
+  // Tipo de ilustração inferido da legenda (Figura, Gráfico, Esquema, etc.).
+  figureType?: string;
+  // Confiança da classificação como figura (0..1).
+  confidence?: number;
+  // A região é realmente uma figura (legenda numerada válida)?
+  isFigure?: boolean;
+  // Foi rasterizada com sucesso (status === "preserved")?
+  rasterized?: boolean;
+  // Foi efetivamente inserida no DOCX (marcador + dados)?
+  inserted?: boolean;
+  // Classificação de auditoria (ver FigureAuditClass).
+  auditClass?: FigureAuditClass;
+  // Motivo quando não rasterizada/inserida.
+  reason?: string;
+  // Número da página onde a região foi detectada.
+  page?: number;
+  // Texto extraído por OCR da imagem rasterizada (acessibilidade/alt-text).
+  ocrText?: string;
+  // Confiança média do OCR da figura (0..100), se aplicável.
+  ocrConfidence?: number;
+  // Backend de OCR utilizado ("native-cli" | "tesseract.js" | "none").
+  ocrBackend?: string;
 }
 
 export const IMPORTED_IMAGE_MARKER_PATTERN = /^\[\[Imagem importada preservada:\s*([a-z0-9-]+)\]\]$/i;

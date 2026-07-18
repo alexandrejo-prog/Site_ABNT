@@ -1,15 +1,26 @@
 name: CI
 
 on:
-  pull_request:
   push:
     branches:
       - main
+      - feat/**
       - fix/**
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  # Build + testes unitarios/integrados (Vitest) em Windows e Linux.
   test-build:
-    runs-on: ubuntu-latest
+    name: Test + Build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,19 +28,24 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install
         run: npm ci
 
-      - name: Test
-        run: npm test
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Test (Vitest)
+        run: npm test -- --run
 
       - name: Build
         run: npm run build
 
+  # Testes end-to-end (Playwright) — todas as fases, Linux.
   e2e:
+    name: E2E (Linux)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -38,19 +54,21 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install
         run: npm ci
 
-      - name: Install Playwright browsers
+      - name: Install Playwright browsers (Chromium + deps do SO)
         run: npx playwright install --with-deps chromium
 
       - name: Run E2E
         run: npm run test:e2e
 
+  # Validacao Word do DOCX gerado — so Windows (requer Microsoft Word).
   e2e-word:
+    name: E2E Word (Windows)
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -59,56 +77,14 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install
         run: npm ci
 
-      - name: Install Playwright browsers
+      - name: Install Playwright browsers (Chromium)
         run: npx playwright install chromium
 
-      - name: Run E2E (Fase 2B - validacao Word)
+      - name: Run E2E Word validation (Fase 2B)
         run: npx playwright test tests/e2e/word-validation.spec.ts
-
-  e2e-visual:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install
-        run: npm ci
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-
-      - name: Run E2E (Fase 2C - regressao visual)
-        run: npx playwright test tests/e2e/visual-critical-layouts.spec.ts
-
-  e2e-artifact:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install
-        run: npm ci
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-
-      - name: Run E2E (Fase 2D - regressao do artefato)
-        run: npx playwright test tests/e2e/artifact-critical-pages.spec.ts

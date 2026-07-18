@@ -751,8 +751,13 @@ function detectApprovalSheet(lines: string[]): { date: string; members: string[]
 
       const hasTitle = /(?:prof|dra|dr)\.?\s+/i.test(text);
       if (hasTitle && text.length < 200) {
-        const parts = text.split(/\s+(?=Prof\.|Dra\.|Dr\.)/i).filter(Boolean);
-        members.push(...parts);
+        const cleaned = text.replace(/\*{0,2}\s*(?:co)?orientador(?:a)?\s*[:\-–]\s*/giu, "").replace(/\*/g, "").trim();
+        const parts = cleaned.split(/\s+(?=Prof\.|Dra\.|Dr\.|Profª|Draª|Drª)/i).filter(Boolean);
+        for (const part of parts) {
+          const trimmed = part.trim();
+          if (/^(prof|dra|dr)\.?\s*$/i.test(trimmed)) continue;
+          if (trimmed) members.push(trimmed);
+        }
       }
     }
   }
@@ -1261,7 +1266,7 @@ export function detectAcademicFieldsFromStructure(
 
   if (!fields.program && fields.workNature) {
     fields.program =
-      fields.workNature.match(/programa de p[óo]s-gradua[cç][aã]o em ([^,]+)/i)?.[1]?.trim() ?? "";
+      fields.workNature.match(/(?:programa|curso) de p[óo]s-gradua[cç][aã]o em ([^,]+)/i)?.[1]?.trim() ?? "";
   }
 
   const approval = detectApprovalSheet(lines);

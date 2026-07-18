@@ -4,7 +4,8 @@ export type ImportedTableOrigin =
   | "docx-table"
   | "mammoth-table"
   | "inferred-text-table"
-  | "converted-pdf-suspected";
+  | "converted-pdf-suspected"
+  | "pdf-reconstructed";
 
 export type ImportedTableStatus =
   | "preserved"

@@ -1,6 +1,7 @@
 import type { ImportedPdfDiagnostic, PdfBodyStartDiagnostic, PdfLineDiagnostic, PdfPageDiagnostic, PdfTextItemDiagnostic } from "./imported-pdf-diagnostic";
 import { detectPdfPretextual } from "./pdf-pretextual-diagnostic";
 import { reconstructPdfParagraphBlocks } from "./pdf-text-reconstruction-diagnostic";
+import { safeEnv } from "./safe-env";
 
 type PdfJsModule = typeof import("pdfjs-dist");
 type PdfViewportLike = {
@@ -192,6 +193,7 @@ export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagno
     getPage(pageNumber: number): Promise<{
       getViewport(options: { scale: number }): PdfViewportLike;
       getTextContent(): Promise<{ items: unknown[] }>;
+      getOperatorList(): Promise<{ fnArray: unknown[] }>;
     }>;
     destroy?(): Promise<void> | void;
   };
@@ -209,6 +211,13 @@ export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagno
     const numPages = pdf.numPages;
     const pages: PdfPageDiagnostic[] = [];
 
+    let detectedImageCount = 0;
+    const ocrEnabled = safeEnv.flag("PDF_OCR", true);
+    const ocrPerPage: import("./imported-pdf-diagnostic").PdfOcrPageStat[] = [];
+    let ocrPagesScanned = 0;
+    let ocrPagesSuccess = 0;
+    let ocrBackend = "none";
+    const dataBuffer = new Uint8Array(await file.arrayBuffer());
     for (let pageNumber = 1; pageNumber <= numPages; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
       const viewport = page.getViewport({ scale: 1 });
@@ -216,18 +225,89 @@ export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagno
       const items = content.items
         .map((item) => normalizePdfTextItem(item as PdfTextItemLike, viewport))
         .filter((item): item is PdfTextItemDiagnostic => item !== null);
-      const lines = buildPdfDiagnosticLines(items, pageNumber);
+      let lines = buildPdfDiagnosticLines(items, pageNumber);
       const textItems = items.map((item) => item.text).filter(Boolean);
+
+      // R-OCR-3: PDF digitalizado (sem camada de texto) → aplica OCR na página
+      // inteira e funde o texto reconhecido para que o restante do pipeline
+      // (corpo, legendas, pretextual) funcione. Só quando há quase nenhum texto.
+      let ocrAppliedThisPage = false;
+      if (ocrEnabled && textItems.length < 3) {
+        ocrPagesScanned += 1;
+        try {
+          const { recognizePdfPage } = await import("./ocr");
+          const ocr = await recognizePdfPage(dataBuffer, pageNumber - 1, { lang: safeEnv.string("OCR_LANG", "por+eng") });
+          ocrBackend = ocr.backend;
+          if (ocr.available && ocr.text.trim()) {
+            ocrPagesSuccess += 1;
+            ocrAppliedThisPage = true;
+            const ocrLines = ocr.text.split(/\r?\n+/).map((l) => l.trim()).filter(Boolean);
+            // Injeta como itens/linhas sintéticas (y crescente) para reaproveitar
+            // toda a lógica de reconstrução já existente.
+            const syntheticItems: PdfTextItemDiagnostic[] = ocrLines.map((text, i) => ({
+              text,
+              x: 0,
+              y: (i + 1) * 20,
+              width: text.length * 6,
+              height: 14,
+              transform: [1, 0, 0, 1, 0, (i + 1) * 20],
+            }));
+            items.push(...syntheticItems);
+            lines = lines.concat(buildPdfDiagnosticLines(syntheticItems, pageNumber));
+          }
+          ocrPerPage.push({
+            pageNumber,
+            backend: ocr.backend,
+            available: ocr.available,
+            confidence: ocr.confidence,
+            charCount: ocr.text.trim().length,
+          });
+        } catch {
+          ocrPerPage.push({ pageNumber, backend: "none", available: false, confidence: 0, charCount: 0 });
+        }
+      }
+
+      let pageImages = 0;
+      try {
+        const operatorList = await page.getOperatorList();
+        const fnArray = operatorList.fnArray as unknown as number[];
+        pageImages = fnArray.filter((op) => op === 85 || op === 83).length;
+        detectedImageCount += pageImages;
+      } catch {
+        pageImages = 0;
+      }
       pages.push({
         pageNumber,
         width: viewport.width,
         height: viewport.height,
         rotation: viewport.rotation ?? 0,
-        rawText: normalizeRawText(textItems),
-        textItemCount: textItems.length,
+        rawText: normalizeRawText(items.map((i) => i.text)),
+        textItemCount: items.length,
         items,
         lines,
+        imageCount: pageImages,
       });
+      if (ocrAppliedThisPage) {/* marcado em ocrPerPage */}
+    }
+
+    if (detectedImageCount > 0) {
+      warnings.push(
+        `IMAGENS NÃO PRESERVADAS: foram detectadas ${detectedImageCount} imagem(ns)/figura(s) no PDF original. O DOCX gerado NÃO reconstrói figuras, gráficos ou quadros do PDF — eles ficam ausentes. Reinsira manualmente cada imagem, com legenda e fonte, no editor antes da versão final.`,
+      );
+    }
+
+    let detectedTableCaptions = 0;
+    for (const page of pages) {
+      for (const line of page.lines) {
+        if (/^(TABELA|QUADRO|QUADROS|GRAFICO|GR[AÁ]FICO)\b/i.test(line.text.trim())) {
+          detectedTableCaptions += 1;
+        }
+      }
+    }
+    if (detectedTableCaptions > 0) {
+      warnings.push(
+        `TABELAS DETECTADAS: ${detectedTableCaptions} referência(s) a Tabela/Quadro/Gráfico no PDF. O sistema tenta reconstruir tabelas detectáveis por coordenadas de texto (reconstrução mínima, sujeita a limitações de layout); tabelas não reconstruídas exigem revisão manual no editor antes da versão final.`,
+      );
     }
 
     if (!pages.some((page) => page.rawText.trim())) {
@@ -237,6 +317,16 @@ export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagno
     const reconstruction = reconstructPdfParagraphBlocks(pages);
     const pretextual = detectPdfPretextual(pages, reconstruction.bodyStart.pageNumber);
 
+    const ocrApplied = ocrPagesScanned > 0;
+    const avgConfidence = ocrPerPage.length
+      ? Math.round(ocrPerPage.reduce((s, p) => s + p.confidence, 0) / ocrPerPage.length)
+      : 0;
+    if (ocrApplied) {
+      warnings.push(
+        `OCR APLICADO: ${ocrPagesSuccess}/${ocrPagesScanned} página(s) digitalizada(s) processada(s) por OCR (backend ${ocrBackend}, confiança média ${avgConfidence}%). O texto reconhecido foi fundido ao documento; revise a fidelidade, pois OCR pode conter erros.`,
+      );
+    }
+
     return {
       fileName: file.name,
       pageCount: numPages,
@@ -245,6 +335,16 @@ export async function importPdfDiagnostic(file: File): Promise<ImportedPdfDiagno
       bodyStart: reconstruction.bodyStart,
       reconstruction,
       warnings: [...warnings, ...pretextual.warnings],
+      ocrApplied,
+      ocrStats: ocrApplied
+        ? {
+            pagesScanned: ocrPagesScanned,
+            pagesOcrSuccess: ocrPagesSuccess,
+            backend: ocrBackend,
+            avgConfidence,
+            perPage: ocrPerPage,
+          }
+        : undefined,
     };
   } catch {
     throw new Error("Não foi possível ler o PDF. O arquivo pode estar inválido, protegido, corrompido ou ilegível sem OCR.");

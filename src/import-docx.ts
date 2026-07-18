@@ -18,11 +18,23 @@ import {
 } from "./import-normalizer";
 import { repairHeadingFragments, repairRecordHeadingFragments } from "./heading-fragment-repair";
 import { sanitizeImportedTitle } from "./title-sanitizer";
+
+function normalizeDash(value: string): string {
+  return value
+    .replace(/[\u2013\u2014\u2012\u2015\uFE58\uFE63]/g, "-")
+    .replace(/\s*-\s*/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 import { ImportedDocumentImage, importedImageMarker, looksLikeAcademicImageLabel, looksLikeAcademicImageCaption, looksLikeImageSource } from "./imported-images";
 import { ImportedTable, importedTableMarker, normalizePhantomColumns, isTableUnreadable, buildStructuredTextFromTable, removeTrailingEmptyColumn, detectGroupColumn, normalizeGroupColumn } from "./imported-tables";
 import { reconstructAcademicTable } from "./academic-table-reconstructor";
 import type { DocumentMode, SourceKind } from "./import-contract";
 import { importPdfDiagnostic } from "./import-pdf-diagnostic";
+import { extractPdfTables } from "./pdf-table-extractor";
+import { extractPdfFigures } from "./pdf-figure-extractor";
+import { buildFigureAudit, generateFigureReportMarkdown } from "./figure-audit";
+import { safeEnv } from "./safe-env";
 import type { ImportedPdfDiagnostic } from "./imported-pdf-diagnostic";
 
 function estimateColumnWidths(gridWidths: number[], columnCount: number): number[] {
@@ -109,6 +121,7 @@ export interface ImportResult {
   importedTables: ImportedTable[];
   pdfDiagnostic?: ImportedPdfDiagnostic;
   workTypeSuggestion?: WorkTypeSuggestion;
+  figureAudit?: import("./figure-audit").FigureAuditSummary;
 }
 
 const DECORATIVE_SECTION_NAMES = new Set([
@@ -168,7 +181,7 @@ function sanitizeConfidence(
   };
 }
 
-function blockText(block: ImportedBlock): string {
+export function blockText(block: ImportedBlock): string {
   if (block.type === "pageBreak" || block.type === "image") return "";
   if (block.type === "table") return block.rows.map((row) => row.join("\t")).join("\n");
   return block.text.trim();
@@ -301,7 +314,13 @@ function computeImageInsertionHint(
 }
 
 function hasAmbiguousNeighbors(blocks: ImportedBlock[], index: number): boolean {
-  const windowSize = 3;
+  // Janela estreita (±1): somente imagens IMEDIATAMENTE vizinhas com a MESMA
+  // legenda exata são consideradas a mesma figura duplicada (ex.: a mesma figura
+  // renderizada duas vezes no DOCX). Subfiguras distintas que o PDF rotulou com o
+  // mesmo número (ex.: "FIGURA 6" e "FIGURA 6a"), mesmo se próximas, ficam a ≥2
+  // blocos de distância (legendas/fonte entre elas) e NÃO devem ser descartadas,
+  // caso contrário figuras reais seriam perdidas no fluxo Cópia → Reimport → ABNT.
+  const windowSize = 1;
   const currentCaption = nearestAcademicImageContext(blocks, index).caption;
   if (!currentCaption) return false;
 
@@ -321,6 +340,15 @@ function classifyAcademicImage(block: ImportedBlock, index: number, blocks: Impo
 
   if (hasAmbiguousNeighbors(blocks, index)) return false;
 
+  // Uma imagem com legenda acadêmica (FIGURA/IMAGEM/.../FONTE) nas proximidades é,
+  // por definição, uma figura real — independentemente da seção heurística atribuída
+  // pelo parser de estrutura (que pode classificar incorretamente como "pre-textual"
+  // figuras de corpos gerados/convertidos). Isso garante a preservação de figuras no
+  // fluxo Cópia → Reimport → ABNT sem relaxar a proteção contra logotipos/decorações
+  // (ainda cobertos por isDecorativeImageBlock e hasAmbiguousNeighbors).
+  const { caption, source } = nearestAcademicImageContext(blocks, index);
+  if (caption || source) return true;
+
   const section = block.section;
   let inBody: boolean;
   if (section === "textual" || section === "post-textual") {
@@ -332,10 +360,7 @@ function classifyAcademicImage(block: ImportedBlock, index: number, blocks: Impo
     const bodyEnd = findBodyEndIndex(blocks);
     inBody = bodyStart >= 0 && index > bodyStart && (bodyEnd < 0 || index < bodyEnd);
   }
-  if (!inBody) return false;
-
-  const { caption, source } = nearestAcademicImageContext(blocks, index);
-  return Boolean(caption || source);
+  return inBody;
 }
 
 function importedImagesFromStructure(structure: DocxStructure): ImportedDocumentImage[] {
@@ -677,6 +702,9 @@ function editorTextWithImageMarkers(
   }
 
   const output = lines.join("\n\n").trim() || fallbackEditorText;
+  if (typeof console !== "undefined" && process.env.BUILD_PDF_DEBUG === "1") {
+    console.error(`[ETWIM_DEBUG] imageBlocks=${blocks.filter((b) => b.type === "image").length} tableBlocks=${blocks.filter((b) => b.type === "table").length} emittedImg=${emittedImageIds.size} emittedTab=${emittedTableIds.size} outputMarkers=${(output.match(/\[\[Imagem importada preservada:[^\]]+\]\]/g) || []).length} importedImages=${importedImages.length}`);
+  }
   return appendMissingPreserved(output, emittedImageIds, emittedTableIds);
 }
 
@@ -767,7 +795,11 @@ export function identifyAcademicFields(
   };
 }
 
-function buildPdfEditorText(diagnostic: ImportedPdfDiagnostic): string {
+function buildPdfEditorText(
+  diagnostic: ImportedPdfDiagnostic,
+  tables: ImportedTable[] = [],
+  figures: ImportedDocumentImage[] = [],
+): string {
   const sections: string[] = [];
   const { pretextual, reconstruction } = diagnostic;
 
@@ -813,6 +845,8 @@ function buildPdfEditorText(diagnostic: ImportedPdfDiagnostic): string {
   }
 
   const bodyStartPage = reconstruction.bodyStart.found ? (reconstruction.bodyStart.pageNumber ?? 1) : 1;
+  const emittedFigureIds = new Set<string>();
+  const emittedTableIds = new Set<string>();
   for (const block of reconstruction.blocks) {
     if (block.pageStart < bodyStartPage) continue;
     const text = block.text.trim();
@@ -823,8 +857,40 @@ function buildPdfEditorText(diagnostic: ImportedPdfDiagnostic): string {
       sections.push(`- ${text}`);
     } else if (block.type === "caption" || block.type === "source") {
       sections.push(`_${text}_`);
+      const matchingTable = tables.find(
+        (table) => !emittedTableIds.has(table.id) && table.caption && text.startsWith(table.caption.slice(0, 24)),
+      );
+      if (matchingTable) {
+        emittedTableIds.add(matchingTable.id);
+        sections.push(importedTableMarker(matchingTable.id));
+      }
+      const matchingFigure = figures.find(
+        (fig) => !emittedFigureIds.has(fig.id) && fig.caption && text.startsWith(fig.caption.slice(0, 24)),
+      );
+      if (matchingFigure) {
+        emittedFigureIds.add(matchingFigure.id);
+        sections.push(importedImageMarker(matchingFigure.id));
+      }
     } else {
       sections.push(text);
+    }
+  }
+
+  if (tables.length) {
+    for (const table of tables) {
+      if (!emittedTableIds.has(table.id)) {
+        emittedTableIds.add(table.id);
+        sections.push(importedTableMarker(table.id));
+      }
+    }
+  }
+
+  if (figures.length) {
+    for (const figure of figures) {
+      if (!emittedFigureIds.has(figure.id)) {
+        emittedFigureIds.add(figure.id);
+        sections.push(importedImageMarker(figure.id));
+      }
     }
   }
 
@@ -839,14 +905,23 @@ function pdfPretextualFields(diagnostic: ImportedPdfDiagnostic): Partial<Academi
   if (author) fields.author = author;
   if (title) fields.title = title;
   if (pretextual.titlePage?.natureText) fields.workNature = pretextual.titlePage.natureText;
-  if (pretextual.titlePage?.program) fields.program = pretextual.titlePage.program;
-  if (pretextual.titlePage?.advisor) fields.advisor = pretextual.titlePage.advisor;
-  if (pretextual.titlePage?.coadvisor) fields.coadvisor = pretextual.titlePage.coadvisor;
+  if (pretextual.titlePage?.program) {
+    fields.program = pretextual.titlePage.program;
+  } else if (pretextual.titlePage?.natureText) {
+    const programMatch = pretextual.titlePage.natureText.match(/(?:programa|curso) de p[óo]s-gradua[cç][aã]o em ([^,]+)/i);
+    if (programMatch?.[1]) fields.program = programMatch[1].trim();
+  }
+  if (pretextual.titlePage?.advisor) {
+    fields.advisor = pretextual.titlePage.advisor;
+  }
+  if (pretextual.titlePage?.coadvisor) {
+    fields.coadvisor = pretextual.titlePage.coadvisor;
+  }
   if (pretextual.titlePage?.institution || pretextual.cover?.institution) {
     fields.course = pretextual.titlePage?.institution || pretextual.cover?.institution || "";
   }
   if (pretextual.titlePage?.city || pretextual.cover?.city) {
-    fields.location = pretextual.titlePage?.city || pretextual.cover?.city || "";
+    fields.location = normalizeDash(pretextual.titlePage?.city || pretextual.cover?.city || "");
   }
   if (pretextual.titlePage?.year || pretextual.cover?.year) {
     fields.year = pretextual.titlePage?.year || pretextual.cover?.year || "";
@@ -988,7 +1063,10 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
 
   if (extension === "pdf") {
     const pdfDiagnostic = await importPdfDiagnostic(file);
-    const editorText = buildPdfEditorText(pdfDiagnostic);
+    const pdfTables = extractPdfTables(pdfDiagnostic);
+    const pdfBuffer = new Uint8Array(await file.arrayBuffer());
+    const pdfFigures = await extractPdfFigures(pdfDiagnostic, pdfBuffer).catch(() => [] as ImportedDocumentImage[]);
+    const editorText = buildPdfEditorText(pdfDiagnostic, pdfTables, pdfFigures);
     const normalized = normalizePlainAcademicText(editorText);
     const detected = detectAcademicFieldsFromStructure(normalized.structure);
     const seed = pdfPretextualFields(pdfDiagnostic);
@@ -998,6 +1076,15 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
       ...normalized.messages,
       ...detected.messages,
     ], "pdf");
+    result.importedTables = pdfTables;
+    result.importedImages = pdfFigures;
+    // R-C1R20: o editorText produzido por buildPdfEditorText retém todos os
+    // marcadores de figura/tabela (um por elemento detectado), enquanto o
+    // editorText derivado de normalized.structure (via buildImportResult) perde
+    // figuras cujos blocos não foram classificados como "image" na normalização.
+    // Usamos o texto com marcadores completos para garantir que a Etapa 1
+    // (PDF -> DOCX Cópia) preserve 100% das figuras/tabelas detectadas.
+    result.editorText = editorText;
     const seedConfidence = pdfPretextualConfidence(pdfDiagnostic);
     const confidence = { ...result.confidence };
     for (const key of Object.keys(seed) as AcademicFieldKey[]) {
@@ -1006,6 +1093,77 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
       if (hasValue && seedConfidence[key]) {
         confidence[key] = seedConfidence[key] as Confidence;
       }
+    }
+    const imageWarningText = pdfDiagnostic.warnings.find((warning) => /IMAGENS NÃO PRESERVADAS/i.test(warning));
+    const tableDetectedText = pdfDiagnostic.warnings.find((warning) => /TABELAS DETECTADAS/i.test(warning));
+
+    // R14: o aviso NUNCA usa "regiões candidatas detectadas" como base de perda.
+    // Usa a auditoria, que distingue figura confirmada de falso positivo e conta
+    // apenas figuras confirmadas que de fato não foram inseridas.
+    const figureAudit = buildFigureAudit(pdfFigures, pdfDiagnostic);
+    const preservedFigures = figureAudit.rasterized;
+    const confirmedFigures = figureAudit.confirmedFigures;
+    const lostFigures = figureAudit.lost; // figuras confirmadas não inseridas (perda real)
+    const falsePositives = figureAudit.falsePositives;
+    const rawImageCountMatch = imageWarningText?.match(/(\d+)\s*imagem/i);
+    const rawImageCount = rawImageCountMatch ? Number(rawImageCountMatch[1]) : 0;
+
+    let imageWarningAdjusted: string | undefined;
+    if (preservedFigures > 0 && lostFigures === 0) {
+      imageWarningAdjusted = `IMAGENS PRESERVADAS: ${preservedFigures} figura(s) do PDF foram rasterizadas e inseridas no DOCX.`;
+    } else if (preservedFigures > 0) {
+      imageWarningAdjusted = `IMAGENS PARCIALMENTE PRESERVADAS: ${preservedFigures} figura(s) inseridas no DOCX; ${lostFigures} figura(s) confirmada(s) NÃO inserida(s) (rasterização falhou). Reinsira manualmente as ausentes antes da versão final.${falsePositives > 0 ? ` ${falsePositives} região(ões) candidata(s) foram descartadas como falso(s) positivo(s) e não contam como perda.` : ""}`;
+    } else if (confirmedFigures > 0) {
+      imageWarningAdjusted = `IMAGENS NÃO PRESERVADAS: ${confirmedFigures} figura(s) confirmada(s) no PDF não puderam ser rasterizadas nem inseridas. Reinsira manualmente cada imagem, com leganda e fonte, no editor antes da versão final.`;
+    } else if (rawImageCount > 0) {
+      // Não há figuras confirmadas por legenda, mas o PDF contém imagens cruas.
+      // Reporta como imagens detectadas, NUNCA como figuras confirmadas perdidas.
+      imageWarningAdjusted = `IMAGENS DETECTADAS NO PDF: ${rawImageCount} imagem(ns)/figura(s) crua(s) encontrada(s) no PDF, porém nenhuma pôde ser confirmada como figura com legenda nem rasterizada. Reinsira manualmente as ilustrações ausentes antes da versão final.`;
+    }
+
+    // R14/R-OCR: gera relatórios detalhados quando solicitado
+    // (evita efeito colateral em tempo de execução do app no browser).
+    if (safeEnv.flag("FIGURE_AUDIT_REPORT", false)) {
+      try {
+        const { writeFileSync } = await import("node:fs");
+        const { join } = await import("node:path");
+        const { generateOcrReportMarkdown } = await import("./ocr");
+        const reportPath = join(process.cwd(), "tmp", "RELATORIO_FIGURAS.md");
+        const markdown = generateFigureReportMarkdown(figureAudit, {
+          fileName: file.name,
+          source: "Conversão PDF → DOCX (Site_ABNT)",
+          generatedAt: new Date().toISOString(),
+        });
+        writeFileSync(reportPath, markdown, "utf8");
+        const ocrPath = join(process.cwd(), "tmp", "RELATORIO_OCR.md");
+        writeFileSync(ocrPath, generateOcrReportMarkdown(pdfDiagnostic, {
+          source: "Conversão PDF → DOCX (Site_ABNT) — OCR de páginas",
+          generatedAt: new Date().toISOString(),
+        }), "utf8");
+      } catch {
+        /* relatório opcional: falha não deve quebrar a importação */
+      }
+    }
+
+    const tableStatus = pdfTables.length > 0
+      ? `TABELAS RECONSTRUÍDAS PARCIALMENTE: ${pdfTables.length} tabela(s) reconstruída(s) por coordenadas no DOCX (reconstrução mínima; confira alinhamento, células mescladas e fontes). As demais permanecem ausentes e exigem revisão manual.`
+      : tableDetectedText;
+    const preservationWarnings = [imageWarningAdjusted, tableStatus].filter(Boolean) as string[];
+    if (preservationWarnings.length && !result.fields.imageWarnings) {
+      result.fields.imageWarnings = preservationWarnings.join(" ");
+    }
+    // Expõe a auditoria de figuras para validação/relatório (R14).
+    (result as ImportResult & { figureAudit?: typeof figureAudit }).figureAudit = figureAudit;
+    // The title/coadvisor extracted from the structured PDF pretextual diagnostic are
+    // authoritative; sanitization steps (sanitizeImportedTitle, heading-fragment repair)
+    // may wrongly blank a legitimate title-page value. Restore it when the seed had one.
+    if (seed.title && !result.fields.title) {
+      result.fields.title = seed.title;
+      if (seedConfidence.title) confidence.title = seedConfidence.title as Confidence;
+    }
+    if (seed.coadvisor && !result.fields.coadvisor) {
+      result.fields.coadvisor = seed.coadvisor;
+      if (seedConfidence.coadvisor) confidence.coadvisor = seedConfidence.coadvisor as Confidence;
     }
     return {
       ...result,

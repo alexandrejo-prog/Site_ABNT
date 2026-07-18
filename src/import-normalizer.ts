@@ -92,7 +92,7 @@ function cleanText(value: string): string {
   return value
     .replace(/\uFFFE|\uFEFF/g, "")
     .replace(/\[Imagem detectada:\s*[^\]]+\]/gi, "")
-    .replace(/\[Imagem:\s*[^\]]+\]/gi, "")
+    .replace(/\[Imagem(?! importada preservada:)[^\]]*\s*:\s*[^\]]+\]/gi, "")
     .replace(/\s+/g, " ")
     .trim();
 }
