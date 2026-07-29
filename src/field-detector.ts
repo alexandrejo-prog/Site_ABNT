@@ -419,13 +419,13 @@ function findFollowingLabel(lines: string[], labels: string[]): string {
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
-    const normalized = normalizeForDetection(line);
+    const normalized = normalizeForDetection(line).replace(/\([a-zA-Z]\)/g, "");
     const inlineLabel = normalizedLabels.find((label) => normalized.startsWith(`${label}:`));
     if (inlineLabel) {
       return cleanValue(line.slice(line.indexOf(":") + 1));
     }
 
-    if (normalizedLabels.includes(normalized)) {
+    if (normalizedLabels.includes(normalized) || normalizedLabels.some((l) => normalized === l || normalized.startsWith(`${l}:`))) {
       const nextLine = lines[index + 1] ?? "";
       if (nextLine && !isPageHeading({ type: "paragraph", text: nextLine, rawText: nextLine, runs: [{ text: nextLine }] }, labels)) {
         return cleanValue(nextLine);
@@ -437,9 +437,14 @@ function findFollowingLabel(lines: string[], labels: string[]): string {
 }
 
 function detectWorkNature(lines: string[]): string {
-  const index = lines.findIndex((line) =>
+  let index = lines.findIndex((line) =>
     /apresentad[ao]\s+[aà]\s+universidade|obten[cç][aã]o\s+do\s+t[ií]tulo/i.test(line),
   );
+  if (index < 0) {
+    index = lines.findIndex((_line, i) =>
+      i + 1 < lines.length && /apresentad[ao]\s+\S+/i.test(lines[i]) && /universidade|t[ií]tulo/i.test(lines[i + 1]),
+    );
+  }
   if (index < 0) return "";
 
   const parts: string[] = [];
@@ -683,10 +688,23 @@ function hasApprovalSheet(lines: string[]): boolean {
 }
 
 function detectApprovalSheet(lines: string[]): { date: string; members: string[] } {
-  const dateLine = lines.find((line) => /aprovad[ao]\s+em\s+(\d{1,2}\s+de\s+\p{L}+\s+de\s+(?:19|20)\d{2})/iu.test(line));
-  const date = dateLine ? cleanValue(dateLine.replace(/^aprovad[ao]\s+em\s+/i, "").replace(/\.$/i, "").trim()) : "";
+  let dateLine = lines.find((line) => /aprovad[ao]\s+em\s+(\d{1,2}\s+de\s+\p{L}+\s+de\s+(?:19|20)\d{2})/iu.test(line));
+  let date = dateLine ? cleanValue(dateLine.replace(/^aprovad[ao]\s+em\s+/i, "").replace(/\.$/i, "").trim()) : "";
 
-  const start = lines.findIndex((line) => /aprovad[ao]\s+em/i.test(line));
+  let start = lines.findIndex((line) => /aprovad[ao]\s+em/i.test(line));
+
+  // Fallback: try to detect committee from a "banca" labeled section
+  if (start < 0) {
+    start = lines.findIndex((line) => /^\s*(banca\s+(examining|examinadora)|membros\s+(da\s+)?banca|comiss[aã]o\s+(julgadora|examinadora))/i.test(line));
+    if (start < 0) {
+      start = lines.findIndex((line) => /^\s*(professor(?:es)?\s+(orientador|convidado)|membro\s+(da\s+)?banca)/i.test(line));
+    }
+    if (start >= 0) {
+      dateLine = lines.find((line) => /^\s*(lavras|lugar|data)\s*[,:\-]?\s*(?:19|20)\d{2}/i.test(line));
+      date = dateLine ? dateLine.replace(/.*?(\d{4}).*/, "$1").trim() : "";
+    }
+  }
+
   const members: string[] = [];
   if (start >= 0) {
     for (let index = start + 1; index < lines.length; index += 1) {
@@ -700,6 +718,8 @@ function detectApprovalSheet(lines: string[]): { date: string; members: string[]
       if (hasTitle && text.length < 200) {
         const parts = text.split(/\s+(?=Prof\.|Dra\.|Dr\.)/i).filter(Boolean);
         members.push(...parts);
+      } else if (!hasTitle && text.length > 15 && text.length < 200 && /^[A-ZÀ-Ú]/.test(text) && !/^\d/.test(text) && !/^(autor|t[ií]tulo|orientador|coorientador|local|cidade|ano|curso|programa)/i.test(text)) {
+        members.push(text);
       }
     }
   }
@@ -1100,7 +1120,15 @@ export function detectAcademicFieldsFromStructure(
 ): FieldDetectionResult {
   const fields = emptyAcademicFields();
   const confidence = emptyConfidenceMap();
-  const lines = blockLines(structure.blocks).map((line) => line.text);
+  const rawLines = blockLines(structure.blocks).map((line) => line.text);
+  const lines = rawLines.flatMap((line) => {
+    if (line.includes("\t")) {
+      const cells = line.split("\t").map((c) => c.trim()).filter(Boolean);
+      const parts = cells.length >= 2 && cells.every((c) => c.length < 100) && cells.some((c) => /:/.test(c)) ? cells : [];
+      return parts.length ? parts : [line];
+    }
+    return [line];
+  });
   const text = structure.text || lines.join("\n");
   const messages: string[] = [];
 
@@ -1117,7 +1145,7 @@ export function detectAcademicFieldsFromStructure(
     }
   }
 
-  fields.author = findByLabel(text, [/^\s*(?:autor(?:a)?|discente|aluno(?:a)?)\s*[:\-]\s*(.+)$/im]);
+  fields.author = findByLabel(text, [/^\s*(?:autor(?:\(?[aA]\)?)?|discente|aluno(?:\(?[aA]\)?)?)\s*[:\-]\s*(.+)$/im]);
   fields.title = findByLabel(text, [/^\s*t[íi]tulo\s*[:\-]\s*(.+)$/im]);
   fields.subtitle = findByLabel(text, [/^\s*subt[íi]tulo\s*[:\-]\s*(.+)$/im]);
   fields.course = findByLabel(text, [/^\s*curso\s*[:\-]\s*(.+)$/im]);
@@ -1151,11 +1179,11 @@ export function detectAcademicFieldsFromStructure(
   confidence.year = coverYear.confidence;
 
   fields.advisor = stripAdvisorNoise(
-    findByLabel(text, [/^\s*orientador(?:a)?\s*[:\-]\s*(.+)$/im]) ||
+    findByLabel(text, [/^\s*orientador(?:\(?[aA]\)?)?\s*[:\-]\s*(.+)$/im]) ||
       findFollowingLabel(lines, ["Orientador", "Orientadora"]),
   );
   fields.coadvisor =
-    findByLabel(text, [/^\s*coorientador(?:a)?\s*[:\-]\s*(.+)$/im]) ||
+    findByLabel(text, [/^\s*coorientador(?:\(?[aA]\)?)?\s*[:\-]\s*(.+)$/im]) ||
     findFollowingLabel(lines, ["Coorientador", "Coorientadora"]);
   fields.workNature = detectWorkNature(lines);
 

@@ -320,7 +320,7 @@ function hasEditorHeading(blocks: EditorBlock[], text: string): boolean {
   });
 }
 
-function referenceParagraphs(references: string[], bodyBlocks: EditorBlock[] = []): Paragraph[] {
+function referenceParagraphs(references: string[], bodyBlocks: EditorBlock[] = []): CpgChild[] {
   const cleanReferences = references
     .map((item) => stripMarkup(item).trim())
     .filter(Boolean)

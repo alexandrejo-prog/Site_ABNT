@@ -2,8 +2,6 @@ import { describe, it, expect } from "vitest";
 import { generateDocxBlob } from "../src/export-docx";
 import { emptyAcademicFields } from "../src/ufla-rules";
 import { loadDocxParts, paragraphTexts, normalizedParagraphTexts } from "./test-utils/ooxml";
-import * as fs from "fs";
-import * as path from "path";
 
 /**
  * Real-world simulation test.
@@ -46,14 +44,11 @@ describe("Real-world DOCX fidelity tests", () => {
     const blob = await generateDocxBlob({ fields, editorText });
     const parts = await loadDocxParts(blob);
     const parTexts = paragraphTexts(parts.documentXml);
-    const tblCount = (parts.documentXml.match(/<w:tbl\b/g) || []).length;
 
     // Check that table content is at least present somewhere
     const hasQuadro = parTexts.some(p => p.includes("Quadro 1"));
     const hasEtapa = parTexts.some(p => p.includes("Etapa"));
     const hasPlanejamento = parTexts.some(p => p.includes("Planejamento"));
-    
-    console.log(`Space-separated table test: tblCount=${tblCount}, hasQuadro=${hasQuadro}, hasEtapa=${hasEtapa}, hasPlanejamento=${hasPlanejamento}`);
     
     // At minimum, all text should appear
     expect(hasQuadro).toBe(true);
@@ -92,7 +87,6 @@ describe("Real-world DOCX fidelity tests", () => {
     const parts = await loadDocxParts(blob);
     const tblCount = (parts.documentXml.match(/<w:tbl\b/g) || []).length;
     
-    console.log(`Tab-separated table: tblCount=${tblCount}`);
     expect(tblCount).toBeGreaterThanOrEqual(1);
   });
 
@@ -124,11 +118,7 @@ describe("Real-world DOCX fidelity tests", () => {
     const blob = await generateDocxBlob({ fields, editorText });
     const parts = await loadDocxParts(blob);
     const tblCount = (parts.documentXml.match(/<w:tbl\b/g) || []).length;
-    const parTexts = paragraphTexts(parts.documentXml);
-    
-    console.log(`Table after heading test: tblCount=${tblCount}`);
-    console.log(`  Paragraphs with table content: ${parTexts.filter(p => p.includes('Quadro') || p.includes('Etapa') || p.includes('Coleta')).join(' | ')}`);
-    
+
     expect(tblCount).toBeGreaterThanOrEqual(1);
   });
 
@@ -165,9 +155,6 @@ describe("Real-world DOCX fidelity tests", () => {
     const endIdx = normalized.findIndex((p, i) => i > refIdx && (p.includes("APENDICE") || p.includes("ANEXOS")));
     const refEntries = allParas.slice(refIdx + 1, endIdx > refIdx ? endIdx : undefined).filter(p => p.trim());
     
-    console.log("\n=== Reference entries found ===");
-    refEntries.forEach((p, i) => console.log(`  ${i}: "${p}"`));
-    
     // Check each reference has proper formatting in XML
     const paraXmls = parts.documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? [];
     for (let i = refIdx + 1; i < (endIdx > refIdx ? endIdx : paraXmls.length); i++) {
@@ -198,14 +185,11 @@ describe("Real-world DOCX fidelity tests", () => {
       expect(runs.length).toBeGreaterThanOrEqual(1);
       
       // Verify the text contains author in uppercase
-      const hasUppercaseAuthor = /^[A-ZÀ-Ú][A-ZÀ-Ú\s.]+[,]/i.test(text);
-      console.log(`  Author uppercase check: "${text.substring(0,30)}..." = ${hasUppercaseAuthor}`);
     }
     
     // Check reference order is alphabetical
     const sortedRefs = [...refEntries].sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
     const orderOk = refEntries.every((p, i) => p === sortedRefs[i]);
-    console.log(`\n  Reference order correct: ${orderOk}`);
     expect(orderOk).toBe(true);
   });
 
@@ -311,9 +295,6 @@ describe("Real-world DOCX fidelity tests", () => {
       
       // Get entries after REFERENCIAS
       const refEntries = text.slice(refIdx + 1).filter(p => p.trim() && !p.includes("APENDICE") && !p.includes("ANEXOS") && !p.includes("APÊNDICE"));
-      
-      console.log("\n=== Combined references ===");
-      refEntries.forEach((p, i) => console.log(`  ${i}: "${p.substring(0, 80)}..."`));
       
       // All 3 references should appear
       expect(refEntries.some(p => p.includes("SILVA"))).toBe(true);

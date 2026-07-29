@@ -24,6 +24,11 @@ testar-site.txt
 
 # Pasta temporária para arquivos DOCX gerados durante testes/build
 tmp/
+temp/
+
+# Manuais UFLA em PDF (grandes, não devem ser versionados)
+LIVRO_Manual*.pdf
+MANUAL+DE+NORMALIZAÇÃO*.pdf
 
 .continue/
 default-config.yaml

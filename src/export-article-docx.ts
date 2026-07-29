@@ -196,26 +196,7 @@ function referenceRunToTextRun(referenceRun: ReferenceRun): TextRun {
   });
 }
 
-function hasEditorHeading(blocks: EditorBlock[], text: string): boolean {
-  const normalizedTarget = text
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase()
-    .replace(/\s+/g, " ")
-    .trim();
-  return blocks.some((block) => {
-    if (block.type !== "heading1" && block.type !== "heading2" && block.type !== "paragraph") return false;
-    const normalizedBlock = block.text
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toUpperCase()
-      .replace(/\s+/g, " ")
-      .trim();
-    return normalizedBlock === normalizedTarget;
-  });
-}
-
-function referenceParagraphs(references: string[]): Paragraph[] {
+function referenceParagraphs(references: string[]): (Paragraph | Table)[] {
   if (!references.length) return [];
 
   const children: Array<Paragraph | Table> = [];

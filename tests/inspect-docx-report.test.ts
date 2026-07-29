@@ -3,7 +3,6 @@ import { generateDocxBlob } from "../src/export-docx";
 import { emptyAcademicFields, UFLA_RULES } from "../src/ufla-rules";
 import {
   loadDocxParts,
-  documentText,
   paragraphTexts,
   normalizedParagraphTexts,
   tocInstruction,
@@ -19,7 +18,6 @@ interface ReportRow {
 
 describe("Inspecao profunda DOCX vs Manual UFLA 6ed", () => {
   let xml: string;
-  let text: string;
   let parTexts: string[];
   let normalizedParTexts: string[];
   let report: ReportRow[] = [];
@@ -103,7 +101,6 @@ describe("Inspecao profunda DOCX vs Manual UFLA 6ed", () => {
     const blob = await generateDocxBlob({ fields, editorText });
     const parts = await loadDocxParts(blob);
     xml = parts.documentXml;
-    text = documentText(parts.documentXml);
     parTexts = paragraphTexts(parts.documentXml);
     normalizedParTexts = normalizedParagraphTexts(parts.documentXml);
   });

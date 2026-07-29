@@ -381,7 +381,7 @@ function hasEditorHeading(blocks: EditorBlock[], text: string): boolean {
   });
 }
 
-function referenceParagraphs(references: string[], bodyBlocks: EditorBlock[] = []): Paragraph[] {
+function referenceParagraphs(references: string[], bodyBlocks: EditorBlock[] = []): (Paragraph | Table)[] {
   if (!references.length) return [];
   const children: Array<Paragraph | Table> = [];
   if (!hasEditorHeading(bodyBlocks, "REFERENCIAS") && !hasEditorHeading(bodyBlocks, "REFERÊNCIAS")) {

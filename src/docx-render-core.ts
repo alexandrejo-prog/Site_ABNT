@@ -351,7 +351,6 @@ export function tabbedTableBlock(
     });
   });
 
-  const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: "000000" };
   const SOLID_BORDER = { style: BorderStyle.SINGLE, size: 4, color: "000000" };
 
   const result: Array<Paragraph | Table> = [
