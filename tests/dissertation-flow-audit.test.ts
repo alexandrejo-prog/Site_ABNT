@@ -108,7 +108,7 @@ O texto será revisado para substituir a linguagem de projeto por linguagem pró
     expect(parts.documentXml).toContain('w:left="1701"');
     expect(parts.documentXml).toContain('w:bottom="1134"');
     expect(parts.documentXml).toContain('w:right="1134"');
-    expect(parts.documentXml).toContain('w:hanging="283"');
+    expect(parts.documentXml).toContain('w:hanging="284"');
     expect(parts.documentXml).toContain("<w:tbl>");
     expect(countOccurrences(text, "Fonte: elaborado pelo autor.")).toBe(1);
   });

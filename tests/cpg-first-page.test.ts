@@ -139,7 +139,7 @@ describe("CPG first page layout", () => {
     const text = documentText(documentXml);
 
     expect(text).not.toContain("FICHA CATALOGRÁFICA");
-    expect(text).not.toContain("SUMÁRIO");
+    expect(text).toContain("SUMÁRIO");
     expect(text).not.toContain("Trabalho apresentado");
   });
 

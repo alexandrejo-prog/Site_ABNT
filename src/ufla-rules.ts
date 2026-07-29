@@ -159,7 +159,7 @@ export interface AcademicFields {
   listaSiglas: string;
 }
 
-const TWIPS_PER_CM = 1440 / 2.54;
+const TWIPS_PER_CM = 567;
 
 export function cmToTwip(valueInCm: number): number {
   return Math.round(valueInCm * TWIPS_PER_CM);
@@ -168,14 +168,14 @@ export function cmToTwip(valueInCm: number): number {
 export const CPG_RULES = {
   source: "Templates do Congresso de Pós-Graduação da UFLA (CPG)",
   margins: {
-    topCm: 3.5,
-    bottomCm: 2.5,
+    topCm: 3,
+    bottomCm: 2,
     leftCm: 3,
-    rightCm: 3,
-    topTwip: cmToTwip(3.5),
-    bottomTwip: cmToTwip(2.5),
+    rightCm: 2,
+    topTwip: cmToTwip(3),
+    bottomTwip: cmToTwip(2),
     leftTwip: cmToTwip(3),
-    rightTwip: cmToTwip(3),
+    rightTwip: cmToTwip(2),
   },
   typography: {
     fontFamily: "Times New Roman",

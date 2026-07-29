@@ -77,7 +77,6 @@ async function generatedProjectXml(
 
 function expectNoGraduateOnlyElements(documentXml: string): void {
   for (const forbidden of [
-    "SUMÁRIO",
     "FICHA CATALOGR",
     "FOLHA DE APROVA",
     "INDICADORES DE IMPACTO",

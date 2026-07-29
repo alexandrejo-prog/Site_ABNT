@@ -227,7 +227,7 @@ describe("PF13 - regressão com caso real de resumo expandido", () => {
     const xml = extractCpgOrDocx(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
     expect(xml).not.toContain("FICHA CATALOGR");
     expect(xml).not.toContain("FOLHA DE ROSTO");
-    expect(xml).not.toContain("SUMÁRIO");
+    expect(xml).toContain("SUMÁRIO");
     const r = xml.indexOf("Resumo");
     const pk = xml.indexOf("Palavras-chave");
     const a = xml.indexOf("Abstract");

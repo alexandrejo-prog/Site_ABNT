@@ -2,8 +2,11 @@ import {
   AlignmentType,
   BorderStyle,
   Document,
+  Header,
   HeadingLevel,
   Packer,
+  PageBreak,
+  PageNumber,
   PageOrientation,
   Paragraph,
   Table,
@@ -27,9 +30,9 @@ const BODY_SIZE = CPG_RULES.typography.bodyFontSizePt * 2;
 const TITLE_SIZE = CPG_RULES.typography.titleFontSizePt * 2;
 const SECTION_SIZE = CPG_RULES.typography.sectionTitleFontSizePt * 2;
 const SUBSECTION_SIZE = CPG_RULES.typography.subsectionTitleFontSizePt * 2;
-const EMAIL_SIZE = CPG_RULES.typography.emailFontSizePt * 2;
 const CAPTION_SIZE = 20;
 const SINGLE_LINE = 240;
+const BODY_LINE = 360;
 const SIX_PT = 120;
 const TWELVE_PT = 240;
 const ABSTRACT_INDENT = cmToTwip(CPG_RULES.typography.abstractSideIndentCm);
@@ -92,7 +95,7 @@ function textRunsFromMarkup(text: string, size = BODY_SIZE, font = CPG_RULES.typ
 function paragraph(text: string, options: Partial<IParagraphOptions> = {}): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.BOTH,
-    spacing: { before: SIX_PT, after: 0, line: SINGLE_LINE },
+    spacing: { before: SIX_PT, after: 0, line: BODY_LINE },
     indent: { firstLine: BODY_FIRST_LINE },
     children: textRunsFromMarkup(text || " "),
     ...options,
@@ -102,7 +105,7 @@ function paragraph(text: string, options: Partial<IParagraphOptions> = {}): Para
 function titleParagraph(text: string): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.CENTER,
-    spacing: { before: TWELVE_PT, after: TWELVE_PT, line: SINGLE_LINE },
+    spacing: { before: TWELVE_PT, after: TWELVE_PT, line: BODY_LINE },
     children: [run(cleanMojibakeText(text || "Titulo do trabalho"), { bold: true, size: TITLE_SIZE })],
   });
 }
@@ -112,7 +115,7 @@ function centered(
   bold = false,
   size = BODY_SIZE,
   font: string = CPG_RULES.typography.fontFamily,
-  spacing: NonNullable<IParagraphOptions["spacing"]> = { after: TWELVE_PT, line: SINGLE_LINE },
+  spacing: NonNullable<IParagraphOptions["spacing"]> = { after: TWELVE_PT, line: BODY_LINE },
 ): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.CENTER,
@@ -123,17 +126,17 @@ function centered(
 
 function affiliationParagraphs(value: string): Paragraph[] {
   return splitParagraphs(value).map((line) =>
-    centered(line, false, BODY_SIZE, CPG_RULES.typography.fontFamily, { after: 0, line: SINGLE_LINE }),
+    centered(line, false, BODY_SIZE, CPG_RULES.typography.fontFamily, { after: 0, line: BODY_LINE }),
   );
 }
 
 function emailParagraph(value: string): Paragraph[] {
   if (!hasText(value)) return [];
   return [
-    centered(value, false, EMAIL_SIZE, CPG_RULES.typography.emailFontFamily, {
+    centered(value, false, BODY_SIZE, CPG_RULES.typography.fontFamily, {
       before: SIX_PT,
       after: SIX_PT,
-      line: SINGLE_LINE,
+      line: BODY_LINE,
     }),
   ];
 }
@@ -145,7 +148,7 @@ function insetLabeledParagraph(label: string, text: string, separator: "." | ":"
     (line, index) =>
       new Paragraph({
         alignment: AlignmentType.BOTH,
-        spacing: { before: SIX_PT, after: 0, line: SINGLE_LINE },
+        spacing: { before: SIX_PT, after: 0, line: BODY_LINE },
         indent: { left: ABSTRACT_INDENT, right: ABSTRACT_INDENT, firstLine: 0 },
         children:
           index === 0
@@ -159,7 +162,7 @@ function sectionTitle(text: string, level: DocxHeadingLevel = HeadingLevel.HEADI
   return new Paragraph({
     heading: level,
     alignment: AlignmentType.LEFT,
-    spacing: { before: TWELVE_PT, after: 0, line: SINGLE_LINE },
+    spacing: { before: TWELVE_PT, after: 0, line: BODY_LINE },
     children: [
       run(cleanMojibakeText(text), {
         bold: level !== HeadingLevel.HEADING_3,
@@ -178,7 +181,7 @@ function cpgCaptionParagraph(text: string, tableCaption: boolean): Paragraph {
       run(cleanMojibakeText(text), {
         bold: true,
         size: CAPTION_SIZE,
-        font: "Helvetica",
+        font: CPG_RULES.typography.fontFamily,
       }),
     ],
     ...(tableCaption ? {} : {}),
@@ -393,6 +396,45 @@ function cpgResumoChildren(input: DocxGenerationInput): CpgChild[] {
   ]);
 }
 
+function cpgSummaryParagraphs(blocks: EditorBlock[]): Paragraph[] {
+  const entries: { text: string; level: number }[] = [];
+  const seen = new Set<string>();
+
+  for (const block of blocks) {
+    let level: number | null = null;
+    if (block.type === "heading1") level = 1;
+    else if (block.type === "heading2") level = 2;
+    else if (block.type === "heading3") level = 3;
+    if (level === null) continue;
+
+    const text = cleanMojibakeText(block.text).trim();
+    const key = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    if (!text || key === "SUMARIO" || seen.has(key)) continue;
+    seen.add(key);
+    entries.push({ text: level === 1 ? text.toUpperCase() : text, level });
+  }
+
+  if (!entries.length) return [];
+
+  return [
+    new Paragraph({ children: [new PageBreak()] }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: TWELVE_PT, after: TWELVE_PT, line: BODY_LINE },
+      children: [run("SUMÁRIO", { bold: true, size: SECTION_SIZE })],
+    }),
+    ...entries.map(
+      (entry) =>
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { before: 0, after: 0, line: SINGLE_LINE },
+          indent: { left: (entry.level - 1) * 360 },
+          children: [run(entry.text, { bold: entry.level === 1, size: BODY_SIZE })],
+        }),
+    ),
+  ];
+}
+
 function cpgFullChildren(input: DocxGenerationInput): CpgChild[] {
   const sanitizedEditorText = stripCpgForbiddenSections(input.editorText);
   const blocks = parseEditorContent(sanitizedEditorText);
@@ -402,6 +444,9 @@ function cpgFullChildren(input: DocxGenerationInput): CpgChild[] {
     ...blocks.filter((block) => block.type === "reference").map((block) => block.text),
   ];
   let firstParagraphInSection = true;
+  const isMultiPage = input.fields.workType === "resumo_expandido_cpg" || input.fields.workType === "artigo_completo_cpg";
+  const hasApendices = hasText(input.fields.apendices);
+  const hasAnexos = hasText(input.fields.anexos);
 
   return compactFirstPage([
     titleParagraph(input.fields.title),
@@ -412,6 +457,7 @@ function cpgFullChildren(input: DocxGenerationInput): CpgChild[] {
     ...insetLabeledParagraph("Palavras-chave", input.fields.palavrasChave, ":", true),
     ...insetLabeledParagraph("Abstract", input.fields.abstractText, "."),
     ...insetLabeledParagraph("Keywords", input.fields.keywords, ":", true),
+    ...(isMultiPage ? cpgSummaryParagraphs(bodyBlocks) : []),
     ...bodyBlocks.flatMap((block) => {
       if (block.type === "heading1" || block.type === "heading2" || block.type === "heading3") {
         firstParagraphInSection = true;
@@ -423,15 +469,44 @@ function cpgFullChildren(input: DocxGenerationInput): CpgChild[] {
       return paragraphs;
     }),
     ...referenceParagraphs(references, bodyBlocks),
+    ...(hasApendices
+      ? [sectionTitle("APÊNDICES"), ...splitParagraphs(input.fields.apendices).map((line) => paragraph(line, { indent: { firstLine: 0 } }))]
+      : []),
+    ...(hasAnexos
+      ? [sectionTitle("ANEXOS"), ...splitParagraphs(input.fields.anexos).map((line) => paragraph(line, { indent: { firstLine: 0 } }))]
+      : []),
   ]);
 }
 
 function createCpgDocument(input: DocxGenerationInput): Document {
   const isResumo = input.fields.workType === "resumo_cpg";
+  const isMultiPage = input.fields.workType === "resumo_expandido_cpg" || input.fields.workType === "artigo_completo_cpg";
+
+  const pageNumberHeader = isMultiPage
+    ? new Header({
+        children: [
+          new Paragraph({
+            alignment: AlignmentType.RIGHT,
+            children: [
+              new TextRun({
+                children: [PageNumber.CURRENT],
+                font: CPG_RULES.typography.fontFamily,
+                size: BODY_SIZE,
+                color: BLACK,
+              }),
+            ],
+          }),
+        ],
+      })
+    : undefined;
+
   return new Document({
     creator: "UFLA DOCX Academico",
     title: input.fields.title || "Trabalho CPG UFLA",
-    description: "Documento CPG/UFLA sem capa, sumário, cabeçalho, rodapé ou numeração.",
+    description: "Documento CPG/UFLA conforme modelo do Congresso de Pós-Graduação.",
+    features: {
+      updateFields: true,
+    },
     sections: [
       {
         properties: {
@@ -449,7 +524,9 @@ function createCpgDocument(input: DocxGenerationInput): Document {
             },
           },
           verticalAlign: VerticalAlign.TOP,
+          ...(isMultiPage ? { pageNumbers: { start: 1 } } : {}),
         },
+        ...(pageNumberHeader ? { headers: { default: pageNumberHeader } } : {}),
         children: isResumo ? cpgResumoChildren(input) : cpgFullChildren(input),
       },
     ],

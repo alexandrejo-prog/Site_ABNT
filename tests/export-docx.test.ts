@@ -148,8 +148,6 @@ function hasPositiveBold(xml: string): boolean {
 
 function expectNoGraduateOnlyElements(documentXml: string): void {
   for (const forbidden of [
-    "SUMÃRIO",
-    "SUM\u00c1RIO",
     "FICHA CATALOGR",
     "FOLHA DE APROVA",
     "INDICADORES DE IMPACTO",
