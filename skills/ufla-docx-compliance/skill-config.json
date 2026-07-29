@@ -1,0 +1,19 @@
+{
+  "name": "ufla-docx-compliance",
+  "version": "1.0.0",
+  "description": "Valida arquivos DOCX contra o Manual de Normalização da UFLA 6ª edição",
+  "author": "Site ABNT UFLA",
+  "type": "local",
+  "entry": "src/index.ts",
+  "commands": {
+    "validar": {
+      "description": "Valida um arquivo DOCX contra o checklist UFLA",
+      "args": ["<caminho-do-arquivo.docx>"],
+      "usage": "@ufla-docx-compliance validar teste-final.docx"
+    }
+  },
+  "activation": {
+    "trigger": "@ufla-docx-compliance",
+    "description": "Ativa a skill de compliance UFLA para validar DOCX"
+  }
+}

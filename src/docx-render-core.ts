@@ -9,6 +9,7 @@ import {
   TextRun,
   WidthType,
 } from "docx";
+import { UFLA_RULES } from "./ufla-rules";
 
 export function cleanMojibakeText(value: string): string {
   return value
@@ -130,8 +131,8 @@ export function textParagraph(
 ): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.BOTH,
-    spacing: { line: 360, after: 240 },
-    indent: { firstLine: 283 },
+    spacing: { line: UFLA_RULES.spacing.bodyLineTwip, after: UFLA_RULES.spacing.afterParagraphTwip },
+    indent: { firstLine: UFLA_RULES.typography.paragraphFirstLineTwip },
     children: textRunsFromMarkup(text || " "),
     ...options,
   });
@@ -143,7 +144,7 @@ export function simpleParagraph(
 ): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.BOTH,
-    spacing: { line: 240, after: 240 },
+    spacing: { line: UFLA_RULES.spacing.singleLineTwip, after: UFLA_RULES.spacing.afterParagraphTwip },
     children: textRunsFromMarkup(text || " "),
     ...options,
   });
@@ -182,7 +183,7 @@ export interface CaptionInfo {
   label?: string;
 }
 
-const CAPTION_PATTERN = /^(figura|quadro|gráfico|mapa|imagem|ilustração|tabela)\s+(\d+)([-:–]?\s*.*)$/i;
+const CAPTION_PATTERN = /^(figura|quadro|gráfico|mapa|imagem|ilustração|tabela)\s+(\d+)([-:–—]?\s*.*)$/i;
 
 export function detectCaption(text: string): CaptionInfo | null {
   const trimmed = text.trim();
@@ -205,14 +206,30 @@ export function captionParagraph(
 ): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.CENTER,
-    spacing: { before: 120, after: 120, line: 240 },
+    spacing: { before: 120, after: 120, line: UFLA_RULES.spacing.singleLineTwip },
     indent: { left: 454, right: 454 },
     children: [
       new TextRun({
         text: cleanMojibakeText(text),
         bold: true,
         font: "Times New Roman",
-        size: 20,
+        size: UFLA_RULES.typography.captionFontSizePt * 2,
+        color: "000000",
+      }),
+    ],
+  });
+}
+
+export function sourceParagraph(text: string): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.LEFT,
+    spacing: { before: 60, after: 120, line: 240 },
+    indent: { left: 454, right: 454 },
+    children: [
+      new TextRun({
+        text: cleanMojibakeText(text),
+        font: "Times New Roman",
+        size: UFLA_RULES.typography.sourceFontSizePt * 2,
         color: "000000",
       }),
     ],
@@ -243,9 +260,21 @@ function markdownCells(line: string): string[] {
     .filter(Boolean);
 }
 
-function tabbedCells(line: string): string[] {
+function tabbedCells(line: string, singleSpaceSplit = false): string[] {
   if (line.includes("\t")) return line.split("\t").map((cell) => cell.trim()).filter(Boolean);
-  return line.split(/ {2,}/).map((cell) => cell.trim()).filter(Boolean);
+  const doubleSpaced = line.split(/ {2,}/).map((cell) => cell.trim()).filter(Boolean);
+  if (doubleSpaced.length > 1) return doubleSpaced;
+  if (singleSpaceSplit) return line.split(/\s+/).map((cell) => cell.trim()).filter(Boolean);
+  return doubleSpaced;
+}
+
+/** Checks if consecutive data lines (excluding source lines) all have the same word count. */
+function hasConsistentWordCount(lines: string[]): boolean {
+  const dataOnly = lines.filter((l) => !isSourceLine(l));
+  if (dataOnly.length < 2) return false;
+  const wc = dataOnly[0].split(/\s+/).length;
+  if (wc < 2) return false;
+  return dataOnly.slice(1).every((l) => l.split(/\s+/).length === wc);
 }
 
 export function detectTabbedTableBlock(text: string): TabbedTableBlockParts | null {
@@ -261,15 +290,18 @@ export function detectTabbedTableBlock(text: string): TabbedTableBlockParts | nu
 
   const rows: string[][] = [];
   let sourceLine: string | undefined;
+  const dataLines = rawLines.slice(1);
+  const useSingleSpace = hasConsistentWordCount(dataLines);
 
-  for (const line of rawLines.slice(1)) {
+  for (let i = 0; i < dataLines.length; i++) {
+    const line = dataLines[i];
     if (isSourceLine(line)) {
       sourceLine = line;
       continue;
     }
     if (isMarkdownSeparator(line)) continue;
 
-    const cells = line.includes("|") ? markdownCells(line) : tabbedCells(line);
+    const cells = line.includes("|") ? markdownCells(line) : tabbedCells(line, useSingleSpace);
     if (cells.length > 1) rows.push(cells);
   }
 
@@ -282,12 +314,12 @@ export function tabbedTableBlock(
   options: {
     captionPrefix?: string;
     bodySize?: number;
-    captionSize?: number;
+    sourceSize?: number;
     font?: string;
     sourceFallback?: string;
   } = {},
 ): Array<Paragraph | Table> {
-  const { captionPrefix = "", bodySize = 24, captionSize = 20, font = "Times New Roman", sourceFallback } = options;
+  const { captionPrefix = "", bodySize = 24, sourceSize = UFLA_RULES.typography.sourceFontSizePt * 2, font = "Times New Roman", sourceFallback } = options;
   const detected = detectTabbedTableBlock(text);
   if (!detected) return splitParagraphs(text).map((line) => simpleParagraph(line));
 
@@ -319,17 +351,20 @@ export function tabbedTableBlock(
     });
   });
 
+  const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: "000000" };
+  const SOLID_BORDER = { style: BorderStyle.SINGLE, size: 4, color: "000000" };
+
   const result: Array<Paragraph | Table> = [
     captionParagraph(captionPrefix + detected.caption),
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       borders: {
-        top: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
-        bottom: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
-        left: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
-        right: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
-        insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
-        insideVertical: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+        top: SOLID_BORDER,
+        bottom: SOLID_BORDER,
+        left: SOLID_BORDER,
+        right: SOLID_BORDER,
+        insideHorizontal: SOLID_BORDER,
+        insideVertical: SOLID_BORDER,
       },
       rows: tableRows,
     }),
@@ -345,7 +380,7 @@ export function tabbedTableBlock(
           new TextRun({
             text: cleanMojibakeText(sourceLine),
             font,
-            size: captionSize,
+            size: sourceSize,
             color: "000000",
           }),
         ],

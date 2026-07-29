@@ -324,7 +324,22 @@ export function detectYearFromCover(blocks: ImportedBlock[]): {
 
   const candidates = coverLines.flatMap((line) => {
     if (hasUnsafeYearContext(line)) return [];
-    return [...line.matchAll(/\b(?:19|20)\d{2}\b/g)].map((match) => ({
+    // Excluir anos dentro de parênteses em linhas que também contêm outro texto
+    // (ex.: título com "(1950)" — é ano contextual, não ano do documento).
+    const yearsOutsideParens = [...line.matchAll(/\b(?:19|20)\d{2}\b/g)].filter(
+      (match) => {
+        const beforeMatch = line.slice(0, match.index);
+        const openParen = beforeMatch.lastIndexOf("(");
+        const closeParen = beforeMatch.lastIndexOf(")");
+        // Se o último '(' antes do match não foi fechado por ')', está dentro de parênteses
+        if (openParen < 0) return true;
+        if (closeParen > openParen) return true; // parêntese já foi fechado
+        // Linha com ano em parênteses + outro texto → ano não é do documento
+        if (line.trim().length > 6) return false;
+        return true;
+      },
+    );
+    return yearsOutsideParens.map((match) => ({
       value: match[0],
       exactLine: line.trim() === match[0],
     }));
@@ -367,14 +382,27 @@ function detectTitleFromCover(
         (line) => normalizeForDetection(line) === normalizeForDetection(author),
       )
     : -1;
-  const titleLines: string[] = [];
-  const startIndex = authorIndex >= 0 ? authorIndex + 1 : 0;
 
-  for (let index = startIndex; index < coverLines.length; index += 1) {
-    const line = coverLines[index];
-    if (!line || isLocation(line) || isYear(line)) break;
-    if (isGenericCoverLine(line)) continue;
-    titleLines.push(line);
+  function collectRange(start: number, end: number): string[] {
+    const collected: string[] = [];
+    for (let index = start; index < end; index += 1) {
+      const line = coverLines[index];
+      if (!line || isLocation(line) || isYear(line)) break;
+      if (isGenericCoverLine(line)) continue;
+      collected.push(line);
+    }
+    return collected;
+  }
+
+  // Tenta linhas antes do autor (título antes do nome, comum em artigos)
+  let titleLines = authorIndex > 0 ? collectRange(0, authorIndex) : [];
+  // Se não achou antes, tenta depois do autor (estrutura de capa tradicional)
+  if (!titleLines.length && authorIndex >= 0) {
+    titleLines = collectRange(authorIndex + 1, coverLines.length);
+  }
+  // Se não há autor, coleta do início
+  if (authorIndex < 0) {
+    titleLines = collectRange(0, coverLines.length);
   }
 
   const value = cleanValue(titleLines.join(" "));

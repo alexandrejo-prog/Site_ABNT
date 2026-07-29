@@ -6,14 +6,14 @@ import { emptyAcademicFields } from "../src/ufla-rules";
 describe("generation blockers", () => {
   const formState = emptyAcademicFields();
 
-  it("somente placeholders do editor ou naturais sao bloqueadores absolutos", () => {
+  it("nenhum placeholder e bloqueador absoluto (sobreponivel via checkbox)", () => {
     expect(isAbsoluteGenerationBlocker({ severity: "error", code: "placeholder-detected", message: "" })).toBe(false);
-    expect(isAbsoluteGenerationBlocker({ severity: "error", code: "draft-placeholder-detected", message: "" })).toBe(true);
-    expect(isAbsoluteGenerationBlocker({ severity: "error", code: "natural-placeholder-detected", message: "" })).toBe(true);
+    expect(isAbsoluteGenerationBlocker({ severity: "error", code: "draft-placeholder-detected", message: "" })).toBe(false);
+    expect(isAbsoluteGenerationBlocker({ severity: "error", code: "natural-placeholder-detected", message: "" })).toBe(false);
   });
 
-  it("work-type-required is absolute blocker", () => {
-    expect(isAbsoluteGenerationBlocker({ severity: "error", code: "work-type-required", message: "" })).toBe(true);
+  it("work-type-required nao e mais bloqueador absoluto (via checkbox)", () => {
+    expect(isAbsoluteGenerationBlocker({ severity: "error", code: "work-type-required", message: "" })).toBe(false);
   });
 
   it("academic issues are not absolute blockers", () => {
@@ -41,8 +41,7 @@ describe("generation blockers", () => {
       { severity: "error", code: "natural-placeholder-detected", message: "placeholder" },
     ];
     const blockers = getAbsoluteGenerationBlockers(issues, formState);
-    expect(blockers).toHaveLength(1);
-    expect(blockers[0].code).toBe("natural-placeholder-detected");
+    expect(blockers).toHaveLength(0);
   });
 
   it("getAbsoluteGenerationBlockers ignores warnings and infos", () => {

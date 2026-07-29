@@ -10,7 +10,8 @@
     "verify": "npm test -- --run && npm run build",
     "acceptance:docx": "node scripts/acceptance/audit-docx.mjs",
     "acceptance:word": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/validate-word.ps1",
-    "acceptance:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run-docx-acceptance.ps1"
+    "acceptance:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run-docx-acceptance.ps1",
+    "skill:validate": "npx tsx skills/ufla-docx-compliance/src/index.ts"
   },
   "dependencies": {
     "@tiptap/extension-text-align": "^3.27.3",

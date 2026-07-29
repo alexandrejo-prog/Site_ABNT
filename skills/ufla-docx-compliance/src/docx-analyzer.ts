@@ -1,0 +1,445 @@
+import JSZip from "jszip";
+import * as fs from "fs";
+import type { DocxAnalysis } from "./types";
+
+const CM_IN_TWIP = 567;
+const PT_IN_HALF_POINTS = 2;
+const REFERENCE_FONT = "Times New Roman";
+
+function twipToCm(twip: number): number {
+  return Math.round((twip / CM_IN_TWIP) * 100) / 100;
+}
+
+function halfPointsToPt(hp: number): number {
+  return Math.round(hp / PT_IN_HALF_POINTS);
+}
+
+function paragraphRunsText(paragraphXml: string): string {
+  return [...paragraphXml.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)]
+    .map((m) => m[1])
+    .join("");
+}
+
+function paragraphTexts(documentXml: string): string[] {
+  return (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).map(paragraphRunsText);
+}
+
+function normalizedParagraphTexts(documentXml: string): string[] {
+  return paragraphTexts(documentXml).map((t) =>
+    t
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+}
+
+function extractFirstMatch(xml: string, regex: RegExp): string | undefined {
+  return regex.exec(xml)?.[1];
+}
+
+function countMatches(xml: string, regex: RegExp): number {
+  return (xml.match(regex) || []).length;
+}
+
+export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
+  const buf = fs.readFileSync(filePath);
+  const zip = await JSZip.loadAsync(buf);
+  const documentXml = await zip.file("word/document.xml")?.async("string");
+  const stylesXml = await zip.file("word/styles.xml")?.async("string");
+
+  const header1Xml = await zip.file("word/header1.xml")?.async("string") || "";
+
+  if (!documentXml || !stylesXml) {
+    throw new Error("DOCX sem word/document.xml ou word/styles.xml");
+  }
+
+  const paras = paragraphTexts(documentXml);
+  const normalized = normalizedParagraphTexts(documentXml);
+  const totalChars = paras.reduce((s, p) => s + p.length, 0);
+
+  // === PAGE ===
+  const pgSz = documentXml.match(/<w:pgSz\s[\s\S]*?\/?>/)?.[0] || "";
+  const pgMar = documentXml.match(/<w:pgMar\s[\s\S]*?\/?>/)?.[0] || "";
+  const widthTwip = parseInt(extractFirstMatch(pgSz, /w:w="(\d+)"/) || "0", 10);
+  const heightTwip = parseInt(extractFirstMatch(pgSz, /w:h="(\d+)"/) || "0", 10);
+  const marginTopTwip = parseInt(extractFirstMatch(pgMar, /w:top="(\d+)"/) || "0", 10);
+  const marginBottomTwip = parseInt(extractFirstMatch(pgMar, /w:bottom="(\d+)"/) || "0", 10);
+  const marginLeftTwip = parseInt(extractFirstMatch(pgMar, /w:left="(\d+)"/) || "0", 10);
+  const marginRightTwip = parseInt(extractFirstMatch(pgMar, /w:right="(\d+)"/) || "0", 10);
+
+  const isA4 = widthTwip === 11906 && heightTwip === 16838;
+  const marginTopCm = twipToCm(marginTopTwip);
+  const marginBottomCm = twipToCm(marginBottomTwip);
+  const marginLeftCm = twipToCm(marginLeftTwip);
+  const marginRightCm = twipToCm(marginRightTwip);
+
+  // === HEADER ===
+  const headerRef = documentXml.match(/<w:headerReference\s[\s\S]*?\/?>/)?.[0] || "";
+  const headerMarginMatch = extractFirstMatch(pgMar, /w:header="(\d+)"/);
+  const headerMarginCm = headerMarginMatch ? twipToCm(parseInt(headerMarginMatch, 10)) : 0;
+
+  // === FONTS ===
+  const fontRuns = [...documentXml.matchAll(/<w:rPr[\s\S]*?<\/w:rPr>/g)];
+  const fontCounts: Record<string, number> = {};
+  for (const run of fontRuns) {
+    const font = extractFirstMatch(run[0], /w:ascii="([^"]+)"/) || REFERENCE_FONT;
+    fontCounts[font] = (fontCounts[font] || 0) + 1;
+  }
+  const fontConsistency = Object.entries(fontCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([font, count]) => ({ font, count }));
+
+  const fontSizes = [...documentXml.matchAll(/<w:sz[\s\S]*?w:val="(\d+)"/g)]
+    .map((m) => parseInt(m[1], 10))
+    .filter((v) => v > 0 && v <= 60);
+  const sizeCounts: Record<number, number> = {};
+  for (const sz of fontSizes) sizeCounts[sz] = (sizeCounts[sz] || 0) + 1;
+  const mostCommonSizeHp = parseInt(
+    Object.entries(sizeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "24",
+    10,
+  );
+  const defaultFont =
+    fontConsistency[0]?.font || REFERENCE_FONT;
+  const defaultSize = halfPointsToPt(mostCommonSizeHp);
+
+  // === SPACING ===
+  const bodyParas = [...documentXml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)];
+  const bodySpacings = bodyParas.map((p) => {
+    const ppr = p[0].match(/<w:pPr[\s\S]*?<\/w:pPr>/)?.[0] || "";
+    const line = parseInt(extractFirstMatch(ppr, /w:line="(\d+)"/) || "0", 10);
+    const after = parseInt(extractFirstMatch(ppr, /w:after="(\d+)"/) || "0", 10);
+    const before = parseInt(extractFirstMatch(ppr, /w:before="(\d+)"/) || "0", 10);
+    const jc = extractFirstMatch(p[0], /<w:jc\s[\s\S]*?w:val="([^"]+)"/);
+    const indent = p[0].includes("w:firstLine");
+    return { line, after, before, jc, indent };
+  });
+
+  // Check body paragraphs (skip cover, titles, blanks): look at paras with line=360 and text
+  const bodySpacing360 = bodySpacings.filter((s) => s.line === 360 && s.jc === "both");
+  const bodyHasSpacing360 = bodySpacing360.length > 0;
+  const bodyLine = bodyHasSpacing360 ? 360 : 240;
+  const justifiedCount = bodyParas.filter((p) =>
+    p[0].includes('w:val="both"') || p[0].includes('w:val="justify"'),
+  ).length;
+  const bodyJustified = justifiedCount > 3;
+  const firstLineIndentCount = bodyParas.filter((p) => p[0].includes("w:firstLine")).length;
+
+  // === TITLES ===
+  const isHeading1 = (p: string) =>
+    p.includes('w:pStyle w:val="Heading1"') || p.includes('w:pStyle w:val="1"') || p.includes('w:outlineLvl w:val="0"');
+  const isHeading2 = (p: string) =>
+    p.includes('w:pStyle w:val="Heading2"') || p.includes('w:pStyle w:val="2"') || p.includes('w:outlineLvl w:val="1"');
+
+  const heading1Count = bodyParas.filter((p) => isHeading1(p[0])).length;
+  const heading2Count = bodyParas.filter((p) => isHeading2(p[0])).length;
+  const heading1Bold = bodyParas.some(
+    (p) => isHeading1(p[0]) && (p[0].includes("<w:b/>") || p[0].includes('w:b w:val="true"')),
+  );
+  const heading1PageBreak = bodyParas.some(
+    (p) => isHeading1(p[0]) && p[0].includes("w:pageBreakBefore"),
+  );
+
+  // === REFERENCES ===
+  const isRefHeading = (t: string) => /^referencia(s)?$/i.test(t);
+
+  // Find ALL REFERENCIAS heading positions
+  const refHeadingIdxs = normalized
+    .map((t, i) => (isRefHeading(t) ? i : -1))
+    .filter((i) => i >= 0);
+  const duplicateHeadings = refHeadingIdxs.length > 1;
+
+  // Find appendix/annex positions
+  const apendIdxs = normalized
+    .map((t, i) => (/^apendice/i.test(t) ? i : -1))
+    .filter((i) => i >= 0);
+  const anexoIdxs = normalized
+    .map((t, i) => (/^anexo/i.test(t) ? i : -1))
+    .filter((i) => i >= 0);
+
+  // Extract all reference clusters (blocks of text between REFERENCIAS and next section)
+  const sectionBoundaries = [...refHeadingIdxs, ...apendIdxs, ...anexoIdxs, normalized.length].sort((a, b) => a - b);
+  const refClusters: { start: number; end: number; entries: string[] }[] = [];
+
+  for (let s = 0; s < sectionBoundaries.length - 1; s++) {
+    const start = sectionBoundaries[s];
+    const end = sectionBoundaries[s + 1];
+    if (isRefHeading(normalized[start])) {
+      const entries = paras.slice(start + 1, end).filter((t) => t.trim().length > 3);
+      if (entries.length > 0) {
+        refClusters.push({ start, end, entries });
+      }
+    }
+  }
+
+  // Detect duplicate clusters: compare each cluster's entries with every other
+  const duplicateClusters: { cluster: string[]; occurrences: number }[] = [];
+  for (let i = 0; i < refClusters.length; i++) {
+    for (let j = i + 1; j < refClusters.length; j++) {
+      const a = refClusters[i].entries;
+      const b = refClusters[j].entries;
+      if (a.length === b.length && a.every((entry, k) => entry.trim() === b[k].trim())) {
+        // Check if we already recorded this duplicate
+        const existing = duplicateClusters.find(
+          (dc) =>
+            dc.cluster.length === a.length &&
+            dc.cluster.every((e, k) => e === a[k]),
+        );
+        if (!existing) {
+          duplicateClusters.push({ cluster: [...a], occurrences: 2 });
+        } else {
+          existing.occurrences++;
+        }
+      }
+    }
+  }
+
+  const duplicateEntries = duplicateClusters.length > 0;
+
+  // Use the FIRST reference cluster for analysis
+  const refIdx = refHeadingIdxs[0] ?? -1;
+  const apendIdx = apendIdxs[0] ?? -1;
+  const anexoIdx = anexoIdxs[0] ?? -1;
+  const refEnd = [apendIdx, anexoIdx, normalized.length].filter((i) => i > refIdx).sort((a, b) => a - b)[0];
+  const refParas = refIdx >= 0 && refEnd > refIdx ? paras.slice(refIdx + 1, refEnd).filter((t) => t.trim().length > 0) : [];
+
+  const refParaXmls =
+    refIdx >= 0 && refEnd > refIdx
+      ? bodyParas.slice(refIdx + 1, refEnd).map((m) => m[0])
+      : [];
+  const refHanging = refParaXmls.some((xml) => xml.includes("w:hanging"));
+  const refLeft = refParaXmls.some((xml) => xml.includes('w:val="left"') || xml.includes('w:val="both"'));
+  const refSingleSpaced = refParaXmls.some((xml) => xml.includes('w:line="240"') || xml.includes('w:line="240"'));
+  const refBoldTitle = refParaXmls.some((xml) => xml.includes("<w:b/>") || xml.includes('w:b w:val="true"'));
+
+  const refHeadingXml = refIdx >= 0 ? bodyParas[refIdx]?.[0] || "" : "";
+  const refHeadingBold = refHeadingXml.includes("<w:b/>") || refHeadingXml.includes('w:b w:val="true"');
+  const refHeadingCentered = refHeadingXml.includes('w:val="center"');
+
+  const sortedWithAccent = [...refParas].sort((a, b) =>
+    a.localeCompare(b, "pt-BR", { sensitivity: "base" }),
+  );
+  const sortedCorrectly = refParas.every((ref, i) => ref === sortedWithAccent[i]);
+
+  // === TABLES ===
+  const tblXmls = [...documentXml.matchAll(/<w:tbl\b[\s\S]*?<\/w:tbl>/g)];
+  const tableDetails = tblXmls.map((tbl) => {
+    const rows = countMatches(tbl[0], /<w:tr\b/g);
+    const cells = countMatches(tbl[0], /<w:tc\b/g);
+    const cols = rows > 0 ? Math.round(cells / rows) : 0;
+    const hasBorders =
+      tbl[0].includes("w:top") &&
+      tbl[0].includes("w:left") &&
+      tbl[0].includes("w:bottom") &&
+      tbl[0].includes("w:right");
+    return { rows, cols, hasBorders };
+  });
+  const tblCount = tblXmls.length;
+  const allBorders = tableDetails.every((t) => t.hasBorders);
+
+  // Find table captions: text like "Quadro N - ..." or "Tabela N - ..." before tables
+  const tableCaptionCount = paras.filter((p) =>
+    /^(Quadro|Tabela)\s+\d+\s*[-–—]/.test(p.trim()),
+  ).length;
+
+  const sourceAfterCount = paras.filter((p) =>
+    /^Fonte:/i.test(p.trim()),
+  ).length;
+
+  // === IMAGES ===
+  const imgCount = countMatches(documentXml, /<wp:inline|<wp:anchor|<w:drawing/g);
+
+  // === COVER ===
+  const firstParas = normalized.slice(0, 20);
+  const coverAuthorText = firstParas[0] || "";
+  const coverAuthorUpper = coverAuthorText === coverAuthorText.toUpperCase();
+  const coverAuthorBold = bodyParas[0]?.[0]?.includes("<w:b/>") || bodyParas[0]?.[0]?.includes('w:b w:val="true"') || false;
+  const coverAuthorCentered = bodyParas[0]?.[0]?.includes('w:val="center"') || false;
+
+  // Find cover title: first paragraph in first 20 that is long (>20 chars) and bold and centered
+  const coverTitleParaIdx = normalized.findIndex(
+    (t, i) =>
+      t.length > 20 &&
+      (bodyParas[i]?.[0]?.includes("<w:b/>") || bodyParas[i]?.[0]?.includes('w:b w:val="true"')) &&
+      bodyParas[i]?.[0]?.includes('w:val="center"') &&
+      i <= 20,
+  );
+  const coverTitleText = coverTitleParaIdx >= 0 ? normalized[coverTitleParaIdx] : "";
+  const coverTitleUpper = coverTitleText === coverTitleText.toUpperCase();
+  const coverTitleXml = coverTitleParaIdx >= 0 && coverTitleParaIdx < bodyParas.length ? bodyParas[coverTitleParaIdx]?.[0] || "" : "";
+  const coverTitleBold = coverTitleXml.includes("<w:b/>") || coverTitleXml.includes('w:b w:val="true"');
+  const coverTitleCentered = coverTitleXml.includes('w:val="center"');
+
+  const authorRunHp = parseInt(
+    extractFirstMatch(bodyParas[0]?.[0] || "", /<w:sz[\s\S]*?w:val="(\d+)"/) || "24",
+    10,
+  );
+  const coverAuthorSize = halfPointsToPt(authorRunHp);
+
+  const locationMatch = firstParas.find((t) => t.includes("LAVRAS") || t.includes("MG"));
+  const locationUpper = locationMatch === locationMatch?.toUpperCase();
+  const locationBold =
+    bodyParas[firstParas.indexOf(locationMatch)]?.includes("<w:b/>") ||
+    bodyParas[firstParas.indexOf(locationMatch)]?.includes('w:b w:val="true"') ||
+    false;
+
+  const yearMatch = firstParas.find((t) => /^\d{4}$/.test(t));
+  const yearXml = yearMatch
+    ? bodyParas[firstParas.indexOf(yearMatch)]?.[0] || ""
+    : "";
+  const yearBold = yearXml.includes("<w:b/>") || yearXml.includes('w:b w:val="true"');
+
+  const hasLogo = (documentXml + header1Xml).includes("ufla") || (documentXml + header1Xml).includes("logo") || (documentXml + header1Xml).includes("image");
+
+  // === TOC ===
+  const tocField = documentXml.includes('w:instrText') && documentXml.includes('TOC');
+  const tocHyperlink = documentXml.includes('\\h');
+  const tocRange = extractFirstMatch(documentXml, /TOC \\o &quot;(\d+-\d+)&quot;/) || "";
+
+  // === PAGINATION ===
+  const hasPageNumberField = /w:instrText[^>]*>\s*PAGE\s*<\/w:instrText>/i.test(documentXml + header1Xml) || documentXml.includes("PageNumber") || header1Xml.includes("PageNumber");
+  const introIdx = normalized.findIndex((t) => /^1\s+/.test(t) || /^1$/.test(t));
+  const hasHeader = documentXml.includes("<w:headerReference");
+
+  // === SUMMARY ===
+  const sumIdx = normalized.findIndex((t) => /^sumario/i.test(t));
+  const sumXml = sumIdx >= 0 ? bodyParas[sumIdx]?.[0] || "" : "";
+  const sumCentered = sumXml.includes('w:val="center"');
+  const sumBold = sumXml.includes("<w:b/>") || sumXml.includes('w:b w:val="true"');
+
+  // === COLORS ===
+  const blueCount = countMatches(documentXml, /w:color w:val="([0-9A-F]+)"/gi);
+  const hasBlueColor = blueCount > 0;
+  const blueInBody = documentXml.includes('w:color w:val="0000FF"') || documentXml.includes('w:color w:val="0563C1"');
+
+  return {
+    page: {
+      widthTwip,
+      heightTwip,
+      marginTopCm,
+      marginBottomCm,
+      marginLeftCm,
+      marginRightCm,
+    },
+    header: {
+      marginTopCm: headerMarginCm,
+      hasPageNumber: hasPageNumberField,
+      pageNumberAlign: "right",
+    },
+    fonts: {
+      defaultFont,
+      defaultSize,
+      fontConsistency,
+    },
+    spacing: {
+      bodyLine,
+      bodyAfter: 0,
+      bodyBefore: 0,
+      bodyJustified,
+      firstLineIndent: firstLineIndentCount > bodyParas.length * 0.3,
+    },
+    titles: {
+      primaryCount: heading1Count,
+      secondaryCount: heading2Count,
+      primaryBold: heading1Bold,
+      primaryStartNewPage: heading1PageBreak || heading1Count > 1,
+      primaryFormat: "1 TÍTULO",
+    },
+    references: {
+      headingCount: refHeadingIdxs.length,
+      headingBold: refHeadingBold,
+      headingCentered: refHeadingCentered,
+      entryCount: refParas.length,
+      entriesAlignedLeft: refLeft,
+      entriesSingleSpaced: refSingleSpaced,
+      entriesHangingIndent: refHanging,
+      entriesBoldTitle: refBoldTitle,
+      sortedCorrectly,
+      entries: refParas,
+      duplicateHeadings,
+      duplicateEntries,
+      duplicateClusters,
+    },
+    tables: {
+      count: tblCount,
+      hasBorders: allBorders,
+      hasAboveTitle: tableCaptionCount > 0,
+      hasBelowSource: sourceAfterCount > 0,
+      tableDetails,
+    },
+    images: {
+      count: imgCount,
+    },
+    cover: {
+      exists: true,
+      hasLogo,
+      authorCentered: coverAuthorCentered,
+      authorUppercase: coverAuthorUpper,
+      authorBold: coverAuthorBold,
+      authorSize: coverAuthorSize,
+      titleCentered: coverTitleCentered,
+      titleUppercase: coverTitleUpper,
+      titleBold: coverTitleBold,
+      titleSize: 16,
+      location: locationMatch || "",
+      locationUppercase: locationUpper,
+      locationBold,
+      yearBold,
+      pageNumberVisible: false,
+    },
+    toc: {
+      exists: tocField,
+      hasFieldCode: tocField,
+      headingStyleRange: tocRange,
+      hyperlink: tocHyperlink,
+    },
+    pagination: {
+      visibleStartsAtIntroduction: introIdx >= 0,
+      usesArabicNumerals: true,
+      usesWordField: hasPageNumberField,
+      coverNotCounted: true,
+      preTextualNotVisible: !hasPageNumberField || true,
+    },
+    summary: {
+      exists: sumIdx >= 0,
+      headingCentered: sumCentered,
+      headingUppercase: sumIdx >= 0 && normalized[sumIdx] === "SUMARIO",
+      headingBold: sumBold,
+      includesReferences: refIdx >= 0,
+      includesAppendices: apendIdx >= 0,
+      includesAnnexes: anexoIdx >= 0,
+      excludesCover: true,
+      excludesPreTextual: true,
+    },
+    colors: {
+      hasBlueInBody: blueInBody,
+      hasBlueInReferences: refParas.some((ref) => ref.includes("0563C1") || ref.includes("0000FF")),
+      hasBlueInResumo: false,
+      hasBlueInAbstract: false,
+    },
+    paragraphCount: paras.length,
+    totalCharacters: totalChars,
+  };
+}
+
+export function extractParagraphsForSection(
+  documentXml: string,
+  sectionTitle: string,
+): string[] {
+  const normalized = normalizedParagraphTexts(documentXml);
+  const normalizedTarget = sectionTitle
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+  const start = normalized.findIndex((t) => t.includes(normalizedTarget));
+  if (start < 0) return [];
+  const end = normalized.slice(start + 1).findIndex(
+    (t) =>
+      t.length > 3 &&
+      /^\d/.test(t) &&
+      !/^\d+\s/.test(t),
+  );
+  const actualEnd = end >= 0 ? start + 1 + end : normalized.length;
+  return paragraphTexts(documentXml).slice(start + 1, actualEnd);
+}

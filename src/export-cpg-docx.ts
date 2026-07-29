@@ -15,8 +15,9 @@ import {
 } from "docx";
 import type { IParagraphOptions } from "docx";
 import { BLACK as SHARED_BLACK } from "./docx-shared";
-import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, hasText, detectCaption, tabbedTableBlock } from "./docx-render-core";
-import { parseEditorContent, type DocxGenerationInput, type EditorBlock } from "./export-docx";
+import { cleanMojibakeText, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, hasText, detectCaption, tabbedTableBlock } from "./docx-render-core";
+import { parseEditorContent, importedTableParagraph, type DocxGenerationInput, type EditorBlock } from "./export-docx";
+import type { ImportedTable } from "./imported-tables";
 import { CPG_RULES, UFLA_RULES, cmToTwip } from "./ufla-rules";
 import { stripCpgForbiddenSections } from "./cpg-content-filter";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
@@ -237,14 +238,17 @@ function tableFromBlock(block: EditorBlock): Table {
   });
 }
 
-function blockToParagraph(block: EditorBlock, firstParagraphInSection: boolean): CpgChild[] {
+function blockToParagraph(block: EditorBlock, firstParagraphInSection: boolean, importedTables: ImportedTable[] = []): CpgChild[] {
   if (block.type === "heading1") return [sectionTitle(block.text, HeadingLevel.HEADING_1)];
   if (block.type === "heading2") return [sectionTitle(block.text, HeadingLevel.HEADING_2)];
   if (block.type === "heading3") return [sectionTitle(block.text, HeadingLevel.HEADING_3)];
   if (block.type === "longQuote") {
     return [
-      paragraph(block.text, {
+      new Paragraph({
+        alignment: AlignmentType.BOTH,
+        spacing: { before: SIX_PT, after: 0, line: SINGLE_LINE },
         indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip, firstLine: 0 },
+        children: textRunsFromMarkup(block.text, UFLA_RULES.typography.longQuoteFontSizePt * 2),
       }),
     ];
   }
@@ -256,8 +260,21 @@ function blockToParagraph(block: EditorBlock, firstParagraphInSection: boolean):
     return tabbedTableBlock(block.text, { font: CPG_RULES.typography.fontFamily, bodySize: BODY_SIZE });
   }
 
+  if (block.type === "importedTable") {
+    const table = importedTables.find((item) => item.id === block.text);
+    return importedTableParagraph(table);
+  }
+
+  if (block.type === "source") {
+    return [sourceParagraph(block.text)];
+  }
+
   const caption = isCaption(block.text);
   if (caption) return [cpgCaptionParagraph(block.text, caption === "table")];
+
+  if (/^Fonte\s*:/i.test(block.text)) {
+    return [sourceParagraph(block.text)];
+  }
 
   return [
     paragraph(block.text, {
@@ -284,7 +301,26 @@ function filterReferenceNoise(reference: string): boolean {
   return !isReferenceTitleNoise(reference);
 }
 
-function referenceParagraphs(references: string[]): Paragraph[] {
+function hasEditorHeading(blocks: EditorBlock[], text: string): boolean {
+  const normalizedTarget = text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  return blocks.some((block) => {
+    if (block.type !== "heading1" && block.type !== "heading2" && block.type !== "paragraph") return false;
+    const normalizedBlock = block.text
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      .replace(/\s+/g, " ")
+      .trim();
+    return normalizedBlock === normalizedTarget;
+  });
+}
+
+function referenceParagraphs(references: string[], bodyBlocks: EditorBlock[] = []): Paragraph[] {
   const cleanReferences = references
     .map((item) => stripMarkup(item).trim())
     .filter(Boolean)
@@ -292,12 +328,21 @@ function referenceParagraphs(references: string[]): Paragraph[] {
   if (!cleanReferences.length) return [];
 
   const title = referenceTitleFor(references);
-  const normalizedReferences = normalizeReferences(cleanReferences)
-    .filter((reference) => reference.text.trim().length > 0)
-    .sort((a, b) => a.text.localeCompare(b.text, "pt-BR", { sensitivity: "base" }));
+  const normalized = normalizeReferences(cleanReferences).filter((reference) => reference.text.trim().length > 0);
+  const seen = new Set<string>();
+  const normalizedReferences = normalized.filter((ref) => {
+    const key = ref.text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).sort((a, b) => a.text.localeCompare(b.text, "pt-BR", { sensitivity: "base" }));
 
-  return [
-    sectionTitle(title),
+  const children: Array<Paragraph | Table> = [];
+  if (!hasEditorHeading(bodyBlocks, "REFERENCIAS") && !hasEditorHeading(bodyBlocks, "REFERÊNCIAS") && !hasEditorHeading(bodyBlocks, "BIBLIOGRÁFICAS") && !hasEditorHeading(bodyBlocks, "BIBLIOGRAFICAS")) {
+    children.push(sectionTitle(title));
+  }
+
+  children.push(
     ...normalizedReferences.map(
       (reference) =>
         new Paragraph({
@@ -310,7 +355,8 @@ function referenceParagraphs(references: string[]): Paragraph[] {
           children: reference.runs.map(referenceRunToTextRun),
         }),
     ),
-  ];
+  );
+  return children;
 }
 
 function compactFirstPage(children: CpgChild[]): CpgChild[] {
@@ -369,14 +415,14 @@ function cpgFullChildren(input: DocxGenerationInput): CpgChild[] {
     ...bodyBlocks.flatMap((block) => {
       if (block.type === "heading1" || block.type === "heading2" || block.type === "heading3") {
         firstParagraphInSection = true;
-        return blockToParagraph(block, true);
+        return blockToParagraph(block, true, input.importedTables ?? []);
       }
 
-      const paragraphs = blockToParagraph(block, firstParagraphInSection);
+      const paragraphs = blockToParagraph(block, firstParagraphInSection, input.importedTables ?? []);
       if (block.type === "paragraph") firstParagraphInSection = false;
       return paragraphs;
     }),
-    ...referenceParagraphs(references),
+    ...referenceParagraphs(references, bodyBlocks),
   ]);
 }
 

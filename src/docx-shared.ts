@@ -87,12 +87,11 @@ export interface IbgeTableOptions {
   columnWidths?: number[];
 }
 
-const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+export const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
 
 function normalizeIbgeHeaders(options: IbgeTableOptions): string[] {
   if (options.headerLabels.length) return options.headerLabels;
-  const inferredColumnCount = Math.max(1, ...options.rows.map((row) => row.length));
-  return Array.from({ length: inferredColumnCount }, (_, index) => `Coluna ${index + 1}`);
+  return [];
 }
 
 function normalizeColumnWidths(columnCount: number, columnWidths?: number[]): number[] {
@@ -105,33 +104,38 @@ function normalizeColumnWidths(columnCount: number, columnWidths?: number[]): nu
 
 export function ibgeTable(options: IbgeTableOptions): Table {
   const headerLabels = normalizeIbgeHeaders(options);
-  const widths = normalizeColumnWidths(headerLabels.length, options.columnWidths);
-  const headerRow = new TableRow({
-    tableHeader: true,
-    children: headerLabels.map(
-      (label, index) =>
-        new TableCell({
-          width: { size: widths[index], type: WidthType.PERCENTAGE },
-          shading: { fill: "EDF1F7" },
-          margins: { top: 80, bottom: 80, left: 80, right: 80 },
-          children: [new Paragraph({ children: [new TextRun({ text: cleanMojibakeText(label), bold: true, font: UFLA_RULES.typography.fontFamily, size: 20, color: BLACK })] })],
-        }),
-    ),
-  });
+  const columnCount = headerLabels.length || Math.max(1, ...options.rows.map((row) => row.length));
+  const widths = normalizeColumnWidths(columnCount, options.columnWidths);
 
-  const bodyRows = options.rows.map(
-    (row) =>
-      new TableRow({
-        children: headerLabels.map(
-          (_label, index) =>
-            new TableCell({
-              width: { size: widths[index], type: WidthType.PERCENTAGE },
-              margins: { top: 80, bottom: 80, left: 80, right: 80 },
-              children: [new Paragraph({ children: [new TextRun({ text: cleanMojibakeText(row[index] ?? ""), font: UFLA_RULES.typography.fontFamily, size: 20, color: BLACK })] })],
-            }),
-        ),
-      }),
-  );
+  const tableRows: TableRow[] = [];
+  if (headerLabels.length) {
+    tableRows.push(new TableRow({
+      tableHeader: true,
+      children: headerLabels.map(
+        (label, index) =>
+          new TableCell({
+            width: { size: widths[index], type: WidthType.PERCENTAGE },
+            shading: { fill: "EDF1F7" },
+            margins: { top: 80, bottom: 80, left: 80, right: 80 },
+            children: [new Paragraph({ children: [new TextRun({ text: cleanMojibakeText(label), bold: true, font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK })] })],
+          }),
+      ),
+    }));
+  }
+
+  for (const row of options.rows) {
+    const cells = Array.from({ length: columnCount }, (_, index) => row[index] ?? "");
+    tableRows.push(new TableRow({
+      children: cells.map(
+        (cellText) =>
+          new TableCell({
+            width: { size: 100 / columnCount, type: WidthType.PERCENTAGE },
+            margins: { top: 80, bottom: 80, left: 80, right: 80 },
+            children: [new Paragraph({ children: [new TextRun({ text: cleanMojibakeText(cellText), font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK })] })],
+          }),
+      ),
+    }));
+  }
 
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
@@ -143,6 +147,6 @@ export function ibgeTable(options: IbgeTableOptions): Table {
       insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
       insideVertical: NO_BORDER,
     },
-    rows: [headerRow, ...bodyRows],
+    rows: tableRows,
   });
 }

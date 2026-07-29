@@ -1,18 +1,22 @@
 import {
   AlignmentType,
   Document,
+  Header,
   HeadingLevel,
   Packer,
+  PageNumber,
   PageOrientation,
   Paragraph,
   Table,
   TextRun,
 } from "docx";
 import type { IParagraphOptions } from "docx";
-import { parseEditorContent, type DocxGenerationInput, type EditorBlock } from "./export-docx";
-import { UFLA_RULES } from "./ufla-rules";
+import { parseEditorContent, importedTableParagraph, importedImageParagraph, type DocxGenerationInput, type EditorBlock } from "./export-docx";
+import type { ImportedTable } from "./imported-tables";
+import type { ImportedDocumentImage } from "./imported-images";
+import { UFLA_RULES, cmToTwip } from "./ufla-rules";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
-import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, tabbedTableBlock } from "./docx-render-core";
+import { cleanMojibakeText, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, tabbedTableBlock } from "./docx-render-core";
 
 const BLACK = "000000";
 const BODY_SIZE = 24;
@@ -44,6 +48,10 @@ function normalizeComparable(value: string): string {
     .trim();
 }
 
+function normalizeSemicolonKeywords(value: string): string {
+  return value.replace(/\s*;\s*/g, "; ").replace(/;\s*$/, "").trim();
+}
+
 function stripLeadingArticleMetadataBlocks(blocks: EditorBlock[], input: DocxGenerationInput): EditorBlock[] {
   const metadata = new Set(
     [input.fields.title, input.fields.subtitle, input.fields.author]
@@ -58,7 +66,23 @@ function stripLeadingArticleMetadataBlocks(blocks: EditorBlock[], input: DocxGen
     firstBodyIndex += 1;
   }
 
-  return blocks.slice(firstBodyIndex);
+  let rest = blocks.slice(firstBodyIndex);
+
+  const skipHeadings = new Set(["RESUMO", "ABSTRACT", "PALAVRAS-CHAVE", "KEYWORDS"]);
+  while (rest.length > 0) {
+    const first = rest[0];
+    if (first.type !== "heading1" && first.type !== "heading2") break;
+    if (!skipHeadings.has(normalizeComparable(first.text))) break;
+    let sectionEnd = 1;
+    while (sectionEnd < rest.length) {
+      const block = rest[sectionEnd];
+      if (block.type === "heading1" || block.type === "heading2") break;
+      sectionEnd += 1;
+    }
+    rest = rest.slice(sectionEnd);
+  }
+
+  return rest;
 }
 
 function run(text: string, options: RunOptions = {}): TextRun {
@@ -93,11 +117,20 @@ function centered(text: string, bold = false, size = BODY_SIZE): Paragraph {
   });
 }
 
+function simpleParagraph(text: string): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.LEFT,
+    spacing: { line: SINGLE_LINE, after: 120 },
+    indent: {},
+    children: textRunsFromMarkup(text || " "),
+  });
+}
+
 function sectionTitle(text: string, level: DocxHeadingLevel = HeadingLevel.HEADING_1): Paragraph {
   return new Paragraph({
     heading: level,
     alignment: AlignmentType.LEFT,
-    spacing: { before: 240, after: 120, line: SINGLE_LINE },
+    spacing: { before: 240, after: 120, line: ONE_AND_HALF_LINE },
     children: [run(text, { bold: level !== HeadingLevel.HEADING_3 })],
   });
 }
@@ -115,21 +148,45 @@ function labeledSection(label: string, value: string): Paragraph[] {
   ];
 }
 
-function blockToParagraph(block: EditorBlock): ArticleChild[] {
+function blockToParagraph(block: EditorBlock, importedImages: ImportedDocumentImage[] = [], importedTables: ImportedTable[] = []): ArticleChild[] {
   if (block.type === "heading1") return [sectionTitle(block.text, HeadingLevel.HEADING_1)];
   if (block.type === "heading2") return [sectionTitle(block.text, HeadingLevel.HEADING_2)];
   if (block.type === "heading3") return [sectionTitle(block.text, HeadingLevel.HEADING_3)];
   if (block.type === "longQuote") {
     return [
-      paragraph(block.text, {
+      new Paragraph({
+        alignment: AlignmentType.BOTH,
         spacing: { line: SINGLE_LINE, after: 120 },
         indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
+        children: coreTextRunsFromMarkup(block.text, UFLA_RULES.typography.longQuoteFontSizePt * 2),
       }),
     ];
   }
   if (block.type === "scheduleTable") return splitParagraphs(block.text).map((line) => paragraph(line));
   if (block.type === "tabbedTable") return tabbedTableBlock(block.text);
+  if (block.type === "importedTable") {
+    const table = importedTables.find((item) => item.id === block.text);
+    if (!table) return [simpleParagraph("[Tabela importada: dados originais indisponiveis — reinsira manualmente]")];
+    return importedTableParagraph(table);
+  }
+  if (block.type === "importedImage") {
+    const image = importedImages.find((item) => item.id === block.text);
+    if (!image) return [simpleParagraph("[Imagem importada: dados originais indisponiveis — reinsira manualmente]")];
+    return importedImageParagraph(image);
+  }
+  if (block.type === "source") {
+    return [sourceParagraph(block.text)];
+  }
+  if (block.type === "reference") return [];
   return [paragraph(block.text)];
+}
+
+function stripTrailingReferenceSection(blocks: EditorBlock[]): EditorBlock[] {
+  const refIndex = blocks.findIndex((block) => {
+    const normalized = normalizeComparable(block.text);
+    return normalized === "REFERENCIAS";
+  });
+  return refIndex === -1 ? blocks : blocks.slice(0, refIndex);
 }
 
 function referenceRunToTextRun(referenceRun: ReferenceRun): TextRun {
@@ -139,37 +196,87 @@ function referenceRunToTextRun(referenceRun: ReferenceRun): TextRun {
   });
 }
 
+function hasEditorHeading(blocks: EditorBlock[], text: string): boolean {
+  const normalizedTarget = text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  return blocks.some((block) => {
+    if (block.type !== "heading1" && block.type !== "heading2" && block.type !== "paragraph") return false;
+    const normalizedBlock = block.text
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      .replace(/\s+/g, " ")
+      .trim();
+    return normalizedBlock === normalizedTarget;
+  });
+}
+
 function referenceParagraphs(references: string[]): Paragraph[] {
   if (!references.length) return [];
 
-  return [
-    sectionTitle("Referencias"),
-    ...normalizeReferences(references)
+  const children: Array<Paragraph | Table> = [];
+  children.push(
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 240, after: 120, line: ONE_AND_HALF_LINE },
+      children: [run("Referências", { bold: true })],
+    }),
+  );
+
+  const normalized = normalizeReferences(references);
+  const seen = new Set<string>();
+  const deduped = normalized.filter((ref) => {
+    const key = ref.text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  children.push(
+    ...deduped
       .sort((a, b) => a.text.localeCompare(b.text, "pt-BR", { sensitivity: "base" }))
       .map(
         (reference) =>
           new Paragraph({
             alignment: AlignmentType.LEFT,
             spacing: { line: SINGLE_LINE, after: 240 },
-            indent: { firstLine: 0 },
+            indent: { left: cmToTwip(0.5), hanging: cmToTwip(0.5) },
             children: reference.runs.length
               ? reference.runs.map(referenceRunToTextRun)
               : [run(reference.text || " ")],
           }),
       ),
-  ];
+  );
+  return children;
 }
 
 function createArticleDocument(input: DocxGenerationInput): Document {
   const blocks = parseEditorContent(input.editorText);
-  const bodyBlocks = stripLeadingArticleMetadataBlocks(
-    blocks.filter((block) => block.type !== "reference" && block.type !== "importedImage"),
-    input,
+  const bodyBlocks = stripTrailingReferenceSection(
+    stripLeadingArticleMetadataBlocks(blocks, input),
   );
-  const references = [
-    ...splitParagraphs(input.fields.referencias),
-    ...blocks.filter((block) => block.type === "reference").map((block) => block.text),
-  ];
+  const refBlocks = blocks.filter((block) => block.type === "reference").map((block) => block.text);
+  const references = refBlocks.length ? refBlocks : splitParagraphs(input.fields.referencias);
+
+  const pageNumberHeader = new Header({
+    children: [
+      new Paragraph({
+        alignment: AlignmentType.RIGHT,
+        children: [
+          new TextRun({
+            children: [PageNumber.CURRENT],
+            font: UFLA_RULES.typography.fontFamily,
+            size: UFLA_RULES.typography.pageNumberFontSizePt * 2,
+            color: BLACK,
+          }),
+        ],
+      }),
+    ],
+  });
 
   return new Document({
     creator: "UFLA DOCX Academico",
@@ -192,19 +299,42 @@ function createArticleDocument(input: DocxGenerationInput): Document {
             },
           },
         },
+        headers: {
+          default: pageNumberHeader,
+        },
         children: [
-          centered((input.fields.title || "Titulo do artigo").toUpperCase(), true, 28),
-          ...(hasText(input.fields.subtitle) ? [centered(input.fields.subtitle, false)] : []),
-          centered(input.fields.author || "Autor", false),
+          centered(input.fields.title || "Titulo do artigo", true, 32),
+          ...(hasText(input.fields.subtitle) ? [centered(input.fields.subtitle, false, 28)] : []),
+          centered(input.fields.author || "Autor", true),
           ...labeledSection("Resumo", input.fields.resumo),
           ...(hasText(input.fields.palavrasChave)
-            ? [paragraph(`Palavras-chave: ${input.fields.palavrasChave}`, { indent: { firstLine: 0 } })]
+            ? [
+                new Paragraph({
+                  alignment: AlignmentType.BOTH,
+                  spacing: { line: ONE_AND_HALF_LINE, after: 0 },
+                  indent: { firstLine: 0 },
+                  children: [
+                    run("Palavras-chave: ", { bold: true }),
+                    run(normalizeSemicolonKeywords(input.fields.palavrasChave)),
+                  ],
+                }),
+              ]
             : []),
           ...labeledSection("Abstract", input.fields.abstractText),
           ...(hasText(input.fields.keywords)
-            ? [paragraph(`Keywords: ${input.fields.keywords}`, { indent: { firstLine: 0 } })]
+            ? [
+                new Paragraph({
+                  alignment: AlignmentType.BOTH,
+                  spacing: { line: ONE_AND_HALF_LINE, after: 0 },
+                  indent: { firstLine: 0 },
+                  children: [
+                    run("Keywords: ", { bold: true }),
+                    run(normalizeSemicolonKeywords(input.fields.keywords)),
+                  ],
+                }),
+              ]
             : []),
-          ...bodyBlocks.flatMap(blockToParagraph),
+          ...bodyBlocks.flatMap((block) => blockToParagraph(block, input.importedImages ?? [], input.importedTables ?? [])),
           ...referenceParagraphs(references),
         ],
       },

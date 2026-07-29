@@ -233,20 +233,20 @@ describe("DOCX export", () => {
   it("generates simple article without graduate pre-textual structure", async () => {
     const documentXml = await generatedArticleXml("# Introducao\nTexto do artigo.\n[REF] SOUZA, J. Texto. Lavras: UFLA, 2025.");
 
-    expect(documentXml).toContain("QUALIDADE DO CAFE NO SUL DE MINAS");
+    expect(documentXml).toContain("Qualidade do cafe no sul de Minas");
     expect(documentXml).toContain("Maria Silva");
     expect(documentXml).toContain("Resumo do trabalho.");
     expect(documentXml).toContain("Palavras-chave");
     expect(documentXml).toContain("Abstract text.");
     expect(documentXml).toContain("Keywords");
-    expect(documentXml).toContain("Referencias");
+    expect(documentXml).toContain("Referências");
     expectNoGraduateOnlyElements(documentXml);
   });
 
   it("generateDocxBlob respeita artigo simples sem front matter", async () => {
     const documentXml = await generatedXml("# 1 INTRODUCAO\nTexto do artigo.\n[REF] SOUZA, J. Texto. Lavras: UFLA, 2025.", articleFields);
 
-    expect(documentXml).toContain("QUALIDADE DO CAFE NO SUL DE MINAS");
+    expect(documentXml).toContain("Qualidade do cafe no sul de Minas");
     expect(documentXml).toContain("Maria Silva");
     expect(documentXml).toContain("Resumo");
     expect(documentXml).toContain("Abstract");
@@ -403,7 +403,7 @@ describe("DOCX export", () => {
     const heading3 = paragraphXmlContainingStyle(documentXml, "1.3.1 Objetivo geral", "Heading3");
 
     expect(hasPositiveBold(heading1)).toBe(true);
-    expect(hasPositiveBold(heading2)).toBe(true);
+    expect(hasPositiveBold(heading2)).toBe(false);
     expect(hasPositiveBold(heading3)).toBe(false);
   });
 
@@ -511,7 +511,7 @@ describe("DOCX export", () => {
 
     for (const caption of [figure, chart, table]) {
       expect(caption).toContain('w:jc w:val="center"');
-      expect(caption).toContain('w:sz w:val="20"');
+      expect(caption).toContain('w:sz w:val="22"');
       expect(caption).toMatch(/<w:b\s*\/?>|w:b w:val="1"/);
       expectNoHeadingStyle(caption);
     }

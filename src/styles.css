@@ -50,7 +50,7 @@
 .diagnostic-disclaimer {
   margin: 0 0 6px;
   font-size: 0.75rem;
-  color: #5b6b5b;
+  color: #3d4f3d;
 }
 
 .diagnostic-list {
@@ -572,7 +572,7 @@ textarea:focus-visible,
 .adherence-disclaimer {
   margin: 0 0 10px;
   font-size: 0.82rem;
-  color: #52616c;
+  color: #2f3d46;
 }
 
 .adherence-grid {
@@ -628,7 +628,7 @@ textarea:focus-visible,
 .adherence-note {
   grid-column: 1 / -1;
   font-size: 0.78rem;
-  color: #52616c;
+  color: #2f3d46;
   line-height: 1.35;
 }
 
@@ -704,13 +704,25 @@ textarea:focus-visible,
   background: #ffe0dd;
 }
 
+.issue.error::before {
+  content: "\2716";
+  margin-right: 6px;
+  font-weight: 700;
+}
+
 .issue.warning {
   color: #5d4300;
   background: #fff0bf;
 }
 
+.issue.warning::before {
+  content: "\26A0";
+  margin-right: 6px;
+  font-weight: 700;
+}
+
 .empty-state {
-  color: #52616c;
+  color: #2f3d46;
 }
 
 .sr-only {
@@ -885,7 +897,7 @@ textarea:focus-visible,
 .import-header p {
   margin: 4px 0 0;
   font-size: 0.82rem;
-  color: #34495e;
+  color: #2c3e50;
 }
 
 .import-status {
@@ -1075,5 +1087,35 @@ textarea:focus-visible,
 @media (prefers-reduced-motion: reduce) {
   .adherence-chevron {
     transition: none;
+  }
+}
+
+@media (prefers-contrast: high) {
+  .app-header {
+    border-bottom-width: 6px;
+  }
+
+  .issue.error {
+    border: 2px solid #741c1c;
+  }
+
+  .issue.warning {
+    border: 2px solid #5d4300;
+  }
+
+  .import-block {
+    border-width: 2px;
+  }
+
+  .work-type-card {
+    border-width: 2px;
+  }
+
+  .field-note {
+    border: 1px solid #5d4300;
+  }
+
+  .mode-panel {
+    border-left-width: 6px;
   }
 }

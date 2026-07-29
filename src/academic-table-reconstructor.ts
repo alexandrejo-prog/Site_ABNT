@@ -275,7 +275,7 @@ export function reconstructGenericAcademicTable(table: ImportedTable): Reconstru
   const columnCount = Math.max(1, table.columnCount);
   const normalizedHeaders = Array.from({ length: columnCount }, (_, index) => {
     const header = normalizeAcademicTableText(headers[index] ?? "");
-    return header || `Coluna ${index + 1}`;
+    return header || "";
   });
   const rows: ReconstructedAcademicTableRow[] = [];
 

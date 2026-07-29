@@ -107,6 +107,12 @@
 - [x] Observação "Atualize o sumário no Word" depois do TOC
 - [x] Configuração updateFields: true
 - [x] HeadingLevel adequado em HEADING_1, HEADING_2, HEADING_3
+- [x] Natureza específica na folha de rosto (Doutor/Mestre/título de graduação conforme workType)
+- [x] Indicadores de impacto obrigatórios para tese/dissertação (gerados com aviso quando vazio)
+- [x] Legenda de figura: formato tipo + número + travessão + título, bold, centrado, fonte 12
+- [x] Fonte de figura: "Fonte:" renderizado com fonte 11, centrado, sem recuo (sourceParagraph)
+- [x] CAPTION_PATTERN aceita travessão eme (—) além de hífen, dois-pontos e travessão ene
+- [x] Marcadores de importedTable/importedImage com fallback amigável se dados não encontrados
 - [ ] Gerar PDF opcional
 
 ## Testes e verificação
@@ -219,6 +225,26 @@
 - [x] Checklist não marca como concluído item parcial
 - [x] Testes cobrem quebra de página antes de seções primárias
 - [x] Testes cobrem referências com negrito
+
+## Limpeza de scripts temporários
+
+- [x] Remover scripts/ debug-analyzer*.ts, debug-page-field*.ts, gerar-*.ts, rodar-skill.ts, verificar-*.ts (12 arquivos)
+- [x] Remover tests/generate-real-docx.ts e tests/analyze-references.ts (helpers com console.log)
+- [x] Manter tests/__qa-generate-cpg.test.ts (teste QA legítimo que gera CPG para validação visual)
+
+## Correções artigo (artigo + artigo_cientifico_ufla)
+
+- [x] Título preserva caixa original (removeu .toUpperCase())
+- [x] Sem capa UFLA nem folha de rosto em artigo (artigo_cientifico_ufla roteado para artigo exporter)
+- [x] Referências: usa apenas [REF] blocks quando presentes; fallback para campo referencias; dedup na normalização
+- [x] [REF] blocks não renderizados como parágrafos do corpo (skip em blockToParagraph)
+- [x] Seção REFERENCIAS do editor é removida do corpo (stripTrailingReferenceSection)
+- [x] Fallback para importedTable não encontrada
+- [x] Fallback para importedImage não encontrada
+- [x] Cabeçalho com número de página adicionado (consistente com demais exportadores)
+- [x] Autor em negrito (consistente)
+- [x] Palavras-chave/keywords normalizadas com ponto e vírgula
+- [x] Section title spacing corrigido para 1,5
 
 ## Acessibilidade (v2.9.0)
 

@@ -13,10 +13,9 @@ export interface DocumentTemplate {
 export const generalTemplate: DocumentTemplate = {
   id: "geral",
   label: "Modelo geral",
-  // Decisão conservadora da auditoria P4: artigo_cientifico_ufla permanece no modelo geral; ele é item da Coleção Produção Acadêmica UFLA, não o Artigo acadêmico simples da UI.
   supports: (workType) => {
     const normalizedWorkType = normalizeWorkType(workType);
-    return !normalizedWorkType || (!isCpgWork(normalizedWorkType as WorkTypeValue) && !isResearchProject(normalizedWorkType as WorkTypeValue) && !isLongFormAcademicWork(normalizedWorkType) && normalizedWorkType !== "artigo");
+    return !normalizedWorkType || (!isCpgWork(normalizedWorkType as WorkTypeValue) && !isResearchProject(normalizedWorkType as WorkTypeValue) && !isLongFormAcademicWork(normalizedWorkType) && normalizedWorkType !== "artigo" && normalizedWorkType !== "artigo_cientifico_ufla");
   },
   async generate(input) {
     const { generateDocxBlob } = await import("./export-docx");
@@ -37,7 +36,10 @@ export const graduateEditableDraftTemplate: DocumentTemplate = {
 export const articleTemplate: DocumentTemplate = {
   id: "artigo",
   label: "Artigo",
-  supports: (workType) => normalizeWorkType(workType) === "artigo",
+  supports: (workType) => {
+    const n = normalizeWorkType(workType);
+    return n === "artigo" || n === "artigo_cientifico_ufla";
+  },
   async generate(input) {
     const { generateArticleDocxBlob } = await import("./export-article-docx");
     return generateArticleDocxBlob(input);

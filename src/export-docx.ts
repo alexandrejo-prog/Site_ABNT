@@ -20,12 +20,12 @@ import {
 import type { IParagraphOptions, IStylesOptions } from "docx";
 import "./docx-toc-field-patch";
 import { pageMargins, ibgeTable, BODY_SIZE, SINGLE_LINE, ONE_AND_HALF_LINE, BLACK, AUTHOR_SIZE as COVER_AUTHOR_SIZE, TITLE_SIZE as COVER_TITLE_SIZE } from "./docx-shared";
-import { AcademicFields, UFLA_RULES } from "./ufla-rules";
+import { AcademicFields, UFLA_RULES, cmToTwip } from "./ufla-rules";
 import { getWorkTypeRequirements } from "./work-type-requirements";
-import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
+import { normalizeReferences, type NormalizedReference, type ReferenceRun } from "./references-normalizer";
 import { buildFlowingImpactText } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
-import { captionParagraph, cleanMojibakeText, detectCaption, tabbedTableBlock } from "./docx-render-core";
+import { captionParagraph, cleanMojibakeText, detectCaption, sourceParagraph, tabbedTableBlock } from "./docx-render-core";
 import { ImportedDocumentImage, IMPORTED_IMAGE_MARKER_PATTERN } from "./imported-images";
 import { ImportedTable, IMPORTED_TABLE_MARKER_PATTERN, buildStructuredTextFromTable } from "./imported-tables";
 
@@ -41,6 +41,7 @@ export type EditorBlockType =
   | "tabbedTable"
   | "importedImage"
   | "importedTable"
+  | "source"
   | "reference";
 
 export interface EditorBlock {
@@ -238,11 +239,28 @@ function isMarkdownTableLine(value: string): boolean {
   return /^\|.+\|$/.test(value.trim());
 }
 
+/** Checks if consecutive lines after startIndex have the same word count (tabular data heuristic). */
+function looksLikeTabularData(lines: string[], startIndex: number): boolean {
+  if (startIndex >= lines.length) return false;
+  const first = lines[startIndex]?.trim();
+  if (!first) return false;
+  const wc = first.split(/\s+/).length;
+  if (wc < 2) return false;
+  for (let i = startIndex + 1; i < Math.min(startIndex + 5, lines.length); i++) {
+    const line = lines[i]?.trim();
+    if (!line) return false;
+    if (/^(Fonte:|Quadro\s|Tabela\s)/i.test(line)) break;
+    if (line.split(/\s+/).length !== wc) return false;
+  }
+  return true;
+}
+
 function shouldStartTabbedTable(value: string, lines: string[], index: number): boolean {
   const trimmed = value.trim();
   if (!/^(quadro|tabela)\s+\d+/i.test(trimmed)) return false;
   const next = lines[index + 1]?.trim() ?? "";
-  return next.includes("\t") || / {2,}/.test(next) || isMarkdownTableLine(next);
+  if (next.includes("\t") || / {2,}/.test(next) || isMarkdownTableLine(next)) return true;
+  return looksLikeTabularData(lines, index + 1);
 }
 
 export function parseEditorContent(editorText: string): EditorBlock[] {
@@ -328,7 +346,9 @@ export function parseEditorContent(editorText: string): EditorBlock[] {
         if (/^##\s+/i.test(nextLine)) break;
         if (/^\d+(?:\.\d+)*\s+/.test(nextLine.trim())) break;
         if (/^(REFERÊNCIAS|REFERENCIAS|APÊNDICE|APENDICE|ANEXO)\b/i.test(nextLine.trim())) break;
-        if (!nextLine.includes("\t") && !/ {2,}/.test(nextLine) && !isMarkdownTableLine(nextLine) && !isMarkdownTableSeparator(nextLine)) break;
+        const hasSeparator = nextLine.includes("\t") || / {2,}/.test(nextLine) || isMarkdownTableLine(nextLine) || isMarkdownTableSeparator(nextLine);
+        const isTabular = !hasSeparator && looksLikeTabularData(lines, cursor);
+        if (!hasSeparator && !isTabular) break;
         tableLines.push(nextLine);
         cursor += 1;
       }
@@ -375,6 +395,11 @@ export function parseEditorContent(editorText: string): EditorBlock[] {
     const importedTableMatch = trimmed.match(IMPORTED_TABLE_MARKER_PATTERN);
     if (importedTableMatch?.[1]) {
       blocks.push({ type: "importedTable", text: importedTableMatch[1] });
+      continue;
+    }
+
+    if (/^Fonte\s*:/i.test(trimmed)) {
+      blocks.push({ type: "source", text: trimmed });
       continue;
     }
 
@@ -672,6 +697,8 @@ function markdownTableBlock(text: string): Array<Paragraph | Table> {
   ];
 }
 
+const SOURCE_FONT_SIZE = UFLA_RULES.typography.sourceFontSizePt * 2;
+
 function plainScheduleTableBlock(text: string): Array<Paragraph | Table> {
   const rawLines = text
     .split(/\n+/)
@@ -732,7 +759,7 @@ function plainScheduleTableBlock(text: string): Array<Paragraph | Table> {
     new Paragraph({
       alignment: AlignmentType.LEFT,
       spacing: { before: 120, after: 120, line: SINGLE_LINE },
-      children: [new TextRun({ text: "Fonte: elaborado pelo autor.", font: UFLA_RULES.typography.fontFamily, size: 20, color: BLACK })],
+      children: [new TextRun({ text: "Fonte: elaborado pelo autor.", font: UFLA_RULES.typography.fontFamily, size: SOURCE_FONT_SIZE, color: BLACK })],
     }),
   ];
 }
@@ -755,7 +782,7 @@ function scheduleTableBlock(text: string): Array<Paragraph | Table> {
         new TextRun({
           text: source,
           font: UFLA_RULES.typography.fontFamily,
-          size: 20,
+          size: SOURCE_FONT_SIZE,
           color: BLACK,
         }),
       ],
@@ -763,7 +790,7 @@ function scheduleTableBlock(text: string): Array<Paragraph | Table> {
   ];
 }
 
-function importedImageParagraph(image: ImportedDocumentImage | undefined): Paragraph[] {
+export function importedImageParagraph(image: ImportedDocumentImage | undefined): Paragraph[] {
   if (!image) return [];
 
   if (image.data?.byteLength) {
@@ -836,7 +863,7 @@ function reconstructedColumnWidths(table: ImportedTable): number[] {
   return Array.from({ length: count }, () => Math.floor(100 / count));
 }
 
-function semanticReconstructedTableParagraph(table: ImportedTable): Array<Paragraph | Table> {
+export function semanticReconstructedTableParagraph(table: ImportedTable): Array<Paragraph | Table> {
   const reconstructed = table.reconstructedTable;
   if (!reconstructed || !reconstructed.rows.length) return [];
 
@@ -898,16 +925,18 @@ function semanticReconstructedTableParagraph(table: ImportedTable): Array<Paragr
     });
   });
 
+  const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: BLACK };
+  const SOLID_BORDER = { style: BorderStyle.SINGLE, size: 4, color: BLACK };
   result.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       borders: {
-        top: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
-        bottom: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
-        left: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
-        right: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
-        insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
-        insideVertical: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        top: SOLID_BORDER,
+        bottom: SOLID_BORDER,
+        left: SOLID_BORDER,
+        right: SOLID_BORDER,
+        insideHorizontal: SOLID_BORDER,
+        insideVertical: SOLID_BORDER,
       },
       rows: [headerRow, ...bodyRows],
     }),
@@ -918,7 +947,7 @@ function semanticReconstructedTableParagraph(table: ImportedTable): Array<Paragr
       new Paragraph({
         alignment: AlignmentType.LEFT,
         spacing: { before: 120, after: 120, line: SINGLE_LINE },
-        children: [new TextRun({ text: cleanMojibakeText(table.source || reconstructed.source || ""), font: "Times New Roman", size: BODY_SIZE, color: BLACK })],
+        children: [new TextRun({ text: cleanMojibakeText(table.source || reconstructed.source || ""), font: "Times New Roman", size: SOURCE_FONT_SIZE, color: BLACK })],
       }),
     );
   }
@@ -937,7 +966,7 @@ function semanticReconstructedTableParagraph(table: ImportedTable): Array<Paragr
   return result;
 }
 
-function importedTableParagraph(table: ImportedTable | undefined): Array<Paragraph | Table> {
+export function importedTableParagraph(table: ImportedTable | undefined): Array<Paragraph | Table> {
   if (!table || !table.rows.length) return [];
 
   if (table.renderMode === "semantic-reconstructed-table") {
@@ -992,7 +1021,7 @@ function importedTableParagraph(table: ImportedTable | undefined): Array<Paragra
             new TextRun({
               text: cleanMojibakeText(table.source),
               font: "Times New Roman",
-              size: BODY_SIZE,
+              size: SOURCE_FONT_SIZE,
               color: BLACK,
             }),
           ],
@@ -1095,16 +1124,18 @@ function importedTableParagraph(table: ImportedTable | undefined): Array<Paragra
     );
   }
 
+  const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: BLACK };
+  const SOLID_BORDER = { style: BorderStyle.SINGLE, size: 4, color: BLACK };
   result.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       borders: {
-        top: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
-        bottom: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
-        left: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
-        right: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
-        insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
-        insideVertical: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+        top: SOLID_BORDER,
+        bottom: SOLID_BORDER,
+        left: SOLID_BORDER,
+        right: SOLID_BORDER,
+        insideHorizontal: SOLID_BORDER,
+        insideVertical: SOLID_BORDER,
       },
       rows: tableRows,
     }),
@@ -1119,7 +1150,7 @@ function importedTableParagraph(table: ImportedTable | undefined): Array<Paragra
           new TextRun({
             text: cleanMojibakeText(table.source),
             font: "Times New Roman",
-            size: BODY_SIZE,
+            size: SOURCE_FONT_SIZE,
             color: BLACK,
           }),
         ],
@@ -1139,7 +1170,8 @@ function blockToParagraph(
   if (block.type === "heading1") {
     const title = new Paragraph({
       heading: HeadingLevel.HEADING_1,
-      spacing: { before: 0, after: 240, line: ONE_AND_HALF_LINE },
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 240, after: 240, line: ONE_AND_HALF_LINE },
       children: [
         new TextRun({
           text: block.text.toUpperCase(),
@@ -1162,7 +1194,6 @@ function blockToParagraph(
         children: [
           new TextRun({
             text: block.text,
-            bold: true,
             font: UFLA_RULES.typography.fontFamily,
             size: BODY_SIZE,
             color: BLACK,
@@ -1195,7 +1226,7 @@ function blockToParagraph(
       new Paragraph({
         alignment: AlignmentType.BOTH,
         spacing: { line: SINGLE_LINE, after: 120 },
-        indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
+    indent: { left: UFLA_RULES.typography.paragraphFirstLineTwip },
         children: textRunsFromMarkup(block.text, LONG_QUOTE_SIZE),
       }),
     ];
@@ -1223,13 +1254,27 @@ function blockToParagraph(
 
   if (block.type === "importedTable") {
     const table = importedTables.find((item) => item.id === block.text);
-    return importedTableParagraph(table);
+    if (table) return importedTableParagraph(table);
+    return [simpleParagraph("[Tabela importada: dados originais indisponíveis — reinsira manualmente]")];
+  }
+
+  if (block.type === "source") {
+    return [sourceParagraph(block.text)];
   }
 
   const cleanedText = cleanMojibakeText(block.text);
+
+  if (IMPORTED_TABLE_MARKER_PATTERN.test(cleanedText) || IMPORTED_IMAGE_MARKER_PATTERN.test(cleanedText)) {
+    return [simpleParagraph("[Elemento importado: dados originais indisponíveis — reinsira manualmente]")];
+  }
+
   const caption = detectCaption(cleanedText);
   if (caption) {
     return [captionParagraph(cleanedText, caption.kind)];
+  }
+
+  if (/^Fonte\s*:/i.test(cleanedText)) {
+    return [sourceParagraph(cleanedText)];
   }
 
   return [textParagraph(cleanedText)];
@@ -1269,7 +1314,7 @@ function summaryEntryParagraph(entry: SummaryEntry): Paragraph {
         font: UFLA_RULES.typography.fontFamily,
         size: BODY_SIZE,
         color: BLACK,
-        bold: entry.level < 3,
+        bold: entry.level === 1,
       }),
     ],
   });
@@ -1299,15 +1344,37 @@ function collectSummaryEntries(bodyBlocks: EditorBlock[], references: string[], 
   return entries;
 }
 
+function getAuthorKey(ref: NormalizedReference): string {
+  const text = ref.text.trim();
+  const commaIndex = text.indexOf(",");
+  if (commaIndex > 0) {
+    return text.substring(0, commaIndex).trim();
+  }
+  const firstSpace = text.search(/\s/);
+  return firstSpace > 0 ? text.substring(0, firstSpace) : text;
+}
+
 function buildReferences(references: string[]): Paragraph[] {
-  return normalizeReferences(references)
-    .sort((a, b) => a.text.localeCompare(b.text, "pt-BR", { sensitivity: "base" }))
+  const normalized = normalizeReferences(references);
+  const seen = new Set<string>();
+  const deduped = normalized.filter((ref) => {
+    const key = ref.text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return deduped
+    .sort((a, b) => {
+      const aKey = getAuthorKey(a);
+      const bKey = getAuthorKey(b);
+      return aKey.localeCompare(bKey, "pt-BR", { sensitivity: "base" });
+    })
     .map(
       (reference) =>
         new Paragraph({
           alignment: AlignmentType.LEFT,
           spacing: { line: SINGLE_LINE, after: SINGLE_LINE },
-          indent: { firstLine: 0, left: 0 },
+          indent: { left: cmToTwip(0.5), hanging: cmToTwip(0.5) },
           children: reference.runs.length
             ? reference.runs.map(referenceRunToTextRun)
             : [referenceRunToTextRun({ text: reference.text || " " })],
@@ -1498,6 +1565,14 @@ export function calculateTextualStartPage(
 
   if (hasText(fields.indicadoresImpacto) || impactRequired) countedPreTextualPages += 1;
   if (hasText(fields.impactIndicators) || impactRequired) countedPreTextualPages += 1;
+
+  const hasAnyList = hasText(fields.listaQuadros) || hasText(fields.listaGraficos) || hasText(fields.listaTabelas) || hasText(fields.listaSiglas);
+  if (hasAnyList) countedPreTextualPages += 1;
+  if (hasText(fields.listaQuadros)) countedPreTextualPages += 1;
+  if (hasText(fields.listaGraficos)) countedPreTextualPages += 1;
+  if (hasText(fields.listaTabelas)) countedPreTextualPages += 1;
+  if (hasText(fields.listaSiglas)) countedPreTextualPages += 1;
+
   if (hasSummary) countedPreTextualPages += 1;
 
   return countedPreTextualPages + 1;
@@ -1610,6 +1685,22 @@ function stripTrailingAdvisorLocationYear(value: string): string {
   return cleaned;
 }
 
+function workTypeSpecificNature(fields: AcademicFields): string {
+  const prog = fields.program || fields.course || "Programa de Pós-Graduação";
+  switch (fields.workType) {
+    case "tese":
+      return `Tese apresentada ao ${prog} da Universidade Federal de Lavras como parte dos requisitos para obtenção do título de Doutor.`;
+    case "dissertacao":
+      return `Dissertação apresentada ao ${prog} da Universidade Federal de Lavras como parte dos requisitos para obtenção do título de Mestre.`;
+    case "monografia":
+      return `Monografia apresentada à Universidade Federal de Lavras como parte dos requisitos para obtenção do título de ${fields.course || "graduação"}.`;
+    case "projeto_pesquisa":
+      return "Projeto de pesquisa apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis.";
+    default:
+      return "Trabalho acadêmico apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis.";
+  }
+}
+
 function fallbackWorkNature(fields: AcademicFields): string {
   if (fields.workType === "projeto_pesquisa") {
     return "Projeto de pesquisa apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis.";
@@ -1619,7 +1710,7 @@ function fallbackWorkNature(fields: AcademicFields): string {
 
 function workNature(fields: AcademicFields): string {
   const providedNature = cleanMojibakeText(fields.workNature).trim();
-  const safeNature = providedNature && !isInternalWorkNature(providedNature) ? providedNature : fallbackWorkNature(fields);
+  const safeNature = providedNature && !isInternalWorkNature(providedNature) ? providedNature : workTypeSpecificNature(fields);
   const cleaned = stripTrailingAdvisorLocationYear(safeNature);
 
   return cleanMojibakeText(normalizeNatureForWorkType(cleaned || safeNature, fields));
@@ -1630,7 +1721,7 @@ function titlePageChildren(fields: AcademicFields): Paragraph[] {
   const supplementalLines = buildTitlePageSupplementalLines(fields, nature);
 
   return [
-    centeredParagraph(cleanMojibakeText((fields.author || "AUTOR").toUpperCase()), true, BODY_SIZE, {
+    centeredParagraph(cleanMojibakeText((fields.author || "AUTOR").toUpperCase()), true, COVER_AUTHOR_SIZE, {
       after: 0,
       line: SINGLE_LINE,
     }),
@@ -1807,7 +1898,7 @@ function approvalPageChildren(fields: AcademicFields): Paragraph[] {
 
   return [
     pageBreak(),
-    centeredParagraph(cleanMojibakeText((fields.author || "AUTOR").toUpperCase()), true, BODY_SIZE, {
+    centeredParagraph(cleanMojibakeText((fields.author || "AUTOR").toUpperCase()), true, COVER_AUTHOR_SIZE, {
       after: 0,
       line: SINGLE_LINE,
     }),
@@ -1886,8 +1977,26 @@ function preTextualChildren(fields: AcademicFields): Paragraph[] {
     ...(fields.keywords
       ? [simpleParagraph(cleanMojibakeText(`Keywords: ${ensureTrailingPeriod(fields.keywords)}`))]
       : []),
-    ...optionalPage("Indicadores de impacto", cleanMojibakeText(indicadores)),
-    ...optionalPage("Impact indicators", impactIndicators),
+  );
+  const impactRequired = fields.workType === "dissertacao" || fields.workType === "tese";
+  if (impactRequired || hasText(indicadores)) {
+    children.push(pageBreak(), unnumberedTitle("Indicadores de impacto"));
+    if (hasText(indicadores)) {
+      children.push(simpleParagraph(cleanMojibakeText(indicadores)));
+    } else {
+      children.push(
+        simpleParagraph(
+          cleanMojibakeText(
+            "Indicadores de impacto não preenchidos. Consulte o Manual UFLA 6ª ed. p. 51 para orientações sobre este elemento obrigatório.",
+          ),
+        ),
+      );
+    }
+  }
+  children.push(
+    ...(hasText(impactIndicators)
+      ? [pageBreak(), unnumberedTitle("Impact indicators"), simpleParagraph(cleanMojibakeText(impactIndicators))]
+      : []),
   );
 
   if (
@@ -1952,16 +2061,19 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
     ...summaryChildren,
   ];
 
+  const hasApendices = Boolean(fields.apendices?.trim());
+  const hasAnexos = Boolean(fields.anexos?.trim());
+
   const textualAndPostTextualChildren: Array<Paragraph | Table> = [
     ...bodyBlocks.flatMap((block, index) => blockToParagraph(block, index === 0, input.importedImages ?? [], input.importedTables ?? [])),
     pageBreak(),
-    sectionTitle("Referências"),
+    ...(hasEditorHeading(bodyBlocks, "REFERÊNCIAS") || bodyBlocks.some((b) => normalizeForDetection(b.text).includes(normalizeForDetection("REFERENCIAS"))) ? [] : [sectionTitle("Referências")]),
     ...buildReferences(references),
-    ...(fields.anexos
-      ? [pageBreak(), sectionTitle("Anexos"), ...buildSimpleParagraphs(fields.anexos)]
-      : []),
-    ...(fields.apendices
+    ...(hasApendices
       ? [pageBreak(), sectionTitle(appendixTitle(fields)), ...buildSimpleParagraphs(fields.apendices)]
+      : []),
+    ...(hasAnexos
+      ? [pageBreak(), sectionTitle("Anexos"), ...buildSimpleParagraphs(fields.anexos)]
       : []),
   ];
 
@@ -2051,7 +2163,7 @@ export async function loadDefaultLogoAsset(): Promise<DocxLogoAsset | undefined>
 }
 
 export async function generateDocxBlob(input: DocxGenerationInput): Promise<Blob> {
-  if (input.fields.workType === "artigo") {
+  if (input.fields.workType === "artigo" || input.fields.workType === "artigo_cientifico_ufla") {
     const { generateArticleDocxBlob } = await import("./export-article-docx");
     return generateArticleDocxBlob(input);
   }

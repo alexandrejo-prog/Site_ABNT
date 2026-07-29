@@ -1,0 +1,29 @@
+=== Ref para 113: "FREIRE, Paulo. Pedagogia da Autonomia. Sao Paulo: Paz e Terra, 1996...."
+  Run 0: [    ] "FREIRE, Paulo. "
+  Run 1: [B   ] "Pedagogia da Autonomia"
+  Run 2: [    ] ". Sao Paulo: Paz e Terra, 1996."
+  Format: hanging=283, left=283, align=left
+
+=== Ref para 114: "FREIRE, Paulo. Pedagogia do Oprimido. Rio de Janeiro: Paz e Terra, 1987...."
+  Run 0: [    ] "FREIRE, Paulo. "
+  Run 1: [B   ] "Pedagogia do Oprimido"
+  Run 2: [    ] ". Rio de Janeiro: Paz e Terra, 1987."
+  Format: hanging=283, left=283, align=left
+
+=== Ref para 115: "MARX, Karl. O Capital. Sao Paulo: Boitempo, 2013...."
+  Run 0: [    ] "MARX, Karl. "
+  Run 1: [B   ] "O Capital"
+  Run 2: [    ] ". Sao Paulo: Boitempo, 2013."
+  Format: hanging=283, left=283, align=left
+
+=== Ref para 116: "MORIN, Edgar. Os Sete Saberes necessarios a educacao do futuro. Brasilia: UNESCO..."
+  Run 0: [    ] "MORIN, Edgar. "
+  Run 1: [B   ] "Os Sete Saberes necessarios a educacao do futuro"
+  Run 2: [    ] ". Brasilia: UNESCO, 2000."
+  Format: hanging=283, left=283, align=left
+
+=== Ref para 117: "UNIVERSIDADE FEDERAL DE LAVRAS. Manual de normalizacao de trabalhos academicos. ..."
+  Run 0: [    ] "UNIVERSIDADE FEDERAL DE LAVRAS. "
+  Run 1: [B   ] "Manual de normalizacao de trabalhos academicos"
+  Run 2: [    ] ". Lavras: UFLA, 2025."
+  Format: hanging=283, left=283, align=left

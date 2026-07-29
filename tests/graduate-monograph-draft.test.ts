@@ -41,7 +41,7 @@ describe("rascunho editável de monografia", () => {
     });
 
     const documentXml = await documentXmlFromBlob(blob);
-    expect(documentXml).toContain("Monografia apresentada à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis.");
+    expect(documentXml).toContain("Monografia apresentada à Universidade Federal de Lavras como parte dos requisitos para obtenção do título de Bacharelado em Biologia.");
     expect(documentXml).toContain("Curso: Bacharelado em Biologia");
     expect(documentXml).not.toContain("Trabalho acadêmico apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis.");
     expect(documentXml).not.toContain("Programa:");

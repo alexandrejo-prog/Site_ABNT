@@ -103,7 +103,7 @@
 - [ ] Nota descritiva/natureza é gerada.
 - [ ] Nota descritiva fica recuada do meio da página para a margem direita.
 - [ ] Nota descritiva usa espaço simples.
-- [ ] Nota descritiva informa tipo de trabalho.
+- [x] Nota descritiva informa tipo de trabalho (natureza específica: Doutor/Mestre/título de graduação).
 - [ ] Nota descritiva informa instituição.
 - [ ] Nota descritiva informa curso/programa.
 - [ ] Nota descritiva informa área de concentração quando aplicável.
@@ -237,8 +237,8 @@
 
 ## 13. Indicadores de impacto
 
-- [ ] Indicadores de impacto são exigidos para dissertação.
-- [ ] Indicadores de impacto são exigidos para tese.
+- [x] Indicadores de impacto são exigidos para dissertação (gerados com aviso quando vazio).
+- [x] Indicadores de impacto são exigidos para tese (gerados com aviso quando vazio).
 - [ ] Título `INDICADORES DE IMPACTO` é centralizado.
 - [ ] Título está em maiúsculas.
 - [ ] Título está em negrito.
@@ -251,7 +251,7 @@
 - [ ] Texto menciona área temática de extensão quando aplicável.
 - [ ] Texto menciona ODS quando aplicável.
 - [ ] `IMPACT INDICATORS` é gerado em página seguinte quando preenchido.
-- [ ] Sistema alerta se dissertação/tese não tiver indicadores.
+- [x] Sistema alerta se dissertação/tese não tiver indicadores (página de aviso gerada no DOCX).
 
 ---
 
@@ -431,21 +431,21 @@
 
 ## 20. Ilustrações
 
-- [ ] Sistema detecta ilustração importada.
-- [ ] Sistema detecta legenda acima da ilustração.
-- [ ] Legenda segue formato tipo + número + travessão + título.
-- [ ] Legenda usa fonte 12.
-- [ ] Legenda usa espaço simples.
-- [ ] Fonte fica abaixo da ilustração.
-- [ ] Fonte usa tamanho 11.
-- [ ] Fonte usa espaço simples.
-- [ ] Imagem é centralizada.
-- [ ] Imagem é dimensionada para caber nas margens.
-- [ ] Imagem é exportada no DOCX.
-- [ ] Sistema alerta imagem sem legenda.
-- [ ] Sistema alerta imagem sem fonte.
-- [ ] Sistema preserva legenda e fonte mesmo se imagem falhar.
-- [ ] Sistema trata quadro como ilustração, não como tabela.
+- [x] Sistema detecta ilustração importada.
+- [x] Sistema detecta legenda acima da ilustração.
+- [x] Legenda segue formato tipo + número + travessão + título (inclui travessão eme).
+- [x] Legenda usa fonte 12 (via captionParagraph).
+- [x] Legenda usa espaço simples (via captionParagraph).
+- [x] Fonte fica abaixo da ilustração (Fonte: renderizado por sourceParagraph).
+- [x] Fonte usa tamanho 11 (via sourceParagraph).
+- [x] Fonte usa espaço simples (240 twips).
+- [x] Imagem é centralizada (via ImageRun com AlignmentType.CENTER).
+- [ ] Imagem é dimensionada para caber nas margens (usa largura/altura do original).
+- [x] Imagem é exportada no DOCX (via ImageRun com dados binários preservados).
+- [x] Sistema alerta imagem sem legenda (via imageWarnings na importação).
+- [x] Sistema alerta imagem sem fonte (via imageWarnings na importação).
+- [x] Sistema preserva legenda e fonte mesmo se imagem falhar (fallback amigável em vez de marcador técnico).
+- [x] Sistema trata quadro como ilustração, não como tabela.
 - [ ] Ilustração em mais de uma página recebe indicação de continua/continuação/conclusão quando suportado.
 
 ---
@@ -699,7 +699,7 @@
 - [ ] Rodar `npm.cmd run build`.
 - [ ] Rodar `npm.cmd run verify`.
 - [ ] Verificar arquivos temporários `.bak-runs`.
-- [ ] Remover scripts temporários usados só para patch, se não forem necessários.
+- [x] Remover scripts temporários usados só para patch (14 arquivos removidos: debug-analyzer*.ts, debug-page-field*.ts, gerar-*.ts, rodar-skill.ts, verificar-*.ts, tests/generate-real-docx.ts, tests/analyze-references.ts).
 - [ ] Confirmar que `PRD.md` está atualizado.
 - [ ] Confirmar que os dois arquivos `.md` normativos foram adicionados.
 - [ ] Confirmar que `CHECKLIST.md` principal está atualizado.

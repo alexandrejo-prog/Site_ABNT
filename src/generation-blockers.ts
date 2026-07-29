@@ -15,11 +15,9 @@ const NON_OVERRIDABLE_ERROR_CODES = [
   "program-degree-incompatible",
 ] as const;
 
-const ABSOLUTE_GENERATION_BLOCKER_CODES = [
-  "work-type-required",
-  "draft-placeholder-detected",
-  "natural-placeholder-detected",
-] as const;
+// Nenhum erro é bloqueador absoluto atualmente. Todos os erros essenciais podem ser
+// sobrepostos via checkbox "Gerar rascunho mesmo com pendências".
+const ABSOLUTE_GENERATION_BLOCKER_CODES: readonly string[] = [];
 
 export function isNonOverridableError(issue: ValidationIssue): boolean {
   return NON_OVERRIDABLE_ERROR_CODES.includes(issue.code as typeof NON_OVERRIDABLE_ERROR_CODES[number]);

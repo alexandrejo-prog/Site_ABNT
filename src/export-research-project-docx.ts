@@ -9,7 +9,8 @@ import {
   TableOfContents,
   TextRun,
 } from "docx";
-import { parseEditorContent, type DocxGenerationInput, type EditorBlock, loadDefaultLogoAsset } from "./export-docx";
+import { parseEditorContent, importedTableParagraph, type DocxGenerationInput, type EditorBlock, loadDefaultLogoAsset } from "./export-docx";
+import type { ImportedTable } from "./imported-tables";
 import { AUTHOR_SIZE, BLACK, BODY_SIZE, ONE_AND_HALF_LINE, SINGLE_LINE, TITLE_SIZE, centered, ibgeTable, logoParagraph, pageBreak, pageMargins, pageNumberHeader, paragraph, run, unnumberedTitle } from "./docx-shared";
 import { repairHeadingFragments } from "./heading-fragment-repair";
 import { normalizeUflaManualInTextCitations } from "./in-text-citation-normalizer";
@@ -17,7 +18,7 @@ import { isResearchProjectProvisionalText, normalizeKeywordSentence, normalizeRe
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { UFLA_RULES } from "./ufla-rules";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
-import { cleanMojibakeText, splitParagraphs as coreSplitParagraphs, tabbedTableBlock, textRunsFromMarkup } from "./docx-render-core";
+import { cleanMojibakeText, sourceParagraph, splitParagraphs as coreSplitParagraphs, tabbedTableBlock, textRunsFromMarkup } from "./docx-render-core";
 
 const PROJECT_TEXTUAL_START_PAGE = 5;
 
@@ -300,19 +301,26 @@ function isTabularParagraph(block: EditorBlock): boolean {
   return block.type === "paragraph" && splitTabCells(block.text).length >= 2;
 }
 
-function blockToParagraph(block: EditorBlock, first: boolean): Array<Paragraph | Table> {
+function blockToParagraph(block: EditorBlock, first: boolean, importedTables: ImportedTable[] = []): Array<Paragraph | Table> {
   if (block.type === "heading1" || block.type === "heading2" || block.type === "heading3") return headingParagraph(block, first);
   if (block.type === "longQuote") {
-    return [new Paragraph({ alignment: AlignmentType.BOTH, spacing: { line: SINGLE_LINE, after: 120 }, indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip }, children: textRunsFromMarkup(normalizeProjectBodyText(block.text || " "), BODY_SIZE, UFLA_RULES.typography.fontFamily, BLACK) })];
+    return [new Paragraph({ alignment: AlignmentType.BOTH, spacing: { line: SINGLE_LINE, after: 120 }, indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip }, children: textRunsFromMarkup(normalizeProjectBodyText(block.text || " "), UFLA_RULES.typography.longQuoteFontSizePt * 2, UFLA_RULES.typography.fontFamily, BLACK) })];
   }
   if (block.type === "markdownTable") return markdownTableChildren(block.text);
   if (block.type === "plainScheduleTable") return tabularBlockChildren(block.text);
   if (block.type === "scheduleTable") return tabularBlockChildren(block.text);
   if (block.type === "tabbedTable") return tabbedTableBlock(block.text, { sourceFallback: "Fonte: elaborado pelo autor." });
+  if (block.type === "importedTable") {
+    const table = importedTables.find((item) => item.id === block.text);
+    return importedTableParagraph(table);
+  }
+  if (block.type === "source") {
+    return [sourceParagraph(block.text)];
+  }
   return [markupParagraph(block.text)];
 }
 
-function bodyChildrenFromBlocks(blocks: EditorBlock[]): Array<Paragraph | Table> {
+function bodyChildrenFromBlocks(blocks: EditorBlock[], importedTables: ImportedTable[] = []): Array<Paragraph | Table> {
   const children: Array<Paragraph | Table> = [];
 
   for (let index = 0; index < blocks.length; index += 1) {
@@ -337,7 +345,7 @@ function bodyChildrenFromBlocks(blocks: EditorBlock[]): Array<Paragraph | Table>
       continue;
     }
 
-    children.push(...blockToParagraph(block, children.length === 0));
+    children.push(...blockToParagraph(block, children.length === 0, importedTables));
   }
 
   return children;
@@ -354,15 +362,46 @@ function referenceRunToTextRun(referenceRun: ReferenceRun): TextRun {
   });
 }
 
-function referenceParagraphs(references: string[]): Paragraph[] {
+function hasEditorHeading(blocks: EditorBlock[], text: string): boolean {
+  const normalizedTarget = text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  return blocks.some((block) => {
+    if (block.type !== "heading1" && block.type !== "heading2" && block.type !== "paragraph") return false;
+    const normalizedBlock = block.text
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      .replace(/\s+/g, " ")
+      .trim();
+    return normalizedBlock === normalizedTarget;
+  });
+}
+
+function referenceParagraphs(references: string[], bodyBlocks: EditorBlock[] = []): Paragraph[] {
   if (!references.length) return [];
-  return [
-    pageBreak(),
-    new Paragraph({ heading: HeadingLevel.HEADING_1, spacing: { before: 0, after: 240, line: ONE_AND_HALF_LINE }, children: [run("REFERÊNCIAS", true)] }),
-    ...normalizeReferences(references)
+  const children: Array<Paragraph | Table> = [];
+  if (!hasEditorHeading(bodyBlocks, "REFERENCIAS") && !hasEditorHeading(bodyBlocks, "REFERÊNCIAS")) {
+    children.push(pageBreak());
+    children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, spacing: { before: 0, after: 240, line: ONE_AND_HALF_LINE }, children: [run("REFERÊNCIAS", true)] }));
+  }
+  const normalized = normalizeReferences(references);
+  const seen = new Set<string>();
+  const deduped = normalized.filter((ref) => {
+    const key = ref.text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  children.push(
+    ...deduped
       .sort((a, b) => cleanMojibakeText(a.text).localeCompare(cleanMojibakeText(b.text), "pt-BR", { sensitivity: "base" }))
       .map((reference) => new Paragraph({ alignment: AlignmentType.LEFT, spacing: { line: SINGLE_LINE, after: SINGLE_LINE }, indent: { left: 720, hanging: 720 }, children: reference.runs.length ? reference.runs.map(referenceRunToTextRun) : [run(cleanMojibakeText(reference.text || " "))] })),
-  ];
+  );
+  return children;
 }
 
 function createProjectDocument(input: DocxGenerationInput): Document {
@@ -373,8 +412,8 @@ function createProjectDocument(input: DocxGenerationInput): Document {
     ...blocks.filter((block) => block.type === "reference").map((block) => block.text),
   ];
   const textualChildren = [
-    ...bodyChildrenFromBlocks(bodyBlocks),
-    ...referenceParagraphs(references),
+    ...bodyChildrenFromBlocks(bodyBlocks, input.importedTables ?? []),
+    ...referenceParagraphs(references, bodyBlocks),
   ];
 
   return new Document({

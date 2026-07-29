@@ -16,6 +16,8 @@
 .skip-link:focus,
 .skip-link:focus-visible {
   transform: translateY(0);
+  outline: 3px solid #004B80;
+  outline-offset: 2px;
 }
 
 .error-boundary {
@@ -60,6 +62,43 @@
   font-weight: 700;
 }
 
+.aria-live-region {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+[aria-describedby]:focus {
+  outline: 3px solid #004B80;
+  outline-offset: 2px;
+}
+
+[aria-invalid="true"] {
+  border-color: #b91c1c !important;
+  box-shadow: 0 0 0 1px #b91c1c;
+}
+
+@media (prefers-contrast: high) {
+  .skip-link {
+    outline: 3px solid #000000;
+  }
+
+  .error-boundary {
+    border: 3px solid #000000;
+  }
+
+  .error-boundary-detail {
+    border: 2px solid #000000;
+  }
+
+  [aria-invalid="true"] {
+    border-width: 2px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -68,5 +107,9 @@
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  .skip-link {
+    transition: none;
   }
 }

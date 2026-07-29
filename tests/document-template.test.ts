@@ -19,17 +19,16 @@ describe("document-template", () => {
   it("usa template geral por padrao", () => {
     expect(templateForWorkType("").id).toBe("geral");
     expect(templateForWorkType("tipo_desconhecido").id).toBe("geral");
-    expect(templateForWorkType("artigo_cientifico_ufla").id).toBe("geral");
+  });
+
+  it("usa template de artigo para artigo_cientifico_ufla e artigo simples", () => {
+    expect(templateForWorkType("artigo_cientifico_ufla").id).toBe("artigo");
+    expect(templateForWorkType("artigo").id).toBe("artigo");
   });
 
   it("usa template de rascunho longo para monografia, dissertacao e tese", () => {
     expect(templateForWorkType("monografia").id).toBe("rascunho-longo-editavel");
     expect(templateForWorkType("dissertacao").id).toBe("rascunho-longo-editavel");
     expect(templateForWorkType("tese").id).toBe("rascunho-longo-editavel");
-  });
-
-  it("mantem artigo_cientifico_ufla no modelo geral por decisao conservadora", () => {
-    expect(templateForWorkType("artigo_cientifico_ufla").id).toBe("geral");
-    expect(templateForWorkType("artigo").id).toBe("artigo");
   });
 });

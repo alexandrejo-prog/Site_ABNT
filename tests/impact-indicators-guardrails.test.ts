@@ -82,13 +82,14 @@ describe("Indicadores de impacto - sem texto genérico", () => {
     expect(issues).toContainEqual(expect.objectContaining({ severity: "error", code: "impact-indicators-missing" }));
   });
 
-  it("DOCX não contém placeholder nem página de indicadores quando vazio (omissão)", async () => {
+  it("DOCX contém página de indicadores com aviso quando vazio (obrigatório para tese/dissertação)", async () => {
     const documentXml = await generatedXml(baseFields({ indicadoresImpacto: "" }));
     expect(documentXml).not.toContain("Esta pesquisa apresenta impacto social");
     expect(documentXml).not.toContain("This research has social and institutional impact");
     expect(documentXml).not.toContain("[PREENCHER: indicadores de impacto]");
     expect(documentXml).not.toContain("[PREENCHER: impact indicators]");
-    expect(documentXml).not.toContain("INDICADORES DE IMPACTO");
+    expect(documentXml).toContain("INDICADORES DE IMPACTO");
+    expect(documentXml).toContain("Consulte o Manual UFLA 6ª ed.");
     expect(documentXml).not.toContain("IMPACT INDICATORS");
   });
 
