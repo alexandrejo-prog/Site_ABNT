@@ -18,7 +18,6 @@ interface ReportRow {
 
 describe("Inspecao profunda DOCX vs Manual UFLA 6ed", () => {
   let xml: string;
-  let stylesXml: string;
   let parTexts: string[];
   let normalizedParTexts: string[];
   let report: ReportRow[] = [];
@@ -102,7 +101,6 @@ describe("Inspecao profunda DOCX vs Manual UFLA 6ed", () => {
     const blob = await generateDocxBlob({ fields, editorText });
     const parts = await loadDocxParts(blob);
     xml = parts.documentXml;
-    stylesXml = parts.stylesXml;
     parTexts = paragraphTexts(parts.documentXml);
     normalizedParTexts = normalizedParagraphTexts(parts.documentXml);
   });
