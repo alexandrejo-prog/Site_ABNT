@@ -95,12 +95,12 @@ Coluna1\tColuna2\tColuna3`;
       const xml = await xmlFrom(blob);
 
       expect(xml).toContain("Times New Roman");
-      expect(xml).toContain('w:pgNumType w:start="5"');
+      expect(xml).toContain('w:pgNumType w:start="1"');
       expect(tocInstruction(xml)).toContain("TOC");
 
       const referenceParagraphs = paragraphTexts(xml).filter((p) => normalizeOoxmlText(p).startsWith("SILVA"));
       expect(referenceParagraphs.length).toBeGreaterThan(0);
-      expect(xml).toContain('w:hanging="720"');
+      expect(xml).toContain('w:hanging="284"');
     });
 
     it("citacoes longas tem recuo proprio", async () => {

@@ -108,6 +108,6 @@ describe("roteamento e exportacao de projeto de pesquisa", () => {
     const xml = await xmlFrom(blob);
 
     expect(tocInstruction(xml)).toContain("TOC");
-    expect(xml).toContain('w:pgNumType w:start="5"');
+    expect(xml).toContain('w:pgNumType w:start="1"');
   });
 });

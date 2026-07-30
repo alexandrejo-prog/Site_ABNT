@@ -112,7 +112,7 @@ function paragraph(text: string, options: Partial<IParagraphOptions> = {}): Para
 function centered(text: string, bold = false, size = BODY_SIZE): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.CENTER,
-    spacing: { after: 240, line: SINGLE_LINE },
+    spacing: { after: 240, line: ONE_AND_HALF_LINE },
     children: [run(text, { bold, size })],
   });
 }
@@ -204,7 +204,7 @@ function referenceParagraphs(references: string[]): (Paragraph | Table)[] {
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { before: 240, after: 120, line: ONE_AND_HALF_LINE },
-      children: [run("Referências", { bold: true })],
+      children: [run("REFERÊNCIAS", { bold: true })],
     }),
   );
 
@@ -277,6 +277,8 @@ function createArticleDocument(input: DocxGenerationInput): Document {
               left: UFLA_RULES.margins.leftTwip,
               bottom: UFLA_RULES.margins.bottomTwip,
               right: UFLA_RULES.margins.rightTwip,
+              header: UFLA_RULES.header.distanceFromTopTwip,
+              footer: UFLA_RULES.footer.distanceFromBottomTwip,
             },
           },
         },

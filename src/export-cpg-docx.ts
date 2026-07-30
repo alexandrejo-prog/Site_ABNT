@@ -30,7 +30,7 @@ const BODY_SIZE = CPG_RULES.typography.bodyFontSizePt * 2;
 const TITLE_SIZE = CPG_RULES.typography.titleFontSizePt * 2;
 const SECTION_SIZE = CPG_RULES.typography.sectionTitleFontSizePt * 2;
 const SUBSECTION_SIZE = CPG_RULES.typography.subsectionTitleFontSizePt * 2;
-const CAPTION_SIZE = 20;
+const CAPTION_SIZE = 22;
 const SINGLE_LINE = 240;
 const BODY_LINE = 360;
 const SIX_PT = 120;
@@ -164,8 +164,8 @@ function sectionTitle(text: string, level: DocxHeadingLevel = HeadingLevel.HEADI
     alignment: AlignmentType.LEFT,
     spacing: { before: TWELVE_PT, after: 0, line: BODY_LINE },
     children: [
-      run(cleanMojibakeText(text), {
-        bold: level !== HeadingLevel.HEADING_3,
+      run(cleanMojibakeText(level === HeadingLevel.HEADING_1 ? text.toUpperCase() : text), {
+        bold: true,
         size: level === HeadingLevel.HEADING_1 ? SECTION_SIZE : SUBSECTION_SIZE,
       }),
     ],

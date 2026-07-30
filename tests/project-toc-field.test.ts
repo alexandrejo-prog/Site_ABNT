@@ -239,8 +239,8 @@ describe("campo de sumario em projeto", () => {
       }),
     );
 
-    expect(xml).toContain("w:left=\"720\"");
-    expect(xml).toContain("w:hanging=\"720\"");
+    expect(xml).toContain("w:left=\"284\"");
+    expect(xml).toContain("w:hanging=\"284\"");
   });
 
   it("remove caracteres invisiveis e normaliza termos compostos no projeto", async () => {

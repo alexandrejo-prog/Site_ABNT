@@ -237,7 +237,7 @@ describe("DOCX export", () => {
     expect(documentXml).toContain("Palavras-chave");
     expect(documentXml).toContain("Abstract text.");
     expect(documentXml).toContain("Keywords");
-    expect(documentXml).toContain("Referências");
+    expect(documentXml).toContain("REFERÊNCIAS");
     expectNoGraduateOnlyElements(documentXml);
   });
 
@@ -298,7 +298,7 @@ describe("DOCX export", () => {
     const authors = paragraphXmlContaining(documentXml, "Maria Silva, Joao Souza");
     const affiliation = paragraphXmlContaining(documentXml, "Universidade Federal de Lavras");
     const abstract = paragraphXmlContaining(documentXml, "Abstract");
-    const section = paragraphXmlContainingStyle(documentXml, "Introducao", "Heading1");
+    const section = paragraphXmlContainingStyle(documentXml, "INTRODUCAO", "Heading1");
     const body = paragraphXmlContaining(documentXml, "Texto comum.");
 
     expect(title).toContain('w:sz w:val="32"');
@@ -402,7 +402,7 @@ describe("DOCX export", () => {
 
     expect(hasPositiveBold(heading1)).toBe(true);
     expect(hasPositiveBold(heading2)).toBe(false);
-    expect(hasPositiveBold(heading3)).toBe(false);
+    expect(hasPositiveBold(heading3)).toBe(true);
   });
 
   it("keeps non-numbered post-textual titles as headings", async () => {
@@ -509,7 +509,7 @@ describe("DOCX export", () => {
 
     for (const caption of [figure, chart, table]) {
       expect(caption).toContain('w:jc w:val="center"');
-      expect(caption).toContain('w:sz w:val="22"');
+      expect(caption).toContain('w:sz w:val="24"');
       expect(caption).toMatch(/<w:b\s*\/?>|w:b w:val="1"/);
       expectNoHeadingStyle(caption);
     }

@@ -69,6 +69,6 @@ describe("estrutura OOXML de layout e sumario", () => {
     expect(`${stylesXml}\n${documentXml}`).toContain("Times New Roman");
     expect(documentXml).toContain(`w:top="${UFLA_RULES.margins.topTwip}"`);
     expect(documentXml).toContain(`w:left="${UFLA_RULES.margins.leftTwip}"`);
-    expect(documentXml).toContain(`w:pgNumType w:start="5"`);
+    expect(documentXml).toContain(`w:pgNumType w:start="1"`);
   });
 });

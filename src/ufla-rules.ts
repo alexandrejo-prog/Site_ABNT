@@ -240,7 +240,7 @@ export const UFLA_RULES = {
     coverTitleFontSizePt: 16,
     longQuoteFontSizePt: 11,
     noteFontSizePt: 10,
-    captionFontSizePt: 11,
+    captionFontSizePt: 12,
     captionDescriptionFontSizePt: 10,
     sourceFontSizePt: 11,
     pageNumberFontSizePt: 10,

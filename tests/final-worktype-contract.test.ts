@@ -164,7 +164,7 @@ describe("Contrato final por tipo de trabalho", () => {
       expect(documentXml).toContain("Palavras-chave");
       expect(documentXml).toContain("Abstract text.");
       expect(documentXml).toContain("Keywords");
-      expect(documentXml).toContain("Referências");
+      expect(documentXml).toContain("REFERÊNCIAS");
       expectNoGraduateOnlyElements(documentXml);
     });
 

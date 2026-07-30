@@ -169,7 +169,7 @@ const DOCUMENT_STYLES: IStylesOptions = {
       run: {
         font: "Times New Roman",
         size: 24,
-        bold: false,
+        bold: true,
         color: BLACK,
       },
       paragraph: {
@@ -1168,7 +1168,7 @@ function blockToParagraph(
   if (block.type === "heading1") {
     const title = new Paragraph({
       heading: HeadingLevel.HEADING_1,
-      alignment: AlignmentType.CENTER,
+      alignment: AlignmentType.LEFT,
       spacing: { before: 240, after: 240, line: ONE_AND_HALF_LINE },
       children: [
         new TextRun({
@@ -1209,7 +1209,7 @@ function blockToParagraph(
         children: [
           new TextRun({
             text: block.text,
-            bold: false,
+            bold: true,
             font: UFLA_RULES.typography.fontFamily,
             size: BODY_SIZE,
             color: BLACK,
@@ -1224,7 +1224,7 @@ function blockToParagraph(
       new Paragraph({
         alignment: AlignmentType.BOTH,
         spacing: { line: SINGLE_LINE, after: 120 },
-    indent: { left: UFLA_RULES.typography.paragraphFirstLineTwip },
+    indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
         children: textRunsFromMarkup(block.text, LONG_QUOTE_SIZE),
       }),
     ];
@@ -1746,7 +1746,7 @@ function titlePageChildren(fields: AcademicFields): Paragraph[] {
       after: 120,
       line: SINGLE_LINE,
     }),
-    centeredParagraph(cleanMojibakeText(fields.year || new Date().getFullYear().toString()), false, BODY_SIZE, {
+    centeredParagraph(cleanMojibakeText(fields.year || new Date().getFullYear().toString()), true, BODY_SIZE, {
       after: 0,
       line: SINGLE_LINE,
     }),
@@ -1967,7 +1967,17 @@ function preTextualChildren(fields: AcademicFields): Paragraph[] {
     unnumberedTitle("Resumo"),
     simpleParagraph(cleanMojibakeText(fields.resumo || " ")),
     ...(fields.palavrasChave
-      ? [simpleParagraph(cleanMojibakeText(`Palavras-chave: ${ensureTrailingPeriod(fields.palavrasChave)}`))]
+      ? [
+          new Paragraph({
+            alignment: AlignmentType.BOTH,
+            spacing: { line: ONE_AND_HALF_LINE, after: 0 },
+            indent: { firstLine: UFLA_RULES.typography.paragraphFirstLineTwip },
+            children: [
+              new TextRun({ text: `Palavras-chave: `, bold: true }),
+              new TextRun({ text: cleanMojibakeText(ensureTrailingPeriod(fields.palavrasChave)) }),
+            ],
+          }),
+        ]
       : []),
     pageBreak(),
     unnumberedTitle("Abstract"),
@@ -2123,7 +2133,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
             },
             margin: pageMargins(),
             pageNumbers: {
-              start: textualStartPage,
+              start: 1,
             },
           },
         },

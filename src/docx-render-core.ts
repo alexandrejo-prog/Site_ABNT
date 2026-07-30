@@ -28,9 +28,16 @@ export function cleanMojibakeText(value: string): string {
     .replace(/Ãµ/g, "õ")
     .replace(/Ãº/g, "ú")
     .replace(/Ã§/g, "ç")
+    .replace(/Ã\u0080/g, "À")
     .replace(/Ã/g, "Á")
+    .replace(/Ã\u0082/g, "Â")
+    .replace(/Ã\u0083/g, "Ã")
     .replace(/Ã‰/g, "É")
+    .replace(/Ã\u008D/g, "Í")
     .replace(/Ã“/g, "Ó")
+    .replace(/Ã\u0094/g, "Ô")
+    .replace(/Ã\u0095/g, "Õ")
+    .replace(/Ã\u009A/g, "Ú")
     .replace(/Ã‡/g, "Ç");
 }
 

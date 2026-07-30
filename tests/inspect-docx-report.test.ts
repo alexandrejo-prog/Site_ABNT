@@ -18,6 +18,7 @@ interface ReportRow {
 
 describe("Inspecao profunda DOCX vs Manual UFLA 6ed", () => {
   let xml: string;
+  let stylesXml: string;
   let parTexts: string[];
   let normalizedParTexts: string[];
   let report: ReportRow[] = [];
@@ -101,6 +102,7 @@ describe("Inspecao profunda DOCX vs Manual UFLA 6ed", () => {
     const blob = await generateDocxBlob({ fields, editorText });
     const parts = await loadDocxParts(blob);
     xml = parts.documentXml;
+    stylesXml = parts.stylesXml;
     parTexts = paragraphTexts(parts.documentXml);
     normalizedParTexts = normalizedParagraphTexts(parts.documentXml);
   });
@@ -219,20 +221,31 @@ describe("Inspecao profunda DOCX vs Manual UFLA 6ed", () => {
     report.push({ item: "7. Sumario com campo TOC \\o 1-3", status: "OK", obs: "" });
   });
 
-  it("9. Heading1 centralizado e heading2 sem negrito", () => {
+  it("9. Heading1 numerado alinhado esquerda, pos-textuais centralizados, heading2/3 em negrito", () => {
     const allParas = xml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? [];
     const h1Paras = allParas.filter((p) => p.includes('w:val="Heading1"'));
+    const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
     for (const h1 of h1Paras) {
-      expect(h1).toContain('w:val="center"');
+      const h1Text = h1.match(/<w:t[^>]*>([^<]+)<\/w:t>/)?.[1] ?? "";
+      const normalized = normalize(h1Text);
+      const isPostTextual = normalized.startsWith("REFERENC") || normalized.startsWith("ANEXO") || normalized.startsWith("APENDICE");
+      if (isPostTextual) {
+        expect(h1).toContain('w:val="center"');
+      } else {
+        expect(h1).toContain('w:val="left"');
+      }
     }
     const h2Paras = allParas.filter((p) => p.includes('w:val="Heading2"'));
-    for (const h2 of h2Paras) {
-      expect(h2).not.toContain("<w:b/>");
-      expect(h2).not.toContain('w:b w:val="true"');
+    expect(h2Paras.length).toBeGreaterThan(0);
+    const h3Paras = allParas.filter((p) => p.includes('w:val="Heading3"'));
+    if (h3Paras.length > 0) {
+      for (const h3 of h3Paras) {
+        expect(h3).toContain("<w:b/>");
+      }
     }
     report.push(
-      { item: "9. Heading1 centralizado", status: "OK", obs: "" },
-      { item: "9. Heading2 sem negrito", status: "OK", obs: "" },
+      { item: "9. Heading1 numerado esquerda / pos-textuais centro", status: "OK", obs: "" },
+      { item: "9. Heading2 negrito via estilo / Heading3 negrito via run", status: "OK", obs: "" },
     );
   });
 

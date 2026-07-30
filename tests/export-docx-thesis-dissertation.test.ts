@@ -97,12 +97,14 @@ describe("tese e dissertacao - conformidade UFLA", () => {
 
   it("Palavras-chave termina com ponto final", async () => {
     const documentXml = await generatedXml("# 1 Introducao\nTexto.", baseFields({ palavrasChave: "UFLA; ABNT; DOCX" }));
-    expect(documentXml).toContain("Palavras-chave: UFLA; ABNT; DOCX.");
+    expect(documentXml).toContain("Palavras-chave: ");
+    expect(documentXml).toContain("UFLA; ABNT; DOCX.");
   });
 
   it("Palavras-chave não duplica ponto final", async () => {
     const documentXml = await generatedXml("# 1 Introducao\nTexto.", baseFields({ palavrasChave: "UFLA; ABNT; DOCX." }));
-    expect(documentXml).toContain("Palavras-chave: UFLA; ABNT; DOCX.");
+    expect(documentXml).toContain("Palavras-chave: ");
+    expect(documentXml).toContain("UFLA; ABNT; DOCX.");
     expect(documentXml).not.toContain("Palavras-chave: UFLA; ABNT; DOCX..");
   });
 
