@@ -1314,11 +1314,13 @@ export function detectAcademicFieldsFromStructure(
 
   for (const key of ACADEMIC_FIELD_KEYS) {
     if (confidence[key] !== "nao-identificado") continue;
+    const fieldValue = fields[key];
+    const valueString = Array.isArray(fieldValue) ? fieldValue.join(" ") : fieldValue;
     markConfidence(
       confidence,
       key,
-      fields[key],
-      fields[key] ? (["resumo", "abstractText", "introducao", "referencias"].includes(key) ? "alta" : "media") : "nao-identificado",
+      valueString,
+      valueString ? (["resumo", "abstractText", "introducao", "referencias"].includes(key) ? "alta" : "media") : "nao-identificado",
     );
   }
 

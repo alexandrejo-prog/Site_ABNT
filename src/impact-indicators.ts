@@ -81,7 +81,8 @@ export const IMPACT_FIELD_ENTRIES: ImpactFieldEntry[] = [
 ];
 
 function fieldValue(fields: AcademicFields, key: AcademicFieldKey): string {
-  return fields[key].trim();
+  const value = fields[key];
+  return (Array.isArray(value) ? value.join(" ") : value).trim();
 }
 
 // Texto consolidado usando somente dados informados pelo usuário.

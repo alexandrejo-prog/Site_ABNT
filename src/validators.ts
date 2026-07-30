@@ -386,7 +386,9 @@ function addUflaCollectionIssues(fields: AcademicFields, issues: ValidationIssue
   });
 
   for (const fieldKey of productionType.requiredFields) {
-    if (!hasValue(fields[fieldKey])) {
+    const fieldValue = fields[fieldKey];
+    const valueString = Array.isArray(fieldValue) ? fieldValue.join(" ") : fieldValue;
+    if (!hasValue(valueString)) {
       issues.push({
         severity: "error",
         code: `ufla-collection-${fieldKey}-required`,
