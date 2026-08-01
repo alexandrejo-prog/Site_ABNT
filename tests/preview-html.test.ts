@@ -86,6 +86,17 @@ describe("buildPreviewHtml - fidelidade estrutural", () => {
     expect(withoutSummary).not.toContain("SUMÁRIO");
   });
 
+  it("Sumário fica dentro de uma página branca (preview-page), não sobre o fundo escuro do modal", () => {
+    const html = previewFor(baseFields(), "# 1 Introducao\nTexto.\n");
+    const summaryIndex = html.indexOf("preview-summary-block");
+    expect(summaryIndex).toBeGreaterThan(-1);
+    const pageStart = html.lastIndexOf('<section class="preview-page', summaryIndex);
+    const pageEnd = html.indexOf("</section>", summaryIndex);
+    expect(pageStart).toBeGreaterThan(-1);
+    expect(pageEnd).toBeGreaterThan(summaryIndex);
+    expect(html.slice(pageStart, pageEnd)).toContain("SUMÁRIO");
+  });
+
   it("Lista entradas do sumário na ordem do texto (nível 1 em negrito)", () => {
     const html = previewFor();
     expect(html).toContain("1 INTRODUCAO");

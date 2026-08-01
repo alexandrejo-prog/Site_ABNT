@@ -553,7 +553,7 @@ function generalPreview(input: DocxGenerationInput): string {
   preTextual.push(optionalFrontPage("Lista de tabelas", fields.listaTabelas));
   preTextual.push(optionalFrontPage("Lista de siglas", fields.listaSiglas));
   if (hasSummary) {
-    preTextual.push(summaryHtml(bodyBlocks, references, fields.apendices, fields.anexos));
+    preTextual.push(page(summaryHtml(bodyBlocks, references, fields.apendices, fields.anexos)));
   }
 
   const postTextual: string[] = [];
