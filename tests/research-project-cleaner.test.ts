@@ -35,17 +35,17 @@ describe("saneamento estrutural de Projeto de pesquisa", () => {
 
   it("normaliza palavras-chave como sentença pontuada", () => {
     expect(normalizeKeywordSentence("PGD; saúde do trabalhador; educação ambiental crítica")).toBe(
-      "PGD. saúde do trabalhador. educação ambiental crítica.",
+      "PGD; saúde do trabalhador; educação ambiental crítica.",
     );
     expect(normalizeKeywordSentence("PGD. saúde do trabalhador")).toBe("PGD. saúde do trabalhador.");
     expect(normalizeKeywordSentence("PGD, saúde do trabalhador, educação ambiental crítica")).toBe(
-      "PGD. saúde do trabalhador. educação ambiental crítica.",
+      "PGD; saúde do trabalhador; educação ambiental crítica.",
     );
     expect(normalizeKeywordSentence("PGD\nsaúde do trabalhador\neducação ambiental crítica")).toBe(
-      "PGD. saúde do trabalhador. educação ambiental crítica.",
+      "PGD; saúde do trabalhador; educação ambiental crítica.",
     );
     expect(normalizeKeywordSentence("PGD.; saúde do trabalhador.; educação ambiental crítica.")).toBe(
-      "PGD. saúde do trabalhador. educação ambiental crítica.",
+      "PGD; saúde do trabalhador; educação ambiental crítica.",
     );
     expect(normalizeKeywordSentence("")).toBe("");
   });

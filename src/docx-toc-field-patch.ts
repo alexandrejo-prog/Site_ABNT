@@ -7,13 +7,13 @@ const TOC_FIELD_CONTAINER_PATTERN = /<w:sdt\b(?:(?!<\/w:sdt>)[\s\S])*?(?:<w:inst
 const SUMMARY_TITLE_PATTERN = /<w:t[^>]*>\s*SUM[ÁA]RIO\s*<\/w:t>/i;
 const STATIC_TOC_PARAGRAPH_PATTERN = /<w:p\b(?:(?!<\/w:p>)[\s\S])*?<w:pStyle\s+w:val="TOC[123]"(?:(?!<\/w:p>)[\s\S])*?<\/w:p>/g;
 
-function dynamicTocFieldXml(options: { encodedQuotes: boolean }): string {
-  const range = options.encodedQuotes ? "&quot;1-3&quot;" : '"1-3"';
+function dynamicTocFieldXml(_options: { encodedQuotes: boolean }): string {
+  const range = '&quot;1-3&quot;';
 
   return [
     "<w:p>",
     "<w:r><w:fldChar w:fldCharType=\"begin\" w:dirty=\"true\"/></w:r>",
-    `<w:r><w:instrText xml:space=\"preserve\"> TOC \\o ${range} \\h \\z \\u </w:instrText></w:r>`,
+    `<w:r><w:instrText xml:space="preserve"> TOC \\o ${range} \\h \\z \\u </w:instrText></w:r>`,
     "<w:r><w:fldChar w:fldCharType=\"separate\"/></w:r>",
     "<w:r><w:t>Clique com o botão direito e atualize o campo para gerar o sumário.</w:t></w:r>",
     "<w:r><w:fldChar w:fldCharType=\"end\"/></w:r>",

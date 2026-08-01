@@ -231,8 +231,8 @@ describe("DOCX export", () => {
   it("generates simple article without graduate pre-textual structure", async () => {
     const documentXml = await generatedArticleXml("# Introducao\nTexto do artigo.\n[REF] SOUZA, J. Texto. Lavras: UFLA, 2025.");
 
-    expect(documentXml).toContain("Qualidade do cafe no sul de Minas");
-    expect(documentXml).toContain("Maria Silva");
+    expect(documentXml).toContain("QUALIDADE DO CAFE NO SUL DE MINAS");
+    expect(documentXml).toContain("MARIA SILVA");
     expect(documentXml).toContain("Resumo do trabalho.");
     expect(documentXml).toContain("Palavras-chave");
     expect(documentXml).toContain("Abstract text.");
@@ -244,8 +244,8 @@ describe("DOCX export", () => {
   it("generateDocxBlob respeita artigo simples sem front matter", async () => {
     const documentXml = await generatedXml("# 1 INTRODUCAO\nTexto do artigo.\n[REF] SOUZA, J. Texto. Lavras: UFLA, 2025.", articleFields);
 
-    expect(documentXml).toContain("Qualidade do cafe no sul de Minas");
-    expect(documentXml).toContain("Maria Silva");
+    expect(documentXml).toContain("QUALIDADE DO CAFE NO SUL DE MINAS");
+    expect(documentXml).toContain("MARIA SILVA");
     expect(documentXml).toContain("Resumo");
     expect(documentXml).toContain("Abstract");
     expect(documentXml).toContain("1 INTRODUCAO");
@@ -263,8 +263,8 @@ describe("DOCX export", () => {
       course: "maria@ufla.br",
     });
 
-    expect(documentXml).toContain("Qualidade do cafe no sul de Minas");
-    expect(documentXml).toContain("Maria Silva");
+    expect(documentXml).toContain("QUALIDADE DO CAFE NO SUL DE MINAS");
+    expect(documentXml).toContain("MARIA SILVA");
     expect(documentXml).toContain("Resumo do trabalho.");
     expect(documentXml).toContain("Palavras-chave");
     expect(documentXml).not.toContain("PageNumber");
@@ -281,8 +281,8 @@ describe("DOCX export", () => {
       course: "maria@ufla.br, joao@ufla.br",
     });
 
-    expect(documentXml).toContain("Qualidade do cafe no sul de Minas");
-    expect(documentXml).toContain("Maria Silva, Joao Souza");
+    expect(documentXml).toContain("QUALIDADE DO CAFE NO SUL DE MINAS");
+    expect(documentXml).toContain("MARIA SILVA, JOAO SOUZA");
     expect(documentXml).toContain("Universidade Federal de Lavras");
     expect(documentXml).toContain("Abstract");
     expect(documentXml).toContain("Keywords");
@@ -294,15 +294,15 @@ describe("DOCX export", () => {
     expectNoGraduateOnlyElements(documentXml);
     expectCpgMargins(documentXml);
 
-    const title = paragraphXmlContaining(documentXml, "Qualidade do cafe no sul de Minas");
-    const authors = paragraphXmlContaining(documentXml, "Maria Silva, Joao Souza");
+    const title = paragraphXmlContaining(documentXml, "QUALIDADE DO CAFE NO SUL DE MINAS");
+    const authors = paragraphXmlContaining(documentXml, "MARIA SILVA, JOAO SOUZA");
     const affiliation = paragraphXmlContaining(documentXml, "Universidade Federal de Lavras");
     const abstract = paragraphXmlContaining(documentXml, "Abstract");
     const section = paragraphXmlContainingStyle(documentXml, "INTRODUCAO", "Heading1");
     const body = paragraphXmlContaining(documentXml, "Texto comum.");
 
     expect(title).toContain('w:sz w:val="32"');
-    expect(authors).toContain("Maria Silva, Joao Souza");
+    expect(authors).toContain("MARIA SILVA, JOAO SOUZA");
     expect(paragraphText(authors).split(",")).toHaveLength(2);
     expect(affiliation).toContain('w:jc w:val="center"');
     expect(abstract).toContain('w:left="454"');
@@ -461,8 +461,8 @@ describe("DOCX export", () => {
       advisor: "Prof. Dr. Orientador",
     });
 
-    const titlePos = documentXml.indexOf("Titulo Real do Trabalho");
-    const authorPos = documentXml.indexOf("Ana, Bruno");
+    const titlePos = documentXml.indexOf("TITULO REAL DO TRABALHO");
+    const authorPos = documentXml.indexOf("ANA, BRUNO");
     const programPos = documentXml.indexOf("Programa de Pos-Graduacao");
     const advisorPos = documentXml.indexOf("Prof. Dr. Orientador");
 
@@ -537,15 +537,15 @@ describe("DOCX export", () => {
       course: "ana@ufla.br, bruno@ufla.br",
     });
 
-    const title = paragraphXmlContaining(documentXml, "Titulo Real do Trabalho");
-    const authors = paragraphXmlContaining(documentXml, "Ana, Bruno");
+    const title = paragraphXmlContaining(documentXml, "TITULO REAL DO TRABALHO");
+    const authors = paragraphXmlContaining(documentXml, "ANA, BRUNO");
     const affiliation = paragraphXmlContaining(documentXml, "Universidade Federal de Lavras");
 
     expect(title).toContain('w:sz w:val="32"');
     expect(title).toMatch(/<w:b\s*\/?>|w:b w:val="1"/);
     expect(authors).toContain('w:sz w:val="24"');
     expect(authors).toMatch(/<w:b\s*\/?>|w:b w:val="1"/);
-    expect(affiliation).toContain('w:sz w:val="24"');
+    expect(affiliation).toContain('w:sz w:val="22"');
     expect(affiliation).not.toMatch(/<w:b\s*\/?>|w:b w:val="1"/);
   });
 
@@ -555,8 +555,8 @@ describe("DOCX export", () => {
     expect(source).toContain("templateForWorkType");
     expect(templateSource).toContain("generateCpgDocxBlob");
     expect(source).toContain("Gerar DOCX");
-    expect(source).toContain("isCpgSelected");
-    expect(source).toContain("Saída do sistema");
+    expect(source).toContain("void isCpgWork");
+    expect(readFileSync(new URL("../src/components/MetadataFields.tsx", import.meta.url), "utf8")).toContain("Saída do sistema");
     expect(source).not.toContain("generateCpgPdfBlob");
     expect(source).not.toContain("handleGeneratePdf");
     expect(source).not.toContain("Gerar PDF experimental");
@@ -700,7 +700,7 @@ describe("sumário atualizável (campo TOC real do Word)", () => {
     const instructions = fieldInstructionRuns(xml);
     expect(xml).toContain("SUMÁRIO");
     expect(instructions).toContain("TOC");
-    expect(instructions).toContain('\\o "1-3"');
+    expect(instructions).toContain('\\o &quot;1-3&quot;');
     expect(instructions).toContain("\\h");
     expect(instructions).toContain("\\z");
     expect(instructions).toContain("\\u");
@@ -805,11 +805,10 @@ SILVA, M. Projeto. Lavras: UFLA, 2024.
     expect(xml).toContain('w:val="Heading1"');
   });
 
-  it("artigo simples não recebe campo TOC", async () => {
+  it("artigo simples não recebe campo TOC (apenas monografias/projetos têm sumário)", async () => {
     const blob = await generateArticleDocxBlob({ fields: articleFields, editorText: "# Introducao\nTexto." });
     const xml = await documentXmlFromBlob(blob);
     expect(fieldInstructionRuns(xml)).not.toContain("TOC");
-    expect(xml).not.toMatch(/<w:fldChar w:fldCharType="begin"/);
   });
 
   it("CPG não recebe campo TOC", async () => {

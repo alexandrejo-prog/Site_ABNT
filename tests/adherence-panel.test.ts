@@ -49,11 +49,11 @@ describe("painel de aderência normativa", () => {
   });
 
   it("App.tsx integra o componente AdherencePanel e mantém fluxo pós-geração", () => {
-    const appSource = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
+    const editorSectionSource = readFileSync(join(process.cwd(), "src", "components", "EditorSection.tsx"), "utf8");
     const panelSource = readFileSync(join(process.cwd(), "src", "components", "AdherencePanel.tsx"), "utf8");
     const sidebarSource = readFileSync(join(process.cwd(), "src", "components", "ValidationSidebar.tsx"), "utf8");
 
-    expect(appSource).toContain("AdherencePanel");
+    expect(editorSectionSource).toContain("AdherencePanel");
     expect(sidebarSource).toContain("Após gerar o DOCX:");
     expect(sidebarSource).toContain("Abra no Word ou LibreOffice");
     expect(sidebarSource).toContain("atualize campos dinâmicos e o sumário");

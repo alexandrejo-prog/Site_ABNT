@@ -158,8 +158,8 @@ describe("Contrato final por tipo de trabalho", () => {
     it("exporta sem pre-textuais de graduacao", async () => {
       const documentXml = await generatedArticleXml("# Introducao\nTexto do artigo.\n[REF] SOUZA, J. Texto. Lavras: UFLA, 2025.");
 
-      expect(documentXml).toContain("Qualidade do cafe no sul de Minas");
-      expect(documentXml).toContain("Maria Silva");
+      expect(documentXml).toContain("QUALIDADE DO CAFE NO SUL DE MINAS");
+      expect(documentXml).toContain("MARIA SILVA");
       expect(documentXml).toContain("Resumo do trabalho.");
       expect(documentXml).toContain("Palavras-chave");
       expect(documentXml).toContain("Abstract text.");
@@ -291,8 +291,8 @@ SILVA, M. Projeto de pesquisa. Lavras: UFLA, 2024.`,
         palavrasChave: "palavra1; palavra2",
       });
 
-      expect(documentXml).toContain("Qualidade do cafe no sul de Minas");
-      expect(documentXml).toContain("Maria Silva");
+      expect(documentXml).toContain("QUALIDADE DO CAFE NO SUL DE MINAS");
+      expect(documentXml).toContain("MARIA SILVA");
       expect(documentXml).toContain("Resumo texto do resumo.");
       expect(documentXml).toContain("Palavras-chave");
       expect(documentXml).toContain("Abstract text.");

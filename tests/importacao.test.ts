@@ -37,11 +37,19 @@ function structureFromBlocks(blocks: ImportedBlock[]): DocxStructure {
 }
 
 function templatePath(): string {
-  const file = readdirSync(process.cwd()).find(
-    (name) => name.startsWith("TEMPLATE_Manual") && name.endsWith(".docx"),
-  );
-  if (!file) throw new Error("Template DOCX da UFLA não encontrado.");
-  return join(process.cwd(), file);
+  const searchDirs = [join(process.cwd(), "Regras"), process.cwd()];
+  for (const dir of searchDirs) {
+    let file: string | undefined;
+    try {
+      file = readdirSync(dir).find(
+        (name) => name.startsWith("TEMPLATE_Manual") && name.endsWith(".docx"),
+      );
+    } catch {
+      continue;
+    }
+    if (file) return join(dir, file);
+  }
+  throw new Error("Template DOCX da UFLA não encontrado.");
 }
 
 async function detectTemplate() {

@@ -57,6 +57,7 @@ export const ACADEMIC_FIELD_KEYS = [
   "program",
   "advisor",
   "coadvisor",
+  "areaConcentracao",
   "location",
   "year",
   "resumo",
@@ -74,6 +75,8 @@ export const ACADEMIC_FIELD_KEYS = [
   "indicadoresImpacto",
   "impactIndicators",
   "imageWarnings",
+  "aprovalDate",
+  "approvalMembers",
   "tema",
   "delimitacaoTema",
   "problemaPesquisa",
@@ -111,6 +114,7 @@ export interface AcademicFields {
   program: string;
   advisor: string;
   coadvisor: string;
+  areaConcentracao: string;
   location: string;
   year: string;
   resumo: string;
@@ -368,6 +372,7 @@ export function emptyAcademicFields(): AcademicFields {
     program: "",
     advisor: "",
     coadvisor: "",
+    areaConcentracao: "",
     location: "Lavras - MG",
     year: new Date().getFullYear().toString(),
     resumo: "",

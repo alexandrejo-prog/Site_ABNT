@@ -151,6 +151,6 @@ export function normalizeKeywordSentence(value: string): string {
     .map((item) => cleanMojibakeText(item).trim().replace(/[.;]+$/u, ""))
     .filter(Boolean);
   if (!items.length) return "";
-  const joined = items.join(". ");
+  const joined = items.join("; ");
   return joined.endsWith(".") ? joined : `${joined}.`;
 }

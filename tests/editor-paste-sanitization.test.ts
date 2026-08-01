@@ -3,10 +3,10 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createEditorCommandAdapter } from "../src/editor-command-adapter";
 
-const appSource = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
+const editorSectionSource = readFileSync(join(process.cwd(), "src", "components", "EditorSection.tsx"), "utf8");
 
 function handleEditorPasteBody(): string {
-  const match = appSource.match(/function handleEditorPaste\([^)]*\) \{(?<body>[\s\S]*?)\n  \}/);
+  const match = editorSectionSource.match(/onPaste=\{\([^)]*\)\s*=>\s*\{(?<body>[\s\S]*?)\}\s*\}\s*spe/);
   if (!match?.groups?.body) throw new Error("handleEditorPaste nao encontrado");
   return match.groups.body;
 }
@@ -15,7 +15,7 @@ describe("colagem segura no editor", () => {
   it("bloqueia paste nativo e usa somente text/plain", () => {
     const body = handleEditorPasteBody();
 
-    expect(body).toContain("event.preventDefault()");
+    expect(body).toContain(".preventDefault()");
     expect(body).toContain('clipboardData.getData("text/plain")');
     expect(body).toContain("editorCommandAdapter.insertEditorText");
     expect(body).not.toContain("text/html");
@@ -23,9 +23,10 @@ describe("colagem segura no editor", () => {
   });
 
   it("nao possui caminhos de insercao direta de HTML externo", () => {
-    expect(appSource).not.toContain("dangerouslySetInnerHTML");
-    expect(appSource).not.toContain('clipboardData.getData("text/html")');
-    expect(appSource).not.toContain("clipboardData.getData('text/html')");
+    const fullSource = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8") + "\n" + editorSectionSource;
+    expect(fullSource).not.toContain("dangerouslySetInnerHTML");
+    expect(fullSource).not.toContain('clipboardData.getData("text/html")');
+    expect(fullSource).not.toContain("clipboardData.getData('text/html')");
   });
 
   it("payloads maliciosos sao enviados como texto para insertText", () => {

@@ -1,0 +1,103 @@
+import { useEffect, useRef, useState } from "react";
+import type { AcademicFields } from "../ufla-rules";
+import { clearDraft, hasDraft, loadDraft, saveDraft } from "../draft-storage";
+
+const DEBOUNCE_MS = 800;
+
+function hasDraftableContent(fields: AcademicFields, editorText: string): boolean {
+  if (editorText.trim().length > 0) return true;
+  return Object.values(fields).some((v) => typeof v === "string" && v.trim().length > 0);
+}
+
+function draftFieldsPayload(fields: AcademicFields): Record<string, string> {
+  const rest = { ...fields };
+  delete (rest as any).workType;
+  return Object.fromEntries(Object.entries(rest).map(([key, value]) => [key, String(value)]));
+}
+
+export interface RestoredDraft {
+  fields: Partial<AcademicFields>;
+  editorText: string;
+}
+
+export type DraftStatusValue = "idle" | "saved" | "restored" | "cleared" | "error";
+
+export function useDraft(fields: AcademicFields, editorText: string) {
+  const [draftStatus, setDraftStatus] = useState<DraftStatusValue>("idle");
+  const [hasStoredDraft, setHasStoredDraft] = useState(() => typeof window !== "undefined" && hasDraft(window.localStorage));
+  const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearedRef = useRef(false);
+
+  const [restoredDraft, setRestoredDraft] = useState<RestoredDraft | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const draft = loadDraft(window.localStorage);
+    if (!draft) return;
+    if (!draft.fields && !draft.editorText) return;
+    if (fields.author || fields.title || editorText) return;
+    try {
+      const restored: Partial<AcademicFields> = {};
+      for (const [key, value] of Object.entries(draft.fields ?? {})) {
+        if (typeof value === "string") (restored as any)[key] = value;
+      }
+      setRestoredDraft({ fields: restored, editorText: draft.editorText ?? "" });
+      setHasStoredDraft(true);
+      setDraftStatus("restored");
+    } catch {
+      // Ignora rascunho incompatível.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current);
+    if (clearedRef.current) {
+      clearedRef.current = false;
+      clearDraft(window.localStorage);
+      autosaveTimeoutRef.current = null;
+      setHasStoredDraft(false);
+      return;
+    }
+    if (!hasDraftableContent(fields, editorText)) {
+      clearDraft(window.localStorage);
+      autosaveTimeoutRef.current = null;
+      setHasStoredDraft(false);
+      return;
+    }
+    const timeout = setTimeout(() => {
+      try {
+        saveDraft({
+          fields: draftFieldsPayload(fields),
+          editorText,
+          updatedAt: new Date().toISOString(),
+        }, window.localStorage);
+        autosaveTimeoutRef.current = null;
+        setHasStoredDraft(true);
+        setDraftStatus("saved");
+      } catch {
+        autosaveTimeoutRef.current = null;
+        setDraftStatus("error");
+      }
+    }, DEBOUNCE_MS);
+    autosaveTimeoutRef.current = timeout;
+    return () => {
+      clearTimeout(timeout);
+      if (autosaveTimeoutRef.current === timeout) autosaveTimeoutRef.current = null;
+    };
+  }, [fields, editorText]);
+
+  function handleClearDraft() {
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+      autosaveTimeoutRef.current = null;
+    }
+    clearedRef.current = true;
+    setRestoredDraft(null);
+    clearDraft(window.localStorage);
+    setHasStoredDraft(false);
+    setDraftStatus("cleared");
+  }
+
+  return { draftStatus, hasStoredDraft, handleClearDraft, restoredDraft };
+}

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("Tiptap clean toolbar", () => {
-  const source = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
+  const source = readFileSync(join(process.cwd(), "src", "components", "EditorToolbar.tsx"), "utf8");
 
   it("renderiza toolbar compacta do Tiptap", () => {
     expect(source).toContain("tiptap-toolbar");

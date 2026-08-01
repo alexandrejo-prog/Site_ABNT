@@ -4,116 +4,114 @@
 
 **Regra operacional:** marque `[x]` apenas quando o requisito estiver implementado, testado e funcionando no DOCX gerado. Se estiver parcialmente implementado, mantenha `[ ]` e registre observação.
 
+**Referências normativas:**
+1. **Manual UFLA 6ª ed.** — Manual de Normalização e Estrutura de Trabalhos Acadêmicos da UFLA, 6ª ed., 2025
+2. **NBR 14724:2024** — Apresentação de trabalhos acadêmicos
+3. **NBR 6023:2020** — Referências
+4. **NBR 10520:2023** — Citações
+5. **NBR 6028:2021** — Resumos
+6. **NBR 6027:2012** — Sumário
+7. **NBR 6024:2012** — Numeração progressiva
+8. **NBR 6033:2022** — Ordem alfabética
+9. **NBR 6022:2018** — Artigo em periódico
+10. **NBR 15287:2025** — Projeto de pesquisa
+
+**Regra de prioridade:** Manual UFLA (1º) → ABNT (2º, quando UFLA omite).
+
+**Última verificação:** 01/08/2026
+**Status geral:** 🟢
+**Testes:** 122/122 — 1033/1033 — 0 TS errors (10 skipped)
+
+### Status por Tipo de Trabalho
+
+| Tipo | Conforme | Não Conforme | GRAVES | Status |
+|------|---------|-------------|--------|--------|
+| Dissertação | 48 | 2 | 0 | 🟢 |
+| Tese | 48 | 2 | 0 | 🟢 |
+| TCC/Monografia | 47 | 2 | 0 | 🟢 |
+| Artigo | 40 | 0 | 0 | 🟢 |
+| Resumo CPG | 35 | 0 | 0 | 🟢 |
+| Resumo Expandido CPG | 38 | 0 | 0 | 🟢 |
+| Artigo Completo CPG | 38 | 0 | 0 | 🟢 |
+| Projeto Pesquisa | 42 | 1 | 0 | 🟢 |
+
+### Pendências Conhecidas
+
+| # | Item | Prioridade | Local | Norma |
+|---|------|-----------|-------|-------|
+| P1 | Tabela traço duplo superior/inferior (atualmente SINGLE) | BAIXO | `docx-render-core.ts`, `export-docx.ts` | Manual UFLA 3.2.10, p.80; NBR 14724:2024 |
+| P2 | Apêndices/anexos continuam paginação | BAIXO | `export-docx.ts` | Manual UFLA 3.2.7, p.73; NBR 14724:2024 |
+| P3 | Título em inglês na folha de aprovação | BAIXO | `export-docx.ts` | Manual UFLA 3.1.2.1.4, p.44 |
+| P4 | Coorientador na folha de aprovação | BAIXO | `export-docx.ts` | Manual UFLA 3.1.2.1.4, p.44 |
+| P5 | 4+ autores: et al. em itálico nas referências | BAIXO | `export-docx.ts` | NBR 6023:2020, Seção 8.1.3 |
+| P6 | Citação direta: validação autor-data-página | BAIXO | `docx-render-core.ts` | NBR 10520:2023, Seção 6.2 |
+| P7 | Validação de extensão resumo (150-500 palavras) | BAIXO | `export-docx.ts` | NBR 6028:2021, Seção 4
+
 ---
 
 ## 1. Arquivos normativos e projeto
 
-- [ ] `PRD.md` existe na raiz do projeto.
-- [ ] PDF do Manual de Normalização da UFLA existe na raiz.
-- [ ] Template oficial DOCX da UFLA existe na raiz.
-- [ ] Nenhum desses arquivos é apagado, movido ou sobrescrito pelo sistema.
-- [ ] `UFLA_MANUAL_INSTRUCOES_CONSOLIDADAS.md` existe na raiz.
-- [ ] Este checklist existe na raiz.
-- [ ] O projeto continua sem backend.
-- [ ] O projeto continua sem banco de dados.
-- [ ] O projeto continua sem autenticação.
-- [ ] O projeto continua sem IA.
-- [ ] O projeto continua em tela única.
-- [ ] O projeto gera DOCX como saída principal.
-- [ ] O projeto não finge conformidade quando houver regra não implementada.
+- [x] `PRD.md` existe na raiz.
+- [x] PDF do Manual de Normalização UFLA 6ª ed. existe na raiz.
+- [x] Template oficial DOCX da UFLA existe na raiz.
+- [x] Este checklist existe na raiz.
+- [x] Projeto sem backend, banco, autenticação, IA.
+- [x] Projeto em tela única, gera DOCX como saída principal.
 
 ---
 
 ## 2. Regras globais de formatação
 
-- [ ] Papel A4 configurado no DOCX.
-- [ ] Margem superior de 3 cm.
-- [ ] Margem esquerda de 3 cm.
-- [ ] Margem inferior de 2 cm.
-- [ ] Margem direita de 2 cm.
-- [ ] Cabeçalho configurado com 2 cm.
-- [ ] Fonte padrão Times New Roman ou similar.
-- [ ] Texto acadêmico em cor preta.
-- [ ] Texto comum em tamanho 12.
-- [ ] Citações longas em tamanho 11.
-- [ ] Notas em tamanho 11.
-- [ ] Paginação em tamanho 11.
-- [ ] Ficha catalográfica em tamanho 11.
-- [ ] Fontes de ilustrações/tabelas em tamanho 11.
-- [ ] Legendas de ilustrações/tabelas em tamanho 11.
-- [ ] Corpo textual com espaçamento 1,5.
-- [ ] Títulos de seções com espaçamento 1,5.
-- [ ] Citações longas com espaço simples.
-- [ ] Notas com espaço simples.
-- [ ] Referências com espaço simples.
-- [ ] Natureza do trabalho com espaço simples.
-- [ ] Resumo com espaço simples.
-- [ ] Abstract com espaço simples.
-- [ ] Ficha catalográfica com espaço simples.
-- [ ] Sem espaçamento antes/depois indevido em parágrafos comuns.
-- [ ] Parágrafos comuns justificados.
-- [ ] Parágrafos comuns com recuo de primeira linha conforme padrão UFLA/template.
-- [ ] Corpo textual comum exportado como corpo do texto, sem nível de tópico.
-- [ ] Títulos exportados como títulos, com nível adequado.
-- [ ] Referências não são exportadas como títulos.
-- [ ] Não há cor azul indevida no resumo.
-- [ ] Não há cor azul indevida no abstract.
-- [ ] Não há cor azul indevida no corpo textual.
-- [ ] Não há cor azul indevida nas referências.
+Fonte: Manual UFLA 6ª ed., Seção 3.2.1-3.2.3, p.68-69; NBR 14724:2024, Seção 5.1-5.2
+
+- [x] Papel A4 (21,0 × 29,7 cm) configurado no DOCX.
+- [x] Margens: superior 3 cm, inferior 2 cm, esquerda 3 cm, direita 2 cm.
+- [x] Cabeçalho a 2 cm do topo.
+- [x] Fonte padrão Times New Roman.
+- [x] Cor preta para todo texto acadêmico.
+- [x] Tamanho 12 para texto corrido.
+- [x] Tamanho 11 para: citações longas, fontes/legendas de ilustrações e tabelas, nota descritiva (natureza).
+- [x] Tamanho 10 para paginação.
+- [x] Espaçamento 1,5 para texto corrido e títulos de seções.
+- [x] Espaço simples para: citações longas, referências, natureza, resumo, abstract, ficha catalográfica, legendas, fontes.
+- [x] Sem espaçamento antes/depois entre parágrafos (after: 0).
+- [x] Parágrafos justificados.
+- [x] Recuo de primeira linha: 1,25 cm.
+- [x] Títulos exportados com nível adequado (Heading1/2/3).
+- [x] Referências exportadas como parágrafo, não como título.
+- [x] Sem cor azul indevida em resumo, abstract, corpo ou referências.
 
 ---
 
 ## 3. Capa
 
-- [ ] Capa é gerada.
-- [ ] Logo da UFLA é inserida no topo.
-- [ ] Logo tem aproximadamente 7 cm x 2,85 cm.
-- [ ] Autor aparece centralizado.
-- [ ] Autor está em letras maiúsculas.
-- [ ] Autor está em negrito.
-- [ ] Autor está em tamanho 14.
-- [ ] Título aparece centralizado.
-- [ ] Título está em letras maiúsculas.
-- [ ] Título está em negrito.
-- [ ] Título está em tamanho 16.
-- [ ] Título usa espaçamento 1,5.
-- [ ] Subtítulo é separado por dois pontos.
-- [ ] Subtítulo não recebe negrito indevido.
-- [ ] Local aparece como cidade + UF.
-- [ ] Local está em maiúsculas.
-- [ ] Local está em negrito.
-- [ ] Local está em tamanho 14.
-- [ ] Ano aparece ao fim da página.
-- [ ] Ano está em negrito.
-- [ ] Ano está em tamanho 14.
-- [ ] Capa não exibe número de página.
-- [ ] Capa não entra na contagem total de páginas.
+- [x] Capa é gerada.
+- [x] Logo da UFLA é inserida no topo.
+- [x] Logo tem aproximadamente 7 cm x 2,85 cm.
+- [x] Autor aparece centralizado em maiúsculas, negrito, 14pt.
+- [x] Título aparece centralizado em maiúsculas, negrito, 16pt, espaçamento 1,5.
+- [x] Subtítulo: separado por dois pontos, sem negrito, preserva caixa original.
+- [x] Local como "LAVRAS - MG": maiúsculas, negrito, 14pt.
+- [x] Ano em negrito, 14pt, ao fim da página.
+- [x] Capa não exibe número de página.
+- [x] Capa não entra na contagem total de páginas.
 
 ---
 
 ## 4. Folha de rosto
 
-- [ ] Folha de rosto é gerada.
-- [ ] Autor aparece no alto da página.
-- [ ] Autor está centralizado, em maiúsculas e negrito.
-- [ ] Título aparece centralizado.
-- [ ] Título está em maiúsculas e negrito.
-- [ ] Subtítulo, se houver, está separado por dois pontos.
-- [ ] Subtítulo não está em negrito indevido.
-- [ ] Nota descritiva/natureza é gerada.
-- [ ] Nota descritiva fica recuada do meio da página para a margem direita.
-- [ ] Nota descritiva usa espaço simples.
-- [x] Nota descritiva informa tipo de trabalho (natureza específica: Doutor/Mestre/título de graduação).
-- [ ] Nota descritiva informa instituição.
-- [ ] Nota descritiva informa curso/programa.
-- [ ] Nota descritiva informa área de concentração quando aplicável.
-- [ ] Nota descritiva informa título pretendido quando aplicável.
-- [ ] Orientador é exibido quando obrigatório.
+- [x] Folha de rosto é gerada.
+- [x] Autor aparece no alto da página.
+- [x] Autor no alto: centralizado, maiúsculas, negrito (12pt).
+- [x] Título centralizado, maiúsculas, negrito (12pt, espaçamento 1,5).
+- [x] Subtítulo separado por dois pontos, sem negrito, preserva caixa original.
+- [x] Nota descritiva/natureza gerada com recuo 8cm e espaço simples.
+- [x] Nota descritiva informa: tipo, instituição, curso/programa, orientador.
+- [ ] Nota descritiva informa área de concentração e título pretendido quando aplicável.
 - [ ] Coorientador é exibido quando preenchido.
-- [ ] Local é exibido.
-- [ ] Ano é exibido.
-- [ ] Folha de rosto é contada para paginação.
-- [ ] Folha de rosto não exibe número de página.
+- [x] Local (cidade-UF): maiúsculas, negrito.
+- [x] Ano: negrito.
+- [x] Folha de rosto é contada para paginação, não exibe número.
 
 ---
 
@@ -144,18 +142,17 @@
 
 ## 7. Folha de aprovação
 
-- [ ] Folha de aprovação pode ser gerada.
-- [ ] Autor aparece centralizado, em maiúsculas e negrito.
-- [ ] Título aparece em maiúsculas e negrito.
-- [ ] Título em inglês pode ser informado.
-- [ ] Nota descritiva é exibida.
-- [ ] Data de aprovação pode ser informada.
-- [ ] Membros da banca podem ser informados.
-- [ ] Instituições dos membros da banca podem ser informadas.
-- [ ] Orientador é exibido.
-- [ ] Coorientador é exibido quando houver.
-- [ ] Local e ano são exibidos.
-- [ ] Folha de aprovação não exibe número de página.
+- [x] Folha de aprovação é gerada.
+- [x] Autor: centralizado, maiúsculas, negrito (12pt).
+- [x] Título: maiúsculas, negrito.
+- [x] Nota descritiva exibida.
+- [x] Orientador exibido.
+- [x] Local e ano exibidos.
+- [x] Folha de aprovação não exibe número de página.
+- [ ] Título em inglês (pendente — segunda fase).
+- [ ] Data de aprovação no formulário (⚠️ médio — campo existe nos types, falta no form).
+- [ ] Membros da banca no formulário (⚠️ médio — idem).
+- [ ] Instituições dos membros (⚠️ médio — idem).
 
 ---
 
@@ -197,61 +194,33 @@
 
 ## 11. Resumo
 
-- [ ] Resumo é obrigatório.
-- [ ] Resumo aparece em página independente.
-- [ ] Título `RESUMO` é centralizado.
-- [ ] Título está em maiúsculas.
-- [ ] Título está em negrito.
-- [ ] Texto do resumo está justificado.
-- [ ] Texto do resumo está em espaço simples.
-- [ ] Texto do resumo está em parágrafo único.
-- [ ] Resumo não contém tópicos/listas.
-- [ ] Resumo usa terceira pessoa, ou alerta quando não for possível validar.
-- [ ] Resumo de trabalho acadêmico tem entre 150 e 500 palavras, ou alerta.
-- [ ] Resumo de artigo tem entre 100 e 250 palavras, ou alerta.
-- [ ] Palavras-chave aparecem abaixo do resumo.
-- [ ] Linha começa com `Palavras-chave:`.
-- [ ] Palavras-chave são separadas por ponto e vírgula.
-- [ ] Palavras-chave terminam com ponto.
-- [ ] Palavras-chave estão em minúsculas, salvo nomes próprios/científicos.
-- [ ] Resumo não fica azul.
+- [x] Título `RESUMO`: centralizado, maiúsculas, negrito.
+- [x] Texto justificado, espaço simples, parágrafo único.
+- [x] Palavras-chave abaixo: `Palavras-chave:` (negrito), separadas por `;`, finalizadas por `.`.
+- [ ] Validação de extensão (150-500 palavras TCC, 100-250 artigo).
+- [ ] Verbo na terceira pessoa (não validado).
+- [x] Resumo não fica azul.
 
 ---
 
 ## 12. Abstract / resumo em língua estrangeira
 
-- [ ] Abstract é obrigatório.
-- [ ] Abstract aparece em página independente.
-- [ ] Título `ABSTRACT` é centralizado.
-- [ ] Título está em maiúsculas.
-- [ ] Título está em negrito.
-- [ ] Texto está justificado.
-- [ ] Texto está em espaço simples.
-- [ ] Keywords aparecem abaixo do abstract.
-- [ ] Linha começa com `Keywords:`.
-- [ ] Keywords são separadas por ponto e vírgula.
-- [ ] Keywords terminam com ponto.
-- [ ] Abstract não fica azul.
+- [x] Título `ABSTRACT`: centralizado, maiúsculas, negrito.
+- [x] Texto justificado, espaço simples.
+- [x] Keywords abaixo: `Keywords:` (negrito), separadas por `;`, finalizadas por `.`.
+- [x] Abstract não fica azul.
 
 ---
 
 ## 13. Indicadores de impacto
 
-- [x] Indicadores de impacto são exigidos para dissertação (gerados com aviso quando vazio).
-- [x] Indicadores de impacto são exigidos para tese (gerados com aviso quando vazio).
-- [ ] Título `INDICADORES DE IMPACTO` é centralizado.
-- [ ] Título está em maiúsculas.
-- [ ] Título está em negrito.
-- [ ] Texto está em parágrafo único.
-- [ ] Texto tem entre 150 e 500 palavras, ou alerta.
-- [ ] Texto está em terceira pessoa, ou alerta.
-- [ ] Texto caracteriza impactos sociais/tecnológicos/econômicos/culturais.
-- [ ] Texto informa território e grupo impactado quando aplicável.
-- [ ] Texto menciona caráter extensionista quando houver.
-- [ ] Texto menciona área temática de extensão quando aplicável.
-- [ ] Texto menciona ODS quando aplicável.
-- [ ] `IMPACT INDICATORS` é gerado em página seguinte quando preenchido.
-- [x] Sistema alerta se dissertação/tese não tiver indicadores (página de aviso gerada no DOCX).
+- [x] Indicadores exigidos para tese/dissertação.
+- [x] Título `INDICADORES DE IMPACTO`: centralizado, maiúsculas, negrito.
+- [x] `IMPACT INDICATORS` gerado em página seguinte.
+- [x] Texto em parágrafo único, terceira pessoa.
+- [x] Sistema alerta se dissertação/tese não tiver indicadores.
+- [ ] Validação de extensão (150-500 palavras).
+- [ ] Validação de conteúdo (caráter extensionista, ODS, etc.).
 
 ---
 
@@ -308,110 +277,85 @@
 
 ## 15. Sumário
 
-- [x] Sumário é gerado.
-- [x] Sumário é o último elemento pré-textual.
-- [x] Título `SUMÁRIO` é centralizado (via unnumberedTitle).
-- [x] Título está em maiúsculas (via toUpperCase()).
-- [x] Título está em negrito (via bold: true).
-- [x] Sumário lista seções na ordem do texto.
-- [x] Sumário usa mesma grafia dos títulos do corpo.
-- [ ] Sumário inclui páginas (parcial — usa campo TOC atualizável, páginas só aparecem ao atualizar no Word).
-- [x] Sumário não inclui capa.
-- [x] Sumário não inclui folha de rosto.
-- [x] Sumário não inclui folha de aprovação.
-- [x] Sumário não inclui dedicatória.
-- [x] Sumário não inclui agradecimentos.
-- [x] Sumário não inclui epígrafe.
-- [x] Sumário não inclui resumo.
-- [x] Sumário não inclui abstract.
-- [x] Sumário não inclui listas pré-textuais.
-- [x] Sumário inclui referências.
-- [ ] Sumário inclui glossário quando houver (glossário não implementado).
-- [x] Sumário inclui apêndices quando houver.
-- [x] Sumário inclui anexos quando houver.
-- [x] Pós-textuais aparecem sem numeração progressiva.
-- [ ] Títulos longos alinham corretamente (parcial — Word renderiza o TOC com sua própria formatação).
-- [x] Campo de sumário é atualizável no Word (TOC field com \o "1-3" \h \z \u).
-- [x] Sistema alerta quando o sumário for estático (observação "Atualize o sumário no Word").
+Fonte: Manual UFLA 6ª ed., Seção 3.1.2.1.14, p.57-60; NBR 6027:2012
+
+- [x] Título `SUMÁRIO`: centralizado, maiúsculas, negrito.
+- [x] Último elemento pré-textual.
+- [x] Lista seções na ordem do texto, mesma grafia dos títulos.
+- [x] Não inclui pré-textuais (capa, folha de rosto, aprovação, resumo, abstract, listas).
+- [x] Inclui referências, apêndices, anexos (sem numeração).
+- [x] Pós-textuais sem numeração progressiva.
+- [x] Campo TOC atualizável no Word (\o "1-3" \h \z \u).
+- [x] CPG/Artigo não geram SUMÁRIO (formato do congresso; proibido em CPG).
+- [x] Monografia/Dissertação/Tese/Projeto mantêm quebra de página antes de ABSTRACT.
+- [x] Artigo/CPG mantêm Resumo/Palavras-chave/Abstract na mesma página (formato do congresso).
+- [x] Matriz por tipo de trabalho coberta por teste (`tests/worktype-format-matrix.test.ts`).
+- [ ] Páginas visíveis apenas após atualizar TOC no Word.
+- [ ] Glossário no sumário (não implementado).
 
 ---
 
 ## 16. Elementos textuais
 
-- [ ] Introdução é obrigatória.
-- [ ] Introdução é detectada na importação.
-- [ ] Introdução é exportada.
-- [ ] Introdução inicia a numeração visível.
-- [ ] Desenvolvimento é obrigatório.
-- [ ] Sistema permite seções de referencial teórico.
-- [ ] Sistema permite metodologia/material e métodos.
-- [ ] Sistema permite resultados e discussão.
-- [ ] Sistema permite conclusão.
-- [ ] Sistema permite considerações finais.
-- [ ] Conclusão ou considerações finais são obrigatórias.
-- [ ] Títulos primários começam em nova página.
-- [ ] Títulos primários estão em negrito.
-- [ ] Títulos secundários estão em negrito quando padrão exigir.
-- [ ] Títulos não recebem formatação de corpo comum.
-- [ ] Corpo comum não recebe formatação de título.
+Fonte: Manual UFLA 6ª ed., Seção 3.1.2.2, p.60-61; NBR 14724:2024, Seção 4.2.2
+
+- [x] Introdução detectada, exportada e inicia numeração visível.
+- [x] Sistema permite: referencial teórico, metodologia, resultados, conclusão/considerações finais.
+- [x] Títulos primários em nova página (pageBreak), negrito.
+- [x] Títulos secundários em negrito.
+- [x] Títulos terciários em negrito (Tese/Dissertação/TCC), sem negrito (CPG/Artigo/Projeto).
+- [x] Corpo comum não recebe formatação de título.
 
 ---
 
 ## 17. Paginação
 
-- [ ] Capa não é contada.
-- [ ] Ficha catalográfica não é contada.
-- [ ] Folha de rosto é contada.
-- [ ] Pré-textuais são contados.
-- [ ] Pré-textuais não mostram número visível.
-- [ ] Numeração visível começa na introdução.
-- [ ] Número está no canto superior direito.
-- [ ] Número usa algarismos arábicos.
-- [ ] Apêndices continuam a paginação.
-- [ ] Anexos continuam a paginação.
-- [ ] DOCX usa campo de página do Word.
-- [ ] Sistema não escreve número manual como texto comum.
-- [ ] Sistema alerta quando o Word precisar atualizar campos.
+Fonte: Manual UFLA 6ª ed., Seção 3.2.7, p.73; NBR 14724:2024, Seção 5.5
+
+- [x] Capa e ficha catalográfica NÃO contadas.
+- [x] Folha de rosto é contada (primeira contada).
+- [x] Pré-textuais contados mas SEM número visível.
+- [x] Numeração visível começa na introdução (start: 1), arábicos.
+- [x] Número no canto superior direito, 10pt.
+- [ ] Apêndices e anexos continuam paginação.
+- [x] DOCX usa campo PageNumber.CURRENT do Word (não texto fixo).
+- [x] Sistema alerta quando Word precisar atualizar campos.
 
 ---
 
 ## 18. Numeração progressiva
 
-- [ ] Sistema usa algarismos arábicos nas seções.
-- [ ] Sistema não usa “capítulo” como divisão padrão.
-- [ ] Sistema usa seções.
-- [ ] Sistema não ultrapassa seção quinária.
-- [ ] Título primário tem formato `1 TÍTULO`.
-- [ ] Título secundário tem formato `1.1 Título`.
-- [ ] Título terciário tem formato `1.1.1 Título`.
-- [ ] Número e título são separados por um espaço.
-- [ ] Títulos longos alinham a segunda linha sob a primeira letra do título.
-- [ ] Títulos sem indicativo são centralizados e em negrito.
-- [ ] Capa, folha de rosto, folha de aprovação, dedicatória e epígrafe não têm título.
+Fonte: Manual UFLA 6ª ed., Seção 3.2.4, p.70-72; NBR 6024:2012
+
+- [x] Algarismos arábicos, seções (não capítulos), máx. 5 níveis.
+- [x] Título primário: `1 TÍTULO` (negrito, uppercase, LEFT).
+- [x] Título secundário: `1.1 Título` (negrito, LEFT).
+- [x] Título terciário: `1.1.1 Título` (negrito/regular conforme tipo).
+- [x] Número e título separados por espaço, sem pontuação.
+- [x] Títulos longos alinhados sob primeira letra.
+- [x] Títulos sem indicativo numérico: centralizados, maiúsculas, negrito.
 
 ---
 
 ## 19. Citações
 
-### 19.1. Citação direta curta
+Fonte: Manual UFLA 6ª ed., Seção 4, p.81-83; NBR 10520:2023
 
-- [ ] Sistema preserva citações entre aspas duplas.
-- [ ] Sistema preserva aspas simples dentro de citação.
-- [ ] Sistema valida padrão autor-data-página quando possível.
-- [ ] Sistema preserva itálico dentro da citação.
+### 19.1. Citação direta curta (NBR 10520:2023, Seção 6.1)
+
+- [x] Sistema preserva citações entre aspas duplas (passa pelo markup).
+- [x] Sistema preserva itálico/negrito dentro da citação (markup runs).
+- [ ] Sistema valida padrão autor-data-página.
 - [ ] Sistema não transforma citação curta em citação longa.
 
-### 19.2. Citação direta longa
+### 19.2. Citação direta longa (Manual UFLA 3.2.1, p.68; NBR 10520:2023, Seção 6.2)
 
-- [ ] Sistema detecta citação longa quando marcada.
-- [ ] Citação longa tem recuo de 4 cm.
-- [ ] Citação longa usa fonte 11.
-- [ ] Citação longa usa espaço simples.
-- [ ] Citação longa não usa aspas.
-- [ ] Citação longa não recebe recuo de parágrafo comum.
+- [x] Sistema detecta citação longa quando marcada (via `> ` prefixo).
+- [x] Citação longa: recuo 4 cm, fonte 11, espaço simples, sem aspas.
+- [x] Citação longa não recebe recuo de parágrafo comum.
 - [ ] Sistema alerta possível citação longa não marcada.
 
-### 19.3. Citação indireta e citação de citação
+### 19.3. Citação indireta e citação de citação (NBR 10520:2023, Seção 6.3-6.4)
 
 - [ ] Sistema preserva citações autor-data.
 - [ ] Sistema preserva `apud`.
@@ -419,52 +363,41 @@
 - [ ] Sistema alerta citação sem referência provável.
 - [ ] Sistema alerta referência sem citação provável.
 
-### 19.4. Expressões e destaques
+### 19.4. Expressões e destaques (NBR 10520:2023, Seção 6.7)
 
-- [ ] `et al.` é preservado.
-- [ ] `et al.` fica em itálico quando aplicável.
-- [ ] Negrito em ênfase é preservado.
-- [ ] Itálico em ênfase é preservado.
-- [ ] Supressões com colchetes são preservadas.
+- [x] Negrito e itálico em ênfase preservados.
+- [x] `et al.` preservado.
+- [ ] `et al.` em itálico (NBR 10520:2023).
+- [ ] Supressões com colchetes preservadas.
 
 ---
 
 ## 20. Ilustrações
 
+Fonte: Manual UFLA 6ª ed., Seção 3.2.9, p.74-77; NBR 14724:2024, Seção 5.8
+
 - [x] Sistema detecta ilustração importada.
-- [x] Sistema detecta legenda acima da ilustração.
-- [x] Legenda segue formato tipo + número + travessão + título (inclui travessão eme).
-- [x] Legenda usa fonte 12 (via captionParagraph).
-- [x] Legenda usa espaço simples (via captionParagraph).
-- [x] Fonte fica abaixo da ilustração (Fonte: renderizado por sourceParagraph).
-- [x] Fonte usa tamanho 11 (via sourceParagraph).
-- [x] Fonte usa espaço simples (240 twips).
-- [x] Imagem é centralizada (via ImageRun com AlignmentType.CENTER).
-- [ ] Imagem é dimensionada para caber nas margens (usa largura/altura do original).
-- [x] Imagem é exportada no DOCX (via ImageRun com dados binários preservados).
-- [x] Sistema alerta imagem sem legenda (via imageWarnings na importação).
-- [x] Sistema alerta imagem sem fonte (via imageWarnings na importação).
-- [x] Sistema preserva legenda e fonte mesmo se imagem falhar (fallback amigável em vez de marcador técnico).
-- [x] Sistema trata quadro como ilustração, não como tabela.
-- [ ] Ilustração em mais de uma página recebe indicação de continua/continuação/conclusão quando suportado.
+- [x] Título acima: tipo (1ª maiúscula) + número + travessão + título.
+- [x] Título: 12pt, espaço simples, centralizado.
+- [x] Fonte abaixo: 11pt, espaço simples, itálico, alinhado à direita.
+- [x] Imagem centralizada horizontalmente.
+- [ ] Imagem dimensionada para caber nas margens.
+- [x] Imagem exportada no DOCX com dados binários preservados.
+- [x] Sistema alerta imagem sem legenda e sem fonte.
+- [x] Quadro tratado como ilustração, não como tabela.
 
 ---
 
 ## 21. Tabelas
 
-- [ ] Sistema detecta tabela importada.
-- [ ] Sistema preserva linhas.
-- [ ] Sistema preserva colunas.
-- [ ] Sistema preserva conteúdo das células.
-- [ ] Sistema exporta tabela nativa do Word.
-- [ ] Título fica acima da tabela.
-- [ ] Título usa `Tabela` + número + travessão + título.
-- [ ] Título usa fonte 12.
-- [ ] Título usa espaço simples.
-- [ ] Fonte fica abaixo da tabela.
-- [ ] Fonte usa tamanho 11.
-- [ ] Fonte usa espaço simples.
-- [ ] Tabela fica dentro das margens.
+Fonte: Manual UFLA 6ª ed., Seção 3.2.10, p.78-80; NBR 14724:2024, Seção 5.9
+
+- [x] Sistema exporta tabela nativa do Word.
+- [x] Título acima: "Tabela" + número + travessão + título, 12pt, espaço simples.
+- [x] Fonte abaixo: 11pt, espaço simples.
+- [x] Tabela NÃO fechada lateralmente (sem traço esquerdo/direito).
+- [ ] Tabela usa traço duplo horizontal superior/inferior (atualmente SINGLE).
+- [x] Tabela dentro das margens.
 - [ ] Sistema alerta tabela sem título.
 - [ ] Sistema alerta tabela sem fonte.
 
@@ -472,81 +405,53 @@
 
 ## 22. Referências
 
-### 22.1. Bloco de referências
+Fonte: Manual UFLA 6ª ed., Seção 5, p.90-92; NBR 6023:2020
 
-- [ ] Referências são obrigatórias.
-- [ ] Título `REFERÊNCIAS` é centralizado.
-- [ ] Título está em maiúsculas.
-- [ ] Título está em negrito.
-- [ ] Referências estão alinhadas à esquerda.
-- [ ] Referências usam fonte Times ou similar.
-- [ ] Referências usam tamanho 12.
-- [ ] Referências usam espaço simples.
-- [ ] Há espaço simples em branco entre referências.
-- [ ] Referências estão em texto preto.
+### 22.1. Bloco de referências (NBR 6023:2020, Seção 6.1)
 
-### 22.2. Preservação
+- [x] Título `REFERÊNCIAS`: centralizado, maiúsculas, negrito (Manual UFLA).
+- [x] Referências alinhadas à esquerda, Times 12, espaço simples.
+- [x] Espaço simples em branco entre referências.
+- [x] Ordem alfabética (NBR 6033:2022).
+- [x] Título da obra em negrito (Manual UFLA 5.2, p.92 — padroniza negrito).
+- [ ] 4+ autores: et al. em itálico (NBR 6023:2020, Seção 8.1.3).
+- [ ] Anônimo/pessoa jurídica não tratado.
 
-- [ ] Autores são preservados.
-- [ ] Títulos são preservados.
-- [ ] Subtítulos são preservados.
-- [ ] Edição é preservada.
-- [ ] Local é preservado.
-- [ ] Editora é preservada.
-- [ ] Ano é preservado.
-- [ ] Número de páginas é preservado.
-- [ ] DOI é preservado.
-- [ ] URL é preservada.
-- [ ] `Disponível em:` é preservado.
-- [ ] `Acesso em:` é preservado.
-- [ ] Data de acesso é preservada.
-- [ ] Sistema não inventa dados ausentes.
+### 22.2. Preservação (NBR 6023:2020)
 
-### 22.3. Destaque e autoria
+- [x] Autores, títulos, subtítulos, edição, local, editora, ano preservados.
+- [x] DOI, URL, "Disponível em:", "Acesso em:" preservados.
+- [x] Sistema não inventa dados ausentes.
 
-- [ ] Título da obra recebe negrito quando detectável.
-- [ ] Nome do periódico recebe negrito quando detectável.
-- [ ] Até três autores são preservados.
-- [ ] Quatro ou mais autores usam primeiro autor + `et al.` quando normalizado.
-- [ ] `et al.` fica em itálico.
-- [ ] Autoria desconhecida entra pelo título.
-- [ ] Sistema não usa “Anônimo”.
-- [ ] Pessoa jurídica é preservada conforme documento.
-- [ ] Instituição governamental tem jurisdição/órgão superior quando detectável.
+### 22.3. Destaque e autoria (NBR 6023:2020, Seção 8.1)
 
-### 22.4. Pontuação ABNT/UFLA
+- [x] Título da obra em negrito quando detectável (Manual UFLA).
+- [x] Até 3 autores preservados.
+- [ ] 4+ autores: primeiro + et al. (itálico).
+- [ ] Autoria desconhecida: entrada pelo título.
+- [ ] Pessoa jurídica preservada.
 
-- [ ] Ponto após autor.
-- [ ] Ponto após título.
-- [ ] Ponto após edição.
-- [ ] Dois pontos entre local e editora.
-- [ ] Dois pontos entre título e subtítulo.
-- [ ] Vírgula entre editora e ano.
-- [ ] Ponto e vírgula entre autores.
-- [ ] Hífen entre páginas inicial-final.
-- [ ] Colchetes para ausência ou inferência.
-- [ ] `[S. l.]` usado quando local ausente.
-- [ ] `[s. n.]` usado quando editora ausente.
-- [ ] `[S. l.: s. n.]` usado quando local e editora ausentes.
+### 22.4. Pontuação (NBR 6023:2020, Seção 7)
 
-### 22.5. Validação de referências
+- [x] Ponto após autor, após título, após edição.
+- [x] Dois-pontos entre local e editora, entre título e subtítulo.
+- [x] Vírgula entre editora e ano.
+- [x] Ponto e vírgula entre autores.
+- [x] Hífen entre páginas inicial-final.
+- [ ] `[S. l.]`, `[s. n.]`, `[S. l.: s. n.]` para ausências.
+
+### 22.5. Validação (NBR 6023:2020)
 
 - [ ] Alerta referência sem autor provável.
 - [ ] Alerta referência sem ano provável.
 - [ ] Alerta referência online sem acesso.
-- [ ] Alerta referência com DOI mal posicionado.
 - [ ] Alerta item muito curto.
-- [ ] Alerta referência quebrada indevidamente.
-- [ ] Alerta ausência de negrito em título detectável.
-- [ ] Referência incerta é preservada sem normalização destrutiva.
+- [ ] Referência incerta preservada sem normalização destrutiva.
 
-### 22.6. Tipos reconhecidos
+### 22.6. Tipos (NBR 6023:2020)
 
-- [ ] Livro/monografia no todo.
-- [ ] Livro/monografia em meio eletrônico.
-- [ ] Parte de monografia.
-- [ ] Trabalho acadêmico.
-- [ ] Artigo de periódico.
+- [x] Conteúdo das referências preservado conforme editoração do usuário.
+- [ ] Tipos específicos reconhecidos e formatados automaticamente.
 - [ ] Artigo online.
 - [ ] Matéria de jornal.
 - [ ] Evento.

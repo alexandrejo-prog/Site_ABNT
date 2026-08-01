@@ -1,654 +1,147 @@
-import { ClipboardEvent as ReactClipboardEvent, MouseEvent as ReactMouseEvent, Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { MouseEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { saveAs } from "file-saver";
 import { FileCheck2, FileDown } from "lucide-react";
-import { ACADEMIC_FIELD_KEYS, AcademicFieldKey, type AcademicFields, CONFIDENCE_LABELS, Confidence, emptyAcademicFields, emptyConfidenceMap, isCpgWork, isResearchProject, isUflaCollectionWork } from "./ufla-rules";
-import { ValidationIssue, hasBlockingErrors, validateWork } from "./validators";
-import { isAbsoluteGenerationBlocker, isNonOverridableError } from "./generation-blockers";
-import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
-import { UFLA_PPG_PROGRAMS } from "./ufla-ppg-programs";
+import { isCpgWork } from "./ufla-rules";
 import { editorHtmlToMarkup, editorMarkupToHtml } from "./editor-markup";
+import { useTiptapExperimentalEditor } from "./editor-feature-flags";
 import { templateForWorkType } from "./document-template";
 import { buildDownloadFileName } from "./download-filename";
-import { stripCpgForbiddenSections, hasCpgForbiddenSections } from "./cpg-content-filter";
-import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
-import { buildDraftFromFields, hasUnfilledPlaceholders, draftWorkTypeSupportsIndicators } from "./draft-builder";
+import { buildDraftFromFields, hasUnfilledPlaceholders } from "./draft-builder";
 import { editorCommandAdapter } from "./editor-command-adapter";
 import { installEditorScrollFix } from "./editor-scroll-fix";
-import { clearDraft, hasDraft, loadDraft, saveDraft } from "./draft-storage";
 import { finalVersionPendingReport } from "./final-version-pending";
-import { AdherencePanel } from "./components/AdherencePanel";
-import { ValidationSidebar } from "./components/ValidationSidebar";
-import { DraftStatus } from "./components/DraftStatus";
-import { ToolButton, runEditorCommand } from "./components/ToolButton";
-import { ImportBlock } from "./components/ImportBlock";
-import { WorkTypeSelector } from "./components/WorkTypeSelector";
-import { useTiptapExperimentalEditor } from "./editor-feature-flags";
-import type { TiptapEditorCommand } from "./tiptap-command-bridge";
+import { useFormModel } from "./hooks/useFormModel";
+import { useEditor } from "./hooks/useEditor";
+import { useDraft } from "./hooks/useDraft";
+import { useValidation } from "./hooks/useValidation";
 import type { ImportedDocumentImage } from "./imported-images";
 import type { ImportedTable } from "./imported-tables";
-
-const FIELD_LABELS: Record<AcademicFieldKey, string> = {
-  author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho", course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador", location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave", abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão", referencias: "Referências", anexos: "Anexos", apendices: "Apêndices", dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators", imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema", problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese", objetivoGeral: "Objetivo Geral", objetivosEspecificos: "Objetivos Específicos", justificativa: "Justificativa", referencialTeorico: "Referencial Teórico", metodologia: "Metodologia", cronograma: "Cronograma", recursosOrcamento: "Recursos/Orçamento", resultadosEsperados: "Resultados Esperados", corpusDados: "Corpus/Dados", contextoInstitucional: "Contexto Institucional", conclusaoProvisoria: "Conclusão Provisória", contribuicoesImpactos: "Contribuições/Impactos", impactoSocial: "Impacto social", impactoCientifico: "Impacto científico", impactoEducacional: "Impacto educacional", impactoAmbiental: "Impacto ambiental", impactoTecnologico: "Impacto tecnológico/econômico", publicoBeneficiado: "Público beneficiado", aderenciaOds: "Aderência a ODS/política institucional",
-};
-
-const RESEARCH_PROJECT_FIELD_KEYS: AcademicFieldKey[] = ["tema", "delimitacaoTema", "problemaPesquisa", "hipotese", "objetivoGeral", "objetivosEspecificos", "justificativa", "referencialTeorico", "metodologia", "cronograma", "recursosOrcamento", "resultadosEsperados"];
-const ASSISTED_FIELD_KEYS: AcademicFieldKey[] = ["tema", "problemaPesquisa", "objetivoGeral", "objetivosEspecificos", "justificativa", "referencialTeorico", "corpusDados", "contextoInstitucional", "metodologia", "resultadosEsperados", "conclusaoProvisoria", "contribuicoesImpactos"];
-const LONG_FIELDS = new Set<AcademicFieldKey>(["workNature", "resumo", "abstractText", "introducao", "conclusao", "referencias", "anexos", "apendices", "dedicatoria", "agradecimentos", "epigrafe", "indicadoresImpacto", "impactIndicators", "imageWarnings", ...RESEARCH_PROJECT_FIELD_KEYS]);
-const EDITOR_DESCRIPTION_ID = "editor-mode-note";
-type EditorMode = "body" | "references";
-const AcademicTiptapEditor = lazy(() => import("./components/AcademicTiptapEditor"));
-
-function rowsForField(key: AcademicFieldKey): number {
-  if (key === "referencias") return 12;
-  if (key === "anexos" || key === "apendices") return 7;
-  return LONG_FIELDS.has(key) ? 5 : 1;
-}
-
-function visibleField(key: AcademicFieldKey, workType: AcademicFields["workType"]): boolean {
-  if (RESEARCH_PROJECT_FIELD_KEYS.includes(key)) return isResearchProject(workType);
-  const indicatorSpecificKeys: AcademicFieldKey[] = ["impactoSocial", "impactoCientifico", "impactoEducacional", "impactoAmbiental", "impactoTecnologico", "publicoBeneficiado", "aderenciaOds"];
-  if (indicatorSpecificKeys.includes(key)) return false;
-  if (workType === "artigo") return !["workNature", "dedicatoria", "agradecimentos", "epigrafe", "indicadoresImpacto", "impactIndicators"].includes(key);
-  if (isUflaCollectionWork(workType)) return !["dedicatoria", "agradecimentos", "epigrafe", "indicadoresImpacto", "impactIndicators"].includes(key);
-  if (isCpgWork(workType)) return !["workNature", "dedicatoria", "epigrafe", "indicadoresImpacto", "impactIndicators", "anexos", "apendices"].includes(key);
-  return true;
-}
-
-// No CPG o campo "course" carrega o e-mail dos autores (legado de importação),
-// então é rotulado como "E-mail" e não como "Curso". Demais tipos mantêm "Curso".
-function courseFieldLabel(workType: AcademicFields["workType"]): string {
-  return isCpgWork(workType) ? "E-mail dos autores" : "Curso";
-}
-
-function modelConfidence(workType: AcademicFields["workType"]): boolean {
-  return ["monografia", "dissertacao", "tese", "projeto_pesquisa"].includes(workType);
-}
-
-function shouldNormalizeAfterFieldChange(key: AcademicFieldKey): boolean {
-  return key === "program" || key === "course";
-}
-
-function hasDraftableContent(fields: AcademicFields, editorText: string): boolean {
-  if (editorText.trim().length > 0) return true;
-  const emptyFields = emptyAcademicFields();
-  return ACADEMIC_FIELD_KEYS.some((key) => fields[key].trim() !== emptyFields[key].trim());
-}
-
-function draftFieldsPayload(fields: AcademicFields): Record<string, string> {
-  return Object.fromEntries(ACADEMIC_FIELD_KEYS.map((key) => [key, fields[key]]));
-}
-
-function academicFieldsFromDraft(payload: Record<string, unknown>): AcademicFields {
-  const restored = emptyAcademicFields();
-  for (const key of ACADEMIC_FIELD_KEYS) {
-    const value = payload[key];
-    if (typeof value === "string") restored[key] = value;
-  }
-  return restored;
-}
-
-function editorTextForValidation(workType: AcademicFields["workType"], editorMode: EditorMode, referencesText: string, bodyText: string): string {
-  if (editorMode === "references") return referencesText;
-  return isCpgWork(workType) ? stripCpgForbiddenSections(bodyText) : bodyText;
-}
-
-function cpgAutoFilterIssue(workType: AcademicFields["workType"], originalText: string, validationText: string): ValidationIssue | null {
-  if (!isCpgWork(workType)) return null;
-  if (!hasCpgForbiddenSections(originalText)) return null;
-  if (originalText.trim() === validationText.trim()) return null;
-  return {
-    severity: "warning",
-    code: "cpg-auto-filtered-structures",
-    message: "Seções incompatíveis com CPG/UFLA serão removidas automaticamente do DOCX.",
-    what: "O texto importado contém elementos como indicadores de impacto, sumário, ficha, folha de aprovação, apêndices ou anexos.",
-    why: "O modelo CPG/UFLA não usa esses elementos no corpo do artigo/resumo, mas o sistema consegue removê-los com segurança antes da validação e da exportação.",
-    action: "Confira o DOCX gerado e revise a numeração das seções no Word/LibreOffice antes da submissão final.",
-  };
-}
-
+import { importedFileNameSuggestsOtherType, type ImportResult } from "./services/ImportService";
+import { DraftStatus } from "./components/DraftStatus";
+import { ImportBlock } from "./components/ImportBlock";
+import { WorkTypeSelector } from "./components/WorkTypeSelector";
+import { ValidationSidebar } from "./components/ValidationSidebar";
+import MetadataFields from "./components/MetadataFields";
+import EditorSection from "./components/EditorSection";
+import type { TiptapEditorCommand } from "./tiptap-command-bridge";
 export default function App() {
-  const [fields, setFields] = useState(emptyAcademicFields);
-  const [confidence, setConfidence] = useState(emptyConfidenceMap);
-  const [editorText, setEditorText] = useState("");
-  const [importedImages, setImportedImages] = useState<ImportedDocumentImage[]>([]);
-  const [importedTables, setImportedTables] = useState<ImportedTable[]>([]);
-  const [issues, setIssues] = useState<ValidationIssue[]>([]);
+  const { fields, confidence, updateField, updateWorkType, replaceFields, resetFields } = useFormModel();
+  const { editorText, setEditorText, editorMode, setEditorMode, tiptapCommandSignal, runTiptapCommand, editorRef, lastAppliedEditorTextRef, editorContentVersionRef, isTiptapEditorEnabled, resetEditor } = useEditor();
+  const { draftStatus, hasStoredDraft, handleClearDraft, restoredDraft } = useDraft(fields, editorText);
+  const { errors, warnings, generateAnyway, setGenerateAnyway, runValidation, resetValidation } = useValidation();
   const [status, setStatus] = useState("Pronto para editar.");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generateAnyway, setGenerateAnyway] = useState(false);
   const [importedFileName, setImportedFileName] = useState<string | null>(null);
-  const [editorMode, setEditorMode] = useState<EditorMode>("body");
+  const [importedImages, setImportedImages] = useState<ImportedDocumentImage[]>([]);
+  const [importedTables, setImportedTables] = useState<ImportedTable[]>([]);
   const [adherenceExpanded, setAdherenceExpanded] = useState(false);
   const [assistedMode, setAssistedMode] = useState(false);
-  const [draftStatus, setDraftStatus] = useState<"idle" | "saved" | "restored" | "cleared" | "error">("idle");
   const [confirmReplaceDraft, setConfirmReplaceDraft] = useState(false);
-  const [tiptapCommandSignal, setTiptapCommandSignal] = useState<{ id: number; command: TiptapEditorCommand } | null>(null);
-  const [hasStoredDraft, setHasStoredDraft] = useState(() => typeof window !== "undefined" && hasDraft(window.localStorage));
-  const editorRef = useRef<HTMLDivElement>(null);
-  const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const editorContentVersionRef = useRef(0);
-  const lastAppliedEditorTextRef = useRef("");
-  const errors = useMemo(() => issues.filter((issue) => issue.severity === "error"), [issues]);
-  const warnings = useMemo(() => issues.filter((issue) => issue.severity === "warning"), [issues]);
-  const isCpgSelected = isCpgWork(fields.workType);
-  const selectedUflaProductionType = isUflaCollectionWork(fields.workType) ? academicProductionTypeById(fields.workType) : undefined;
+
+  void useTiptapExperimentalEditor;
+
+  void isCpgWork(fields.workType);
   const activeEditorText = editorMode === "references" ? fields.referencias : editorText;
-  const isTiptapEditorEnabled = useMemo(() => useTiptapExperimentalEditor(), []);
-  const editorAriaLabel = editorMode === "references" ? "Editor de referências" : "Editor do texto principal";
-  const editorHelpText = isTiptapEditorEnabled
-    ? "Modo experimental de edição. Use para testar a nova experiência. O DOCX continua sendo gerado pelo exportador estável."
-    : "Editor acadêmico: edite o conteúdo e marque a estrutura do texto. Fonte, tamanho, recuos e espaçamentos seguem automaticamente o padrão UFLA/ABNT no DOCX.";
   const finalPending = useMemo(() => finalVersionPendingReport(fields, activeEditorText), [fields, activeEditorText]);
 
   useEffect(() => installEditorScrollFix(), []);
+  useEffect(() => { if (restoredDraft) { replaceFields(restoredDraft.fields as any); if (restoredDraft.editorText) setEditorText(restoredDraft.editorText); } }, [restoredDraft]);
+  useEffect(() => { runValidation(fields, editorText, editorMode); }, [runValidation, fields, editorText, editorMode]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const draft = loadDraft(window.localStorage);
-    if (!draft) return;
-    const isEmpty = !draft.fields && !draft.editorText;
-    if (isEmpty) return;
-    if (fields.author || fields.title || editorText) return;
-    try {
-      setFields((current) => ({ ...current, ...academicFieldsFromDraft(draft.fields) }));
-      if (draft.editorText) setEditorText(draft.editorText);
-      setHasStoredDraft(true);
-      setDraftStatus("restored");
-    } catch {
-      // Ignora rascunho incompatível.
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current);
-    if (!hasDraftableContent(fields, editorText)) {
-      clearDraft(window.localStorage);
-      autosaveTimeoutRef.current = null;
-      setHasStoredDraft(false);
-      return;
-    }
-    const timeout = setTimeout(() => {
-      try {
-        saveDraft({
-          fields: draftFieldsPayload(fields),
-          editorText,
-          references: fields.referencias ? [fields.referencias] : [],
-          workType: fields.workType,
-          updatedAt: new Date().toISOString(),
-        }, window.localStorage);
-        autosaveTimeoutRef.current = null;
-        setHasStoredDraft(true);
-        setDraftStatus("saved");
-      } catch {
-        autosaveTimeoutRef.current = null;
-        setDraftStatus("error");
-      }
-    }, 800);
-    autosaveTimeoutRef.current = timeout;
-    return () => {
-      clearTimeout(timeout);
-      if (autosaveTimeoutRef.current === timeout) autosaveTimeoutRef.current = null;
-    };
-  }, [fields, editorText]);
-
-  useEffect(() => {
-    if (!editorRef.current) return;
-    const newContent = editorMarkupToHtml(activeEditorText);
-    const isEditing = document.activeElement === editorRef.current;
-    const contentChanged = lastAppliedEditorTextRef.current !== activeEditorText;
-    if (contentChanged && (!isEditing || editorMode !== "body")) {
-      editorRef.current.innerHTML = newContent;
-      lastAppliedEditorTextRef.current = activeEditorText;
-      editorContentVersionRef.current += 1;
-    }
-  }, [activeEditorText, editorMode]);
-
-  function updateField(key: AcademicFieldKey, value: string) {
-    setFields((current) => {
-      const next = { ...current, [key]: value };
-      return shouldNormalizeAfterFieldChange(key) ? normalizeFieldsForSelectedModel(next) : next;
-    });
-    setConfidence((current) => ({
-      ...current,
-      [key]: current[key] === "nao-identificado" ? "baixa" : current[key],
-      ...(shouldNormalizeAfterFieldChange(key) && modelConfidence(fields.workType) ? { workNature: "media" as Confidence } : {}),
-    }));
-  }
-
-  function updateActiveEditorText(value: string) {
-    if (editorMode === "references") {
-      updateField("referencias", value);
-      return;
-    }
-    setEditorText(value);
-    lastAppliedEditorTextRef.current = value;
-  }
-
-  function handleRichEditorInput() {
+  const handleEditorInput = useCallback(() => {
     if (!editorRef.current) return;
     const markup = editorHtmlToMarkup(editorRef.current);
-    updateActiveEditorText(markup);
+    if (editorMode === "references") { updateField("referencias", markup); return; }
+    setEditorText(markup);
     lastAppliedEditorTextRef.current = markup;
-  }
+  }, [editorMode, updateField, setEditorText]);
 
-  function updateWorkType(workType: AcademicFields["workType"]) {
-    const nextFields = normalizeFieldsForSelectedModel({ ...fields, workType });
-    const textToValidate = editorTextForValidation(workType, editorMode, nextFields.referencias, editorText);
-    const nextIssues = [...validateWork(nextFields, textToValidate)];
-    const autoFilterIssue = cpgAutoFilterIssue(workType, editorText, textToValidate);
-    if (autoFilterIssue) nextIssues.push(autoFilterIssue);
-    setFields(nextFields);
-    setConfidence((current) => ({ ...current, workNature: modelConfidence(workType) ? "media" : current.workNature, program: modelConfidence(workType) ? "media" : current.program }));
-    setGenerateAnyway(false);
-    setIssues(nextIssues);
-  }
-
-  function replaceFieldsWithImportedDocument(importedFields: ReturnType<typeof emptyAcademicFields>, importedConfidence: Record<AcademicFieldKey, Confidence>) {
-    setFields(() => normalizeFieldsForSelectedModel({ ...emptyAcademicFields(), ...importedFields }));
-    setConfidence(() => {
-      const next = emptyConfidenceMap();
-      for (const key of ACADEMIC_FIELD_KEYS) next[key] = importedConfidence[key];
-      return next;
-    });
-  }
-
-function importedFileNameSuggestsOtherType(fileName: string, currentWorkType: string): boolean {
-  if (currentWorkType !== "projeto_pesquisa") return false;
-  const lower = fileName.toLowerCase();
-  return [
-    "desenvolvimento-de-software",
-    "artigo",
-    "monografia",
-    "tese",
-    "dissertacao",
-  ].some((keyword) => lower.includes(keyword));
-}
-
-  async function handleImport(result: {
-    fields: ReturnType<typeof emptyAcademicFields>;
-    confidence: ReturnType<typeof emptyConfidenceMap>;
-    editorText: string;
-    messages: string[];
-    fileName: string;
-    importedImages?: ImportedDocumentImage[];
-    importedTables?: ImportedTable[];
-  }) {
-    try {
-      setStatus("Importando arquivo...");
-      if (autosaveTimeoutRef.current) {
-        clearTimeout(autosaveTimeoutRef.current);
-        autosaveTimeoutRef.current = null;
-      }
-      clearDraft(window.localStorage);
-      setHasStoredDraft(false);
-      const previousWorkType = fields.workType;
-      replaceFieldsWithImportedDocument(result.fields, result.confidence);
-      setImportedFileName(result.fileName);
-      setEditorMode("body");
-      setIssues([]);
-      setGenerateAnyway(false);
-      setImportedImages(result.importedImages ?? []);
-      setImportedTables(result.importedTables ?? []);
-      const newEditorText = result.editorText || result.fields.introducao;
-      setEditorText(newEditorText);
-      if (editorRef.current) editorRef.current.innerHTML = editorMarkupToHtml(newEditorText);
-      lastAppliedEditorTextRef.current = newEditorText;
-      editorContentVersionRef.current += 1;
-      const importWarnings = result.messages.length ? `Arquivo importado com ${result.messages.length} aviso(s). Metadados anteriores foram substituídos.` : "Arquivo importado. Metadados anteriores foram substituídos; revise os campos antes de gerar.";
-      const fileNameConflict = importedFileNameSuggestsOtherType(result.fileName, previousWorkType) ? " O tipo atual é Projeto de pesquisa. O nome do arquivo importado não será usado para alterar o modelo." : "";
-      setStatus(importWarnings + fileNameConflict);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Falha ao importar.");
-    }
-  }
-
-  function handleRemoveImport() {
-    setFields(emptyAcademicFields());
-    setConfidence(emptyConfidenceMap());
-    setEditorText("");
-    setIssues([]);
-    setGenerateAnyway(false);
-    setImportedFileName(null);
-    setImportedImages([]);
-    setImportedTables([]);
-    setEditorMode("body");
-    lastAppliedEditorTextRef.current = "";
-    editorContentVersionRef.current += 1;
-    setStatus("Importação removida. Escolha outro arquivo ou preencha manualmente.");
-  }
-
-  function handleClearDraft() {
-    if (autosaveTimeoutRef.current) {
-      clearTimeout(autosaveTimeoutRef.current);
-      autosaveTimeoutRef.current = null;
-    }
-    clearDraft(window.localStorage);
-    setFields(emptyAcademicFields());
-    setConfidence(emptyConfidenceMap());
-    setEditorText("");
-    setIssues([]);
-    setGenerateAnyway(false);
-    setImportedFileName(null);
-    setImportedImages([]);
-    setEditorMode("body");
-    lastAppliedEditorTextRef.current = "";
-    if (editorRef.current) editorRef.current.innerHTML = "";
-    editorContentVersionRef.current += 1;
-    setHasStoredDraft(false);
-    setDraftStatus("cleared");
-    setStatus("Rascunho local removido e formulário limpo.");
-  }
-
-
-  function runTiptapCommand(command: TiptapEditorCommand) {
-    setTiptapCommandSignal((current) => ({ id: (current?.id ?? 0) + 1, command }));
-  }
-
-  function runEditorAction(tiptapCommand: TiptapEditorCommand, legacyAction: () => void) {
-    if (isTiptapEditorEnabled) {
-      runTiptapCommand(tiptapCommand);
-      return;
-    }
-    legacyAction();
-  }
-  function applyBlockStyle(prefix: string) {
+  const applyBlockStyle = useCallback((prefix: string) => {
     editorRef.current?.focus();
     const block = prefix === "# " ? "h1" : prefix === "## " ? "h2" : prefix === "> " ? "blockquote" : "p";
     editorCommandAdapter.formatEditorBlock(block);
     if (prefix === "[REF] ") editorCommandAdapter.insertEditorText("[REF] ");
-    setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0);
-  }
+    setTimeout(() => requestAnimationFrame(handleEditorInput), 0);
+  }, [handleEditorInput]);
 
-  function wrapSelection(command: "bold" | "italic") {
-    editorRef.current?.focus();
-    editorCommandAdapter.applyEditorCommand(command);
-    setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0);
-  }
+  const runEditorAction = useCallback((tiptapCommand: TiptapEditorCommand, legacy: () => void) => {
+    if (isTiptapEditorEnabled) { runTiptapCommand(tiptapCommand); return; }
+    legacy();
+  }, [isTiptapEditorEnabled, runTiptapCommand]);
 
-  function clearFormatting() {
-    editorRef.current?.focus();
-    editorCommandAdapter.clearEditorFormatting();
-    setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0);
-  }
+  const handleImport = useCallback(async (result: ImportResult) => {
+    setStatus("Importando arquivo...");
+    replaceFields(result.fields, result.confidence);
+    setImportedFileName(result.fileName);
+    setEditorMode("body");
+    resetValidation();
+    setGenerateAnyway(false);
+    setImportedImages(result.importedImages ?? []);
+    setImportedTables(result.importedTables ?? []);
+    const text = result.editorText || result.fields.introducao;
+    setEditorText(text);
+    if (editorRef.current) editorRef.current.innerHTML = editorMarkupToHtml(text);
+    lastAppliedEditorTextRef.current = text;
+    editorContentVersionRef.current += 1;
+    const msg = result.messages.length ? `Arquivo importado com ${result.messages.length} aviso(s). Metadados anteriores foram substituídos.` : "Arquivo importado. Metadados anteriores foram substituídos; revise os campos antes de gerar.";
+    const conflict = importedFileNameSuggestsOtherType(result.fileName, fields.workType) ? " O tipo atual é Projeto de pesquisa. O nome do arquivo importado não será usado para alterar o modelo." : "";
+    setStatus(msg + conflict);
+  }, [replaceFields, fields.workType, editorRef, setEditorText, setEditorMode, resetValidation, setGenerateAnyway, setImportedFileName, setImportedImages, setImportedTables]);
 
-  function handleEditorPaste(event: ReactClipboardEvent<HTMLDivElement>) {
-    event.preventDefault();
-    editorCommandAdapter.insertEditorText(event.clipboardData.getData("text/plain"));
-    setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0);
-  }
+  const handleRemoveImport = useCallback(() => {
+    resetFields(); resetEditor(); resetValidation(); setGenerateAnyway(false);
+    setImportedFileName(null); setImportedImages([]); setImportedTables([]);
+    setStatus("Importação removida. Escolha outro arquivo ou preencha manualmente.");
+  }, [resetFields, resetEditor, resetValidation, setGenerateAnyway, setImportedFileName, setImportedImages, setImportedTables]);
 
-  function handleBuildDraft() {
-    if (editorText.trim() && !confirmReplaceDraft) {
-      setConfirmReplaceDraft(true);
-      setStatus("Clique em 'Montar rascunho a partir dos campos' novamente para confirmar a substituição do texto do editor.");
-      return;
-    }
+  const triggerValidation = useCallback(() => { const { issues: r, hasBlocking } = runValidation(fields, editorText, editorMode); setStatus(hasBlocking ? `Validação concluída: ${r.filter(i => i.severity === "error").length} erro(s), ${r.filter(i => i.severity === "warning" || i.severity === "info").length} alerta(s). Há erros essenciais antes da geração.` : `Validação concluída: ${r.filter(i => i.severity === "error").length} erro(s), ${r.filter(i => i.severity === "warning" || i.severity === "info").length} alerta(s). Pode gerar o DOCX como rascunho editável.`); }, [runValidation, fields, editorText, editorMode]);
+
+  const handleGenerateDocx = useCallback(async () => {
+    const { canGenerate } = runValidation(fields, editorText, editorMode);
+    if (!canGenerate && !generateAnyway) { setStatus("Há pendências críticas que impedem a geração do DOCX. Corrija os campos obrigatórios e marcadores [PREENCHER: ...] antes de gerar."); return; }
+    try {
+      setIsGenerating(true); setStatus("Gerando DOCX...");
+      const generationFields = fields;
+      const blob = await templateForWorkType(fields.workType).generate({ fields: generationFields, editorText, importedImages, importedTables });
+      saveAs(blob, buildDownloadFileName({ workType: fields.workType, title: fields.title, importedFileName }));
+      const pending = finalVersionPendingReport(fields, activeEditorText);
+      setStatus(generateAnyway || pending.hasPendingItems ? "Rascunho gerado. Abra no Word/LibreOffice, atualize o sumário e substitua campos provisórios antes da submissão." : "DOCX gerado. Se o sumário aparecer vazio, atualize os campos no Word/LibreOffice. Isso é esperado.");
+    } catch (err) { setStatus(err instanceof Error ? err.message : "Falha ao gerar DOCX."); }
+    finally { setIsGenerating(false); }
+  }, [fields, editorText, importedImages, importedTables, generateAnyway, editorMode, importedFileName, activeEditorText, runValidation]);
+
+  const handleBuildDraft = useCallback(() => {
+    if (editorText.trim() && !confirmReplaceDraft) { setConfirmReplaceDraft(true); setStatus("Clique em 'Montar rascunho a partir dos campos' novamente para confirmar a substituição do texto do editor."); return; }
     setConfirmReplaceDraft(false);
     const draft = buildDraftFromFields(fields);
     setEditorText(draft);
     lastAppliedEditorTextRef.current = draft;
     if (editorRef.current) editorRef.current.innerHTML = editorMarkupToHtml(draft);
     editorContentVersionRef.current += 1;
-    const hasPlaceholder = hasUnfilledPlaceholders(draft);
-    setStatus(
-      hasPlaceholder
-        ? "Rascunho montado. Campos vazios geraram marcadores [PREENCHER: ...]; preencha-os antes da versão final."
-        : "Rascunho montado a partir dos campos informados.",
-    );
-  }
-
-  function runValidation(candidateFields = fields) {
-    const normalizedFields = normalizeFieldsForSelectedModel(candidateFields);
-    let textToValidate = editorMode === "references" ? normalizedFields.referencias : editorText;
-    const rawText = textToValidate;
-    if (isCpgWork(normalizedFields.workType) && editorMode !== "references") {
-      textToValidate = stripCpgForbiddenSections(textToValidate);
-    }
-    const nextIssues = [...validateWork(normalizedFields, textToValidate)];
-    const autoFilterIssue = cpgAutoFilterIssue(normalizedFields.workType, rawText, textToValidate);
-    if (autoFilterIssue) nextIssues.push(autoFilterIssue);
-    setIssues(nextIssues);
-    const errorCount = nextIssues.filter((issue) => issue.severity === "error").length;
-    const warningCount = nextIssues.filter((issue) => issue.severity === "warning" || issue.severity === "info").length;
-    setStatus(
-      hasBlockingErrors(nextIssues)
-        ? `Validação concluída: ${errorCount} erro(s), ${warningCount} alerta(s). Há erros essenciais antes da geração.`
-        : `Validação concluída: ${errorCount} erro(s), ${warningCount} alerta(s). Pode gerar o DOCX como rascunho editável.`,
-    );
-    return nextIssues;
-  }
-
-  function handleSkipToMain(event: ReactMouseEvent<HTMLAnchorElement>) {
-    event.preventDefault();
-    const main = document.getElementById("main-content");
-    if (!main) return;
-    main.focus({ preventScroll: true });
-    main.scrollIntoView?.({ block: "start" });
-    window.history.replaceState(null, "", "#main-content");
-  }
-  async function handleGenerateDocx() {
-    const generationFields = normalizeFieldsForSelectedModel(fields);
-    const nextIssues = runValidation(generationFields);
-    const nonOverridable = nextIssues.some((issue) => issue.severity === "error" && isNonOverridableError(issue));
-    if (nonOverridable && !generateAnyway) {
-      setStatus("Há pendências críticas que impedem a geração do DOCX. Corrija os campos obrigatórios e marcadores [PREENCHER: ...] antes de gerar.");
-      return;
-    }
-    const absoluteBlocker = nextIssues.some((issue) => issue.severity === "error" && isAbsoluteGenerationBlocker(issue));
-    if (absoluteBlocker) {
-      setStatus("Há pendências que impedem a geração do DOCX. Corrija os marcadores [PREENCHER: ...] e campos mínimos antes de gerar.");
-      return;
-    }
-    try {
-      setIsGenerating(true);
-      setStatus("Gerando DOCX...");
-      // Contrato do editor: generate({ fields: generationFields, editorText }) segue como base; imagens importadas acompanham o payload.
-      const blob = await templateForWorkType(generationFields.workType).generate({ fields: generationFields, editorText, importedImages, importedTables });
-      saveAs(blob, buildDownloadFileName({ workType: generationFields.workType, title: generationFields.title, importedFileName }));
-      const pending = finalVersionPendingReport(generationFields, activeEditorText);
-      setStatus(
-        generateAnyway || pending.hasPendingItems
-          ? "Rascunho gerado. Abra no Word/LibreOffice, atualize o sumário e substitua campos provisórios antes da submissão."
-          : "DOCX gerado. Se o sumário aparecer vazio, atualize os campos no Word/LibreOffice. Isso é esperado.",
-      );
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Falha ao gerar DOCX.");
-    } finally {
-      setIsGenerating(false);
-    }
-  }
+    setStatus(hasUnfilledPlaceholders(draft) ? "Rascunho montado. Campos vazios geraram marcadores [PREENCHER: ...]; preencha-os antes da versão final." : "Rascunho montado a partir dos campos informados.");
+  }, [fields, editorText, confirmReplaceDraft, setEditorText, editorRef]);
 
   return (
     <div className="app-shell">
-      <a href="#main-content" className="skip-link" onClick={handleSkipToMain}>Pular para o conte&uacute;do principal</a>
+      <a href="#main-content" className="skip-link" onClick={(e: MouseEvent<HTMLAnchorElement>) => { e.preventDefault(); window.location.hash = "#main-content"; document.getElementById("main-content")?.focus({ preventScroll: true }); }}>Pular para o conteúdo principal</a>
       <header className="app-header">
         <img src="/assets/ufla-logo.jpeg" alt="Marca UFLA" className="ufla-logo" />
-        <div>
-          <p className="eyebrow">Ferramenta de apoio UFLA/ABNT</p>
-          <h1>Assistente de estruturação e normalização acadêmica</h1>
-        </div>
+        <div><p className="eyebrow">Ferramenta de apoio UFLA/ABNT</p><h1>Assistente de estruturação e normalização acadêmica</h1></div>
         <div className="header-actions">
-          <DraftStatus draftStatus={draftStatus} hasDraft={hasStoredDraft} onClearDraft={handleClearDraft} />
-          <button className="primary-action" type="button" onClick={() => runValidation()}><FileCheck2 size={18} aria-hidden="true" />Validar trabalho</button>
+          <DraftStatus draftStatus={draftStatus} hasDraft={hasStoredDraft} onClearDraft={() => { handleClearDraft(); resetFields(); resetEditor(); setImportedFileName(null); setImportedImages([]); setImportedTables([]); setStatus("Rascunho local removido e formulário limpo."); }} />
+          <button className="primary-action" type="button" onClick={triggerValidation}><FileCheck2 size={18} aria-hidden="true" />Validar trabalho</button>
           <button className="primary-action strong" type="button" onClick={handleGenerateDocx} disabled={isGenerating}><FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar DOCX editável"}</button>
         </div>
       </header>
-
-      <p className="global-draft-notice" role="note">O DOCX é rascunho técnico. Sumário, ficha catalográfica, paginação final e PDF devem ser conferidos no Word/LibreOffice. Após abrir no Word/LibreOffice, clique com o botão direito no sumário e selecione &ldquo;Atualizar campo&rdquo;.</p>
-
+      <p className="global-draft-notice" role="note">O DOCX é rascunho técnico. Sumário, ficha catalográfica, paginação final e PDF devem ser conferidos no Word/LibreOffice.</p>
       <main id="main-content" className="workspace" tabIndex={-1} aria-busy={isGenerating}>
         <section className="metadata-pane" aria-label="Campos acadêmicos">
           <ImportBlock onImport={handleImport} onRemove={handleRemoveImport} importedFileName={importedFileName} workType={fields.workType} />
-          <div className="work-type-section">
-            <WorkTypeSelector value={fields.workType} onChange={updateWorkType} />
-          </div>
-          <div className="assisted-panel">
-            <div className="assisted-header-row">
-              <h2>Preencher campos</h2>
-              <label className="assisted-toggle"><input type="checkbox" checked={assistedMode} onChange={(event) => setAssistedMode(event.target.checked)} /><span>Mostrar campos guiados</span></label>
-            </div>
-            <p className="assisted-note">Preencha os campos abaixo e use <strong>Montar rascunho</strong> para gerar a estrutura no editor. Campos vazios viram marcadores [PREENCHER: ...]; o sistema não inventa conteúdo.</p>
-            <div>
-              <button className="primary-action" type="button" onClick={handleBuildDraft}><FileCheck2 size={18} aria-hidden="true" />{confirmReplaceDraft ? "Confirmar substituição" : "Montar rascunho a partir dos campos"}</button>
-              {confirmReplaceDraft && <button className="secondary-action" type="button" onClick={() => setConfirmReplaceDraft(false)}>Cancelar</button>}
-            </div>
-          </div>
-          {fields.workType === "artigo" && <div className="mode-panel"><h2>Artigo acadêmico simples</h2><p>Modelo sem capa, folha de rosto, ficha catalográfica, folha de aprovação, indicadores de impacto e sumário.</p></div>}
-          {isCpgSelected && <div className="mode-panel"><h2>Modo CPG/UFLA selecionado</h2><p>Este modelo segue template CPG/UFLA. Seções incompatíveis importadas serão removidas automaticamente do DOCX e da validação do rascunho.</p><p><strong>Saída do sistema:</strong> gere o DOCX e, se precisar de PDF, exporte por um editor de texto externo.</p></div>}
-          {(fields.workType === "dissertacao" || fields.workType === "tese") && <div className="mode-panel"><h2>Dissertação/Tese</h2><p>O sumário do DOCX é um campo atualizável. Após abrir no Word ou LibreOffice, atualize os campos para preencher o sumário com a paginação real. No Word: Ctrl+A e F9, depois escolha &ldquo;Atualizar o índice inteiro&rdquo;. No LibreOffice: Ferramentas &gt; Atualizar &gt; Atualizar tudo.</p></div>}
-          {isResearchProject(fields.workType) && <div className="mode-panel"><h2>Estrutura do Projeto de Pesquisa</h2><p>Campos específicos para estrutura de projeto de pesquisa conforme ABNT NBR 15287:2025.</p><p className="toc-update-note">Após abrir o DOCX no Word ou LibreOffice, atualize os campos do documento para preencher o sumário com a paginação real. No Word: Ctrl+A e F9, depois escolha &ldquo;Atualizar o índice inteiro&rdquo;. No LibreOffice: Ferramentas &gt; Atualizar &gt; Atualizar tudo.</p></div>}
-          {selectedUflaProductionType && <div className="mode-panel"><h2>{selectedUflaProductionType.label}</h2><p>{ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE}</p><p><strong>Saída do sistema:</strong> DOCX editável; o PDF final deve ser exportado no Word ou LibreOffice.</p></div>}
-          {ACADEMIC_FIELD_KEYS.map((key) => (visibleField(key, fields.workType) || (assistedMode && ASSISTED_FIELD_KEYS.includes(key))) ? <div className="field-group" key={key}><div className="label-row"><label htmlFor={key}>{key === "course" ? courseFieldLabel(fields.workType) : FIELD_LABELS[key]}</label><span className={`confidence confidence-${confidence[key]}`}>{CONFIDENCE_LABELS[confidence[key]]}</span></div>{LONG_FIELDS.has(key) ? <textarea id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} rows={rowsForField(key)} aria-describedby={key === "referencias" ? "referencias-note" : undefined} /> : key === "program" && ["dissertacao", "tese", "projeto_pesquisa"].includes(fields.workType) ? <input id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} list="ufla-ppg-programs" /> : <input id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} />}{key === "referencias" && <div className="field-note" id="referencias-note"><p>Para editar com mais espaço, use o botão <strong>Referências</strong> no painel central.</p><p>Use uma referência por linha. Para destacar manualmente, selecione o trecho e clique em Negrito ou Itálico.</p></div>}</div> : null)}
-          {["dissertacao", "tese", "projeto_pesquisa"].includes(fields.workType) && (
-            <datalist id="ufla-ppg-programs">
-              {UFLA_PPG_PROGRAMS.map((program) => (
-                <option key={`${program.type}-${program.name}`} value={program.name} />
-              ))}
-            </datalist>
-          )}
-          {draftWorkTypeSupportsIndicators(fields.workType) && (
-            <div className="field-group impact-indicators-group">
-              <h3>Indicadores de impacto (dissertação/tese)</h3>
-              {(["impactoSocial", "impactoCientifico", "impactoEducacional", "impactoAmbiental", "impactoTecnologico", "publicoBeneficiado", "aderenciaOds"] as AcademicFieldKey[]).map((key) => (
-                <div className="field-group" key={key}><label htmlFor={key}>{FIELD_LABELS[key]}</label><textarea id={key} value={fields[key]} onChange={(event) => updateField(key, event.target.value)} rows={2} /></div>
-              ))}
-            </div>
-          )}
+          <div className="work-type-section"><WorkTypeSelector value={fields.workType} onChange={updateWorkType} /></div>
+          <MetadataFields fields={fields} confidence={confidence} updateField={updateField} assistedMode={assistedMode} setAssistedMode={setAssistedMode} handleBuildDraft={handleBuildDraft} confirmReplaceDraft={confirmReplaceDraft} setConfirmReplaceDraft={setConfirmReplaceDraft} />
         </section>
-
-        <section className="editor-pane" aria-label="Editor do texto">
-          <div className="editor-toolbar-sticky">
-            <div className="word-ribbon-tabs" aria-label="Abas da faixa">
-              <button className="word-ribbon-tab active" type="button">Página Inicial</button>
-            </div>
-            <div className="toolbar editor-mode-toolbar" aria-label="Modo de edição">
-              <button className={`text-button ${editorMode === "body" ? "active" : ""}`} type="button" onClick={() => setEditorMode("body")}>Texto</button>
-              <button className={`text-button ${editorMode === "references" ? "active" : ""}`} type="button" onClick={() => setEditorMode("references")}>Referências</button>
-            </div>
-            {isTiptapEditorEnabled ? (
-              <div className="tiptap-toolbar" aria-label="Faixa de formatação Tiptap">
-                <div className="tiptap-toolbar-group">
-                  <span className="tiptap-toolbar-label">Texto</span>
-                  <div className="tiptap-toolbar-row">
-                    <ToolButton title="Negrito" glyph="N" className="tool-negrito" onClick={() => runEditorAction("bold", () => wrapSelection("bold"))} />
-                    <ToolButton title="Itálico" glyph="I" onClick={() => runEditorAction("italic", () => wrapSelection("italic"))} />
-                    <ToolButton title="Sublinhado" glyph="S" className="tool-sublinhado" onClick={() => runEditorAction("underline", () => runEditorCommand("underline"))} />
-                    <ToolButton title="Limpar formatação" glyph="⌫" onClick={() => runEditorAction("clearFormatting", clearFormatting)} />
-                  </div>
-                </div>
-                <div className="tiptap-toolbar-group">
-                  <span className="tiptap-toolbar-label">Estrutura</span>
-                  <div className="tiptap-toolbar-row">
-                    <ToolButton title="Normal" glyph="¶" onClick={() => runEditorAction("paragraph", () => applyBlockStyle("p"))} />
-                    <ToolButton title="Título 1" glyph="T1" onClick={() => runEditorAction("heading1", () => applyBlockStyle("# "))} />
-                    <ToolButton title="Título 2" glyph="T2" onClick={() => runEditorAction("heading2", () => applyBlockStyle("## "))} />
-                    <ToolButton title="Citação" glyph="❝" onClick={() => runEditorAction("blockquote", () => applyBlockStyle("> "))} />
-                    <ToolButton title="Ref. ABNT" glyph="Ref" tooltip="Marca o parágrafo como referência bibliográfica para a seção REFERÊNCIAS do DOCX." onClick={() => runEditorAction("reference", () => applyBlockStyle("[REF] "))} />
-                  </div>
-                </div>
-                <div className="tiptap-toolbar-group">
-                  <span className="tiptap-toolbar-label">Listas</span>
-                  <div className="tiptap-toolbar-row">
-                    <ToolButton title="Marcadores" glyph="•" onClick={() => runEditorAction("bulletList", () => runEditorCommand("insertUnorderedList"))} />
-                    <ToolButton title="Numerada" glyph="1." onClick={() => runEditorAction("orderedList", () => runEditorCommand("insertOrderedList"))} />
-                  </div>
-                </div>
-                <div className="tiptap-toolbar-group">
-                  <span className="tiptap-toolbar-label">Alinhamento</span>
-                  <div className="tiptap-toolbar-row">
-                    <ToolButton title="Alinhar à esquerda" glyph="E" onClick={() => runEditorAction("alignLeft", () => runEditorCommand("justifyLeft"))} />
-                    <ToolButton title="Centralizar" glyph="C" onClick={() => runEditorAction("alignCenter", () => runEditorCommand("justifyCenter"))} />
-                    <ToolButton title="Justificar" glyph="J" onClick={() => runEditorAction("alignJustify", () => runEditorCommand("justifyFull"))} />
-                  </div>
-                </div>
-                <div className="tiptap-toolbar-group">
-                  <span className="tiptap-toolbar-label">Histórico</span>
-                  <div className="tiptap-toolbar-row">
-                    <ToolButton title="Desfazer" glyph="↶" onClick={() => runEditorAction("undo", () => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("undo"); })} />
-                    <ToolButton title="Refazer" glyph="↷" onClick={() => runEditorAction("redo", () => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("redo"); })} />
-                  </div>
-                </div>
-              </div>
-            ) : (
-                <div className="toolbar word-ribbon" aria-label="Faixa de formatação do editor">
-                <div className="word-tool-group" data-group="Área de edição" aria-label="Área de Transferência">
-                  <div className="word-tool-row">
-                    <ToolButton title="Limpar formatação" glyph="⌫" onClick={() => runEditorAction("clearFormatting", clearFormatting)} />
-                    <ToolButton title="Desfazer" glyph="↶" onClick={() => runEditorAction("undo", () => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("undo"); })} />
-                    <ToolButton title="Refazer" glyph="↷" onClick={() => runEditorAction("redo", () => { editorRef.current?.focus(); editorCommandAdapter.applyEditorCommand("redo"); })} />
-                  </div>
-                  <span className="word-tool-group-label">Área de Transferência</span>
-                </div>
-
-                <div className="word-tool-group" data-group="Estrutura" aria-label="Estrutura">
-                  <div className="word-tool-row">
-                    <ToolButton title="Título 1" glyph="T1" onClick={() => runEditorAction("heading1", () => applyBlockStyle("# "))} />
-                    <ToolButton title="Título 2" glyph="T2" onClick={() => runEditorAction("heading2", () => applyBlockStyle("## "))} />
-                    <ToolButton title="Citação longa" glyph="❝" onClick={() => runEditorAction("blockquote", () => applyBlockStyle("> "))} />
-                    <ToolButton title="Marcar como referência bibliográfica" glyph="Ref. ABNT" className="tool-reference" tooltip="Marca o parágrafo como referência bibliográfica para a seção REFERÊNCIAS do DOCX." onClick={() => runEditorAction("reference", () => applyBlockStyle("[REF] "))} />
-                  </div>
-                  <span className="word-tool-group-label">Estrutura</span>
-                </div>
-
-                <div className="word-tool-group" data-group="Parágrafo" aria-label="Parágrafo">
-                  <div className="word-tool-row">
-                    <ToolButton title="Lista com marcadores" glyph="•" onClick={() => runEditorAction("bulletList", () => runEditorCommand("insertUnorderedList"))} />
-                    <ToolButton title="Lista numerada" glyph="1." onClick={() => runEditorAction("orderedList", () => runEditorCommand("insertOrderedList"))} />
-                    <ToolButton title="Alinhar à esquerda" glyph="E" onClick={() => runEditorAction("alignLeft", () => runEditorCommand("justifyLeft"))} />
-                    <ToolButton title="Centralizar" glyph="C" onClick={() => runEditorAction("alignCenter", () => runEditorCommand("justifyCenter"))} />
-                    <ToolButton title="Justificar" glyph="J" onClick={() => runEditorAction("alignJustify", () => runEditorCommand("justifyFull"))} />
-                  </div>
-                  <span className="word-tool-group-label">Parágrafo</span>
-                </div>
-              </div>
-            )}
-            {isTiptapEditorEnabled && (
-              <p className="tiptap-mode-banner" role="note">
-                Modo Tiptap experimental. Use para testar a nova edição. O DOCX continua sendo gerado pelo exportador estável.
-              </p>
-            )}
-            <p id={EDITOR_DESCRIPTION_ID} className="field-note editor-mode-note">{editorHelpText}</p>
-          </div>
-          <div className="editor-page-stack" aria-label="Editor de texto contínuo">
-            <div className="editor-page-shell">
-              {isTiptapEditorEnabled ? (
-                <Suspense
-                  fallback={
-                    <div className="editor rich-editor tiptap-loading" role="status">
-                      Carregando editor Tiptap experimental...
-                    </div>
-                  }
-                >
-                  <AcademicTiptapEditor
-                    value={activeEditorText}
-                    onChange={updateActiveEditorText}
-                    ariaLabel={editorAriaLabel}
-                    describedBy={EDITOR_DESCRIPTION_ID}
-                    editable={true}
-                    commandSignal={tiptapCommandSignal}
-                    editorMode={editorMode}
-                  />
-                </Suspense>
-              ) : (
-                <div ref={editorRef} className="editor rich-editor" data-editor-mode={editorMode} contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-describedby={EDITOR_DESCRIPTION_ID} aria-label={editorAriaLabel} onInput={handleRichEditorInput} onPaste={handleEditorPaste} spellCheck />
-              )}
-            </div>
-          </div>
-          <p className="editor-page-note">Editor em visualização contínua. A paginação final deve ser conferida no Word/LibreOffice após atualizar campos e sumário.</p>
-          <AdherencePanel expanded={adherenceExpanded} onToggle={() => setAdherenceExpanded((prev) => !prev)} />
-        </section>
-
-        <ValidationSidebar
-          status={status}
-          generateAnyway={generateAnyway}
-          onToggleGenerateAnyway={setGenerateAnyway}
-          fields={fields}
-          editorText={editorText}
-          errors={errors}
-          warnings={warnings}
-          finalPending={finalPending}
-        />
+        <EditorSection editorMode={editorMode} setEditorMode={setEditorMode} isTiptapEditorEnabled={isTiptapEditorEnabled} editorRef={editorRef} handleEditorInput={handleEditorInput} runEditorAction={runEditorAction as (cmd: string, fn: () => void) => void} applyBlockStyle={applyBlockStyle} activeEditorText={activeEditorText} updateField={updateField} setEditorText={setEditorText} tiptapCommandSignal={tiptapCommandSignal} adherenceExpanded={adherenceExpanded} setAdherenceExpanded={setAdherenceExpanded} />
+        <ValidationSidebar status={status} generateAnyway={generateAnyway} onToggleGenerateAnyway={setGenerateAnyway} fields={fields} editorText={editorText} errors={errors} warnings={warnings} finalPending={finalPending} />
       </main>
     </div>
   );

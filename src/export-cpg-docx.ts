@@ -5,7 +5,6 @@ import {
   Header,
   HeadingLevel,
   Packer,
-  PageBreak,
   PageNumber,
   PageOrientation,
   Paragraph,
@@ -106,7 +105,7 @@ function titleParagraph(text: string): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { before: TWELVE_PT, after: TWELVE_PT, line: BODY_LINE },
-    children: [run(cleanMojibakeText(text || "Titulo do trabalho"), { bold: true, size: TITLE_SIZE })],
+    children: [run(cleanMojibakeText(text || "Titulo do trabalho").toUpperCase(), { bold: true, size: TITLE_SIZE })],
   });
 }
 
@@ -126,7 +125,7 @@ function centered(
 
 function affiliationParagraphs(value: string): Paragraph[] {
   return splitParagraphs(value).map((line) =>
-    centered(line, false, BODY_SIZE, CPG_RULES.typography.fontFamily, { after: 0, line: BODY_LINE }),
+    centered(line, false, CAPTION_SIZE, CPG_RULES.typography.fontFamily, { after: 0, line: BODY_LINE }),
   );
 }
 
@@ -148,7 +147,7 @@ function insetLabeledParagraph(label: string, text: string, separator: "." | ":"
     (line, index) =>
       new Paragraph({
         alignment: AlignmentType.BOTH,
-        spacing: { before: SIX_PT, after: 0, line: BODY_LINE },
+        spacing: { before: SIX_PT, after: 0, line: UFLA_RULES.spacing.singleLineTwip },
         indent: { left: ABSTRACT_INDENT, right: ABSTRACT_INDENT, firstLine: 0 },
         children:
           index === 0
@@ -165,7 +164,7 @@ function sectionTitle(text: string, level: DocxHeadingLevel = HeadingLevel.HEADI
     spacing: { before: TWELVE_PT, after: 0, line: BODY_LINE },
     children: [
       run(cleanMojibakeText(level === HeadingLevel.HEADING_1 ? text.toUpperCase() : text), {
-        bold: true,
+        bold: level !== HeadingLevel.HEADING_3,
         size: level === HeadingLevel.HEADING_1 ? SECTION_SIZE : SUBSECTION_SIZE,
       }),
     ],
@@ -216,10 +215,10 @@ function tableFromBlock(block: EditorBlock): Table {
     borders: {
       top: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
       bottom: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
-      left: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
-      right: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+      left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+      right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
       insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
-      insideVertical: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+      insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
     },
     rows: rows.map((row, rowIndex) =>
       new TableRow({
@@ -342,7 +341,15 @@ function referenceParagraphs(references: string[], bodyBlocks: EditorBlock[] = [
 
   const children: Array<Paragraph | Table> = [];
   if (!hasEditorHeading(bodyBlocks, "REFERENCIAS") && !hasEditorHeading(bodyBlocks, "REFERÊNCIAS") && !hasEditorHeading(bodyBlocks, "BIBLIOGRÁFICAS") && !hasEditorHeading(bodyBlocks, "BIBLIOGRAFICAS")) {
-    children.push(sectionTitle(title));
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: TWELVE_PT, after: 0, line: BODY_LINE },
+        children: [
+          run(cleanMojibakeText(title.toUpperCase()), { bold: true, size: SECTION_SIZE }),
+        ],
+      }),
+    );
   }
 
   children.push(
@@ -370,7 +377,7 @@ function compactFirstPage(children: CpgChild[]): CpgChild[] {
 function cpgResumoChildren(input: DocxGenerationInput): CpgChild[] {
   return compactFirstPage([
     titleParagraph(input.fields.title),
-    centered(cleanMojibakeText(input.fields.author || "Autores"), true),
+    centered(cleanMojibakeText(input.fields.author || "Autores").toUpperCase(), true),
     ...affiliationParagraphs(input.fields.program),
     ...emailParagraph(input.fields.course),
     ...(hasText(input.fields.resumo)
@@ -396,45 +403,6 @@ function cpgResumoChildren(input: DocxGenerationInput): CpgChild[] {
   ]);
 }
 
-function cpgSummaryParagraphs(blocks: EditorBlock[]): Paragraph[] {
-  const entries: { text: string; level: number }[] = [];
-  const seen = new Set<string>();
-
-  for (const block of blocks) {
-    let level: number | null = null;
-    if (block.type === "heading1") level = 1;
-    else if (block.type === "heading2") level = 2;
-    else if (block.type === "heading3") level = 3;
-    if (level === null) continue;
-
-    const text = cleanMojibakeText(block.text).trim();
-    const key = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
-    if (!text || key === "SUMARIO" || seen.has(key)) continue;
-    seen.add(key);
-    entries.push({ text: level === 1 ? text.toUpperCase() : text, level });
-  }
-
-  if (!entries.length) return [];
-
-  return [
-    new Paragraph({ children: [new PageBreak()] }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: TWELVE_PT, after: TWELVE_PT, line: BODY_LINE },
-      children: [run("SUMÁRIO", { bold: true, size: SECTION_SIZE })],
-    }),
-    ...entries.map(
-      (entry) =>
-        new Paragraph({
-          alignment: AlignmentType.LEFT,
-          spacing: { before: 0, after: 0, line: SINGLE_LINE },
-          indent: { left: (entry.level - 1) * 360 },
-          children: [run(entry.text, { bold: entry.level === 1, size: BODY_SIZE })],
-        }),
-    ),
-  ];
-}
-
 function cpgFullChildren(input: DocxGenerationInput): CpgChild[] {
   const sanitizedEditorText = stripCpgForbiddenSections(input.editorText);
   const blocks = parseEditorContent(sanitizedEditorText);
@@ -444,20 +412,16 @@ function cpgFullChildren(input: DocxGenerationInput): CpgChild[] {
     ...blocks.filter((block) => block.type === "reference").map((block) => block.text),
   ];
   let firstParagraphInSection = true;
-  const isMultiPage = input.fields.workType === "resumo_expandido_cpg" || input.fields.workType === "artigo_completo_cpg";
-  const hasApendices = hasText(input.fields.apendices);
-  const hasAnexos = hasText(input.fields.anexos);
 
   return compactFirstPage([
     titleParagraph(input.fields.title),
-    centered(cleanMojibakeText(input.fields.author || "Autores"), true),
+    centered(cleanMojibakeText(input.fields.author || "Autores").toUpperCase(), true),
     ...affiliationParagraphs(input.fields.program),
     ...emailParagraph(input.fields.course),
     ...insetLabeledParagraph("Resumo", input.fields.resumo, "."),
     ...insetLabeledParagraph("Palavras-chave", input.fields.palavrasChave, ":", true),
     ...insetLabeledParagraph("Abstract", input.fields.abstractText, "."),
     ...insetLabeledParagraph("Keywords", input.fields.keywords, ":", true),
-    ...(isMultiPage ? cpgSummaryParagraphs(bodyBlocks) : []),
     ...bodyBlocks.flatMap((block) => {
       if (block.type === "heading1" || block.type === "heading2" || block.type === "heading3") {
         firstParagraphInSection = true;
@@ -469,12 +433,6 @@ function cpgFullChildren(input: DocxGenerationInput): CpgChild[] {
       return paragraphs;
     }),
     ...referenceParagraphs(references, bodyBlocks),
-    ...(hasApendices
-      ? [sectionTitle("APÊNDICES"), ...splitParagraphs(input.fields.apendices).map((line) => paragraph(line, { indent: { firstLine: 0 } }))]
-      : []),
-    ...(hasAnexos
-      ? [sectionTitle("ANEXOS"), ...splitParagraphs(input.fields.anexos).map((line) => paragraph(line, { indent: { firstLine: 0 } }))]
-      : []),
   ]);
 }
 

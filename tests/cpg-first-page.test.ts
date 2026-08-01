@@ -99,9 +99,9 @@ async function generatedCpgXml(fields: AcademicFields = cpgFields, editorText = 
 describe("CPG first page layout", () => {
   it("keeps title as first real paragraph without empty spacer or page break", async () => {
     const documentXml = await generatedCpgXml();
-    const title = paragraphXmlContaining(documentXml, "Qualidade do cafe no sul de Minas");
+    const title = paragraphXmlContaining(documentXml, "QUALIDADE DO CAFE NO SUL DE MINAS");
 
-    expect(titleOccurrences(documentXml, "Qualidade do cafe no sul de Minas")).toBe(1);
+    expect(titleOccurrences(documentXml, "QUALIDADE DO CAFE NO SUL DE MINAS")).toBe(1);
     expect(paragraphsIn(documentXml)[0]).toBe(title);
     expect(title).not.toContain('w:br w:type="page"');
     expect(spacingBefore(title)).toBeLessThanOrEqual(240);
@@ -112,7 +112,7 @@ describe("CPG first page layout", () => {
 
   it("keeps authors bold and affiliation normal on the first page", async () => {
     const documentXml = await generatedCpgXml();
-    const authors = paragraphXmlContaining(documentXml, "Maria Silva, Joao Souza");
+    const authors = paragraphXmlContaining(documentXml, "MARIA SILVA, JOAO SOUZA");
     const affiliation = paragraphXmlContaining(documentXml, "Universidade Federal de Lavras");
 
     expect(paragraphText(authors).split(",")).toHaveLength(2);
@@ -120,7 +120,7 @@ describe("CPG first page layout", () => {
     expect(authors).toContain('w:sz w:val="24"');
     expect(hasPositiveBold(authors)).toBe(true);
     expect(affiliation).toContain('w:jc w:val="center"');
-    expect(affiliation).toContain('w:sz w:val="24"');
+    expect(affiliation).toContain('w:sz w:val="22"');
     expect(hasPositiveBold(affiliation)).toBe(false);
   });
 
@@ -139,7 +139,7 @@ describe("CPG first page layout", () => {
     const text = documentText(documentXml);
 
     expect(text).not.toContain("FICHA CATALOGRÁFICA");
-    expect(text).toContain("SUMÁRIO");
+    expect(text).not.toContain("SUMÁRIO");
     expect(text).not.toContain("Trabalho apresentado");
   });
 

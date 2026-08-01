@@ -7,12 +7,16 @@ describe("interface estática", () => {
   const sidebar = readFileSync(join(process.cwd(), "src", "components", "ValidationSidebar.tsx"), "utf8");
   const importBlock = readFileSync(join(process.cwd(), "src", "components", "ImportBlock.tsx"), "utf8");
   const workTypeSelector = readFileSync(join(process.cwd(), "src", "components", "WorkTypeSelector.tsx"), "utf8");
+  const toolbar = readFileSync(join(process.cwd(), "src", "components", "EditorToolbar.tsx"), "utf8");
+  const editorSection = readFileSync(join(process.cwd(), "src", "components", "EditorSection.tsx"), "utf8");
+  const metadataFields = readFileSync(join(process.cwd(), "src", "components", "MetadataFields.tsx"), "utf8");
+  const appConstants = readFileSync(join(process.cwd(), "src", "app-constants.ts"), "utf8");
   const adherence = readFileSync(join(process.cwd(), "src", "components", "AdherencePanel.tsx"), "utf8");
   const styles = readFileSync(join(process.cwd(), "src", "styles.css"), "utf8");
   const wordToolbar = readFileSync(join(process.cwd(), "src", "word-toolbar.css"), "utf8");
   const uxFixes = readFileSync(join(process.cwd(), "src", "ux-fixes.css"), "utf8");
   const ruler = readFileSync(join(process.cwd(), "src", "components", "EditorRuler.tsx"), "utf8");
-  const combined = `${app}\n${sidebar}\n${adherence}`;
+  const combined = `${app}\n${sidebar}\n${adherence}\n${toolbar}\n${editorSection}\n${metadataFields}\n${appConstants}`;
   const uiComponents = `${importBlock}\n${workTypeSelector}`;
 
   it("mantém regiões nomeadas para revisão", () => {
@@ -55,10 +59,10 @@ describe("interface estática", () => {
   });
 
   it("orienta atualização do sumário no Word/LibreOffice", () => {
-    expect(app).toContain("Atualizar o índice inteiro");
-    expect(app).toContain("Ctrl+A e F9");
-    expect(app).toContain("Ferramentas");
-    expect(app).toContain("Atualizar tudo");
+    expect(combined).toContain("Atualizar o índice inteiro");
+    expect(combined).toContain("Ctrl+A e F9");
+    expect(combined).toContain("Ferramentas");
+    expect(combined).toContain("Atualizar tudo");
   });
 
   it("botão de geração usa linguagem de rascunho editável", () => {
@@ -72,12 +76,12 @@ describe("interface estática", () => {
   });
 
   it("ribbon tem aba Página Inicial e grupos compactos", () => {
-    expect(app).toContain("word-ribbon-tab");
-    expect(app).toContain("Página Inicial");
-    expect(app).toContain("Área de Transferência");
-    expect(app).not.toContain("Espaçamento");
-    expect(app).not.toContain('data-group="Fonte"');
-    expect(app).toContain('data-group="Parágrafo"');
+    expect(combined).toContain("word-ribbon-tab");
+    expect(combined).toContain("Página Inicial");
+    expect(combined).toContain("Área de Transferência");
+    expect(combined).not.toContain("Espaçamento");
+    expect(combined).not.toContain('data-group="Fonte"');
+    expect(combined).toContain('data-group="Parágrafo"');
   });
 
   it("nao renderiza controles de fonte/tamanho editaveis", () => {
@@ -106,16 +110,16 @@ describe("interface estática", () => {
     expect(uxFixes).not.toContain(".editor-toolbar-sticky::after");
   });
   it("botão de referência bibliográfica não usa REF isolado", () => {
-    expect(app).toContain("Marcar como referência bibliográfica");
-    expect(app).toContain("Marca o parágrafo como referência bibliográfica para a seção REFERÊNCIAS do DOCX.");
-    expect(app).toContain('glyph="Ref. ABNT"');
-    expect(app).not.toContain('glyph="REF"');
+    expect(combined).toContain("Marcar como referência bibliográfica");
+    expect(combined).toContain("Marca o parágrafo como referência bibliográfica para a seção REFERÊNCIAS do DOCX.");
+    expect(combined).toContain('glyph="Ref. ABNT"');
+    expect(combined).not.toContain('glyph="REF"');
   });
 
   it("editor contínuo tem aviso de visualização contínua fora do contenteditable", () => {
-    expect(app).toContain('className="editor-page-stack"');
-    expect(app).toContain('className="editor-page-shell"');
-    expect(app).toContain("Editor em visualização contínua");
+    expect(combined).toContain('className="editor-page-stack"');
+    expect(combined).toContain('className="editor-page-shell"');
+    expect(combined).toContain("Editor em visualização contínua");
     const editorMarkup = readFileSync(join(process.cwd(), "src", "editor-markup.ts"), "utf8");
     expect(editorMarkup).not.toContain("Editor em visualização contínua");
     expect(editorMarkup).not.toContain("editor-page-stack");

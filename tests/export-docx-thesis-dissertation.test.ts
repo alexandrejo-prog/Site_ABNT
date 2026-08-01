@@ -41,6 +41,10 @@ async function generatedXml(editorText: string, documentFields: AcademicFields):
   return extractFileFromZip(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
 }
 
+function textContent(xml: string): string {
+  return [...xml.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)].map((m) => m[1]).join("");
+}
+
 function baseFields(overrides: Partial<AcademicFields> = {}): AcademicFields {
   return {
     ...emptyAcademicFields(),
@@ -110,13 +114,13 @@ describe("tese e dissertacao - conformidade UFLA", () => {
 
   it("Keywords termina com ponto final", async () => {
     const documentXml = await generatedXml("# 1 Introducao\nTexto.", baseFields({ keywords: "UFLA; ABNT; DOCX" }));
-    expect(documentXml).toContain("Keywords: UFLA; ABNT; DOCX.");
+    expect(textContent(documentXml)).toContain("Keywords: UFLA; ABNT; DOCX.");
   });
 
   it("Keywords não duplica ponto final", async () => {
     const documentXml = await generatedXml("# 1 Introducao\nTexto.", baseFields({ keywords: "UFLA; ABNT; DOCX." }));
-    expect(documentXml).toContain("Keywords: UFLA; ABNT; DOCX.");
-    expect(documentXml).not.toContain("Keywords: UFLA; ABNT; DOCX..");
+    expect(textContent(documentXml)).toContain("Keywords: UFLA; ABNT; DOCX.");
+    expect(textContent(documentXml)).not.toContain("Keywords: UFLA; ABNT; DOCX..");
   });
 
   it("sumário de tese usa campo TOC atualizável e não lista estática pobre", async () => {

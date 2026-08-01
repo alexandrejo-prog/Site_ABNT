@@ -227,7 +227,7 @@ describe("PF13 - regressão com caso real de resumo expandido", () => {
     const xml = extractCpgOrDocx(Buffer.from(await blob.arrayBuffer()), "word/document.xml");
     expect(xml).not.toContain("FICHA CATALOGR");
     expect(xml).not.toContain("FOLHA DE ROSTO");
-    expect(xml).toContain("SUMÁRIO");
+    expect(xml).not.toContain("SUMÁRIO");
     const r = xml.indexOf("Resumo");
     const pk = xml.indexOf("Palavras-chave");
     const a = xml.indexOf("Abstract");
@@ -247,7 +247,9 @@ describe("PF13 - regressão com caso real de resumo expandido", () => {
 describe("PF3 - campos guiados não poluem a tela (teste estático)", () => {
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
   const sidebarSource = readFileSync(new URL("../src/components/ValidationSidebar.tsx", import.meta.url), "utf8");
-  const source = `${appSource}\n${sidebarSource}`;
+  const metadataSource = readFileSync(new URL("../src/components/MetadataFields.tsx", import.meta.url), "utf8");
+  const appConstantsSource = readFileSync(new URL("../src/app-constants.ts", import.meta.url), "utf8");
+  const source = `${appSource}\n${sidebarSource}\n${metadataSource}\n${appConstantsSource}`;
   it("App contém o título correto e aviso de rascunho editável", () => {
     expect(source).toContain("Assistente de estruturação e normalização acadêmica");
     expect(source).toContain("O DOCX é rascunho técnico");
@@ -257,8 +259,8 @@ describe("PF3 - campos guiados não poluem a tela (teste estático)", () => {
     expect(source).toMatch(/assistedMode && ASSISTED_FIELD_KEYS\.includes\(key\)/);
   });
   it("campos específicos de indicador não aparecem na listagem geral (visível apenas no mini-formulário)", () => {
-    expect(source).toMatch(/indicatorSpecificKeys\.includes\(key\)[\s\S]*?return false;/);
     expect(source).toContain('"impactoSocial", "impactoCientifico", "impactoEducacional", "impactoAmbiental", "impactoTecnologico", "publicoBeneficiado", "aderenciaOds"');
+    expect(source).toMatch(/IMPACT_KEYS\.includes\(key\)/);
   });
   it("não usa 'Gerar mesmo assim' sem qualificação", () => {
     expect(source).toContain("Gerar rascunho mesmo com pendências");

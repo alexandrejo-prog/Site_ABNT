@@ -9,8 +9,12 @@ import App from "../src/App";
 const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
 const sidebarSource = readFileSync(resolve(process.cwd(), "src/components/ValidationSidebar.tsx"), "utf8");
 const importBlockSource = readFileSync(resolve(process.cwd(), "src/components/ImportBlock.tsx"), "utf8");
+const toolbarSource = readFileSync(resolve(process.cwd(), "src/components/EditorToolbar.tsx"), "utf8");
+const editorSectionSource = readFileSync(resolve(process.cwd(), "src/components/EditorSection.tsx"), "utf8");
+const metadataSource = readFileSync(resolve(process.cwd(), "src/components/MetadataFields.tsx"), "utf8");
+const appConstantsSource = readFileSync(resolve(process.cwd(), "src/app-constants.ts"), "utf8");
 const stylesSource = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
-const combined = `${appSource}\n${sidebarSource}\n${importBlockSource}`;
+const combined = `${appSource}\n${sidebarSource}\n${importBlockSource}\n${toolbarSource}\n${editorSectionSource}\n${metadataSource}\n${appConstantsSource}`;
 
 describe("Acessibilidade básica da interface", () => {
   afterEach(() => {
@@ -30,8 +34,8 @@ describe("Acessibilidade básica da interface", () => {
   });
 
   it("rotula o campo de e-mail do CPG como 'E-mail dos autores'", () => {
-    expect(appSource).toContain('"E-mail dos autores"');
-    expect(appSource).toContain("courseFieldLabel");
+    expect(combined).toContain('"E-mail dos autores"');
+    expect(combined).toContain("courseFieldLabel");
   });
 
   it("possui rótulo acessível no botão de importação", () => {
@@ -48,7 +52,7 @@ describe("Acessibilidade básica da interface", () => {
   });
 
   it("botões da toolbar possuem type e title", () => {
-    const toolButtonMatches = appSource.match(/<ToolButton[^>]*>/g) ?? [];
+    const toolButtonMatches = toolbarSource.match(/<ToolButton[^>]*>/g) ?? [];
     expect(toolButtonMatches.length).toBeGreaterThanOrEqual(6);
 
     const hasTitleAttr = toolButtonMatches.every((button) =>
@@ -62,9 +66,9 @@ describe("Acessibilidade básica da interface", () => {
   });
 
   it("editor rich-text possui aria-label", () => {
-    expect(appSource).toContain('aria-label=');
-    expect(appSource).toContain('role="textbox"');
-    expect(appSource).toContain('aria-multiline="true"');
+    expect(editorSectionSource).toContain('aria-label=');
+    expect(editorSectionSource).toContain('role="textbox"');
+    expect(editorSectionSource).toContain('aria-multiline="true"');
   });
 
   it("botão de geração DOCX possui estado disabled acessível", () => {

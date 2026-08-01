@@ -16,7 +16,7 @@ import type { ImportedTable } from "./imported-tables";
 import type { ImportedDocumentImage } from "./imported-images";
 import { UFLA_RULES, cmToTwip } from "./ufla-rules";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
-import { cleanMojibakeText, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, tabbedTableBlock } from "./docx-render-core";
+import { cleanMojibakeText, longQuoteParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, tabbedTableBlock } from "./docx-render-core";
 
 const BLACK = "000000";
 const BODY_SIZE = 24;
@@ -127,18 +127,19 @@ function simpleParagraph(text: string): Paragraph {
 }
 
 function sectionTitle(text: string, level: DocxHeadingLevel = HeadingLevel.HEADING_1): Paragraph {
+  const displayText = level === HeadingLevel.HEADING_1 ? text.toUpperCase() : text;
   return new Paragraph({
     heading: level,
     alignment: AlignmentType.LEFT,
     spacing: { before: 240, after: 120, line: ONE_AND_HALF_LINE },
-    children: [run(text, { bold: level !== HeadingLevel.HEADING_3 })],
+    children: [run(displayText, { bold: level !== HeadingLevel.HEADING_3 })],
   });
 }
 
 function labeledSection(label: string, value: string): Paragraph[] {
   if (!hasText(value)) return [];
   return [
-    sectionTitle(label),
+    centered(label.toUpperCase(), true),
     ...splitParagraphs(value).map((line) =>
       paragraph(line, {
         spacing: { line: SINGLE_LINE, after: 120 },
@@ -153,14 +154,7 @@ function blockToParagraph(block: EditorBlock, importedImages: ImportedDocumentIm
   if (block.type === "heading2") return [sectionTitle(block.text, HeadingLevel.HEADING_2)];
   if (block.type === "heading3") return [sectionTitle(block.text, HeadingLevel.HEADING_3)];
   if (block.type === "longQuote") {
-    return [
-      new Paragraph({
-        alignment: AlignmentType.BOTH,
-        spacing: { line: SINGLE_LINE, after: 120 },
-        indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
-        children: coreTextRunsFromMarkup(block.text, UFLA_RULES.typography.longQuoteFontSizePt * 2),
-      }),
-    ];
+    return [longQuoteParagraph(block.text)];
   }
   if (block.type === "scheduleTable") return splitParagraphs(block.text).map((line) => paragraph(line));
   if (block.type === "tabbedTable") return tabbedTableBlock(block.text);
@@ -177,14 +171,14 @@ function blockToParagraph(block: EditorBlock, importedImages: ImportedDocumentIm
   if (block.type === "source") {
     return [sourceParagraph(block.text)];
   }
-  if (block.type === "reference") return [];
+  if (block.type === "reference" || normalizeComparable(block.text) === "REFERENCIAS") return [];
   return [paragraph(block.text)];
 }
 
 function stripTrailingReferenceSection(blocks: EditorBlock[]): EditorBlock[] {
   const refIndex = blocks.findIndex((block) => {
     const normalized = normalizeComparable(block.text);
-    return normalized === "REFERENCIAS";
+    return normalized === "REFERENCIAS" || normalized.startsWith("REFERENCIAS");
   });
   return refIndex === -1 ? blocks : blocks.slice(0, refIndex);
 }
@@ -196,15 +190,18 @@ function referenceRunToTextRun(referenceRun: ReferenceRun): TextRun {
   });
 }
 
+let _articleReferencesAdded = false;
+
 function referenceParagraphs(references: string[]): (Paragraph | Table)[] {
-  if (!references.length) return [];
+  if (!references.length || _articleReferencesAdded) return [];
+  _articleReferencesAdded = true;
 
   const children: Array<Paragraph | Table> = [];
   children.push(
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { before: 240, after: 120, line: ONE_AND_HALF_LINE },
-      children: [run("REFERÊNCIAS", { bold: true })],
+      children: [run("REFERÊNCIAS".toUpperCase(), { bold: true })],
     }),
   );
 
@@ -236,6 +233,7 @@ function referenceParagraphs(references: string[]): (Paragraph | Table)[] {
 }
 
 function createArticleDocument(input: DocxGenerationInput): Document {
+  _articleReferencesAdded = false;
   const blocks = parseEditorContent(input.editorText);
   const bodyBlocks = stripTrailingReferenceSection(
     stripLeadingArticleMetadataBlocks(blocks, input),
@@ -263,6 +261,7 @@ function createArticleDocument(input: DocxGenerationInput): Document {
     creator: "UFLA DOCX Academico",
     title: input.fields.title || "Artigo academico",
     description: "Artigo academico simples sem estrutura pre-textual de monografia.",
+    features: { updateFields: true },
     sections: [
       {
         properties: {
@@ -286,19 +285,19 @@ function createArticleDocument(input: DocxGenerationInput): Document {
           default: pageNumberHeader,
         },
         children: [
-          centered(input.fields.title || "Titulo do artigo", true, 32),
+          centered((input.fields.title || "Titulo do artigo").toUpperCase(), true, 32),
           ...(hasText(input.fields.subtitle) ? [centered(input.fields.subtitle, false, 28)] : []),
-          centered(input.fields.author || "Autor", true),
+          centered((input.fields.author || "Autor").toUpperCase(), false, 28),
           ...labeledSection("Resumo", input.fields.resumo),
           ...(hasText(input.fields.palavrasChave)
             ? [
                 new Paragraph({
                   alignment: AlignmentType.BOTH,
-                  spacing: { line: ONE_AND_HALF_LINE, after: 0 },
+                  spacing: { line: SINGLE_LINE, after: 0 },
                   indent: { firstLine: 0 },
                   children: [
                     run("Palavras-chave: ", { bold: true }),
-                    run(normalizeSemicolonKeywords(input.fields.palavrasChave)),
+                    run(normalizeSemicolonKeywords(input.fields.palavrasChave) + "."),
                   ],
                 }),
               ]
@@ -308,11 +307,11 @@ function createArticleDocument(input: DocxGenerationInput): Document {
             ? [
                 new Paragraph({
                   alignment: AlignmentType.BOTH,
-                  spacing: { line: ONE_AND_HALF_LINE, after: 0 },
+                  spacing: { line: SINGLE_LINE, after: 0 },
                   indent: { firstLine: 0 },
                   children: [
                     run("Keywords: ", { bold: true }),
-                    run(normalizeSemicolonKeywords(input.fields.keywords)),
+                    run(normalizeSemicolonKeywords(input.fields.keywords) + "."),
                   ],
                 }),
               ]

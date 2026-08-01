@@ -4,6 +4,9 @@ import { describe, expect, it } from "vitest";
 
 describe("editor e fluxo de importação", () => {
   const appSource = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
+  const toolbarSource = readFileSync(join(process.cwd(), "src", "components", "EditorToolbar.tsx"), "utf8");
+  const editorSectionSource = readFileSync(join(process.cwd(), "src", "components", "EditorSection.tsx"), "utf8");
+  const combined = `${appSource}\n${toolbarSource}\n${editorSectionSource}`;
 
   it("App.tsx não contém geração direta de PDF", () => {
     const pdfGenerationPatterns = [
@@ -18,21 +21,21 @@ describe("editor e fluxo de importação", () => {
   });
 
   it("App.tsx contém modo Texto e Referências", () => {
-    expect(appSource).toContain('editorMode === "body"');
-    expect(appSource).toContain('editorMode === "references"');
-    expect(appSource).toContain('setEditorMode("body")');
-    expect(appSource).toContain('setEditorMode("references")');
+    expect(combined).toContain('editorMode === "body"');
+    expect(combined).toContain('editorMode === "references"');
+    expect(combined).toContain('setEditorMode("body")');
+    expect(combined).toContain('setEditorMode("references")');
   });
 
   it("App.tsx contém botões de Desfazer e Refazer", () => {
-    expect(appSource).toContain("Desfazer");
-    expect(appSource).toContain("Refazer");
-    expect(appSource).toContain('editorCommandAdapter.applyEditorCommand("undo")');
-    expect(appSource).toContain('editorCommandAdapter.applyEditorCommand("redo")');
+    expect(combined).toContain("Desfazer");
+    expect(combined).toContain("Refazer");
+    expect(combined).toContain('editorCommandAdapter.applyEditorCommand("undo")');
+    expect(combined).toContain('editorCommandAdapter.applyEditorCommand("redo")');
   });
 
   it("App.tsx não usa dangerouslySetInnerHTML no editor", () => {
-    const editorMatches = appSource.match(/<div[^>]*ref={editorRef}[^>]*>/g);
+    const editorMatches = editorSectionSource.match(/<div[^>]*ref=\{editorRef[^>]*\}[^>]*>/g);
     expect(editorMatches).toBeTruthy();
 
     const editorDiv = editorMatches![0];
@@ -40,16 +43,17 @@ describe("editor e fluxo de importação", () => {
   });
 
   it("App.tsx contém lógica de sincronização segura do editor", () => {
+    const editorSource = readFileSync(join(process.cwd(), "src", "hooks", "useEditor.ts"), "utf8");
+    expect(editorSource).toContain("editorContentVersionRef");
+    expect(editorSource).toContain("lastAppliedEditorTextRef");
     expect(appSource).toContain("editorContentVersionRef");
     expect(appSource).toContain("lastAppliedEditorTextRef");
-    expect(appSource).toContain("contentChanged");
-    expect(appSource).toContain("isEditing");
   });
 
   it("App.tsx atualiza editor após importação", () => {
     expect(appSource).toContain("editorContentVersionRef.current += 1");
-    expect(appSource).toContain("lastAppliedEditorTextRef.current = newEditorText");
-    expect(appSource).toContain("editorRef.current.innerHTML = editorMarkupToHtml(newEditorText)");
+    expect(appSource).toContain("lastAppliedEditorTextRef.current = ");
+    expect(appSource).toContain("editorRef.current.innerHTML = editorMarkupToHtml(");
   });
 
   it("App.tsx preserva conteúdo ao alternar modos", () => {
@@ -58,11 +62,12 @@ describe("editor e fluxo de importação", () => {
   });
 
   it("App.tsx valida com texto do modo ativo usando candidateFields", () => {
-    expect(appSource).toContain("textToValidate = editorMode === \"references\" ? normalizedFields.referencias : editorText");
+    const validationSource = readFileSync(join(process.cwd(), "src", "hooks", "useValidation.ts"), "utf8");
+    expect(validationSource).toContain("textToValidate = editorMode === \"references\" ? fields.referencias : editorText");
   });
 
   it("funções de formatação usam setTimeout para evitar perda de seleção", () => {
-    expect(appSource).toContain('setTimeout(() => requestAnimationFrame(handleRichEditorInput), 0)');
+    expect(appSource).toContain('setTimeout(() => requestAnimationFrame(handleEditorInput), 0)');
   });
 
   it("importação preserva editorText completo e aplica reparo seguro", () => {

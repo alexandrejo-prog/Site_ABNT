@@ -4,11 +4,12 @@ import { describe, expect, it } from "vitest";
 
 describe("Tiptap UX cleanliness", () => {
   const appSource = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
+  const toolbarSource = readFileSync(join(process.cwd(), "src", "components", "EditorToolbar.tsx"), "utf8");
   const cssSource = readFileSync(join(process.cwd(), "src", "styles.css"), "utf8");
   const tiptapCssSource = readFileSync(join(process.cwd(), "src", "components", "AcademicTiptapEditor.css"), "utf8");
 
   it("contem aviso resumido do Tiptap", () => {
-    expect(appSource).toContain("Modo Tiptap experimental. Use para testar a nova edição.");
+    expect(toolbarSource).toContain("Modo Tiptap experimental. Use para testar a nova edição.");
   });
 
   it("nao contem multiplos banners redundantes no fluxo Tiptap", () => {

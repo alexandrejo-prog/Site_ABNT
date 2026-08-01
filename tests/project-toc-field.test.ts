@@ -16,6 +16,10 @@ function tocInstruction(xml: string): string {
     .join(" ");
 }
 
+function textContent(xml: string): string {
+  return [...xml.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)].map((m) => m[1]).join("");
+}
+
 describe("campo de sumario em projeto", () => {
   it("gera sumario atualizavel sem pagina estimada, sem duplicacao e sem ficha catalografica", async () => {
     const fields = {
@@ -129,8 +133,8 @@ describe("campo de sumario em projeto", () => {
       }),
     );
 
-    expect(xml).toContain("Palavras-chave: PGD. saúde do trabalhador. educação ambiental crítica.");
-    expect(xml).toContain("Keywords: worker health. critical environmental education.");
+    expect(textContent(xml)).toContain("Palavras-chave: PGD; saúde do trabalhador; educação ambiental crítica.");
+    expect(textContent(xml)).toContain("Keywords: worker health; critical environmental education.");
   });
 
   it("renderiza linhas tabuladas do projeto como quadro/tabela DOCX", async () => {
@@ -214,7 +218,7 @@ describe("campo de sumario em projeto", () => {
 
     expect(xml).toContain("INTRODUÇÃO");
     expect(xml).toContain("REFERENCIAL TEÓRICO");
-    expect(xml).toContain("Palavras-chave: PGD. saúde do trabalhador. educação ambiental crítica.");
+    expect(textContent(xml)).toContain("Palavras-chave: PGD; saúde do trabalhador; educação ambiental crítica.");
     expect(xml).not.toContain("TITLE 1");
     expect(xml).not.toContain("Toc234433198");
     expect(xml).not.toContain("REFERENCIAL TERICO");

@@ -3,7 +3,10 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("Tiptap visible toggle", () => {
-  const source = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
+  const appSource = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
+  const editorSectionSource = readFileSync(join(process.cwd(), "src", "components", "EditorSection.tsx"), "utf8");
+  const toolbarSource = readFileSync(join(process.cwd(), "src", "components", "EditorToolbar.tsx"), "utf8");
+  const source = `${appSource}\n${editorSectionSource}\n${toolbarSource}`;
 
   it("nao exibe seletor de editor na interface", () => {
     expect(source).not.toContain("Legado estável");

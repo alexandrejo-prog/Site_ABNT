@@ -37,7 +37,7 @@ describe("exportacao de artigo simples", () => {
     );
 
     expect(countOccurrences(xml, "A constelação do Homem Velho")).toBe(2);
-    expect(countOccurrences(xml, "Alexandre")).toBe(1);
+    expect(countOccurrences(xml, "Alexandre")).toBe(0);
     expect(xml).toContain("A constelação do Homem Velho dos guaranis");
   });
 

@@ -7,363 +7,80 @@ description: Desenvolvimento do Site_ABNT - editor e normalizador acadêmico con
 
 ## Objetivo
 
-Você trabalha exclusivamente no projeto **Site_ABNT**.
+Você trabalha no projeto **Site_ABNT**, um sistema que permite a importação, edição, normalização e exportação de trabalhos acadêmicos (Teses, Dissertações, TCCs, Artigos, Resumos e Projetos de Pesquisa) em estrita conformidade com:
 
-O objetivo do sistema é permitir que documentos acadêmicos sejam importados, editados, normalizados e exportados conforme:
+- **Manual de Normalização e Estrutura de Trabalhos Acadêmicos da UFLA (6ª edição, 2025)**
+- **Normas ABNT vigentes** (quando o manual da UFLA for omisso ou delegar regras)
 
-- ABNT (NBR vigentes)
-- Manual de Normalização da UFLA
-
-O projeto prioriza:
-
-- estabilidade;
-- previsibilidade;
-- compatibilidade com Microsoft Word;
-- código limpo;
-- testes automatizados.
-
-Nunca implemente funcionalidades fora desse objetivo sem solicitação explícita.
+O projeto prioriza a estabilidade do código, a compatibilidade de abertura sem erros/reparações com o Microsoft Word, simplicidade de arquitetura e cobertura de testes automatizados.
 
 ---
 
-# Escopo
+## Prioridade e Coerência Normativa
 
-O Site_ABNT **não é um conversor de PDF**.
+Ao atualizar ou corrigir os exportadores DOCX, siga a seguinte precedência de regras:
+1. **Manual da UFLA 6ª edição** (e os guias específicos presentes no diretório [Regras](file:///C:/Users/User/Desktop/Alexandre/Site_Normas_UFLA/Site_ABNT/Regras)).
+2. **Template oficial do Word fornecido pela UFLA** ([TEMPLATE_Manual - Formato padrao.docx](file:///C:/Users/User/Desktop/Alexandre/Site_Normas_UFLA/Site_ABNT/TEMPLATE_Manual%20-%20Formato%20padrao.docx)).
+3. **Normas ABNT vigentes** (especialmente NBR 14724:2024 para Trabalhos Acadêmicos, NBR 6023:2020 para Referências, NBR 10520:2023 para Citações, NBR 15287:2025 para Projetos de Pesquisa).
 
-Entradas aceitas:
-
-- DOCX
-- Markdown (.md)
-- Texto (.txt)
-
-Entradas rejeitadas:
-
-- PDF
-- ODT
-- RTF
-- HTML
-
-Não restaurar suporte à importação de PDF.
-
-Caso exista código legado relacionado a PDF, considerar apenas durante manutenção até sua remoção definitiva.
+Se uma regra não constar no manual da UFLA, **aplique a norma ABNT mais recente**. Nunca improvise regras visuais sem amparo normativo.
 
 ---
 
-# Objetivo funcional
+## Escopo Técnico e Operacional
 
-O fluxo do sistema é:
+O Site_ABNT **não é um conversor de PDF**. 
+- **Formatos de Entrada Aceitos:** DOCX, Markdown (.md) e Texto (.txt).
+- **Formatos de Entrada Rejeitados:** PDF, ODT, RTF e HTML.
+- **Saída Única:** DOCX nativo gerado com a biblioteca `docx` do npm.
 
-DOCX / MD / TXT
-
-↓
-
-Importação
-
-↓
-
-Modelo interno
-
-↓
-
-Normalização acadêmica
-
-↓
-
-Exportação DOCX
-
-↓
-
-Validação automática no Microsoft Word
+### Princípios de Preservação Estrutural
+Toda exportação de DOCX deve preservar:
+- Estilo e hierarquia das seções (`Heading1`, `Heading2`, `Heading3`, etc.).
+- Imagens com legendas no topo e fontes na parte inferior.
+- Tabelas abertas (padrão IBGE) e quadros fechados.
+- Referências ordenadas alfabeticamente, alinhadas à esquerda e com recuo deslocante (*hanging indent*).
+- Notas de rodapé e citações longas recuadas a 4 cm com espaçamento simples e fonte 11pt.
+- Sumário dinâmico utilizando o campo de código de campo `TOC` do Word.
+- Numeração de páginas no canto superior direito usando o campo `PAGE` do Word, visível apenas a partir da Introdução, embora contada desde a folha de rosto.
 
 ---
 
-# Princípios
+## Arquitetura do Projeto
 
-Sempre preservar:
-
-- estrutura OOXML;
-- compatibilidade com Microsoft Word;
-- estilos;
-- imagens;
-- legendas;
-- tabelas;
-- quadros;
-- referências;
-- notas de rodapé;
-- sumário;
-- bookmarks;
-- campos PAGEREF;
-- TOC quando existente.
-
-Nunca gerar DOCX que exija reparação no Word.
+- **Localização dos Exportadores (no diretório `src/`):**
+  - [export-docx.ts](file:///C:/Users/User/Desktop/Alexandre/Site_Normas_UFLA/Site_ABNT/src/export-docx.ts): Dissertação, Tese, TCC/Monografia.
+  - [export-article-docx.ts](file:///C:/Users/User/Desktop/Alexandre/Site_Normas_UFLA/Site_ABNT/src/export-article-docx.ts): Artigo científico.
+  - [export-cpg-docx.ts](file:///C:/Users/User/Desktop/Alexandre/Site_Normas_UFLA/Site_ABNT/src/export-cpg-docx.ts): Resumo expandido CPG.
+  - [export-research-project-docx.ts](file:///C:/Users/User/Desktop/Alexandre/Site_Normas_UFLA/Site_ABNT/src/export-research-project-docx.ts): Projeto de pesquisa (NBR 15287).
+  - [docx-render-core.ts](file:///C:/Users/User/Desktop/Alexandre/Site_Normas_UFLA/Site_ABNT/src/docx-render-core.ts): Núcleo compartilhado de renderização do DOCX.
+  - [docx-shared.ts](file:///C:/Users/User/Desktop/Alexandre/Site_Normas_UFLA/Site_ABNT/src/docx-shared.ts): Funções de bloco compartilhadas.
+  - [ufla-rules.ts](file:///C:/Users/User/Desktop/Alexandre/Site_Normas_UFLA/Site_ABNT/src/ufla-rules.ts): Constantes e dimensões tipográficas da UFLA.
+- **Validador de Conformidade (`skills/ufla-docx-compliance`):**
+  - Uma ferramenta integrada de auditoria do DOCX contra o [CHECKLIST_SITE_UFLA_MANUAL.md](file:///C:/Users/User/Desktop/Alexandre/Site_Normas_UFLA/Site_ABNT/CHECKLIST_SITE_UFLA_MANUAL.md).
+  - Execute-a para validar as alterações nos exportadores.
 
 ---
 
-# Fluxo de desenvolvimento
+## Fluxo de Desenvolvimento e Validação
 
-Sempre trabalhar em branch própria.
-
-Fluxo padrão:
-
-git switch main
-
-git pull --ff-only
-
-git switch -c feat/nome-da-tarefa
-
-Nunca alterar diretamente a branch main.
-
-Nunca utilizar worktrees, salvo solicitação explícita.
-
----
-
-# Implementação
-
-Antes de alterar código:
-
-1. localizar os arquivos envolvidos;
-
-2. localizar testes existentes;
-
-3. entender dependências;
-
-4. implementar somente o necessário;
-
-5. evitar alterações colaterais.
-
-Nunca fazer refatorações grandes sem solicitação.
+1. **Ramificação (Branch):** Nunca altere a branch `main` diretamente. Crie sempre uma branch funcional (`feat/` ou `fix/`).
+2. **Desenvolvimento:** Implemente somente o necessário para a regra acadêmica, evitando refatorações que afetem arquivos não relacionados.
+3. **Validação e Build:** Antes de fazer commit, execute localmente:
+   ```bash
+   npm run verify
+   ```
+   Isso executa os testes do Vitest e valida o build de tipos TypeScript.
+4. **Verificação de Compliance:** Valide o arquivo DOCX gerado de teste rodando a ferramenta de conformidade:
+   ```bash
+   npm run skill:validate -- <caminho-do-docx>
+   ```
+5. **Garantia Microsoft Word:** Todo DOCX produzido deve ser aberto perfeitamente pelo Microsoft Word sem exibir caixas de mensagem exigindo reparação (como `OpenAndRepair = true`). Se o Word precisar reparar o arquivo, a alteração estrutural no código é considerada inválida.
 
 ---
 
-# Arquitetura
-
-Priorizar:
-
-- funções pequenas;
-- baixo acoplamento;
-- alta coesão;
-- código puro sempre que possível;
-- reutilização;
-- tipagem consistente;
-- testes próximos da implementação.
-
-Evitar:
-
-- duplicação;
-- efeitos colaterais;
-- dependências desnecessárias;
-- código morto.
-
----
-
-# Dependências
-
-Não instalar novas bibliotecas sem necessidade clara.
-
-Sempre preferir utilizar dependências já existentes.
-
-Evitar alterações desnecessárias em:
-
-package-lock.json
-
----
-
-# Microsoft Word
-
-Todo DOCX produzido deve ser compatível com Microsoft Word.
-
-O pipeline oficial utiliza:
-
-ReadOnly = true
-
-OpenAndRepair = false
-
-Fields.Update()
-
-ExportAsFixedFormat()
-
-Caso o Word somente consiga abrir usando OpenAndRepair=true:
-
-o documento deve ser considerado reprovado.
-
----
-
-# Pipeline de aceitação
-
-O pipeline possui duas etapas.
-
-## Etapa estrutural
-
-Valida:
-
-- estrutura OOXML;
-- relacionamentos;
-- imagens;
-- bookmarks;
-- PAGEREF;
-- TOC;
-- mídia;
-- integridade.
-
-## Etapa Word
-
-Valida:
-
-- abertura sem reparação;
-- atualização dos campos;
-- atualização do sumário;
-- exportação PDF;
-- número de páginas;
-- fechamento correto do Word.
-
----
-
-# Playwright
-
-Playwright é utilizado para testes E2E.
-
-Os testes devem validar:
-
-- carregamento da aplicação;
-- importação DOCX;
-- importação TXT;
-- importação Markdown;
-- edição;
-- exportação;
-- integração futura com o pipeline Word.
-
-Não implementar regressão visual sem solicitação.
-
-Não instalar bibliotecas de comparação visual sem necessidade.
-
----
-
-# Testes
-
-Antes de qualquer commit executar:
-
-npm test
-
-npm run build
-
-Executar testes E2E apenas quando houver alteração relacionada.
-
-Não ignorar falhas.
-
-Corrigir apenas a causa real.
-
----
-
-# CI
-
-GitHub Actions é o principal validador.
-
-Vercel é o principal validador de deploy.
-
-Não realizar auditorias completas após cada alteração.
-
-Executar investigação apenas quando ocorrer:
-
-- falha do CI;
-- falha do deploy;
-- regressão observada.
-
----
-
-# Commits
-
-Utilizar mensagens curtas.
-
-Exemplos:
-
-feat:
-
-fix:
-
-refactor:
-
-docs:
-
-test:
-
-chore:
-
-Cada commit deve representar uma alteração lógica única.
-
----
-
-# Pull Requests
-
-Após o push:
-
-abrir Pull Request.
-
-Aguardar:
-
-- GitHub Actions;
-- Vercel.
-
-Não realizar merge antes das verificações estarem aprovadas.
-
----
-
-# Relatório final
-
-Ao concluir uma tarefa informar:
-
-- arquivos alterados;
-- testes executados;
-- resultado do npm test;
-- resultado do npm run build;
-- resultado dos testes E2E (quando aplicável);
-- git status;
-- SHA do commit;
-- resultado do push.
-
-Não incluir auditorias extensas quando não forem necessárias.
-
----
-
-# Nunca fazer
-
-Nunca:
-
-- alterar main diretamente;
-- usar force push;
-- fazer merge automático;
-- restaurar suporte a PDF;
-- remover testes existentes sem motivo;
-- ignorar falhas do build;
-- aprovar DOCX reparados pelo Word;
-- instalar dependências sem justificativa;
-- modificar código não relacionado à tarefa.
-
----
-
-# Prioridades
-
-Sempre priorizar, nesta ordem:
-
-1. Correção funcional.
-
-2. Compatibilidade com Microsoft Word.
-
-3. Conformidade ABNT/UFLA.
-
-4. Testes automatizados.
-
-5. Simplicidade da implementação.
-
-6. Desempenho.
-
-7. Refatoração.
-
----
-
-# Filosofia do projeto
-
-O Site_ABNT deve ser um editor e normalizador acadêmico confiável.
-
-A prioridade é produzir documentos corretos e compatíveis com o Microsoft Word, preservando a estrutura acadêmica e facilitando a normalização conforme ABNT e Manual da UFLA.
-
-Toda implementação deve privilegiar estabilidade, previsibilidade e facilidade de manutenção.
+## Filosofia de Trabalho da IA
+
+1. **Consultar Sempre:** Sempre leia o [context.md](file:///C:/Users/User/Desktop/Alexandre/Site_Normas_UFLA/Site_ABNT/context.md) e a skill [ufla-docx-rules](file:///C:/Users/User/Desktop/Alexandre/Site_Normas_UFLA/Site_ABNT/.agents/skills/ufla-docx-rules/SKILL.md) antes de propor mudanças de layout, tipografia ou espaçamentos.
+2. **Idioma:** Todas as conversas, planos e explicações devem ser feitos em Português (Brasil).
+3. **Preservar Testes:** Nunca remova testes existentes sem uma justificativa explícita e aprovação do usuário. Se as regras mudaram, adapte os testes correspondentes.

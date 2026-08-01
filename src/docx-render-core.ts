@@ -243,6 +243,15 @@ export function sourceParagraph(text: string): Paragraph {
   });
 }
 
+export function longQuoteParagraph(text: string): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.BOTH,
+    spacing: { line: UFLA_RULES.spacing.singleLineTwip, after: 120 },
+    indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
+    children: textRunsFromMarkup(text, UFLA_RULES.typography.longQuoteFontSizePt * 2),
+  });
+}
+
 export interface TabbedTableBlockParts {
   caption: string;
   rows: string[][];

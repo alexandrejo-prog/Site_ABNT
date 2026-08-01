@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 describe("editor body first-line indent", () => {
   const styles = readFileSync(join(process.cwd(), "src", "styles.css"), "utf8");
   const tiptapStyles = readFileSync(join(process.cwd(), "src", "components", "AcademicTiptapEditor.css"), "utf8");
-  const app = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
+  const editorSection = readFileSync(join(process.cwd(), "src", "components", "EditorSection.tsx"), "utf8");
   const tiptapComponent = readFileSync(join(process.cwd(), "src", "components", "AcademicTiptapEditor.tsx"), "utf8");
   const ruler = readFileSync(join(process.cwd(), "src", "components", "EditorRuler.tsx"), "utf8");
 
@@ -64,11 +64,11 @@ describe("editor body first-line indent", () => {
   });
 
   it("legacy repassa modo de editor via data-editor-mode", () => {
-    expect(app).toContain('data-editor-mode={editorMode}');
+    expect(editorSection).toContain('data-editor-mode={editorMode}');
   });
 
   it("Tiptap recebe prop editorMode", () => {
-    expect(app).toContain("editorMode={editorMode}");
+    expect(editorSection).toContain("editorMode={editorMode}");
     expect(tiptapComponent).toContain("editorMode?: \"body\" | \"references\"");
     expect(tiptapComponent).toContain('"data-editor-mode": editorMode');
   });
