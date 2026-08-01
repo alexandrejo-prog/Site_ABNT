@@ -5,6 +5,7 @@ import {
 } from "./docx-render-core";
 import { escapeHtml, inlineMarkupToHtml } from "./editor-markup";
 import {
+  extractReferencesSection,
   parseEditorContent,
   type DocxGenerationInput,
   type EditorBlock,
@@ -184,14 +185,24 @@ function tableHtmlFromText(text: string): string {
   return `${captionHtmlPart}<table class="preview-table"><tbody>${rowsHtml}</tbody></table>${sourceHtmlPart}`;
 }
 
+function uint8ArrayToBase64(data: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < data.length; index += chunkSize) {
+    binary += String.fromCharCode(...data.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
+}
+
 function importedImageHtml(image: ImportedDocumentImage | undefined): string {
   if (!image) return simpleParagraph("[Imagem importada: dados originais indisponíveis — reinsira manualmente]");
   const caption = image.caption ? captionHtml(image.caption) : "";
   const source = image.source ? sourceHtml(image.source) : "";
+  const base64 = image.base64 || (image.data?.byteLength ? uint8ArrayToBase64(image.data) : "");
   let imageHtml: string;
-  if (image.base64) {
+  if (base64) {
     const mime = image.mimeType || "image/png";
-    imageHtml = `<img class="preview-image" src="data:${mime};base64,${image.base64}" alt="${escapeHtml(image.caption || image.fileName || image.id)}" />`;
+    imageHtml = `<img class="preview-image" src="data:${mime};base64,${base64}" alt="${escapeHtml(image.caption || image.fileName || image.id)}" />`;
   } else {
     imageHtml = simpleParagraph(`[IMAGEM DETECTADA] ${image.caption ? image.caption + ". " : ""}Reinsira manualmente esta imagem no documento final.`);
   }
@@ -491,11 +502,17 @@ function generalPreview(input: DocxGenerationInput): string {
   const { fields } = input;
   const requirements = getWorkTypeRequirements(fields.workType);
   const parsedBlocks = parseEditorContent(input.editorText);
-  const bodyBlocks = parsedBlocks.filter((block) => block.type !== "reference");
+  const bodyBlocksAll = parsedBlocks.filter((block) => block.type !== "reference");
   const editorReferences = parsedBlocks
     .filter((block) => block.type === "reference")
     .map((block) => block.text);
-  const references = [...splitParagraphs(fields.referencias), ...editorReferences];
+  const extractedReferencesSection = extractReferencesSection(bodyBlocksAll);
+  const bodyBlocks = extractedReferencesSection.bodyBlocks;
+  const references = [
+    ...splitParagraphs(fields.referencias),
+    ...editorReferences,
+    ...extractedReferencesSection.references,
+  ];
   const hasSummary =
     bodyBlocks.some(
       (block) =>

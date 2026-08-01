@@ -151,6 +151,7 @@
   margin: 0;
   line-height: 1;
   font-size: 12pt;
+  white-space: pre-wrap;
 }
 
 .preview-indent-none {

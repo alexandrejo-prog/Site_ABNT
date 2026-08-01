@@ -1398,6 +1398,48 @@ function normalizedHeadingBase(text: string): string {
   return normalizeForDetection(text).replace(/^\d+(?:\.\d+)*\s*/, "");
 }
 
+function isReferencesSectionHeading(block: EditorBlock): boolean {
+  if (block.type !== "heading1" && block.type !== "heading2") return false;
+  const base = normalizedHeadingBase(block.text);
+  return base === "REFERENCIAS" || base === "REFERENCIAS BIBLIOGRAFICAS" || base === "BIBLIOGRAFICAS";
+}
+
+// Extrai a seção REFERÊNCIAS/BIBLIOGRÁFICAS que o usuário digitou no editor
+// (heading + parágrafos de referência), removendo-a do corpo e devolvendo os
+// textos como referências para a seção dedicada. Evita duplicação quando o
+// mesmo conteúdo também existe no campo `referencias`.
+export function extractReferencesSection(bodyBlocks: EditorBlock[]): {
+  bodyBlocks: EditorBlock[];
+  references: string[];
+} {
+  const filtered: EditorBlock[] = [];
+  const references: string[] = [];
+  let inReferences = false;
+
+  for (const block of bodyBlocks) {
+    if (!inReferences) {
+      if (isReferencesSectionHeading(block)) {
+        inReferences = true;
+        continue;
+      }
+      filtered.push(block);
+      continue;
+    }
+    if (block.type === "heading1" || block.type === "heading2" || block.type === "heading3") {
+      inReferences = false;
+      filtered.push(block);
+      continue;
+    }
+    if (block.type === "paragraph" || block.type === "reference" || block.type === "source") {
+      if (block.text.trim()) references.push(block.text);
+      continue;
+    }
+    filtered.push(block);
+  }
+
+  return { bodyBlocks: filtered, references };
+}
+
 function isConclusionEquivalentHeading(text: string): boolean {
   return ["CONCLUSAO", "CONSIDERACOES FINAIS"].includes(normalizedHeadingBase(text));
 }
@@ -2249,22 +2291,28 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   const editorReferences = parsedBlocks
     .filter((block) => block.type === "reference")
     .map((block) => block.text);
-  const references = [...splitParagraphs(fields.referencias), ...editorReferences];
+  const extractedReferencesSection = extractReferencesSection(bodyBlocks);
+  const bodyBlocksWithoutReferences = extractedReferencesSection.bodyBlocks;
+  const references = [
+    ...splitParagraphs(fields.referencias),
+    ...editorReferences,
+    ...extractedReferencesSection.references,
+  ];
   const hasSummary =
-    bodyBlocks.some(
+    bodyBlocksWithoutReferences.some(
       (block) =>
         block.type === "heading1" || block.type === "heading2" || block.type === "heading3",
     ) ||
     references.length > 0 ||
     Boolean(fields.apendices || fields.anexos);
   const textualStartPage = calculateTextualStartPage(fields, hasSummary);
-  const summaryChildren = buildSummary(bodyBlocks, references, fields, textualStartPage);
+  const summaryChildren = buildSummary(bodyBlocksWithoutReferences, references, fields, textualStartPage);
 
   const preTextualChildrenList: Array<Paragraph | TableOfContents> = [
     ...coverChildren(fields, input.logo),
     pageBreak(),
     ...titlePageChildren(fields),
-    ...preTextualChildren(fields, bodyBlocks, input.importedImages ?? [], input.importedTables ?? []),
+    ...preTextualChildren(fields, bodyBlocksWithoutReferences, input.importedImages ?? [], input.importedTables ?? []),
     ...summaryChildren,
   ];
 
@@ -2272,9 +2320,9 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   const hasAnexos = Boolean(fields.anexos?.trim());
 
   const textualAndPostTextualChildren: Array<Paragraph | Table> = [
-    ...bodyBlocks.flatMap((block, index) => blockToParagraph(block, index === 0, input.importedImages ?? [], input.importedTables ?? [])),
+    ...bodyBlocksWithoutReferences.flatMap((block, index) => blockToParagraph(block, index === 0, input.importedImages ?? [], input.importedTables ?? [])),
     pageBreak(),
-    ...(hasEditorHeading(bodyBlocks, "REFERÊNCIAS") || bodyBlocks.some((b) => normalizeForDetection(b.text).includes(normalizeForDetection("REFERENCIAS"))) ? [] : [sectionTitle("Referências")]),
+    ...(hasEditorHeading(bodyBlocksWithoutReferences, "REFERÊNCIAS") || bodyBlocksWithoutReferences.some((b) => normalizeForDetection(b.text).includes(normalizeForDetection("REFERENCIAS"))) ? [] : [sectionTitle("Referências")]),
     ...buildReferences(references),
     ...(hasApendices
       ? [pageBreak(), sectionTitle(appendixTitle(fields)), ...buildSimpleParagraphs(fields.apendices)]

@@ -209,3 +209,53 @@ describe("buildPreviewHtml - template detectado por workType", () => {
     expect(previewFor(baseFields({ workType: "projeto_pesquisa" }))).toContain('data-template="research-project"');
   });
 });
+
+describe("buildPreviewHtml - regressões dos bugs corrigidos", () => {
+  const RESUME_TEXT =
+    "O presente estudo objetiva investigar.\nPalavras-chave: Ensino de Geometria; Currículo.";
+
+  it("Bug 1 - quebras de linha do resumo são preservadas no preview", () => {
+    const html = previewFor(
+      baseFields({
+        resumo: RESUME_TEXT,
+        abstractText: "First.\nSecond.",
+      }),
+    );
+    const simpleMatches = html.match(/class="preview-simple"/g) ?? [];
+    expect(simpleMatches.length).toBeGreaterThan(0);
+    expect(html).toContain("O presente estudo objetiva investigar.");
+    expect(html).toContain("Palavras-chave: Ensino de Geometria; Currículo.");
+    expect(html).toContain("First.");
+    expect(html).toContain("Second.");
+  });
+
+  it("Bug 2 - imagem importada com data Uint8Array renderiza <img> no preview", () => {
+    const data = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+    const html = buildPreviewHtml({
+      fields: baseFields(),
+      editorText: EDITOR_TEXT,
+      importedImages: [
+        {
+          id: "img-1",
+          caption: "Figura 1 - Grafico de barras",
+          data,
+          position: 0,
+          status: "preserved",
+        },
+      ],
+    });
+    expect(html).toContain("<img");
+    expect(html).not.toContain("[IMAGEM DETECTADA]");
+  });
+
+  it("Bug 3 - editor com # REFERENCIAS + campo igual não duplica no preview", () => {
+    const ref = "SILVA, M. Qualidade do cafe. Lavras: UFLA, 2024.";
+    const html = previewFor(
+      baseFields({ referencias: ref }),
+      "# 1 Introducao\nTexto.\n# REFERENCIAS\n" + ref,
+    );
+    const occurrences = html.split("SILVA, M.").length - 1;
+    expect(occurrences).toBe(1);
+    expect(html).toContain("REFERÊNCIAS");
+  });
+});
