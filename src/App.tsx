@@ -1,6 +1,6 @@
 import { MouseEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { saveAs } from "file-saver";
-import { FileCheck2, FileDown } from "lucide-react";
+import { Eye, FileCheck2, FileDown } from "lucide-react";
 import { isCpgWork } from "./ufla-rules";
 import { editorHtmlToMarkup, editorMarkupToHtml } from "./editor-markup";
 import { useTiptapExperimentalEditor } from "./editor-feature-flags";
@@ -23,6 +23,7 @@ import { WorkTypeSelector } from "./components/WorkTypeSelector";
 import { ValidationSidebar } from "./components/ValidationSidebar";
 import MetadataFields from "./components/MetadataFields";
 import EditorSection from "./components/EditorSection";
+import { PreviewModal } from "./components/PreviewModal";
 import type { TiptapEditorCommand } from "./tiptap-command-bridge";
 export default function App() {
   const { fields, confidence, updateField, updateWorkType, replaceFields, resetFields } = useFormModel();
@@ -31,6 +32,7 @@ export default function App() {
   const { errors, warnings, generateAnyway, setGenerateAnyway, runValidation, resetValidation } = useValidation();
   const [status, setStatus] = useState("Pronto para editar.");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [importedFileName, setImportedFileName] = useState<string | null>(null);
   const [importedImages, setImportedImages] = useState<ImportedDocumentImage[]>([]);
   const [importedTables, setImportedTables] = useState<ImportedTable[]>([]);
@@ -110,6 +112,28 @@ export default function App() {
     finally { setIsGenerating(false); }
   }, [fields, editorText, importedImages, importedTables, generateAnyway, editorMode, importedFileName, activeEditorText, runValidation]);
 
+  const handleOpenPreview = useCallback(() => {
+    setIsPreviewOpen(true);
+  }, []);
+
+  const handleClosePreview = useCallback(() => {
+    setIsPreviewOpen(false);
+  }, []);
+
+  const handleCommitPreviewEditorText = useCallback((text: string) => {
+    if (editorMode === "references") {
+      updateField("referencias", text);
+      return;
+    }
+    setEditorText(text);
+    lastAppliedEditorTextRef.current = text;
+  }, [editorMode, updateField, setEditorText, lastAppliedEditorTextRef]);
+
+  const handleGenerateFromPreview = useCallback(() => {
+    setIsPreviewOpen(false);
+    handleGenerateDocx();
+  }, [handleGenerateDocx]);
+
   const handleBuildDraft = useCallback(() => {
     if (editorText.trim() && !confirmReplaceDraft) { setConfirmReplaceDraft(true); setStatus("Clique em 'Montar rascunho a partir dos campos' novamente para confirmar a substituição do texto do editor."); return; }
     setConfirmReplaceDraft(false);
@@ -130,6 +154,7 @@ export default function App() {
         <div className="header-actions">
           <DraftStatus draftStatus={draftStatus} hasDraft={hasStoredDraft} onClearDraft={() => { handleClearDraft(); resetFields(); resetEditor(); setImportedFileName(null); setImportedImages([]); setImportedTables([]); setStatus("Rascunho local removido e formulário limpo."); }} />
           <button className="primary-action" type="button" onClick={triggerValidation}><FileCheck2 size={18} aria-hidden="true" />Validar trabalho</button>
+          <button className="primary-action" type="button" onClick={handleOpenPreview}><Eye size={18} aria-hidden="true" />Visualizar</button>
           <button className="primary-action strong" type="button" onClick={handleGenerateDocx} disabled={isGenerating}><FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar DOCX editável"}</button>
         </div>
       </header>
@@ -143,6 +168,15 @@ export default function App() {
         <EditorSection editorMode={editorMode} setEditorMode={setEditorMode} isTiptapEditorEnabled={isTiptapEditorEnabled} editorRef={editorRef} handleEditorInput={handleEditorInput} runEditorAction={runEditorAction as (cmd: string, fn: () => void) => void} applyBlockStyle={applyBlockStyle} activeEditorText={activeEditorText} updateField={updateField} setEditorText={setEditorText} tiptapCommandSignal={tiptapCommandSignal} adherenceExpanded={adherenceExpanded} setAdherenceExpanded={setAdherenceExpanded} />
         <ValidationSidebar status={status} generateAnyway={generateAnyway} onToggleGenerateAnyway={setGenerateAnyway} fields={fields} editorText={editorText} errors={errors} warnings={warnings} finalPending={finalPending} />
       </main>
+      {isPreviewOpen && (
+        <PreviewModal
+          input={{ fields, editorText: activeEditorText, importedImages, importedTables }}
+          onClose={handleClosePreview}
+          onCommitEditorText={handleCommitPreviewEditorText}
+          onUpdateField={updateField}
+          onGenerate={handleGenerateFromPreview}
+        />
+      )}
     </div>
   );
 }
