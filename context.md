@@ -130,6 +130,19 @@ As pendências abaixo constam no [CHECKLIST_SITE_UFLA_MANUAL.md](file:///C:/User
 
 ---
 
+## 6b. PRÉ-VISUALIZAÇÃO FIEL AO DOCX COM EDIÇÃO (01/08/2026)
+1. **Renderizador HTML fiel** — `src/preview-html.ts` exporta `buildPreviewHtml(input: DocxGenerationInput): string`.
+   - Reutiliza `parseEditorContent`, `cleanMojibakeText`, `detectCaption`, `detectTabbedTableBlock`, `inlineMarkupToHtml`/`escapeHtml`, `normalizeReferences`, `buildFlowingImpactText`, `UFLA_RULES`/`CPG_RULES`, `getWorkTypeRequirements`, `normalizeWorkType` — sem duplicar lógica dos exportadores.
+   - Páginas: capa (logo `/assets/ufla-logo.jpeg`), folha de rosto (`preview-title-page`), resumo/abstract, indicadores de impacto, listas de ilustrações/tabelas, sumário, corpo, referências, apêndices/anexos.
+   - Variantes por tipo via `previewTemplateFor(workType)` → `data-template="general|article|cpg|research-project"`.
+   - Fidelidade via classes CSS e atributos `data-first-line-cm="1.25"`, `data-long-quote-cm="4"`, `data-font-size="11pt"`.
+2. **Estilos** — `src/preview-styles.css`: página A4 (21×29,7 cm) com margens `3cm 2cm 2cm 3cm`, Times New Roman, corpo 1,5 com recuo 1,25 cm justificado, espaço simples em referências/citações longas/resumo/abstract, citação longa 4 cm/11 pt, referências com hanging 0,5 cm, tabelas com bordas, `@media print`.
+3. **Modal de edição** — `src/components/PreviewModal.tsx`: portal em `document.body`, `role="dialog"` acessível, Escape fecha, trava scroll, zoom 50–150%, modos Visualizar/Editar, `contentEditable` sincronizado via `editorHtmlToMarkup`/`editorMarkupToHtml`, toolbar (negrito/itálico/sublinhado/Título 1/Título 2/Citação/Parágrafo) via `editorCommandAdapter`, campos de metadados (autor/título/subtítulo/orientador/coorientador/ano), botão "Gerar DOCX" usa o conteúdo editado.
+4. **Integração** — `src/App.tsx`: botão "Visualizar" no header (ícone `Eye`), estado `isPreviewOpen`, handlers `handleOpenPreview`/`handleClosePreview`/`handleCommitPreviewEditorText` (se `editorMode === "references"` grava em `referencias`, senão no editor)/`handleGenerateFromPreview`; `src/main.tsx` importa `preview-styles.css`.
+5. **Testes** — `tests/preview-html.test.ts` (21), `tests/preview-modal.test.tsx` (9), `tests/preview-matrix.test.ts` (15). `npm run verify` 100% verde: 127 arquivos, 1092 testes (10 skipped), build OK. Commit `cd708f0` pushado.
+
+---
+
 ## 7. COMANDOS ÚTEIS
 ```bash
 npm run dev              # Inicia o servidor de desenvolvimento SPA
