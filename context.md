@@ -120,6 +120,13 @@ As pendências abaixo constam no [CHECKLIST_SITE_UFLA_MANUAL.md](file:///C:/User
    - **P6** validação completa autor-data-página mantida adiada (risco de falso-positivo).
    - Novo teste `tests/pendencias-7-fixes.test.ts` (5 testes) cobre P1-P4.
 5. `npm run verify` 100% verde: 123 arquivos, 1038 testes (10 skipped), build OK.
+6. **Listas de ilustrações e tabelas implementadas** — `export-docx.ts`:
+   - `collectListItems()` detecta legendas (Figura/Quadro/Gráfico/Mapa/Imagem/Ilustração → ilustração; Tabela → tabela) nos blocos do corpo e em imagens/tabelas importadas, na ordem do texto.
+   - `buildListaIlustracoes()` e `buildListaTabelas()` geram páginas pré-textuais após Abstract/Indicadores e antes do Sumário, com título centralizado/maiúsculas/negrito.
+   - Cada entrada: `Tipo N - Título` + tab com leader de pontos + `PAGEREF` (página à direita, atualizada pelo Word) + recuo deslocante 0,5 cm (`hanging`) para títulos longos em escada.
+   - Legendas do corpo envolvidas com `BookmarkStart`/`BookmarkEnd` (`bookmarkedCaptionParagraph()`) para o `PAGEREF` apontar.
+   - Novo teste `tests/lista-ilustracoes.test.ts` (9 testes) cobre título, ordem, formato, páginas à direita e escada.
+7. `npm run verify` 100% verde: 124 arquivos, 1047 testes (10 skipped), build OK.
 
 ---
 

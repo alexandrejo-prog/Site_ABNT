@@ -1,5 +1,7 @@
 import {
   AlignmentType,
+  BookmarkEnd,
+  BookmarkStart,
   BorderStyle,
   Document,
   HeadingLevel,
@@ -10,10 +12,13 @@ import {
   PageNumber,
   PageOrientation,
   Paragraph,
+  SimpleField,
+  Tab,
   Table,
   TableCell,
   TableOfContents,
   TableRow,
+  TabStopType,
   TextRun,
   WidthType,
 } from "docx";
@@ -25,7 +30,7 @@ import { getWorkTypeRequirements } from "./work-type-requirements";
 import { normalizeReferences, type NormalizedReference, type ReferenceRun } from "./references-normalizer";
 import { buildFlowingImpactText } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
-import { captionParagraph, cleanMojibakeText, detectCaption, sourceParagraph, tabbedTableBlock } from "./docx-render-core";
+import { cleanMojibakeText, detectCaption, sourceParagraph, tabbedTableBlock, type CaptionKind } from "./docx-render-core";
 import { ImportedDocumentImage, IMPORTED_IMAGE_MARKER_PATTERN } from "./imported-images";
 import { ImportedTable, IMPORTED_TABLE_MARKER_PATTERN, buildStructuredTextFromTable } from "./imported-tables";
 
@@ -1268,7 +1273,7 @@ function blockToParagraph(
 
   const caption = detectCaption(cleanedText);
   if (caption) {
-    return [captionParagraph(cleanedText, caption.kind)];
+    return [bookmarkedCaptionParagraph(cleanedText, caption.kind, `LISTA_${bookmarkSafeLabel(cleanedText)}`)];
   }
 
   if (/^Fonte\s*:/i.test(cleanedText)) {
@@ -1496,6 +1501,172 @@ function appendixTitle(fields: AcademicFields): string {
     return "APÊNDICE A - ROTEIRO PRELIMINAR DE ENTREVISTA";
   }
   return "APÊNDICE A";
+}
+
+interface ListItem {
+  kind: "illustration" | "table";
+  type: string;
+  number: string;
+  title: string;
+  bookmarkId: string;
+}
+
+function captionTypeOf(text: string): string {
+  const match = text.trim().match(/^([a-záéíóúãõç]+)/i);
+  return match ? match[1] : "";
+}
+
+function captionListItem(
+  text: string,
+  kind: "illustration" | "table",
+  bookmarkId: string,
+): ListItem | null {
+  const caption = detectCaption(text);
+  if (!caption) return null;
+  const type = captionTypeOf(text).toUpperCase();
+  if (!type) return null;
+  return {
+    kind,
+    type,
+    number: caption.number ?? "",
+    title: caption.label ?? "",
+    bookmarkId,
+  };
+}
+
+function importedImageListItem(image: ImportedDocumentImage | undefined): ListItem | null {
+  if (!image?.caption) return null;
+  const type = captionTypeOf(image.caption);
+  if (!type) return null;
+  const isTable = /^tabela/i.test(type);
+  return captionListItem(image.caption, isTable ? "table" : "illustration", `LISTA_${bookmarkSafeLabel(image.caption)}`);
+}
+
+function importedTableListItem(table: ImportedTable | undefined): ListItem | null {
+  if (!table?.caption) return null;
+  return captionListItem(table.caption, "table", `LISTA_${bookmarkSafeLabel(table.caption)}`);
+}
+
+function bookmarkSafeLabel(text: string): string {
+  return normalizeForDetection(text).replace(/[^A-Z0-9]/g, "_").slice(0, 60) || "ITEM";
+}
+
+let listBookmarkNumericId = 0;
+
+function nextListBookmarkNumericId(): number {
+  listBookmarkNumericId += 1;
+  return listBookmarkNumericId;
+}
+
+function bookmarkedCaptionParagraph(text: string, _kind: CaptionKind, bookmarkId: string): Paragraph {
+  const numericId = nextListBookmarkNumericId();
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 120, after: 120, line: SINGLE_LINE },
+    indent: { left: 454, right: 454 },
+    children: [
+      new BookmarkStart(bookmarkId, numericId),
+      new TextRun({
+        text: cleanMojibakeText(text),
+        bold: true,
+        font: "Times New Roman",
+        size: BODY_SIZE,
+        color: BLACK,
+      }),
+      new BookmarkEnd(numericId),
+    ],
+  });
+}
+
+function collectListItems(
+  bodyBlocks: EditorBlock[],
+  importedImages: ImportedDocumentImage[] = [],
+  importedTables: ImportedTable[] = [],
+): ListItem[] {
+  const items: ListItem[] = [];
+  const seen = new Set<string>();
+
+  const push = (item: ListItem | null): void => {
+    if (!item) return;
+    const key = `${item.kind}:${item.type}:${item.number}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    items.push(item);
+  };
+
+  for (const block of bodyBlocks) {
+    if (block.type === "paragraph") {
+      const cleaned = cleanMojibakeText(block.text);
+      const caption = detectCaption(cleaned);
+      if (caption) {
+        push(captionListItem(cleaned, caption.kind === "table" ? "table" : "illustration", `LISTA_${bookmarkSafeLabel(cleaned)}`));
+      }
+      continue;
+    }
+    if (block.type === "importedImage") {
+      push(importedImageListItem(importedImages.find((image) => image.id === block.text)));
+      continue;
+    }
+    if (block.type === "importedTable") {
+      push(importedTableListItem(importedTables.find((table) => table.id === block.text)));
+      continue;
+    }
+  }
+
+  return items;
+}
+
+function listEntryParagraph(item: ListItem): Paragraph {
+  const normalizedTitle = item.title.replace(/^[\s\-–—:.]+\s*/, "").trim();
+  const label = `${item.type} ${item.number} - ${normalizedTitle}`;
+  return new Paragraph({
+    alignment: AlignmentType.LEFT,
+    spacing: { line: SINGLE_LINE, after: 120 },
+    tabStops: [{ type: TabStopType.RIGHT, position: 9071, leader: "dot" }],
+    indent: { left: 709, hanging: 709 },
+    children: [
+      new TextRun({
+        text: cleanMojibakeText(label),
+        font: UFLA_RULES.typography.fontFamily,
+        size: BODY_SIZE,
+        color: BLACK,
+      }),
+      new TextRun({ children: [new Tab()] }),
+      new SimpleField(`PAGEREF ${item.bookmarkId} \\h`, "00"),
+    ],
+  });
+}
+
+function listPage(
+  title: string,
+  items: ListItem[],
+  filter: (item: ListItem) => boolean,
+): Paragraph[] {
+  const filtered = items.filter(filter);
+  if (!filtered.length) return [];
+  return [
+    pageBreak(),
+    unnumberedTitle(title),
+    ...filtered.map(listEntryParagraph),
+  ];
+}
+
+function buildListaIlustracoes(
+  bodyBlocks: EditorBlock[],
+  importedImages: ImportedDocumentImage[] = [],
+  importedTables: ImportedTable[] = [],
+): Paragraph[] {
+  const items = collectListItems(bodyBlocks, importedImages, importedTables);
+  return listPage("Lista de ilustrações", items, (item) => item.kind === "illustration");
+}
+
+function buildListaTabelas(
+  bodyBlocks: EditorBlock[],
+  importedImages: ImportedDocumentImage[] = [],
+  importedTables: ImportedTable[] = [],
+): Paragraph[] {
+  const items = collectListItems(bodyBlocks, importedImages, importedTables);
+  return listPage("Lista de tabelas", items, (item) => item.kind === "table");
 }
 
 function buildSummary(
@@ -1956,7 +2127,12 @@ function optionalUntitledRightPage(content: string, italics = false): Paragraph[
   ];
 }
 
-function preTextualChildren(fields: AcademicFields): Paragraph[] {
+function preTextualChildren(
+  fields: AcademicFields,
+  bodyBlocks: EditorBlock[] = [],
+  importedImages: ImportedDocumentImage[] = [],
+  importedTables: ImportedTable[] = [],
+): Paragraph[] {
   const requirements = getWorkTypeRequirements(fields.workType);
   const consolidated = buildFlowingImpactText(fields);
   const indicadores = consolidated;
@@ -2034,6 +2210,11 @@ function preTextualChildren(fields: AcademicFields): Paragraph[] {
     children.push(pageBreak());
   }
 
+  children.push(
+    ...buildListaIlustracoes(bodyBlocks, importedImages, importedTables),
+    ...buildListaTabelas(bodyBlocks, importedImages, importedTables),
+  );
+
   if (hasText(fields.listaQuadros)) {
     children.push(...optionalPage("Lista de quadros", cleanMojibakeText(fields.listaQuadros)));
   }
@@ -2083,7 +2264,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
     ...coverChildren(fields, input.logo),
     pageBreak(),
     ...titlePageChildren(fields),
-    ...preTextualChildren(fields),
+    ...preTextualChildren(fields, bodyBlocks, input.importedImages ?? [], input.importedTables ?? []),
     ...summaryChildren,
   ];
 

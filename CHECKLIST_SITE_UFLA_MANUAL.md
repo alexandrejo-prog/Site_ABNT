@@ -228,40 +228,40 @@ Fonte: Manual UFLA 6ª ed., Seção 3.2.1-3.2.3, p.68-69; NBR 14724:2024, Seçã
 
 ### 14.1. Lista de ilustrações
 
-- [ ] Sistema detecta figuras.
-- [ ] Sistema detecta gráficos.
-- [ ] Sistema detecta quadros.
-- [ ] Sistema detecta mapas.
-- [ ] Sistema detecta fotografias/imagens.
-- [ ] Lista de ilustrações pode ser gerada.
-- [ ] Título `LISTA DE ILUSTRAÇÕES` é centralizado.
-- [ ] Título está em maiúsculas.
-- [ ] Título está em negrito.
-- [ ] Itens aparecem na ordem do texto.
-- [ ] Cada item tem tipo.
-- [ ] Cada item tem número.
-- [ ] Cada item tem travessão.
-- [ ] Cada item tem título.
-- [ ] Cada item tem página.
-- [ ] Números de página ficam à direita.
-- [ ] Títulos longos alinham segunda linha em escada.
-- [ ] Texto da lista não invade área do número de página.
+- [x] Sistema detecta figuras.
+- [x] Sistema detecta gráficos.
+- [x] Sistema detecta quadros.
+- [x] Sistema detecta mapas.
+- [x] Sistema detecta fotografias/imagens.
+- [x] Lista de ilustrações pode ser gerada.
+- [x] Título `LISTA DE ILUSTRAÇÕES` é centralizado.
+- [x] Título está em maiúsculas.
+- [x] Título está em negrito.
+- [x] Itens aparecem na ordem do texto.
+- [x] Cada item tem tipo.
+- [x] Cada item tem número.
+- [x] Cada item tem travessão.
+- [x] Cada item tem título.
+- [x] Cada item tem página (campo `PAGEREF` dinâmico).
+- [x] Números de página ficam à direita.
+- [x] Títulos longos alinham segunda linha em escada.
+- [x] Texto da lista não invade área do número de página.
 - [ ] Sistema permite listas próprias por tipo quando necessário.
 
 ### 14.2. Lista de tabelas
 
-- [ ] Sistema detecta tabelas.
-- [ ] Lista de tabelas pode ser gerada.
-- [ ] Título `LISTA DE TABELAS` é centralizado.
-- [ ] Título está em maiúsculas.
-- [ ] Título está em negrito.
-- [ ] Itens aparecem na ordem do texto.
-- [ ] Cada item tem número.
-- [ ] Cada item tem travessão.
-- [ ] Cada item tem título.
-- [ ] Cada item tem página.
-- [ ] Números de página ficam à direita.
-- [ ] Títulos longos alinham segunda linha em escada.
+- [x] Sistema detecta tabelas.
+- [x] Lista de tabelas pode ser gerada.
+- [x] Título `LISTA DE TABELAS` é centralizado.
+- [x] Título está em maiúsculas.
+- [x] Título está em negrito.
+- [x] Itens aparecem na ordem do texto.
+- [x] Cada item tem número.
+- [x] Cada item tem travessão.
+- [x] Cada item tem título.
+- [x] Cada item tem página (campo `PAGEREF` dinâmico).
+- [x] Números de página ficam à direita.
+- [x] Títulos longos alinham segunda linha em escada.
 
 ### 14.3. Abreviaturas, siglas e símbolos
 
