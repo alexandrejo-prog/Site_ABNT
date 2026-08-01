@@ -1,7 +1,7 @@
 import { isCpgWork, isResearchProject, isUflaCollectionWork } from "./ufla-rules";
 
 export const FIELD_LABELS: Record<string, string> = {
-  author: "Autor", title: "Título", subtitle: "Subtítulo", workNature: "Natureza do trabalho",
+  author: "Autor", title: "Título", subtitle: "Subtítulo", englishTitle: "Título em inglês", workNature: "Natureza do trabalho",
   course: "Curso", program: "Programa", advisor: "Orientador", coadvisor: "Coorientador",
   location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave",
   abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão",
@@ -44,6 +44,7 @@ export function rowsForField(key: string): number {
 export function visibleField(key: string, workType: string): boolean {
   if (RESEARCH_PROJECT_FIELD_KEYS.includes(key)) return isResearchProject(workType as any);
   if (IMPACT_KEYS.includes(key)) return false;
+  if (key === "englishTitle") return workType === "dissertacao" || workType === "tese";
   if (workType === "artigo") return !["workNature", "dedicatoria", "agradecimentos", "epigrafe", "indicadoresImpacto", "impactIndicators"].includes(key);
   if (isUflaCollectionWork(workType as any)) return !["dedicatoria", "agradecimentos", "epigrafe", "indicadoresImpacto", "impactIndicators"].includes(key);
   if (isCpgWork(workType as any)) return !["workNature", "dedicatoria", "epigrafe", "indicadoresImpacto", "impactIndicators", "anexos", "apendices"].includes(key);

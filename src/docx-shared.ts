@@ -140,8 +140,8 @@ export function ibgeTable(options: IbgeTableOptions): Table {
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     borders: {
-      top: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
-      bottom: { style: BorderStyle.SINGLE, size: 4, color: BLACK },
+      top: { style: BorderStyle.DOUBLE, size: 4, color: BLACK },
+      bottom: { style: BorderStyle.DOUBLE, size: 4, color: BLACK },
       left: NO_BORDER,
       right: NO_BORDER,
       insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: BLACK },

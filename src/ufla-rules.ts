@@ -52,6 +52,7 @@ export const ACADEMIC_FIELD_KEYS = [
   "author",
   "title",
   "subtitle",
+  "englishTitle",
   "workNature",
   "course",
   "program",
@@ -109,6 +110,7 @@ export interface AcademicFields {
   author: string;
   title: string;
   subtitle: string;
+  englishTitle: string;
   workNature: string;
   course: string;
   program: string;
@@ -367,6 +369,7 @@ export function emptyAcademicFields(): AcademicFields {
     author: "",
     title: "",
     subtitle: "",
+    englishTitle: "",
     workNature: "",
     course: "",
     program: "",

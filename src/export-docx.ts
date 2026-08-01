@@ -1851,12 +1851,22 @@ function normalizeApprovalMember(member: string): string {
 function approvalPageChildren(fields: AcademicFields): Paragraph[] {
   if (!hasApprovalPage(fields)) return [];
 
-  const orientationLines = fields.advisor
-    ? [
-        centeredParagraph(cleanMojibakeText(fields.advisor), false, BODY_SIZE, { after: 0, line: SINGLE_LINE }),
-        centeredParagraph("Orientador(a) - UFLA", false, BODY_SIZE, { after: 360, line: SINGLE_LINE }),
-      ]
-    : [];
+  const isGraduate = fields.workType === "dissertacao" || fields.workType === "tese";
+
+  const orientationLines: Paragraph[] = [
+    ...(fields.advisor
+      ? [
+          centeredParagraph(cleanMojibakeText(fields.advisor), false, BODY_SIZE, { after: 0, line: SINGLE_LINE }),
+          centeredParagraph("Orientador(a) - UFLA", false, BODY_SIZE, { after: 360, line: SINGLE_LINE }),
+        ]
+      : []),
+    ...(fields.coadvisor
+      ? [
+          centeredParagraph(cleanMojibakeText(fields.coadvisor), false, BODY_SIZE, { after: 0, line: SINGLE_LINE }),
+          centeredParagraph("Coorientador(a) - UFLA", false, BODY_SIZE, { after: 360, line: SINGLE_LINE }),
+        ]
+      : []),
+  ];
 
   const formattedDate = formatApprovalDate(fields.aprovalDate || "");
   const bancaLines: Paragraph[] = [
@@ -1905,6 +1915,14 @@ function approvalPageChildren(fields: AcademicFields): Paragraph[] {
       after: 600,
       line: ONE_AND_HALF_LINE,
     }),
+    ...(isGraduate && fields.englishTitle?.trim()
+      ? [
+          centeredParagraph(cleanMojibakeText(fields.englishTitle.trim()), false, BODY_SIZE, {
+            after: 600,
+            line: ONE_AND_HALF_LINE,
+          }),
+        ]
+      : []),
     natureParagraph(cleanMojibakeText(workNature(fields))),
     ...orientationLines,
     ...bancaLines,

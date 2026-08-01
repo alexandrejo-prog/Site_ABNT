@@ -39,13 +39,13 @@
 
 | # | Item | Prioridade | Local | Norma |
 |---|------|-----------|-------|-------|
-| P1 | Tabela traço duplo superior/inferior (atualmente SINGLE) | BAIXO | `docx-render-core.ts`, `export-docx.ts` | Manual UFLA 3.2.10, p.80; NBR 14724:2024 |
-| P2 | Apêndices/anexos continuam paginação | BAIXO | `export-docx.ts` | Manual UFLA 3.2.7, p.73; NBR 14724:2024 |
-| P3 | Título em inglês na folha de aprovação | BAIXO | `export-docx.ts` | Manual UFLA 3.1.2.1.4, p.44 |
-| P4 | Coorientador na folha de aprovação | BAIXO | `export-docx.ts` | Manual UFLA 3.1.2.1.4, p.44 |
-| P5 | 4+ autores: et al. em itálico nas referências | BAIXO | `export-docx.ts` | NBR 6023:2020, Seção 8.1.3 |
-| P6 | Citação direta: validação autor-data-página | BAIXO | `docx-render-core.ts` | NBR 10520:2023, Seção 6.2 |
-| P7 | Validação de extensão resumo (150-500 palavras) | BAIXO | `export-docx.ts` | NBR 6028:2021, Seção 4
+| P1 | ~~Tabela traço duplo superior/inferior~~ **[x]** | BAIXO | `docx-shared.ts` | Manual UFLA 3.2.10, p.80; NBR 14724:2024 |
+| P2 | ~~Apêndices/anexos continuam paginação~~ **[x]** | BAIXO | `export-docx.ts` | Manual UFLA 3.2.7, p.73; NBR 14724:2024 |
+| P3 | ~~Título em inglês na folha de aprovação~~ **[x]** | BAIXO | `export-docx.ts`, `ufla-rules.ts` | Manual UFLA 3.1.2.1.4, p.44 |
+| P4 | ~~Coorientador na folha de aprovação~~ **[x]** | BAIXO | `export-docx.ts` | Manual UFLA 3.1.2.1.4, p.44 |
+| P5 | ~~4+ autores: et al. em itálico nas referências~~ **[x]** | BAIXO | `references-normalizer.ts` | NBR 6023:2020, Seção 8.1.3 |
+| P6 | Citação direta: validação autor-data-página (adiada — risco de falso-positivo; a estrutural básica já é validada) | BAIXO | `docx-render-core.ts` | NBR 10520:2023, Seção 6.2 |
+| P7 | ~~Validação de extensão resumo (150-500 palavras)~~ **[x]** | BAIXO | `validators.ts` | NBR 6028:2021, Seção 4 |
 
 ---
 
@@ -108,7 +108,7 @@ Fonte: Manual UFLA 6ª ed., Seção 3.2.1-3.2.3, p.68-69; NBR 14724:2024, Seçã
 - [x] Nota descritiva/natureza gerada com recuo 8cm e espaço simples.
 - [x] Nota descritiva informa: tipo, instituição, curso/programa, orientador.
 - [ ] Nota descritiva informa área de concentração e título pretendido quando aplicável.
-- [ ] Coorientador é exibido quando preenchido.
+- [x] Coorientador é exibido quando preenchido.
 - [x] Local (cidade-UF): maiúsculas, negrito.
 - [x] Ano: negrito.
 - [x] Folha de rosto é contada para paginação, não exibe número.
@@ -149,7 +149,7 @@ Fonte: Manual UFLA 6ª ed., Seção 3.2.1-3.2.3, p.68-69; NBR 14724:2024, Seçã
 - [x] Orientador exibido.
 - [x] Local e ano exibidos.
 - [x] Folha de aprovação não exibe número de página.
-- [ ] Título em inglês (pendente — segunda fase).
+- [x] Título em inglês (dissertação e tese).
 - [ ] Data de aprovação no formulário (⚠️ médio — campo existe nos types, falta no form).
 - [ ] Membros da banca no formulário (⚠️ médio — idem).
 - [ ] Instituições dos membros (⚠️ médio — idem).
@@ -197,7 +197,7 @@ Fonte: Manual UFLA 6ª ed., Seção 3.2.1-3.2.3, p.68-69; NBR 14724:2024, Seçã
 - [x] Título `RESUMO`: centralizado, maiúsculas, negrito.
 - [x] Texto justificado, espaço simples, parágrafo único.
 - [x] Palavras-chave abaixo: `Palavras-chave:` (negrito), separadas por `;`, finalizadas por `.`.
-- [ ] Validação de extensão (150-500 palavras TCC, 100-250 artigo).
+- [x] Validação de extensão (150-500 palavras TCC, 100-250 artigo).
 - [ ] Verbo na terceira pessoa (não validado).
 - [x] Resumo não fica azul.
 
@@ -396,7 +396,7 @@ Fonte: Manual UFLA 6ª ed., Seção 3.2.10, p.78-80; NBR 14724:2024, Seção 5.9
 - [x] Título acima: "Tabela" + número + travessão + título, 12pt, espaço simples.
 - [x] Fonte abaixo: 11pt, espaço simples.
 - [x] Tabela NÃO fechada lateralmente (sem traço esquerdo/direito).
-- [ ] Tabela usa traço duplo horizontal superior/inferior (atualmente SINGLE).
+- [x] Tabela usa traço duplo horizontal superior/inferior.
 - [x] Tabela dentro das margens.
 - [ ] Sistema alerta tabela sem título.
 - [ ] Sistema alerta tabela sem fonte.
@@ -414,7 +414,7 @@ Fonte: Manual UFLA 6ª ed., Seção 5, p.90-92; NBR 6023:2020
 - [x] Espaço simples em branco entre referências.
 - [x] Ordem alfabética (NBR 6033:2022).
 - [x] Título da obra em negrito (Manual UFLA 5.2, p.92 — padroniza negrito).
-- [ ] 4+ autores: et al. em itálico (NBR 6023:2020, Seção 8.1.3).
+- [x] 4+ autores: et al. em itálico (NBR 6023:2020, Seção 8.1.3).
 - [ ] Anônimo/pessoa jurídica não tratado.
 
 ### 22.2. Preservação (NBR 6023:2020)
@@ -427,7 +427,7 @@ Fonte: Manual UFLA 6ª ed., Seção 5, p.90-92; NBR 6023:2020
 
 - [x] Título da obra em negrito quando detectável (Manual UFLA).
 - [x] Até 3 autores preservados.
-- [ ] 4+ autores: primeiro + et al. (itálico).
+- [x] 4+ autores: primeiro + et al. (itálico).
 - [ ] Autoria desconhecida: entrada pelo título.
 - [ ] Pessoa jurídica preservada.
 

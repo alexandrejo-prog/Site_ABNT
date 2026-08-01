@@ -96,12 +96,12 @@ O repositório inclui um analisador automático que lê um arquivo `.docx` gerad
 ---
 
 ## 6. PENDÊNCIAS CONHECIDAS (Checklist UFLA/ABNT)
-As pendências abaixo constam no [CHECKLIST_SITE_UFLA_MANUAL.md](file:///C:/Users\User\Desktop\Alexandre\Site_Normas_UFLA\Site_ABNT\CHECKLIST_SITE_UFLA_MANUAL.md):
-1. **Tabelas:** traço duplo superior/inferior (atualmente `SINGLE`).  
-2. **Apêndices/Anexos:** ajustar quebra de seção para manutenção da numeração de páginas.  
-3. **Folha de Aprovação:** título em inglês e campo de coorientador **[x]** (já implementado).  
+As pendências abaixo constam no [CHECKLIST_SITE_UFLA_MANUAL.md](file:///C:/Users\User/Desktop\Alexandre\Site_Normas_UFLA\Site_ABNT\CHECKLIST_SITE_UFLA_MANUAL.md):
+1. **Tabelas:** traço duplo superior/inferior **[x]** (implementado — `BorderStyle.DOUBLE` em `docx-shared.ts`).  
+2. **Apêndices/Anexos:** numeração de páginas contínua **[x]** (já na mesma seção textual; teste cobre).  
+3. **Folha de Aprovação:** título em inglês e coorientador **[x]** (implementado — dissertação/tese; `englishTitle` no form).  
 4. **Referências com 4+ Autores:** itálico em “et al.” **[x]** (implementado).  
-5. **Citação Direta Curta:** validação automática da estrutura autor‑data‑página **[x]** (validada).  
+5. **Citação Direta Curta:** validação estrutural básica autor‑data **[x]** (validada); validação completa de autor‑data‑página **adiada** — risco de falso‑positivo.  
 6. **Resumos:** validação da extensão (150‑500 palavras) **[x]** (validada).
 
 ---
@@ -112,7 +112,14 @@ As pendências abaixo constam no [CHECKLIST_SITE_UFLA_MANUAL.md](file:///C:/User
    - Monografia/Dissertação/Tese/Projeto: **SUMÁRIO com TOC real + quebra de página antes de ABSTRACT**.
    - Artigo/Resumo CPG/Resumo Expandido CPG/Artigo Completo CPG: **SEM SUMÁRIO; ABSTRACT na mesma página** (formato do congresso, por design).
 3. Testes atualizados que esperavam SUMÁRIO no CPG: `tests/cpg-first-page.test.ts`, `tests/guardrails-pente-fino.test.ts`.
-4. `npm run verify` 100% verde: 122 arquivos, 1033 testes (10 skipped), build OK.
+4. **Fechamento P1–P5/P7 das pendências do checklist:**
+   - **P1** tabela IBGE com traço duplo superior/inferior — `ibgeTable` em `docx-shared.ts` usa `BorderStyle.DOUBLE` (mantidas bordas laterais ausentes e `insideHorizontal` SINGLE).
+   - **P3** título em inglês na folha de aprovação — campo `englishTitle` em `ufla-rules.ts`/`app-constants.ts` (visível só em dissertação/tese) e render em `approvalPageChildren()` em `export-docx.ts`.
+   - **P4** coorientador na folha de aprovação — bloco `Coorientador(a) - UFLA` adicionado em `approvalPageChildren()`.
+   - **P5/P7** já existiam (`references-normalizer.ts` itálico em "et al."; `validators.ts` `resumo-word-count` 150-500).
+   - **P6** validação completa autor-data-página mantida adiada (risco de falso-positivo).
+   - Novo teste `tests/pendencias-7-fixes.test.ts` (5 testes) cobre P1-P4.
+5. `npm run verify` 100% verde: 123 arquivos, 1038 testes (10 skipped), build OK.
 
 ---
 
