@@ -15,7 +15,7 @@ export { suggestFixes } from "./fix-suggester";
 
 export async function validateDocx(
   filePath: string,
-  options?: { json?: boolean; output?: string; verbose?: boolean },
+  options?: { json?: boolean; output?: string; verbose?: boolean; workType?: string },
 ): Promise<ComplianceReport> {
   const resolvedPath = path.resolve(filePath);
 
@@ -24,15 +24,16 @@ export async function validateDocx(
   }
 
   const analysis = await analyzeDocx(resolvedPath);
-  const items = checkCompliance(analysis);
+  const items = checkCompliance(analysis, options?.workType);
 
   const ok = items.filter((i) => i.status === "ok").length;
   const fail = items.filter((i) => i.status === "fail").length;
   const partial = items.filter((i) => i.status === "partial").length;
   const unchecked = items.filter((i) => i.status === "unchecked").length;
-  const grave = items.filter((i) => i.severity === "grave" && i.status !== "ok").length;
-  const medio = items.filter((i) => i.severity === "medio" && i.status !== "ok").length;
-  const baixo = items.filter((i) => i.severity === "baixo" && i.status !== "ok").length;
+  const nonOk = items.filter((i) => i.status !== "ok" && i.status !== "unchecked");
+  const grave = nonOk.filter((i) => i.severity === "grave").length;
+  const medio = nonOk.filter((i) => i.severity === "medio").length;
+  const baixo = nonOk.filter((i) => i.severity === "baixo").length;
 
   const report: ComplianceReport = {
     timestamp: new Date().toISOString(),
@@ -49,7 +50,7 @@ export async function validateDocx(
       medio,
       baixo,
     },
-    passed: fail === 0 && grave === 0,
+    passed: fail === 0 && partial === 0 && grave === 0,
   };
 
   if (options?.output) {
@@ -82,11 +83,13 @@ async function main() {
   const fileArg = args.find((a) => !a.startsWith("--"));
   const jsonFlag = args.includes("--json");
   const verboseFlag = args.includes("--verbose");
+  const typeFlag = args.find((a) => a.startsWith("--type="));
+  const workType = typeFlag?.split("=")[1];
   const outputFlag = args.find((a) => a.startsWith("--report="));
   const outputFile = outputFlag?.split("=")[1];
 
   if (!fileArg) {
-    console.error("Uso: npx tsx src/index.ts <arquivo.docx> [--json] [--verbose] [--report=saida.md]");
+    console.error("Uso: npx tsx src/index.ts <arquivo.docx> [--json] [--verbose] [--type=dissertacao|tese|monografia|artigo|resumo_cpg|resumo_expandido_cpg|artigo_completo_cpg|projeto_pesquisa] [--report=saida.md]");
     process.exit(1);
   }
 
@@ -95,6 +98,7 @@ async function main() {
       json: jsonFlag,
       verbose: verboseFlag,
       output: outputFile,
+      workType,
     });
 
     if (jsonFlag && !outputFile) {

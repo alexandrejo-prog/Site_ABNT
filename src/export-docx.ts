@@ -30,7 +30,7 @@ import { getWorkTypeRequirements } from "./work-type-requirements";
 import { normalizeReferences, type NormalizedReference, type ReferenceRun } from "./references-normalizer";
 import { buildFlowingImpactText } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
-import { cleanMojibakeText, detectCaption, sourceParagraph, tabbedTableBlock, type CaptionKind } from "./docx-render-core";
+import { cleanMojibakeText, detectCaption, sourceParagraph, tabbedTableBlock, tokenizeMarkup, type CaptionKind } from "./docx-render-core";
 import { ImportedDocumentImage, IMPORTED_IMAGE_MARKER_PATTERN } from "./imported-images";
 import { ImportedTable, IMPORTED_TABLE_MARKER_PATTERN, buildStructuredTextFromTable } from "./imported-tables";
 
@@ -78,8 +78,8 @@ interface ScheduleRow {
 export const DEFAULT_UFLA_LOGO_PATH = "/assets/ufla-logo.jpeg";
 
 const LONG_QUOTE_SIZE = UFLA_RULES.typography.longQuoteFontSizePt * 2;
-const REFERENCE_FONT = "Times New Roman";
-const REFERENCE_SIZE = 12 * 2;
+const REFERENCE_FONT = UFLA_RULES.typography.fontFamily;
+const REFERENCE_SIZE = UFLA_RULES.typography.bodyFontSizePt * 2;
 const UFLA_LOGO_WIDTH_PX = 265;
 const UFLA_LOGO_HEIGHT_PX = 108;
 
@@ -92,13 +92,13 @@ const DOCUMENT_STYLES: IStylesOptions = {
       next: "Normal",
       quickFormat: true,
       run: {
-        font: "Times New Roman",
-        size: 24,
+        font: UFLA_RULES.typography.fontFamily,
+        size: BODY_SIZE,
         bold: true,
         color: BLACK,
       },
       paragraph: {
-        spacing: { before: 0, after: 0 },
+        spacing: { before: UFLA_RULES.spacing.afterParagraphTwip, after: UFLA_RULES.spacing.afterParagraphTwip },
       },
     },
     {
@@ -108,13 +108,13 @@ const DOCUMENT_STYLES: IStylesOptions = {
       next: "Normal",
       quickFormat: true,
       run: {
-        font: "Times New Roman",
-        size: 24,
+        font: UFLA_RULES.typography.fontFamily,
+        size: BODY_SIZE,
         bold: true,
         color: BLACK,
       },
       paragraph: {
-        spacing: { before: 0, after: 0 },
+        spacing: { before: UFLA_RULES.spacing.afterParagraphTwip, after: UFLA_RULES.spacing.afterParagraphTwip },
       },
     },
     {
@@ -124,13 +124,13 @@ const DOCUMENT_STYLES: IStylesOptions = {
       next: "Normal",
       quickFormat: true,
       run: {
-        font: "Times New Roman",
-        size: 24,
+        font: UFLA_RULES.typography.fontFamily,
+        size: BODY_SIZE,
         bold: false,
         color: BLACK,
       },
       paragraph: {
-        spacing: { before: 0, after: 0 },
+        spacing: { before: UFLA_RULES.spacing.afterParagraphTwip, after: UFLA_RULES.spacing.afterParagraphTwip },
       },
     },
     {
@@ -140,13 +140,13 @@ const DOCUMENT_STYLES: IStylesOptions = {
       next: "Normal",
       quickFormat: true,
       run: {
-        font: "Times New Roman",
-        size: 24,
+        font: UFLA_RULES.typography.fontFamily,
+        size: BODY_SIZE,
         bold: true,
         color: BLACK,
       },
       paragraph: {
-        spacing: { before: 0, after: 0 },
+        spacing: { before: UFLA_RULES.spacing.afterParagraphTwip, after: UFLA_RULES.spacing.afterParagraphTwip },
       },
     },
     {
@@ -156,13 +156,13 @@ const DOCUMENT_STYLES: IStylesOptions = {
       next: "Normal",
       quickFormat: true,
       run: {
-        font: "Times New Roman",
-        size: 24,
+        font: UFLA_RULES.typography.fontFamily,
+        size: BODY_SIZE,
         bold: true,
         color: BLACK,
       },
       paragraph: {
-        spacing: { before: 0, after: 0 },
+        spacing: { before: UFLA_RULES.spacing.afterParagraphTwip, after: UFLA_RULES.spacing.afterParagraphTwip },
       },
     },
     {
@@ -172,13 +172,13 @@ const DOCUMENT_STYLES: IStylesOptions = {
       next: "Normal",
       quickFormat: true,
       run: {
-        font: "Times New Roman",
-        size: 24,
+        font: UFLA_RULES.typography.fontFamily,
+        size: BODY_SIZE,
         bold: true,
         color: BLACK,
       },
       paragraph: {
-        spacing: { before: 0, after: 0 },
+        spacing: { before: UFLA_RULES.spacing.afterParagraphTwip, after: UFLA_RULES.spacing.afterParagraphTwip },
       },
     },
   ],
@@ -435,36 +435,19 @@ function referenceRunToTextRun(run: ReferenceRun): TextRun {
 }
 
 function textRunsForSingleLine(text: string, size = BODY_SIZE): TextRun[] {
-  const runs: TextRun[] = [];
-  const tokenPattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
-  let cursor = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = tokenPattern.exec(text)) !== null) {
-    if (match.index > cursor) {
-      runs.push(plainRun(text.slice(cursor, match.index), size));
-    }
-
-    const token = match[0];
-    const bold = token.startsWith("**");
-    const content = bold ? token.slice(2, -2) : token.slice(1, -1);
-    runs.push(
-      new TextRun({
-        text: content,
-        bold,
-        italics: !bold,
-        font: UFLA_RULES.typography.fontFamily,
-        size,
-        color: BLACK,
-      }),
-    );
-    cursor = match.index + token.length;
-  }
-
-  if (cursor < text.length) {
-    runs.push(plainRun(text.slice(cursor), size));
-  }
-
+  const parsed = tokenizeMarkup(cleanMojibakeText(text));
+  const runs = parsed.map((run) =>
+    run.bold || run.italics
+      ? new TextRun({
+          text: run.text,
+          bold: run.bold,
+          italics: run.italics,
+          font: UFLA_RULES.typography.fontFamily,
+          size,
+          color: BLACK,
+        })
+      : plainRun(run.text, size),
+  );
   return runs.length ? runs : [plainRun("", size)];
 }
 
@@ -499,7 +482,7 @@ function centeredParagraph(
   text: string,
   bold = false,
   size = BODY_SIZE,
-  spacing: NonNullable<IParagraphOptions["spacing"]> = { after: 240 },
+  spacing: NonNullable<IParagraphOptions["spacing"]> = { after: UFLA_RULES.spacing.afterPrimaryTitleTwip },
 ): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.CENTER,
@@ -552,7 +535,7 @@ function sectionTitle(text: string): Paragraph {
   return new Paragraph({
     heading: HeadingLevel.HEADING_1,
     alignment: AlignmentType.CENTER,
-    spacing: { before: 240, after: 240, line: ONE_AND_HALF_LINE },
+    spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
     children: [
       new TextRun({
         text: text.toUpperCase(),
@@ -568,7 +551,7 @@ function sectionTitle(text: string): Paragraph {
 function unnumberedTitle(text: string): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.CENTER,
-    spacing: { before: 240, after: 240, line: ONE_AND_HALF_LINE },
+    spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
     children: [
       new TextRun({
         text: text.toUpperCase(),
@@ -884,7 +867,7 @@ export function semanticReconstructedTableParagraph(table: ImportedTable): Array
           new TextRun({
             text: cleanMojibakeText(table.caption || reconstructed.caption || ""),
             bold: true,
-            font: "Times New Roman",
+            font: UFLA_RULES.typography.fontFamily,
             size: BODY_SIZE,
             color: BLACK,
           }),
@@ -901,7 +884,7 @@ export function semanticReconstructedTableParagraph(table: ImportedTable): Array
         new Paragraph({
           alignment: AlignmentType.LEFT,
           spacing: { line: SINGLE_LINE, after: 0 },
-          children: [new TextRun({ text: cleanMojibakeText(header), bold: true, font: "Times New Roman", size: BODY_SIZE, color: BLACK })],
+          children: [new TextRun({ text: cleanMojibakeText(header), bold: true, font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK })],
         }),
       ],
     })),
@@ -922,7 +905,7 @@ export function semanticReconstructedTableParagraph(table: ImportedTable): Array
             new Paragraph({
               alignment: AlignmentType.LEFT,
               spacing: { line: SINGLE_LINE, after: 0 },
-              children: [new TextRun({ text: cleanMojibakeText(displayText), font: "Times New Roman", size: BODY_SIZE, color: BLACK })],
+              children: [new TextRun({ text: cleanMojibakeText(displayText), font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK })],
             }),
           ],
         });
@@ -951,7 +934,7 @@ export function semanticReconstructedTableParagraph(table: ImportedTable): Array
       new Paragraph({
         alignment: AlignmentType.LEFT,
         spacing: { before: 120, after: 120, line: SINGLE_LINE },
-        children: [new TextRun({ text: cleanMojibakeText(table.source || reconstructed.source || ""), font: "Times New Roman", size: SOURCE_FONT_SIZE, color: BLACK })],
+        children: [new TextRun({ text: cleanMojibakeText(table.source || reconstructed.source || ""), font: UFLA_RULES.typography.fontFamily, size: SOURCE_FONT_SIZE, color: BLACK })],
       }),
     );
   }
@@ -962,7 +945,7 @@ export function semanticReconstructedTableParagraph(table: ImportedTable): Array
       new Paragraph({
         alignment: AlignmentType.LEFT,
         spacing: { before: 120, after: 120, line: SINGLE_LINE },
-        children: [new TextRun({ text: cleanMojibakeText(warning), italics: true, font: "Times New Roman", size: BODY_SIZE, color: BLACK })],
+        children: [new TextRun({ text: cleanMojibakeText(warning), italics: true, font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK })],
       }),
     );
   }
@@ -988,7 +971,7 @@ export function importedTableParagraph(table: ImportedTable | undefined): Array<
             new TextRun({
               text: cleanMojibakeText(table.caption),
               bold: true,
-              font: "Times New Roman",
+              font: UFLA_RULES.typography.fontFamily,
               size: BODY_SIZE,
               color: BLACK,
             }),
@@ -1007,7 +990,7 @@ export function importedTableParagraph(table: ImportedTable | undefined): Array<
           children: [
             new TextRun({
               text: cleanMojibakeText(line),
-              font: "Times New Roman",
+              font: UFLA_RULES.typography.fontFamily,
               size: BODY_SIZE,
               color: BLACK,
             }),
@@ -1024,7 +1007,7 @@ export function importedTableParagraph(table: ImportedTable | undefined): Array<
           children: [
             new TextRun({
               text: cleanMojibakeText(table.source),
-              font: "Times New Roman",
+              font: UFLA_RULES.typography.fontFamily,
               size: SOURCE_FONT_SIZE,
               color: BLACK,
             }),
@@ -1042,7 +1025,7 @@ export function importedTableParagraph(table: ImportedTable | undefined): Array<
             new TextRun({
               text: cleanMojibakeText(table.layoutWarning),
               italics: true,
-              font: "Times New Roman",
+              font: UFLA_RULES.typography.fontFamily,
               size: BODY_SIZE,
               color: BLACK,
             }),
@@ -1097,7 +1080,7 @@ export function importedTableParagraph(table: ImportedTable | undefined): Array<
                 new TextRun({
                   text: cleanMojibakeText(cellText),
                   bold: rowIndex === 0,
-                  font: "Times New Roman",
+                  font: UFLA_RULES.typography.fontFamily,
                   size: BODY_SIZE,
                   color: BLACK,
                 }),
@@ -1119,7 +1102,7 @@ export function importedTableParagraph(table: ImportedTable | undefined): Array<
           new TextRun({
             text: cleanMojibakeText(table.caption),
             bold: true,
-            font: "Times New Roman",
+            font: UFLA_RULES.typography.fontFamily,
             size: BODY_SIZE,
             color: BLACK,
           }),
@@ -1152,7 +1135,7 @@ export function importedTableParagraph(table: ImportedTable | undefined): Array<
         children: [
           new TextRun({
             text: cleanMojibakeText(table.source),
-            font: "Times New Roman",
+            font: UFLA_RULES.typography.fontFamily,
             size: SOURCE_FONT_SIZE,
             color: BLACK,
           }),
@@ -1174,7 +1157,7 @@ function blockToParagraph(
     const title = new Paragraph({
       heading: HeadingLevel.HEADING_1,
       alignment: AlignmentType.LEFT,
-      spacing: { before: 240, after: 240, line: ONE_AND_HALF_LINE },
+      spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
       children: [
         new TextRun({
           text: block.text.toUpperCase(),
@@ -1193,7 +1176,7 @@ function blockToParagraph(
     return [
       new Paragraph({
         heading: HeadingLevel.HEADING_2,
-        spacing: { before: 240, after: 240, line: ONE_AND_HALF_LINE },
+        spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
         children: [
           new TextRun({
             text: block.text,
@@ -1210,7 +1193,7 @@ function blockToParagraph(
     return [
       new Paragraph({
         heading: HeadingLevel.HEADING_3,
-        spacing: { before: 240, after: 240, line: ONE_AND_HALF_LINE },
+        spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
         children: [
           new TextRun({
             text: block.text,
@@ -1611,7 +1594,7 @@ function bookmarkedCaptionParagraph(text: string, _kind: CaptionKind, bookmarkId
       new TextRun({
         text: cleanMojibakeText(text),
         bold: true,
-        font: "Times New Roman",
+        font: UFLA_RULES.typography.fontFamily,
         size: BODY_SIZE,
         color: BLACK,
       }),
@@ -1777,12 +1760,15 @@ export function calculateTextualStartPage(
   if (hasText(fields.indicadoresImpacto) || impactRequired) countedPreTextualPages += 1;
   if (hasText(fields.impactIndicators) || impactRequired) countedPreTextualPages += 1;
 
-  const hasAnyList = hasText(fields.listaQuadros) || hasText(fields.listaGraficos) || hasText(fields.listaTabelas) || hasText(fields.listaSiglas);
+  const hasAnyList = hasText(fields.listaQuadros) || hasText(fields.listaGraficos) || hasText(fields.listaTabelas) || hasText(fields.listaSiglas) || hasText(fields.listaAbreviaturas) || hasText(fields.listaSimbolos) || hasText(fields.glossario);
   if (hasAnyList) countedPreTextualPages += 1;
   if (hasText(fields.listaQuadros)) countedPreTextualPages += 1;
   if (hasText(fields.listaGraficos)) countedPreTextualPages += 1;
   if (hasText(fields.listaTabelas)) countedPreTextualPages += 1;
   if (hasText(fields.listaSiglas)) countedPreTextualPages += 1;
+  if (hasText(fields.listaAbreviaturas)) countedPreTextualPages += 1;
+  if (hasText(fields.listaSimbolos)) countedPreTextualPages += 1;
+  if (hasText(fields.glossario)) countedPreTextualPages += 1;
 
   if (hasSummary) countedPreTextualPages += 1;
 
@@ -2196,6 +2182,7 @@ function preTextualChildren(
 
   children.push(
     ...approvalPageChildren(fields),
+    ...optionalPage("Errata", cleanMojibakeText(fields.errata)),
     ...optionalUntitledRightPage(cleanMojibakeText(fields.dedicatoria)),
     ...optionalPage("Agradecimentos", cleanMojibakeText(fields.agradecimentos)),
     ...optionalUntitledRightPage(cleanMojibakeText(fields.epigrafe), true),
@@ -2247,7 +2234,10 @@ function preTextualChildren(
     hasText(fields.listaQuadros) ||
     hasText(fields.listaGraficos) ||
     hasText(fields.listaTabelas) ||
-    hasText(fields.listaSiglas)
+    hasText(fields.listaSiglas) ||
+    hasText(fields.listaAbreviaturas) ||
+    hasText(fields.listaSimbolos) ||
+    hasText(fields.glossario)
   ) {
     children.push(pageBreak());
   }
@@ -2268,6 +2258,15 @@ function preTextualChildren(
   }
   if (hasText(fields.listaSiglas)) {
     children.push(...optionalPage("Lista de siglas", cleanMojibakeText(fields.listaSiglas)));
+  }
+  if (hasText(fields.listaAbreviaturas)) {
+    children.push(...optionalPage("Lista de abreviaturas", cleanMojibakeText(fields.listaAbreviaturas)));
+  }
+  if (hasText(fields.listaSimbolos)) {
+    children.push(...optionalPage("Lista de símbolos", cleanMojibakeText(fields.listaSimbolos)));
+  }
+  if (hasText(fields.glossario)) {
+    children.push(...optionalPage("Glossário", cleanMojibakeText(fields.glossario)));
   }
 
   return children;
@@ -2322,7 +2321,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   const textualAndPostTextualChildren: Array<Paragraph | Table> = [
     ...bodyBlocksWithoutReferences.flatMap((block, index) => blockToParagraph(block, index === 0, input.importedImages ?? [], input.importedTables ?? [])),
     pageBreak(),
-    ...(hasEditorHeading(bodyBlocksWithoutReferences, "REFERÊNCIAS") || bodyBlocksWithoutReferences.some((b) => normalizeForDetection(b.text).includes(normalizeForDetection("REFERENCIAS"))) ? [] : [sectionTitle("Referências")]),
+    ...(hasEditorHeading(bodyBlocksWithoutReferences, "REFERÊNCIAS") || bodyBlocksWithoutReferences.some((b) => ["REFERENCIAS", "REFERENCIAS BIBLIOGRAFICAS", "BIBLIOGRAFICAS"].includes(normalizeForDetection(b.text).replace(/^\d+(?:\.\d+)*\s*/, ""))) ? [] : [sectionTitle("Referências")]),
     ...buildReferences(references),
     ...(hasApendices
       ? [pageBreak(), sectionTitle(appendixTitle(fields)), ...buildSimpleParagraphs(fields.apendices)]

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AcademicFields } from "../ufla-rules";
 import { clearDraft, hasDraft, loadDraft, saveDraft } from "../draft-storage";
+import type { DraftStorageErrorKind } from "../draft-storage-error";
 
 const DEBOUNCE_MS = 800;
 
@@ -27,8 +28,10 @@ export function useDraft(fields: AcademicFields, editorText: string) {
   const [hasStoredDraft, setHasStoredDraft] = useState(() => typeof window !== "undefined" && hasDraft(window.localStorage));
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearedRef = useRef(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
   const [restoredDraft, setRestoredDraft] = useState<RestoredDraft | null>(null);
+  const [draftErrorKind, setDraftErrorKind] = useState<DraftStorageErrorKind | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -44,6 +47,9 @@ export function useDraft(fields: AcademicFields, editorText: string) {
       setRestoredDraft({ fields: restored, editorText: draft.editorText ?? "" });
       setHasStoredDraft(true);
       setDraftStatus("restored");
+      setDraftErrorKind(null);
+      const savedAt = draft.updatedAt ? new Date(draft.updatedAt) : null;
+      setLastSavedAt(savedAt && !Number.isNaN(savedAt.getTime()) ? savedAt : null);
     } catch {
       // Ignora rascunho incompatível.
     }
@@ -67,17 +73,25 @@ export function useDraft(fields: AcademicFields, editorText: string) {
     }
     const timeout = setTimeout(() => {
       try {
-        saveDraft({
+        const result = saveDraft({
           fields: draftFieldsPayload(fields),
           editorText,
           updatedAt: new Date().toISOString(),
         }, window.localStorage);
         autosaveTimeoutRef.current = null;
-        setHasStoredDraft(true);
-        setDraftStatus("saved");
+        if (result.ok) {
+          setHasStoredDraft(true);
+          setDraftStatus("saved");
+          setDraftErrorKind(null);
+          setLastSavedAt(new Date());
+        } else {
+          setDraftStatus("error");
+          setDraftErrorKind(result.kind);
+        }
       } catch {
         autosaveTimeoutRef.current = null;
         setDraftStatus("error");
+        setDraftErrorKind("unknown");
       }
     }, DEBOUNCE_MS);
     autosaveTimeoutRef.current = timeout;
@@ -96,8 +110,10 @@ export function useDraft(fields: AcademicFields, editorText: string) {
     setRestoredDraft(null);
     clearDraft(window.localStorage);
     setHasStoredDraft(false);
+    setLastSavedAt(null);
+    setDraftErrorKind(null);
     setDraftStatus("cleared");
   }
 
-  return { draftStatus, hasStoredDraft, handleClearDraft, restoredDraft };
+  return { draftStatus, hasStoredDraft, handleClearDraft, restoredDraft, lastSavedAt, draftErrorKind };
 }

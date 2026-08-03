@@ -46,4 +46,37 @@ describe("ref validator", () => {
       "DEJOURS, Christophe. A loucura do trabalho: estudo de psicopatologia do trabalho. 6. ed. São Paulo: Cortez, 2015.",
     )).toContain("reference-author-spelling-review");
   });
+
+  it("nao alerta ordem quando referencias estao em ordem alfabetica", () => {
+    const codes = codesFor(
+      "BRASIL. Lei nº 14.133. Brasília, DF, 2021.\n" +
+        "SILVA, Maria. Introdução à pesquisa. Lavras: UFLA, 2023.",
+    );
+    expect(codes).not.toContain("reference-order");
+  });
+
+  it("alerta referencias fora da ordem alfabetica", () => {
+    const codes = codesFor(
+      "SILVA, Maria. Introdução à pesquisa. Lavras: UFLA, 2023.\n" +
+        "BRASIL. Lei nº 14.133. Brasília, DF, 2021.",
+    );
+    expect(codes).toContain("reference-order");
+  });
+
+  it("usa ordenacao pt-BR (acentos) ao avaliar ordem", () => {
+    const codes = codesFor(
+      "ÁVILA, Carlos. Primeiro autor.\n" +
+        "BASTOS, João. Segundo autor.\n" +
+        "AQUINO, Pedro. Terceiro autor.",
+    );
+    expect(codes).toContain("reference-order");
+  });
+
+  it("alerta livro sem editora detectada (NBR 6023)", () => {
+    expect(codesFor("SILVA, Maria. Introdução à pesquisa. 2023.")).toContain("reference-livro-publisher-missing");
+  });
+
+  it("nao alerta livro com editora no formato Local: Editora, ano", () => {
+    expect(codesFor("SILVA, Maria. Introdução à pesquisa. Lavras: UFLA, 2023.")).not.toContain("reference-livro-publisher-missing");
+  });
 });

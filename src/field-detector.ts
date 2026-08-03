@@ -265,11 +265,43 @@ function isGenericCoverLine(value: string): boolean {
   return GENERIC_COVER_WORDS.has(normalized) || normalized.length < 2;
 }
 
+/**
+ * Remove um marcador de nota de rodapé sobrescrito colado ao final do texto
+ * (ex.: "ALEXANDRE JOSÉ DE OLIVEIRA¹" → "ALEXANDRE JOSÉ DE OLIVEIRA").
+ * Aceita dígitos sobrescritos unicode (¹²³⁴⁵) ou 1–3 dígitos ASCII colados
+ * sem espaço à última palavra (ex.: "OLIVEIRA1"). Não remove anos ("1950") ou
+ * números com espaço ("MODELO 2"), pois esses pertencem a títulos.
+ */
+function stripFootnoteMarker(value: string): string {
+  const cleaned = cleanValue(value);
+  if (!cleaned) return cleaned;
+
+  const unicodeMatch = cleaned.match(/^(.*?)[\u00b9\u00b2\u00b3\u2074\u2070\u00b0\u00aa\u00ba]$/);
+  if (unicodeMatch) {
+    const base = (unicodeMatch[1] ?? "").trim();
+    if (base.split(/\s+/).filter(Boolean).length >= 2) return base;
+    return cleaned;
+  }
+
+  const asciiMatch = cleaned.match(/^(.*?)(\d+)$/);
+  if (asciiMatch) {
+    const [, base, digits] = asciiMatch;
+    if (/(\s)\d/.test(cleaned)) return cleaned;
+    if (digits.length === 4) return cleaned;
+    const baseWords = (base ?? "").trim().split(/\s+/).filter(Boolean);
+    if (baseWords.length >= 2) return (base ?? "").trim();
+    return cleaned;
+  }
+
+  return cleaned;
+}
+
 function isLikelyAuthorName(value: string): boolean {
-  const normalized = normalizeForDetection(value);
+  const authorBase = stripFootnoteMarker(value);
+  const normalized = normalizeForDetection(authorBase);
   if (normalized === "NOME E SOBRENOME DO AUTOR") return true;
-  if (isGenericCoverLine(value) || isLocation(value) || isYear(value)) return false;
-  if (/[:;]|\d/.test(value)) return false;
+  if (isGenericCoverLine(authorBase) || isLocation(authorBase) || isYear(authorBase)) return false;
+  if (/[:;]|\d/.test(authorBase)) return false;
   if (
     /\b(RESUMO|ABSTRACT|REFERENCIAS|INTRODUCAO|ANEXOS|APENDICES|SUMARIO)\b/.test(
       normalized,
@@ -279,14 +311,14 @@ function isLikelyAuthorName(value: string): boolean {
   }
 
   // Rejeitar termos institucionais
-  const upperValue = value.toUpperCase();
+  const upperValue = authorBase.toUpperCase();
   for (const term of INSTITUTIONAL_TERMS) {
     if (upperValue.includes(term)) {
       return false;
     }
   }
 
-  const words = value.split(/\s+/).filter(Boolean);
+  const words = authorBase.split(/\s+/).filter(Boolean);
   return words.length >= 2 && words.length <= 8;
 }
 
@@ -364,9 +396,10 @@ function detectAuthorFromCover(blocks: ImportedBlock[], allLines: string[]): {
   const candidate = coverLines.find(isLikelyAuthorName) ?? "";
   if (!candidate) return { value: "", confidence: "nao-identificado" };
 
-  const occurrences = countTextOccurrences(allLines, candidate);
+  const author = stripFootnoteMarker(candidate);
+  const occurrences = countTextOccurrences(allLines, author);
   return {
-    value: candidate,
+    value: author,
     confidence: occurrences > 1 ? "alta" : "media",
   };
 }
@@ -389,6 +422,8 @@ function detectTitleFromCover(
       const line = coverLines[index];
       if (!line || isLocation(line) || isYear(line)) break;
       if (isGenericCoverLine(line)) continue;
+      // Não deixar um nome de autor (com ou sem marcador de nota) entrar no título
+      if (isLikelyAuthorName(line)) continue;
       collected.push(line);
     }
     return collected;

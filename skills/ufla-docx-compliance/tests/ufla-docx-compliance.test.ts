@@ -105,6 +105,9 @@ function makeMockAnalysis(overrides?: Partial<DocxAnalysis>): DocxAnalysis {
       excludesCover: true,
       excludesPreTextual: true,
     },
+    resumo: {
+      titleCentered: true,
+    },
     colors: {
       hasBlueInBody: false,
       hasBlueInReferences: false,
@@ -243,6 +246,70 @@ describe("checklist-checker", () => {
     expect(dupHeading?.status).toBe("ok");
     expect(dupContent?.status).toBe("ok");
   });
+
+  it("should mark structurally-excluded items as unchecked for artigo", () => {
+    const analysis = makeMockAnalysis();
+    const items = checkCompliance(analysis, "artigo");
+    for (const id of ["3.1", "3.10", "5.1", "15.1", "25.6", "25.7"]) {
+      const item = items.find((i) => i.id === id);
+      expect(item?.status).toBe("unchecked");
+    }
+  });
+
+  it("should mark table items unchecked when document has no tables", () => {
+    const analysis = makeMockAnalysis({ tables: { count: 0, hasBorders: false, hasAboveTitle: false, hasBelowSource: false, tableDetails: [] } });
+    const items = checkCompliance(analysis);
+    for (const id of ["21.1", "21.2", "21.3", "21.4"]) {
+      const item = items.find((i) => i.id === id);
+      expect(item?.status).toBe("unchecked");
+      expect(item?.suggestion).toContain("Documento sem tabelas");
+    }
+  });
+
+  it("should mark annex/appendix items unchecked when absent (optional)", () => {
+    const analysis = makeMockAnalysis({
+      summary: { exists: true, headingCentered: true, headingUppercase: true, headingBold: true, includesReferences: true, includesAppendices: false, includesAnnexes: false, excludesCover: true, excludesPreTextual: true },
+    });
+    const items = checkCompliance(analysis);
+    expect(items.find((i) => i.id === "25.6")?.status).toBe("unchecked");
+    expect(items.find((i) => i.id === "25.7")?.status).toBe("unchecked");
+  });
+
+  it("should keep table/annex/appendix as ok when present", () => {
+    const analysis = makeMockAnalysis({
+      tables: { count: 2, hasBorders: true, hasAboveTitle: true, hasBelowSource: true, tableDetails: [{ rows: 3, cols: 3, hasBorders: true }] },
+      summary: { exists: true, headingCentered: true, headingUppercase: true, headingBold: true, includesReferences: true, includesAppendices: true, includesAnnexes: true, excludesCover: true, excludesPreTextual: true },
+    });
+    const items = checkCompliance(analysis);
+    expect(items.find((i) => i.id === "21.1")?.status).toBe("ok");
+    expect(items.find((i) => i.id === "25.6")?.status).toBe("ok");
+    expect(items.find((i) => i.id === "25.7")?.status).toBe("ok");
+  });
+
+  it("should mark structurally-excluded items as unchecked for resumo_cpg", () => {
+    const analysis = makeMockAnalysis();
+    const items = checkCompliance(analysis, "resumo_cpg");
+    for (const id of ["3.10", "11.1", "17.1", "25.8"]) {
+      const item = items.find((i) => i.id === id);
+      expect(item?.status).toBe("unchecked");
+    }
+  });
+
+  it("should check RESUMO title item from resumo.titleCentered", () => {
+    const analysis = makeMockAnalysis({ resumo: { titleCentered: false } });
+    const items = checkCompliance(analysis);
+    const item = items.find((i) => i.id === "11.1");
+    expect(item?.status).toBe("fail");
+  });
+
+  it("should not count unchecked items as grave failures", () => {
+    const analysis = makeMockAnalysis({
+      page: { widthTwip: 0, heightTwip: 0, marginTopCm: 0, marginBottomCm: 0, marginLeftCm: 0, marginRightCm: 0 },
+    });
+    const items = checkCompliance(analysis, "artigo");
+    const failItems = items.filter((i) => i.status === "fail");
+    expect(failItems.length).toBeGreaterThan(0);
+  });
 });
 
 describe("report-generator", () => {
@@ -339,5 +406,11 @@ describe("validateDocx integration", () => {
     const markdown = generateReport(report);
     expect(markdown.length).toBeGreaterThan(100);
     expect(markdown).toContain("teste-final.docx");
+  });
+
+  it("should accept workType option and classify excluded items as unchecked", async () => {
+    const { validateDocx } = await import("../src/index");
+    const report = await validateDocx(TEST_DOCX, { workType: "artigo" });
+    expect(report.summary.unchecked).toBeGreaterThan(0);
   });
 });

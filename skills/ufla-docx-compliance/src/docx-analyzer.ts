@@ -69,14 +69,12 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
   const marginLeftTwip = parseInt(extractFirstMatch(pgMar, /w:left="(\d+)"/) || "0", 10);
   const marginRightTwip = parseInt(extractFirstMatch(pgMar, /w:right="(\d+)"/) || "0", 10);
 
-  const isA4 = widthTwip === 11906 && heightTwip === 16838;
   const marginTopCm = twipToCm(marginTopTwip);
   const marginBottomCm = twipToCm(marginBottomTwip);
   const marginLeftCm = twipToCm(marginLeftTwip);
   const marginRightCm = twipToCm(marginRightTwip);
 
   // === HEADER ===
-  const headerRef = documentXml.match(/<w:headerReference\s[\s\S]*?\/?>/)?.[0] || "";
   const headerMarginMatch = extractFirstMatch(pgMar, /w:header="(\d+)"/);
   const headerMarginCm = headerMarginMatch ? twipToCm(parseInt(headerMarginMatch, 10)) : 0;
 
@@ -252,10 +250,14 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
 
   // === COVER ===
   const firstParas = normalized.slice(0, 20);
-  const coverAuthorText = firstParas[0] || "";
+  // O primeiro parágrafo do documento costuma ser o parágrafo da imagem da logo
+  // (sem texto) ou um espaçador. O autor é o primeiro parágrafo com texto da capa.
+  const coverAuthorIdx = normalized.findIndex((t, i) => i < 20 && t.length > 0);
+  const coverAuthorText = coverAuthorIdx >= 0 ? normalized[coverAuthorIdx] : "";
+  const coverAuthorParaXml = coverAuthorIdx >= 0 ? bodyParas[coverAuthorIdx]?.[0] || "" : "";
   const coverAuthorUpper = coverAuthorText === coverAuthorText.toUpperCase();
-  const coverAuthorBold = bodyParas[0]?.[0]?.includes("<w:b/>") || bodyParas[0]?.[0]?.includes('w:b w:val="true"') || false;
-  const coverAuthorCentered = bodyParas[0]?.[0]?.includes('w:val="center"') || false;
+  const coverAuthorBold = coverAuthorParaXml.includes("<w:b/>") || coverAuthorParaXml.includes('w:b w:val="true"');
+  const coverAuthorCentered = coverAuthorParaXml.includes('w:val="center"');
 
   // Find cover title: first paragraph in first 20 that is long (>20 chars) and bold and centered
   const coverTitleParaIdx = normalized.findIndex(
@@ -272,16 +274,16 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
   const coverTitleCentered = coverTitleXml.includes('w:val="center"');
 
   const authorRunHp = parseInt(
-    extractFirstMatch(bodyParas[0]?.[0] || "", /<w:sz[\s\S]*?w:val="(\d+)"/) || "24",
+    extractFirstMatch(coverAuthorParaXml, /<w:sz[\s\S]*?w:val="(\d+)"/) || "24",
     10,
   );
   const coverAuthorSize = halfPointsToPt(authorRunHp);
 
   const locationMatch = firstParas.find((t) => t.includes("LAVRAS") || t.includes("MG"));
   const locationUpper = locationMatch === locationMatch?.toUpperCase();
+  const locationIdx = locationMatch ? firstParas.indexOf(locationMatch) : -1;
   const locationBold =
-    bodyParas[firstParas.indexOf(locationMatch)]?.includes("<w:b/>") ||
-    bodyParas[firstParas.indexOf(locationMatch)]?.includes('w:b w:val="true"') ||
+    (locationIdx >= 0 && (bodyParas[locationIdx]?.includes("<w:b/>") || bodyParas[locationIdx]?.includes('w:b w:val="true"'))) ||
     false;
 
   const yearMatch = firstParas.find((t) => /^\d{4}$/.test(t));
@@ -290,7 +292,7 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
     : "";
   const yearBold = yearXml.includes("<w:b/>") || yearXml.includes('w:b w:val="true"');
 
-  const hasLogo = (documentXml + header1Xml).includes("ufla") || (documentXml + header1Xml).includes("logo") || (documentXml + header1Xml).includes("image");
+  const hasLogo = /ufla|logo|image|drawing/i.test(documentXml + header1Xml);
 
   // === TOC ===
   const tocField = documentXml.includes('w:instrText') && documentXml.includes('TOC');
@@ -300,7 +302,6 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
   // === PAGINATION ===
   const hasPageNumberField = /w:instrText[^>]*>\s*PAGE\s*<\/w:instrText>/i.test(documentXml + header1Xml) || documentXml.includes("PageNumber") || header1Xml.includes("PageNumber");
   const introIdx = normalized.findIndex((t) => /^1\s+/.test(t) || /^1$/.test(t));
-  const hasHeader = documentXml.includes("<w:headerReference");
 
   // === SUMMARY ===
   const sumIdx = normalized.findIndex((t) => /^sumario/i.test(t));
@@ -308,9 +309,14 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
   const sumCentered = sumXml.includes('w:val="center"');
   const sumBold = sumXml.includes("<w:b/>") || sumXml.includes('w:b w:val="true"');
 
+  // === RESUMO ===
+  // O título RESUMO é um parágrafo isolado; o sumário é verificado separadamente
+  // acima, pois as seções são independentes.
+  const resumoIdx = normalized.findIndex((t) => /^resumo$/i.test(t));
+  const resumoXml = resumoIdx >= 0 ? bodyParas[resumoIdx]?.[0] || "" : "";
+  const resumoTitleCentered = resumoXml.includes('w:val="center"');
+
   // === COLORS ===
-  const blueCount = countMatches(documentXml, /w:color w:val="([0-9A-F]+)"/gi);
-  const hasBlueColor = blueCount > 0;
   const blueInBody = documentXml.includes('w:color w:val="0000FF"') || documentXml.includes('w:color w:val="0563C1"');
 
   return {
@@ -411,6 +417,9 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
       includesAnnexes: anexoIdx >= 0,
       excludesCover: true,
       excludesPreTextual: true,
+    },
+    resumo: {
+      titleCentered: resumoTitleCentered,
     },
     colors: {
       hasBlueInBody: blueInBody,

@@ -251,6 +251,25 @@
   margin: 0;
   line-height: 1.5;
   font-size: 12pt;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4em;
+}
+
+.preview-summary-text {
+  white-space: nowrap;
+}
+
+.preview-summary-leader {
+  flex: 1 1 auto;
+  border-bottom: 1px dotted #000;
+  transform: translateY(-0.3em);
+  min-width: 1.5em;
+}
+
+.preview-summary-page {
+  white-space: nowrap;
+  text-align: right;
 }
 
 .preview-summary-1 {

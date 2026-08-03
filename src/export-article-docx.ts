@@ -19,9 +19,9 @@ import { normalizeReferences, type ReferenceRun } from "./references-normalizer"
 import { cleanMojibakeText, longQuoteParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, tabbedTableBlock } from "./docx-render-core";
 
 const BLACK = "000000";
-const BODY_SIZE = 24;
-const SINGLE_LINE = 240;
-const ONE_AND_HALF_LINE = 360;
+const BODY_SIZE = UFLA_RULES.typography.bodyFontSizePt * 2;
+const SINGLE_LINE = UFLA_RULES.spacing.singleLineTwip;
+const ONE_AND_HALF_LINE = UFLA_RULES.spacing.bodyLineTwip;
 
 interface RunOptions {
   bold?: boolean;
@@ -112,7 +112,7 @@ function paragraph(text: string, options: Partial<IParagraphOptions> = {}): Para
 function centered(text: string, bold = false, size = BODY_SIZE): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.CENTER,
-    spacing: { after: 240, line: ONE_AND_HALF_LINE },
+    spacing: { after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
     children: [run(text, { bold, size })],
   });
 }
@@ -120,7 +120,7 @@ function centered(text: string, bold = false, size = BODY_SIZE): Paragraph {
 function simpleParagraph(text: string): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.LEFT,
-    spacing: { line: SINGLE_LINE, after: 120 },
+    spacing: { line: SINGLE_LINE, after: UFLA_RULES.spacing.afterParagraphTwip },
     indent: {},
     children: textRunsFromMarkup(text || " "),
   });
@@ -131,7 +131,7 @@ function sectionTitle(text: string, level: DocxHeadingLevel = HeadingLevel.HEADI
   return new Paragraph({
     heading: level,
     alignment: AlignmentType.LEFT,
-    spacing: { before: 240, after: 120, line: ONE_AND_HALF_LINE },
+    spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
     children: [run(displayText, { bold: level !== HeadingLevel.HEADING_3 })],
   });
 }
@@ -142,7 +142,7 @@ function labeledSection(label: string, value: string): Paragraph[] {
     centered(label.toUpperCase(), true),
     ...splitParagraphs(value).map((line) =>
       paragraph(line, {
-        spacing: { line: SINGLE_LINE, after: 120 },
+        spacing: { line: SINGLE_LINE, after: UFLA_RULES.spacing.afterParagraphTwip },
         indent: { firstLine: 0 },
       }),
     ),
@@ -190,17 +190,14 @@ function referenceRunToTextRun(referenceRun: ReferenceRun): TextRun {
   });
 }
 
-let _articleReferencesAdded = false;
-
 function referenceParagraphs(references: string[]): (Paragraph | Table)[] {
-  if (!references.length || _articleReferencesAdded) return [];
-  _articleReferencesAdded = true;
+  if (!references.length) return [];
 
   const children: Array<Paragraph | Table> = [];
   children.push(
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { before: 240, after: 120, line: ONE_AND_HALF_LINE },
+      spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
       children: [run("REFERÊNCIAS".toUpperCase(), { bold: true })],
     }),
   );
@@ -221,7 +218,7 @@ function referenceParagraphs(references: string[]): (Paragraph | Table)[] {
         (reference) =>
           new Paragraph({
             alignment: AlignmentType.LEFT,
-            spacing: { line: SINGLE_LINE, after: 240 },
+            spacing: { line: SINGLE_LINE, after: UFLA_RULES.spacing.afterPrimaryTitleTwip },
             indent: { left: cmToTwip(0.5), hanging: cmToTwip(0.5) },
             children: reference.runs.length
               ? reference.runs.map(referenceRunToTextRun)
@@ -233,7 +230,6 @@ function referenceParagraphs(references: string[]): (Paragraph | Table)[] {
 }
 
 function createArticleDocument(input: DocxGenerationInput): Document {
-  _articleReferencesAdded = false;
   const blocks = parseEditorContent(input.editorText);
   const bodyBlocks = stripTrailingReferenceSection(
     stripLeadingArticleMetadataBlocks(blocks, input),
@@ -293,7 +289,7 @@ function createArticleDocument(input: DocxGenerationInput): Document {
             ? [
                 new Paragraph({
                   alignment: AlignmentType.BOTH,
-                  spacing: { line: SINGLE_LINE, after: 0 },
+                  spacing: { line: SINGLE_LINE, after: UFLA_RULES.spacing.afterParagraphTwip },
                   indent: { firstLine: 0 },
                   children: [
                     run("Palavras-chave: ", { bold: true }),
@@ -307,7 +303,7 @@ function createArticleDocument(input: DocxGenerationInput): Document {
             ? [
                 new Paragraph({
                   alignment: AlignmentType.BOTH,
-                  spacing: { line: SINGLE_LINE, after: 0 },
+                  spacing: { line: SINGLE_LINE, after: UFLA_RULES.spacing.afterParagraphTwip },
                   indent: { firstLine: 0 },
                   children: [
                     run("Keywords: ", { bold: true }),

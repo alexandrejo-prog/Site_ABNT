@@ -429,3 +429,268 @@
     box-shadow: none;
   }
 }
+
+.flow-progress {
+  display: block;
+  padding: 10px 16px;
+  background: #f4f8f5;
+  border-bottom: 1px solid #d8e4da;
+}
+
+.flow-progress-list {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  max-width: 1120px;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.flow-step {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: #69747b;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.flow-step-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flow-step-marker {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  flex: none;
+  border: 2px solid #c3d0c5;
+  background: #ffffff;
+}
+
+.flow-step.is-complete .flow-step-marker {
+  border-color: #1f7b69;
+  background: #1f7b69;
+}
+
+.flow-step.is-complete {
+  color: #1e3932;
+}
+
+.flow-step.is-current .flow-step-marker {
+  border-color: #1f7b69;
+  box-shadow: 0 0 0 3px rgba(31, 123, 105, 0.18);
+}
+
+.flow-step.is-current {
+  color: #124d42;
+}
+
+.flow-progress-status {
+  display: block;
+  margin: 8px auto 0;
+  max-width: 1120px;
+  color: #3d4f3d;
+  font-size: 0.78rem;
+}
+
+.field-focus-flash {
+  animation: field-focus-flash 1.4s ease-in-out;
+}
+
+@keyframes field-focus-flash {
+  0%, 100% { outline-offset: 0; }
+  25%, 75% { outline: 3px solid rgba(31, 123, 105, 0.5); outline-offset: 3px; }
+}
+
+.validation-pane .issue-navigate {
+  margin-top: 6px;
+  padding: 4px 10px;
+  min-height: 28px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #124d42;
+  background: #e9f5f1;
+  border: 1px solid #1f7b69;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.validation-pane .issue-navigate:hover {
+  background: #d8ece5;
+}
+
+.validation-pane .output-badge {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.validation-pane .output-badge strong {
+  font-size: 0.88rem;
+}
+
+.output-badge-draft {
+  color: #4a2c00;
+  background: #fff0bf;
+  border: 1px solid #e5c15a;
+}
+
+.output-badge-review {
+  color: #17462b;
+  background: #dff0e9;
+  border: 1px solid #9ccfb4;
+}
+
+.output-badge-blocked {
+  color: #741c1c;
+  background: #ffddda;
+  border: 1px solid #e5a8a2;
+}
+
+.validation-pane .quick-guide {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #d7dfd8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.validation-pane .quick-guide summary {
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1e3932;
+}
+
+.validation-pane .quick-guide ol {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.demo-load {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px dashed #1f7b69;
+  border-radius: 8px;
+  background: #f1faf6;
+}
+
+.demo-load .secondary-action {
+  width: 100%;
+}
+
+.demo-load-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: #1e3932;
+}
+
+.first-use-guide {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 14px 16px;
+  border: 1px solid #1f7b69;
+  border-left-width: 5px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #f1faf6, #ffffff);
+}
+
+.first-use-guide-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.first-use-guide-header h2 {
+  margin: 0;
+  font-size: 1rem;
+  color: #0e3f35;
+}
+
+.first-use-guide-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #1e5d4f;
+  cursor: pointer;
+}
+
+.first-use-guide-close:hover {
+  background: #e2f3ec;
+}
+
+.first-use-guide-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.first-use-guide-steps li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: #1e3932;
+  opacity: 0.55;
+}
+
+.first-use-guide-steps li.is-active {
+  opacity: 1;
+}
+
+.first-use-guide-number {
+  flex: 0 0 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #1f7b69;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.first-use-guide-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.first-use-guide-actions .secondary-action,
+.first-use-guide-actions .primary-action {
+  font-size: 0.82rem;
+  padding: 6px 12px;
+}
+
+.preview-loading {
+  padding: 16px;
+  color: #1e3932;
+  font-size: 0.85rem;
+}

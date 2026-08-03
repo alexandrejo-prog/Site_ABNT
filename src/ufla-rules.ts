@@ -73,6 +73,7 @@ export const ACADEMIC_FIELD_KEYS = [
   "dedicatoria",
   "agradecimentos",
   "epigrafe",
+  "errata",
   "indicadoresImpacto",
   "impactIndicators",
   "imageWarnings",
@@ -131,6 +132,7 @@ export interface AcademicFields {
   dedicatoria: string;
   agradecimentos: string;
   epigrafe: string;
+  errata: string;
   indicadoresImpacto: string;
   impactIndicators: string;
   imageWarnings: string;
@@ -163,6 +165,9 @@ export interface AcademicFields {
   listaGraficos: string;
   listaTabelas: string;
   listaSiglas: string;
+  listaAbreviaturas: string;
+  listaSimbolos: string;
+  glossario: string;
 }
 
 const TWIPS_PER_CM = 567;
@@ -390,6 +395,7 @@ export function emptyAcademicFields(): AcademicFields {
     dedicatoria: "",
     agradecimentos: "",
     epigrafe: "",
+    errata: "",
     indicadoresImpacto: "",
     impactIndicators: "",
     imageWarnings: "",
@@ -422,6 +428,9 @@ export function emptyAcademicFields(): AcademicFields {
     listaGraficos: "",
     listaTabelas: "",
     listaSiglas: "",
+    listaAbreviaturas: "",
+    listaSimbolos: "",
+    glossario: "",
   };
 }
 

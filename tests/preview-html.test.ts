@@ -103,6 +103,60 @@ describe("buildPreviewHtml - fidelidade estrutural", () => {
     expect(html).toContain("1.1 Contexto");
     expect(html).toContain("REFERÊNCIAS");
   });
+
+  it("Entradas do sumário têm número de página calculado à direita com dot leader", () => {
+    const html = previewFor();
+    expect(html).toContain("preview-summary-leader");
+    const pagePattern = /preview-summary-page">\d+<\/span>/;
+    expect(html).toMatch(pagePattern);
+    const intro = html.match(/1 INTRODUCAO<\/span><span class="preview-summary-leader"[^>]*><\/span><span class="preview-summary-page">(\d+)<\/span>/);
+    expect(intro).not.toBeNull();
+    const introPage = Number(intro![1]);
+    const refs = html.match(/REFERÊNCIAS<\/span><span class="preview-summary-leader"[^>]*><\/span><span class="preview-summary-page">(\d+)<\/span>/);
+    expect(refs).not.toBeNull();
+    expect(Number(refs![1])).toBeGreaterThan(introPage);
+  });
+
+  it("Números de página do sumário iniciam após os pré-textuais (corpo não começa na página 1)", () => {
+    const html = previewFor(baseFields(), "# 1 Introducao\nTexto.\n");
+    const pages = [...html.matchAll(/preview-summary-page">(\d+)<\/span>/g)].map((m) => Number(m[1]));
+    expect(pages.length).toBeGreaterThan(0);
+    expect(Math.min(...pages)).toBeGreaterThan(1);
+  });
+
+  it("Paginação real por altura: conteúdo longo espalha seções por mais páginas", () => {
+    const longPara = Array.from({ length: 60 }, (_, i) => `Paragrafo ${i + 1} com texto suficiente para encher a pagina A4 e forcar quebra de pagina.`).join("\n");
+    const html = previewFor(
+      baseFields(),
+      ["# 1 Introducao", longPara, "# 2 Metodologia", "Curto.", "# 3 Resultados", "Curto."].join("\n"),
+    );
+    const pagesOf = (label: string): number => {
+      const match = html.match(new RegExp(`${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}<\\/span><span class="preview-summary-leader"[^>]*><\\/span><span class="preview-summary-page">(\\d+)<\\/span>`));
+      return Number(match?.[1]);
+    };
+    const intro = pagesOf("1 INTRODUCAO");
+    const metodo = pagesOf("2 METODOLOGIA");
+    const resultados = pagesOf("3 RESULTADOS");
+    expect(Number.isFinite(intro)).toBe(true);
+    expect(Number.isFinite(metodo)).toBe(true);
+    expect(Number.isFinite(resultados)).toBe(true);
+    expect(metodo).toBeGreaterThan(intro);
+    expect(resultados).toBeGreaterThanOrEqual(metodo);
+    expect(resultados - intro).toBeGreaterThan(1);
+  });
+
+  it("Paginação real por altura: cada seção inicia em página própria após texto denso", () => {
+    const longPara = Array.from({ length: 90 }, (_, i) => `Paragrafo ${i + 1} com conteudo longo o bastante para ocupar varias linhas em Times 12pt com espacamento 1,5.`).join("\n");
+    const html = previewFor(
+      baseFields(),
+      ["# 1 Introducao", longPara, "# 2 Metodologia", longPara, "# 3 Resultados", longPara].join("\n"),
+    );
+    const pages = [...html.matchAll(/preview-summary-page">(\d+)<\/span>/g)].map((m) => Number(m[1]));
+    const sectionPages = pages.slice(0, 3);
+    expect(sectionPages.length).toBe(3);
+    expect(sectionPages[1]).toBeGreaterThan(sectionPages[0]);
+    expect(sectionPages[2]).toBeGreaterThan(sectionPages[1]);
+  });
 });
 
 describe("buildPreviewHtml - estilos fiéis ao DOCX", () => {
@@ -268,5 +322,31 @@ describe("buildPreviewHtml - regressões dos bugs corrigidos", () => {
     const occurrences = html.split("SILVA, M.").length - 1;
     expect(occurrences).toBe(1);
     expect(html).toContain("REFERÊNCIAS");
+  });
+
+  it("Bug 4 - imagem importada com legenda/fonte também no corpo não duplica no body-flow do preview", () => {
+    const caption = "Figura 1 - Bandeirinhas Geometricas, de Alfredo Volpi";
+    const source = "Fonte: elaborado pelo autor (2026).";
+    const data = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+    const html = buildPreviewHtml({
+      fields: baseFields(),
+      editorText: ["# 1 Introducao", "Texto.", caption, "[[Imagem importada preservada: img-1]]", source, "# 2 Metodologia", "Texto."].join("\n"),
+      importedImages: [
+        {
+          id: "img-1",
+          caption,
+          source,
+          data,
+          position: 0,
+          status: "preserved",
+        },
+      ],
+    });
+    const bodyFlow = html.slice(html.indexOf("preview-body-flow"));
+    const bodyAfterLists = bodyFlow.slice(0, bodyFlow.indexOf("preview-references"));
+    const captionRuns = bodyAfterLists.match(/preview-caption/g) ?? [];
+    const sourceRuns = bodyAfterLists.match(/preview-source/g) ?? [];
+    expect(captionRuns.length).toBe(1);
+    expect(sourceRuns.length).toBe(1);
   });
 });

@@ -3,7 +3,62 @@ import type { DocxAnalysis, ChecklistItem } from "./types";
 const CM_3 = 3.0;
 const CM_2 = 2.0;
 
-export function checkCompliance(analysis: DocxAnalysis): ChecklistItem[] {
+// Itens do checklist que não se aplicam à estrutura de determinados tipos de
+// trabalho (definidos na matriz de formatos do CONTEXT.md). O validador marca
+// esses itens como "não verificado" em vez de "falha", pois a ausência é
+// estrutural (ex.: artigo/CPG não possuem sumário nem capa UFLA).
+const EXCLUDED_BY_TYPE: Record<string, string[]> = {
+  // Monografia/TCC é um trabalho completo UFLA (capa, folha de rosto, resumo,
+  // abstract, sumário, referências): nenhum item do checklist é estruturalmente
+  // inaplicável. Entrada vazia é explícita para deixar o mapeamento claro.
+  monografia: [],
+  artigo: [
+    "3.1", "3.2", "3.3", "3.4", "3.5", "3.6", "3.7", "3.8", "3.9", "3.10",
+    "5.1",
+    "15.1", "15.2", "15.3", "15.4",
+    "25.1", "25.2", "25.5", "25.6", "25.7",
+  ],
+  artigo_cientifico_ufla: [
+    "3.1", "3.2", "3.3", "3.4", "3.5", "3.6", "3.7", "3.8", "3.9", "3.10",
+    "5.1",
+    "15.1", "15.2", "15.3", "15.4",
+    "25.1", "25.2", "25.5", "25.6", "25.7",
+  ],
+  resumo_cpg: [
+    "3.1", "3.2", "3.3", "3.4", "3.5", "3.6", "3.7", "3.8", "3.9", "3.10",
+    "5.1",
+    "11.1",
+    "15.1", "15.2", "15.3", "15.4",
+    "17.1", "17.3",
+    "21.1", "21.2", "21.3", "21.4",
+    "25.1", "25.2", "25.5", "25.6", "25.7",
+    "22.1", "22.2", "22.4", "22.5", "22.6", "22.7", "22.8", "22.9", "22.11", "22.12",
+    "25.4", "2.10", "16.1", "25.8",
+  ],
+  resumo_expandido_cpg: [
+    "3.1", "3.2", "3.3", "3.4", "3.5", "3.6", "3.7", "3.8", "3.9", "3.10",
+    "5.1",
+    "11.1",
+    "15.1", "15.2", "15.3", "15.4",
+    "17.1",
+    "25.1", "25.2", "25.5", "25.6", "25.7",
+  ],
+  artigo_completo_cpg: [
+    "3.1", "3.2", "3.3", "3.4", "3.5", "3.6", "3.7", "3.8", "3.9", "3.10",
+    "5.1",
+    "11.1",
+    "15.1", "15.2", "15.3", "15.4",
+    "17.1",
+    "25.1", "25.2", "25.5", "25.6", "25.7",
+  ],
+  projeto_pesquisa: ["3.10", "25.6", "25.7"],
+};
+
+export function checkCompliance(
+  analysis: DocxAnalysis,
+  workType?: string,
+): ChecklistItem[] {
+  const excluded = new Set(EXCLUDED_BY_TYPE[workType ?? ""] ?? []);
   const items: ChecklistItem[] = [];
   const add = (
     id: string,
@@ -17,7 +72,24 @@ export function checkCompliance(analysis: DocxAnalysis): ChecklistItem[] {
     fixFile?: string,
     fixLine?: number,
     fixInstruction?: string,
+    notApplicableWhen?: boolean,
+    notApplicableReason?: string,
   ) => {
+    if (excluded.has(id) || notApplicableWhen) {
+      items.push({
+        id,
+        section,
+        description,
+        status: "unchecked",
+        severity,
+        location,
+        suggestion: excluded.has(id)
+          ? "Nao aplicavel a este tipo de trabalho (estrutura definida no Manual/CPG)."
+          : notApplicableReason ?? "Elemento opcional ausente neste documento (nao verificado).",
+        fixType: "none",
+      });
+      return;
+    }
     items.push({
       id,
       section,
@@ -63,7 +135,7 @@ export function checkCompliance(analysis: DocxAnalysis): ChecklistItem[] {
   add("5.1", "Ficha Catalografica", "Sistema reserva espaco para ficha", true, "medio", "ficha", "Mensagem padrao exibida", "none", undefined, undefined, "O sistema exibe texto padrao da ficha");
 
   // === 11. Resumo ===
-  add("11.1", "Resumo", "Titulo RESUMO centralizado", analysis.summary.headingCentered, "medio", "resumo", "Centralizar titulo do resumo", "code", "src/export-docx.ts", undefined, "Usar unnumberedTitle com alignment center");
+  add("11.1", "Resumo", "Titulo RESUMO centralizado", analysis.resumo.titleCentered, "medio", "resumo", "Centralizar titulo do resumo", "code", "src/export-docx.ts", undefined, "Usar unnumberedTitle com alignment center");
 
   // === 15. Sumario ===
   add("15.1", "Sumario", "Sumario e gerado", analysis.summary.exists, "grave", "sumario", "Gerar sumario no DOCX", "code", "src/export-docx.ts:1477", 1477, "Chamar buildSummary() no createDocxDocument");
@@ -84,10 +156,15 @@ export function checkCompliance(analysis: DocxAnalysis): ChecklistItem[] {
   add("18.1", "Numeracao", "Titulo primario formato '1 TITULO'", analysis.titles.primaryFormat === "1 TÍTULO", "medio", "titulos", "Formatar heading1 como numero + espaco + TITULO", "code", "src/export-docx.ts", undefined, "Incluir numero no texto do heading1");
 
   // === 21. Tabelas ===
-  add("21.1", "Tabelas", "Sistema exporta tabela nativa do Word", analysis.tables.count > 0, "grave", "tabelas", "Usar Table do docx library", "code", "src/export-docx.ts", undefined, "Garantir que tabelas sejam exportadas como <w:tbl>");
-  add("21.2", "Tabelas", "Tabela tem bordas", analysis.tables.hasBorders, "medio", "tabelas", "Adicionar bordas a tabela", "code", "src/export-docx.ts", undefined, "Usar TableBorders com todos os lados");
-  add("21.3", "Tabelas", "Titulo fica acima da tabela", analysis.tables.hasAboveTitle, "medio", "tabelas", "Inserir caption antes da tabela", "code", "src/export-docx.ts", undefined, "Adicionar paragrafo 'Tabela X - Titulo' antes da tabela");
-  add("21.4", "Tabelas", "Fonte fica abaixo da tabela", analysis.tables.hasBelowSource, "medio", "tabelas", "Inserir 'Fonte:' apos a tabela", "code", "src/export-docx.ts", undefined, "Adicionar paragrafo 'Fonte:...' apos a tabela");
+  // Itens 21.x tratam da formatacao de tabelas QUANDO o documento as contem.
+  // Nenhum tipo exige tabela obrigatoria (Manual UFLA 3.2.10 / matriz de tipos);
+  // documento sem tabela nao tem objeto de verificacao -> "nao verificado".
+  const noTables = analysis.tables.count === 0;
+  const noTablesReason = "Documento sem tabelas: itens de tabela sem objeto de verificacao.";
+  add("21.1", "Tabelas", "Sistema exporta tabela nativa do Word", analysis.tables.count > 0, "grave", "tabelas", "Usar Table do docx library", "code", "src/export-docx.ts", undefined, "Garantir que tabelas sejam exportadas como <w:tbl>", noTables, noTablesReason);
+  add("21.2", "Tabelas", "Tabela tem bordas", analysis.tables.hasBorders, "medio", "tabelas", "Adicionar bordas a tabela", "code", "src/export-docx.ts", undefined, "Usar TableBorders com todos os lados", noTables, noTablesReason);
+  add("21.3", "Tabelas", "Titulo fica acima da tabela", analysis.tables.hasAboveTitle, "medio", "tabelas", "Inserir caption antes da tabela", "code", "src/export-docx.ts", undefined, "Adicionar paragrafo 'Tabela X - Titulo' antes da tabela", noTables, noTablesReason);
+  add("21.4", "Tabelas", "Fonte fica abaixo da tabela", analysis.tables.hasBelowSource, "medio", "tabelas", "Inserir 'Fonte:' apos a tabela", "code", "src/export-docx.ts", undefined, "Adicionar paragrafo 'Fonte:...' apos a tabela", noTables, noTablesReason);
 
   // === 22. Referencias ===
   add("22.1", "Referencias", "Referencias sao obrigatorias", analysis.references.entryCount > 0, "grave", "referencias", "Adicionar referencias ao DOCX", "code", "src/export-docx.ts:1999", 1999, "Chamar buildReferences()");
@@ -109,8 +186,13 @@ export function checkCompliance(analysis: DocxAnalysis): ChecklistItem[] {
   add("25.3", "Exportacao", "Exportador gera resumo", true, "grave", "exportacao", "Resumo gerado", "none");
   add("25.4", "Exportacao", "Exportador gera referencias", analysis.references.entryCount > 0, "grave", "referencias", "Gerar secao de referencias", "code", "src/export-docx.ts:1999", 1999, "Chamar buildReferences()");
   add("25.5", "Exportacao", "Exportador gera sumario", analysis.summary.exists, "grave", "sumario", "Gerar sumario", "code", "src/export-docx.ts:1464", 1464, "Chamar buildSummary()");
-  add("25.6", "Exportacao", "Exportador gera anexos", analysis.summary.includesAnnexes, "medio", "anexos", "Incluir anexos", "code", "src/export-docx.ts:2004", 2004, "Adicionar secao de Anexos");
-  add("25.7", "Exportacao", "Exportador gera apendices", analysis.summary.includesAppendices, "medio", "apendices", "Incluir apendices", "code", "src/export-docx.ts:2000", 2000, "Adicionar secao de Apendices");
+  // Anexos e apendices sao opcionais para todos os tipos (checklist 23 e matriz
+  // de tipos). Quando o documento nao os contem, a ausencia e estado valido:
+  // item vira "nao verificado", nao falha.
+  const noAnnexesReason = "Anexos sao opcionais e ausentes neste documento (nao verificado).";
+  const noAppendicesReason = "Apendices sao opcionais e ausentes neste documento (nao verificado).";
+  add("25.6", "Exportacao", "Exportador gera anexos", analysis.summary.includesAnnexes, "medio", "anexos", "Incluir anexos", "code", "src/export-docx.ts:2004", 2004, "Adicionar secao de Anexos", !analysis.summary.includesAnnexes, noAnnexesReason);
+  add("25.7", "Exportacao", "Exportador gera apendices", analysis.summary.includesAppendices, "medio", "apendices", "Incluir apendices", "code", "src/export-docx.ts:2000", 2000, "Adicionar secao de Apendices", !analysis.summary.includesAppendices, noAppendicesReason);
   add("25.8", "Exportacao", "Exportador insere numero de pagina com campo Word", analysis.pagination.usesWordField, "grave", "paginacao", "Usar PageNumber.CURRENT", "code", "src/export-docx.ts:2013", 2013, "Adicionar PageNumber.CURRENT ao header");
 
   return items;

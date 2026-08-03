@@ -1,9 +1,16 @@
+import { classifyStorageError, type DraftStorageErrorKind } from "./draft-storage-error";
+
 export interface DraftPayload {
   fields: Record<string, unknown>;
   editorText: string;
   references?: string[];
   workType?: string;
   updatedAt: string;
+}
+
+export interface DraftSaveResult {
+  ok: boolean;
+  kind: DraftStorageErrorKind;
 }
 
 const DRAFT_KEY = "site-abnt:draft:v3";
@@ -40,12 +47,14 @@ function clearLegacyDrafts(storage: Storage): void {
   }
 }
 
-export function saveDraft(payload: DraftPayload, storage: Storage = globalThis.localStorage): void {
+export function saveDraft(payload: DraftPayload, storage: Storage = globalThis.localStorage): DraftSaveResult {
   try {
     clearLegacyDrafts(storage);
     storage.setItem(DRAFT_KEY, JSON.stringify(payload));
+    return { ok: true, kind: "none" };
   } catch (error) {
     logDraftStorageError("salvar", error);
+    return { ok: false, kind: classifyStorageError(error) };
   }
 }
 

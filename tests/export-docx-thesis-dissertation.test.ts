@@ -74,6 +74,15 @@ function tocInstruction(documentXml: string): string {
 }
 
 describe("tese e dissertacao - conformidade UFLA", () => {
+  it("usa tokens UFLA nos estilos DOCX em vez de literais de fonte e tamanho", () => {
+    const source = readFileSync("src/export-docx.ts", "utf8");
+    expect(source).not.toContain('font: "Times New Roman"');
+    expect(source).not.toMatch(/size:\s*24,/);
+    expect(source).toContain("UFLA_RULES.typography.fontFamily");
+    expect(source).toContain("size: BODY_SIZE");
+  });
+
+
   it("não gera nenhum placeholder [PREENCHER: no DOCX de tese", async () => {
     const documentXml = await generatedXml("# 1 Introducao\nTexto.", baseFields({ workType: "tese" }));
     expect(documentXml).not.toContain("[PREENCHER");

@@ -270,4 +270,12 @@ describe("references normalizer", () => {
     expect(normalized.text).toContain("UNIVERSIDADE FEDERAL DE LAVRAS");
     expect(normalized.detectedType).toBe("documento-institucional");
   });
+
+  it("detecta trabalho apresentado em evento (anais de congresso)", () => {
+    expectDetectedBold(
+      "SOUZA, A. B. Impactos da IA na educação. In: SIMPÓSIO NACIONAL DE TECNOLOGIA EDUCACIONAL, 12., 2026, Lavras. Anais... Lavras: UFLA, 2026. p. 88-92.",
+      "evento",
+      "SIMPÓSIO NACIONAL DE TECNOLOGIA EDUCACIONAL",
+    );
+  });
 });

@@ -1,9 +1,12 @@
 import type { AcademicFields } from "./ufla-rules";
 import { detectNaturalPlaceholder, detectPlaceholderText } from "./academic-guardrails";
 
+export const FIELD_TARGET_EDITOR = "__editor__";
+
 export interface FinalVersionPendingItem {
   label: string;
   description: string;
+  fieldKey?: string;
 }
 
 export interface FinalVersionPendingReport {
@@ -26,6 +29,7 @@ export function finalVersionPendingReport(fields: AcademicFields, editorText: st
       items.push({
         label: "Orientador(a) provisorio",
         description: "Substitua o nome do orientador pelo nome real antes da versao final.",
+        fieldKey: "advisor",
       });
     }
   }
@@ -56,6 +60,7 @@ export function finalVersionPendingReport(fields: AcademicFields, editorText: st
       items.push({
         label: "Marcadores de rascunho no texto",
         description: "Substitua os marcadores [PREENCHER: ...] pelo conteúdo real antes da versão final.",
+        fieldKey: FIELD_TARGET_EDITOR,
       });
     }
   }

@@ -24,6 +24,9 @@ import { getWorkTypeRequirements } from "./work-type-requirements";
 
 export type ValidationSeverity = "error" | "warning" | "info";
 
+export const FIELD_TARGET_WORK_TYPE = "__work_type__";
+export const FIELD_TARGET_EDITOR = "__editor__";
+
 export interface ValidationIssue {
   severity: ValidationSeverity;
   code: string;
@@ -31,6 +34,11 @@ export interface ValidationIssue {
   what?: string;
   why?: string;
   action?: string;
+  /**
+   * Alvo de navegação ("Corrigir campo"). Correspondem a chaves de campo,
+   * FIELD_TARGET_EDITOR ("__editor__") ou FIELD_TARGET_WORK_TYPE ("__work_type__").
+   */
+  fieldKey?: string;
 }
 
 export interface AdherenceCategory {
@@ -124,9 +132,9 @@ function addPlaceholderIssues(fields: AcademicFields, editorText: string, issues
   }
   if (hasValue(editorText)) {
     if (detectControlledPlaceholder(editorText)) {
-      issues.push({ severity: "error", code: "draft-placeholder-detected", message: "O rascunho ainda contém campos a preencher.", what: "O texto principal contém marcadores controlados de rascunho como [PREENCHER: ...].", why: "O DOCX final não pode conter marcadores de preenchimento; eles indicam seções não redigidas.", action: "Substitua os marcadores por conteúdo real antes de gerar a versão final." });
+      issues.push({ severity: "error", code: "draft-placeholder-detected", fieldKey: FIELD_TARGET_EDITOR, message: "O rascunho ainda contém campos a preencher.", what: "O texto principal contém marcadores controlados de rascunho como [PREENCHER: ...].", why: "O DOCX final não pode conter marcadores de preenchimento; eles indicam seções não redigidas.", action: "Substitua os marcadores por conteúdo real antes de gerar a versão final." });
     } else if (detectPlaceholderText(editorText)) {
-      issues.push({ severity: "warning", code: "placeholder-detected", message: "Há marcador de preenchimento no documento.", what: "O texto principal contém placeholder ou instrução não substituída.", why: "O DOCX final não pode conter campos genéricos ou instruções de preenchimento.", action: "Substitua o trecho por informação real antes da versão final." });
+      issues.push({ severity: "warning", code: "placeholder-detected", fieldKey: FIELD_TARGET_EDITOR, message: "Há marcador de preenchimento no documento.", what: "O texto principal contém placeholder ou instrução não substituída.", why: "O DOCX final não pode conter campos genéricos ou instruções de preenchimento.", action: "Substitua o trecho por informação real antes da versão final." });
     }
   }
 }
@@ -136,6 +144,7 @@ function addRequiredFieldIssues(fields: AcademicFields, issues: ValidationIssue[
     issues.push({
       severity: "error",
       code: "course-required",
+      fieldKey: "course",
       message: "Informe o curso da monografia antes de gerar o DOCX.",
       what: "A monografia não tem o curso informado.",
       why: "A natureza do trabalho (folha de rosto) exige o curso para a gradação correspondente.",
@@ -147,6 +156,7 @@ function addRequiredFieldIssues(fields: AcademicFields, issues: ValidationIssue[
     issues.push({
       severity: "error",
       code: "program-required",
+      fieldKey: "program",
       message: "Informe o programa de pós-graduação antes de gerar o DOCX.",
       what: "A dissertação/tese não tem o programa de pós-graduação informado.",
       why: "A natureza do trabalho (folha de rosto) exige o programa para o título solicitado.",
@@ -168,9 +178,10 @@ function addNaturalPlaceholderIssues(fields: AcademicFields, editorText: string,
   for (const [_label, value] of targets) {
     if (hasValue(value) && detectNaturalPlaceholder(value)) {
       issues.push({
-        severity: "error",
-        code: "natural-placeholder-detected",
-        message: "Há texto provisório de preenchimento no documento.",
+severity: "error",
+      code: "natural-placeholder-detected",
+      fieldKey: FIELD_TARGET_EDITOR,
+      message: "Há texto provisório de preenchimento no documento.",
         what: "O sistema detectou uma frase genérica como 'informado pelo usuário' ou 'grau acadêmico correspondente'.",
         why: "Esse tipo de texto não pode aparecer em versão acadêmica final.",
         action: "Preencha os campos obrigatórios reais antes de gerar o DOCX.",
@@ -201,6 +212,7 @@ function addAbstractTopicIssues(fields: AcademicFields, issues: ValidationIssue[
     issues.push({
       severity: result.severity,
       code: "abstract-topic-conflict",
+      fieldKey: "abstractText",
       message: "O Abstract parece não corresponder ao título/resumo.",
       what: "O texto em inglês possui termos centrais incompatíveis com o tema em português.",
       why: "Abstract incoerente passa impressão de texto alucinado ou reaproveitado.",
@@ -293,8 +305,8 @@ function addImpactIndicatorIssues(fields: AcademicFields, issues: ValidationIssu
   if (!getWorkTypeRequirements(fields.workType).requiresImpactIndicators) return;
   const isInstructional = hasValue(fields.indicadoresImpacto) && detectPlaceholderText(fields.indicadoresImpacto);
   const sufficient = hasSufficientImpactIndicators(fields);
-  if (!sufficient && !isInstructional) issues.push({ severity: "error", code: "impact-indicators-missing", message: "Preencha os Indicadores de Impacto antes da versão final.", what: "Os indicadores de impacto estão vazios ou insuficientes.", why: "A UFLA pode exigir indicadores de impacto em dissertações e teses; texto genérico não é aceitável.", action: "Preencha ao menos dois dos campos de impacto (social, científico, educacional, ambiental, tecnológico/econômico) e o público beneficiado com informações reais do trabalho." });
-  if (isInstructional) issues.push({ severity: "error", code: "impact-indicators-missing", message: "Preencha os Indicadores de Impacto com informações reais antes da versão final.", what: "Os indicadores de impacto contêm apenas texto instrucional.", why: "A UFLA pode exigir indicadores de impacto em dissertações e teses; texto genérico não é aceitável.", action: "Substitua o texto instrucional por informações reais do trabalho." });
+  if (!sufficient && !isInstructional) issues.push({ severity: "error", code: "impact-indicators-missing", fieldKey: "indicadoresImpacto", message: "Preencha os Indicadores de Impacto antes da versão final.", what: "Os indicadores de impacto estão vazios ou insuficientes.", why: "A UFLA pode exigir indicadores de impacto em dissertações e teses; texto genérico não é aceitável.", action: "Preencha ao menos dois dos campos de impacto (social, científico, educacional, ambiental, tecnológico/econômico) e o público beneficiado com informações reais do trabalho." });
+  if (isInstructional) issues.push({ severity: "error", code: "impact-indicators-missing", fieldKey: "indicadoresImpacto", message: "Preencha os Indicadores de Impacto com informações reais antes da versão final.", what: "Os indicadores de impacto contêm apenas texto instrucional.", why: "A UFLA pode exigir indicadores de impacto em dissertações e teses; texto genérico não é aceitável.", action: "Substitua o texto instrucional por informações reais do trabalho." });
   if (hasValue(fields.indicadoresImpacto) && !isInstructional && !hasValue(fields.impactIndicators)) issues.push({ severity: "warning", code: "impact-indicators-english-recommended", message: "Inclua a versão em inglês dos indicadores de impacto quando exigida.", what: "Há indicadores de impacto em português, mas o campo Impact indicators está vazio.", why: "Alguns fluxos de pós-graduação exigem versão em português e inglês.", action: "Preencha o campo Impact indicators ou confirme se o template aplicado não exige versão em inglês." });
 }
 
@@ -316,6 +328,72 @@ function hasLikelyUnmarkedLongQuote(text: string): boolean {
     const hasCitationClue = /\([A-ZÁÉÍÓÚÂÊÔÃÕÇ][^)]*,\s*(19|20)\d{2}/.test(paragraph);
     return looksLong && hasCitationClue && !alreadyMarked;
   });
+}
+
+function hasQuotationMarks(text: string): boolean {
+  return /["''""«"]/.test(text);
+}
+
+function validateShortCitation(editorText: string): ValidationIssue[] {
+  const found: ValidationIssue[] = [];
+  const paragraphs = editorText.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
+
+  for (const paragraph of paragraphs) {
+    // (AUTOR), (AUTOR, 2024), (AUTOR, 2024, p. 15), (AUTOR, 2024, 15)
+    const citeRe = /\(([^()]*?(?:\b(?:19|20)\d{2}\b)?[^()]*?)\)/g;
+    let match: RegExpExecArray | null;
+    while ((match = citeRe.exec(paragraph)) !== null) {
+      const inner = match[1].trim();
+      // ignora parênteses que não parecem citação (ex.: dados (IBGE), fórmulas)
+      if (inner.length > 60) continue;
+      const yearMatch = inner.match(/\b(19|20)\d{2}\b/);
+      const authorPart = yearMatch ? inner.slice(0, inner.indexOf(yearMatch[0])).trim() : "";
+      const hasAuthor = /[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/i.test(authorPart.replace(/[,;]\s*$/, ""));
+
+      // página indicada de forma vazia: (SILVA, 2024, p.) ou (SILVA, 2024, p. )
+      if (/,\s*p\.?\s*\)?$/i.test(inner.trim()) || /p\.\s*$/.test(inner.trim())) {
+        found.push({
+          severity: "warning",
+          code: "citation-page-missing",
+          message: "Citação com indicação de página vazia.",
+          what: `Citação "(${inner})" indica página, mas não informa o número.`,
+        });
+        continue;
+      }
+
+      if (!yearMatch) {
+        // tem autor mas não tem ano → toda citação deve indicar o ano
+        found.push({
+          severity: "warning",
+          code: "citation-year-missing",
+          message: "Citação sem ano. Toda citação deve indicar o ano da fonte.",
+          what: `Citação "(${inner})" não traz o ano da publicação.`,
+        });
+        continue;
+      }
+
+      if (!hasAuthor) {
+        found.push({
+          severity: "warning",
+          code: "citation-author-missing",
+          message: "Citação sem autor identificável antes do ano.",
+          what: `Citação "(${inner})" não tem autor antes do ano.`,
+        });
+        continue;
+      }
+
+      // Citação direta (com aspas) deve indicar a página (NBR 10520:2023)
+      if (hasQuotationMarks(paragraph) && !/\b(p\.?|pag\.?|f\.?|página[s]?)\s*[\.:]?\s*\d+/i.test(inner)) {
+        found.push({
+          severity: "info",
+          code: "citation-direct-locator",
+          message: "Citação direta (com aspas) sem indicação de página. Se for transcrição literal, informe a página (NBR 10520).",
+          what: `Citação "(${inner})" em parágrafo com aspas não indica a página da fonte.`,
+        });
+      }
+    }
+  }
+  return found;
 }
 
 function referenceIssueMessage(code: string, message: string): string {
@@ -361,12 +439,12 @@ function addResearchProjectIssues(fields: AcademicFields, editorText: string, is
   const hasMethodology = hasValue(fields.metodologia) || hasSectionHeading(editorText, ["METODOLOGIA", "PROCEDIMENTOS METODOLÓGICOS", "PROCEDIMENTOS METODOLOGICOS"]);
   const hasSchedule = hasValue(fields.cronograma) || hasSectionHeading(editorText, ["CRONOGRAMA"]);
   const hasReferences = hasValue(fields.referencias) || hasSectionHeading(editorText, ["REFERÊNCIAS", "REFERENCIAS", "BIBLIOGRÁFICAS", "BIBLIOGRAFICAS"]);
-  if (!hasProblemStatement) issues.push({ severity: "error", code: "research-problem-required", message: "Informe o problema de pesquisa.", what: "O projeto de pesquisa não apresenta o problema a ser investigado.", why: "O problema delimita a investigação e orienta objetivos, metodologia e justificativa.", action: "Adicione conteúdo no campo 'Problema de pesquisa' ou uma seção chamada 'Problema de pesquisa' no editor." });
-  if (!hasObjective) issues.push({ severity: "error", code: "research-goal-required", message: "Informe o objetivo geral.", what: "O projeto de pesquisa não apresenta o objetivo geral.", why: "O objetivo geral direciona a pesquisa e fundamenta a metodologia.", action: "Adicione conteúdo no campo 'Objetivo geral' ou uma seção chamada 'Objetivo geral' no editor." });
-  if (!hasJustification) issues.push({ severity: "error", code: "research-justification-required", message: "Informe a justificativa.", what: "O projeto de pesquisa não apresenta a justificativa.", why: "A justificativa fundamenta a relevância e pertinência da pesquisa.", action: "Adicione conteúdo no campo 'Justificativa' ou uma seção chamada 'Justificativa' no editor." });
-  if (!hasMethodology) issues.push({ severity: "error", code: "research-methodology-required", message: "Informe a metodologia.", what: "O projeto de pesquisa não apresenta a metodologia.", why: "A metodologia descreve como a pesquisa será conduzida.", action: "Adicione conteúdo no campo 'Metodologia' ou uma seção chamada 'Metodologia' no editor." });
-  if (!hasSchedule) issues.push({ severity: "error", code: "research-schedule-required", message: "Informe o cronograma.", what: "O projeto de pesquisa não apresenta o cronograma.", why: "O cronograma orienta a execução e marcos do projeto.", action: "Adicione conteúdo no campo 'Cronograma' ou uma seção chamada 'Cronograma' no editor." });
-  if (!hasReferences) issues.push({ severity: "error", code: "research-references-required", message: "Informe as referências.", what: "O projeto de pesquisa não apresenta referências.", why: "Referências são necessárias para base teórica e aportes bibliográficos.", action: "Adicione referências no editor ou no campo Referências." });
+  if (!hasProblemStatement) issues.push({ severity: "error", code: "research-problem-required", fieldKey: "problemaPesquisa", message: "Informe o problema de pesquisa.", what: "O projeto de pesquisa não apresenta o problema a ser investigado.", why: "O problema delimita a investigação e orienta objetivos, metodologia e justificativa.", action: "Adicione conteúdo no campo 'Problema de pesquisa' ou uma seção chamada 'Problema de pesquisa' no editor." });
+  if (!hasObjective) issues.push({ severity: "error", code: "research-goal-required", fieldKey: "objetivoGeral", message: "Informe o objetivo geral.", what: "O projeto de pesquisa não apresenta o objetivo geral.", why: "O objetivo geral direciona a pesquisa e fundamenta a metodologia.", action: "Adicione conteúdo no campo 'Objetivo geral' ou uma seção chamada 'Objetivo geral' no editor." });
+  if (!hasJustification) issues.push({ severity: "error", code: "research-justification-required", fieldKey: "justificativa", message: "Informe a justificativa.", what: "O projeto de pesquisa não apresenta a justificativa.", why: "A justificativa fundamenta a relevância e pertinência da pesquisa.", action: "Adicione conteúdo no campo 'Justificativa' ou uma seção chamada 'Justificativa' no editor." });
+  if (!hasMethodology) issues.push({ severity: "error", code: "research-methodology-required", fieldKey: "metodologia", message: "Informe a metodologia.", what: "O projeto de pesquisa não apresenta a metodologia.", why: "A metodologia descreve como a pesquisa será conduzida.", action: "Adicione conteúdo no campo 'Metodologia' ou uma seção chamada 'Metodologia' no editor." });
+  if (!hasSchedule) issues.push({ severity: "error", code: "research-schedule-required", fieldKey: "cronograma", message: "Informe o cronograma.", what: "O projeto de pesquisa não apresenta o cronograma.", why: "O cronograma orienta a execução e marcos do projeto.", action: "Adicione conteúdo no campo 'Cronograma' ou uma seção chamada 'Cronograma' no editor." });
+  if (!hasReferences) issues.push({ severity: "error", code: "research-references-required", fieldKey: "referencias", message: "Informe as referências.", what: "O projeto de pesquisa não apresenta referências.", why: "Referências são necessárias para base teórica e aportes bibliográficos.", action: "Adicione referências no editor ou no campo Referências." });
   if (hasValue(fields.objetivosEspecificos) && !hasValue(fields.objetivoGeral) && !hasObjective) issues.push({ severity: "error", code: "research-objective-mandatory", message: "Objetivo geral é obrigatório quando há objetivos específicos.", what: "Objetivos específicos foram informados, mas o objetivo geral está ausente.", why: "O objetivo geral é o alvo principal da pesquisa e deve estar presente antes dos objetivos específicos.", action: "Preencha o campo 'Objetivo Geral' antes da geração." });
   issues.push({ severity: "info", code: "research-toc-update", message: "Após gerar o DOCX, abra no Word ou LibreOffice e atualize o sumário para preencher a paginação real.", what: "O sumário do Projeto de pesquisa é atualizável.", why: "O campo TOC precisa ser atualizado no editor de texto para refletir a paginação final.", action: "No Word: Ctrl+A e F9, depois 'Atualizar o índice inteiro'. No LibreOffice: Ferramentas > Atualizar > Atualizar tudo." });
 }
@@ -392,6 +470,7 @@ function addUflaCollectionIssues(fields: AcademicFields, issues: ValidationIssue
       issues.push({
         severity: "error",
         code: `ufla-collection-${fieldKey}-required`,
+        fieldKey,
         message: `Preencha o campo obrigatorio para ${productionType.label}: ${fieldKey}.`,
         what: "Um campo minimo do formato selecionado esta vazio.",
         why: "A Colecao Producao Academica UFLA exige revisao da estrutura e dos metadados antes da submissao.",
@@ -414,6 +493,7 @@ function addProgramCompatibilityIssues(fields: AcademicFields, issues: Validatio
       issues.push({
         severity: "warning",
         code: "program-ambiguous",
+        fieldKey: "program",
         message: "O programa informado corresponde a mais de um programa da UFLA (acadêmico e profissional).",
         what: "Há mais de um programa com esse nome na lista oficial da PRPG/UFLA.",
         why: "Dissertação/tese exigem a definição exata da modalidade (acadêmica ou profissional) e do nível.",
@@ -430,6 +510,7 @@ function addProgramCompatibilityIssues(fields: AcademicFields, issues: Validatio
     issues.push({
       severity: "warning",
       code: "program-not-recognized",
+      fieldKey: "program",
       message: "O programa informado não foi reconhecido na lista local da PRPG/UFLA.",
       what: "O campo Programa não corresponde exatamente a um programa cadastrado no snapshot local.",
       why: "Usar o nome oficial reduz erro na folha de rosto e na natureza do trabalho.",
@@ -446,6 +527,7 @@ function applyProgramDegreeChecks(program: UflaPpgProgram, fields: AcademicField
     issues.push({
       severity: "error",
       code: "program-degree-incompatible",
+      fieldKey: "program",
       message: "O programa informado não é compatível com o tipo de trabalho selecionado.",
       what: "A lista oficial da PRPG/UFLA indica que o programa não oferece o nível exigido pelo tipo selecionado.",
       why: "Dissertação exige programa com mestrado; tese exige programa com doutorado.",
@@ -457,6 +539,7 @@ function applyProgramDegreeChecks(program: UflaPpgProgram, fields: AcademicField
     issues.push({
       severity: "error",
       code: "program-degree-incompatible",
+      fieldKey: "program",
       message: "O programa informado não é compatível com o tipo de trabalho selecionado.",
       what: "A lista oficial da PRPG/UFLA indica que o programa não oferece o nível exigido pelo tipo selecionado.",
       why: "Dissertação exige programa com mestrado; tese exige programa com doutorado.",
@@ -470,27 +553,27 @@ export function validateWork(fields: AcademicFields, editorText = ""): Validatio
   const requirements = getWorkTypeRequirements(fields.workType);
   const simpleArticle = fields.workType === "artigo";
 
-  if (!hasValue(fields.workType)) issues.push({ severity: "error", code: "work-type-required", message: "Selecione o tipo de trabalho.", what: "O tipo de trabalho não foi informado.", why: "O tipo define quais elementos pré-textuais e regras de formatação serão aplicados no DOCX.", action: "Escolha artigo, monografia, dissertação, tese ou outro na lista suspensa." });
+  if (!hasValue(fields.workType)) issues.push({ severity: "error", code: "work-type-required", fieldKey: FIELD_TARGET_WORK_TYPE, message: "Selecione o tipo de trabalho.", what: "O tipo de trabalho não foi informado.", why: "O tipo define quais elementos pré-textuais e regras de formatação serão aplicados no DOCX.", action: "Escolha artigo, monografia, dissertação, tese ou outro na lista suspensa." });
 
-  if (!hasValue(fields.title)) issues.push({ severity: simpleArticle ? "warning" : "error", code: "title-required", message: simpleArticle ? "Título não detectado automaticamente; será usado título provisório no artigo simples." : "Informe o título do trabalho.", what: "O título do trabalho está vazio.", why: simpleArticle ? "Artigo simples pode ser gerado como rascunho com título provisório." : "O título é obrigatório na capa, folha de rosto e cabeçalhos do documento.", action: "Preencha o campo Título com a designação oficial do trabalho antes da versão final." });
+  if (!hasValue(fields.title)) issues.push({ severity: simpleArticle ? "warning" : "error", code: "title-required", fieldKey: "title", message: simpleArticle ? "Título não detectado automaticamente; será usado título provisório no artigo simples." : "Informe o título do trabalho.", what: "O título do trabalho está vazio.", why: simpleArticle ? "Artigo simples pode ser gerado como rascunho com título provisório." : "O título é obrigatório na capa, folha de rosto e cabeçalhos do documento.", action: "Preencha o campo Título com a designação oficial do trabalho antes da versão final." });
 
-  if (!hasValue(fields.author)) issues.push({ severity: "error", code: "author-required", message: "Informe o autor do trabalho.", what: "O autor do trabalho não foi informado.", why: "O nome do autor aparece na capa, folha de rosto e elementos pré-textuais.", action: "Preencha o campo Autor com o nome completo do autor ou autores separados por vírgula." });
-  else if (looksInstitutionalAuthor(fields.author)) issues.push({ severity: "error", code: "author-institutional", message: "O campo autor parece conter uma instituição, programa, unidade ou localidade, não um nome de pessoa. Revise a identificação automática.", what: "O campo Autor contém texto que parece institucional.", why: "A capa e a folha de rosto esperam o nome de pessoa física, não o nome da instituição.", action: "Substitua por nome(s) de pessoa(s). Se houver múltiplos autores, separe por vírgula." });
+  if (!hasValue(fields.author)) issues.push({ severity: "error", code: "author-required", fieldKey: "author", message: "Informe o autor do trabalho.", what: "O autor do trabalho não foi informado.", why: "O nome do autor aparece na capa, folha de rosto e elementos pré-textuais.", action: "Preencha o campo Autor com o nome completo do autor ou autores separados por vírgula." });
+  else if (looksInstitutionalAuthor(fields.author)) issues.push({ severity: "error", code: "author-institutional", fieldKey: "author", message: "O campo autor parece conter uma instituição, programa, unidade ou localidade, não um nome de pessoa. Revise a identificação automática.", what: "O campo Autor contém texto que parece institucional.", why: "A capa e a folha de rosto esperam o nome de pessoa física, não o nome da instituição.", action: "Substitua por nome(s) de pessoa(s). Se houver múltiplos autores, separe por vírgula." });
 
   if (requirements.requiresCoverAndFrontMatter && isAdvisorRequired(fields.workType) && !hasValue(fields.advisor)) {
     const severity = fields.workType === "monografia" ? "warning" : "error";
-    issues.push({ severity, code: "advisor-required", message: "Informe o orientador para dissertação ou tese.", what: "O orientador não foi informado.", why: "Dissertações e teses exigem identificação do orientador na folha de rosto.", action: "Preencha o campo Orientador com o nome completo antes da versão final." });
+    issues.push({ severity, code: "advisor-required", fieldKey: "advisor", message: "Informe o orientador para dissertação ou tese.", what: "O orientador não foi informado.", why: "Dissertações e teses exigem identificação do orientador na folha de rosto.", action: "Preencha o campo Orientador com o nome completo antes da versão final." });
   }
   if (!hasValue(fields.resumo)) {
     const severity = fields.workType === "projeto_pesquisa" ? "error" : "warning";
-    issues.push({ severity, code: "resumo-required", message: severity === "error" ? "Informe o resumo antes de gerar o DOCX." : "Inclua o resumo antes da versão final.", what: "O resumo está vazio.", why: "O resumo é elemento pré-textual obrigatório na maioria dos tipos de trabalho.", action: "Escreva o resumo no campo correspondente. Verifique extensão e palavras-chave." });
+    issues.push({ severity, code: "resumo-required", fieldKey: "resumo", message: severity === "error" ? "Informe o resumo antes de gerar o DOCX." : "Inclua o resumo antes da versão final.", what: "O resumo está vazio.", why: "O resumo é elemento pré-textual obrigatório na maioria dos tipos de trabalho.", action: "Escreva o resumo no campo correspondente. Verifique extensão e palavras-chave." });
   }
-  if (!hasValue(fields.referencias) && !isCpgWork(fields.workType)) issues.push({ severity: "warning", code: "references-required", message: "Inclua as referências do trabalho.", what: "O bloco de referências está vazio.", why: "Referências são obrigatórias para a seção pós-textual.", action: "Adicione as referências no campo Referências, uma por linha." });
+  if (!hasValue(fields.referencias) && !isCpgWork(fields.workType)) issues.push({ severity: "warning", code: "references-required", fieldKey: "referencias", message: "Inclua as referências do trabalho.", what: "O bloco de referências está vazio.", why: "Referências são obrigatórias para a seção pós-textual.", action: "Adicione as referências no campo Referências, uma por linha." });
   else if (hasValue(fields.referencias)) for (const referenceIssue of validateReferencesText(fields.referencias)) issues.push({ severity: "warning", code: referenceIssue.code, message: referenceIssueMessage(referenceIssue.code, referenceIssue.message), what: referenceIssue.code.includes("year-missing") ? "Há referência sem ano detectável." : referenceIssue.code.includes("access-missing") ? "Há referência online sem informação de acesso." : referenceIssue.code.includes("highlight-missing") ? "Há referência sem destaque de título detectado." : referenceIssue.code.includes("too-short") ? "Há referência muito curta para validação segura." : referenceIssue.code.includes("normative-preserved") ? "Há referência normativa preservada sem destaque automático." : referenceIssue.code.includes("academic-pages-missing") ? "Há trabalho acadêmico sem paginação detectável." : referenceIssue.code.includes("publisher-missing") ? "Há referência sem órgão/editor responsável detectável." : referenceIssue.code.includes("doi-url-normalized") ? "Há DOI informado como URL." : referenceIssue.code.includes("url-markup-normalized") ? "Há URL em markdown ou entre sinais." : referenceIssue.code.includes("author-spelling-review") ? "Há grafia de autor que exige conferência." : "Referência precisa de revisão.", why: "A conformidade ABNT/UFLA depende de autor, ano, acesso, editora/órgão, paginação e destaque corretos.", action: "Revise o item no campo Referências e confira a fonte bibliográfica original antes da versão final." });
-  if (!hasValue(fields.introducao) && !isCpgWork(fields.workType) && !simpleArticle) issues.push({ severity: "warning", code: "intro-required", message: "A introdução não foi detectada ou está vazia.", what: "A seção de introdução não foi identificada.", why: "A introdução é a primeira seção textual obrigatória na estrutura UFLA.", action: "Insira a introdução no editor ou no campo Introdução." });
+if (!hasValue(fields.introducao) && !isCpgWork(fields.workType) && !simpleArticle) issues.push({ severity: "warning", code: "intro-required", fieldKey: "introducao", message: "A introdução não foi detectada ou está vazia.", what: "A seção de introdução não foi identificada.", why: "A introdução é a primeira seção textual obrigatória na estrutura UFLA.", action: "Insira a introdução no editor ou no campo Introdução." });
   if (!hasValue(fields.abstractText) && fields.workType !== "resumo_cpg" && !simpleArticle) {
     const severity = fields.workType === "projeto_pesquisa" ? "error" : "warning";
-    issues.push({ severity, code: "abstract-recommended", message: severity === "error" ? "Informe o abstract antes de gerar o DOCX." : "Inclua o abstract quando exigido pelo trabalho.", what: "O abstract está vazio.", why: "O abstract é obrigatório para a maioria dos trabalhos acadêmicos da UFLA.", action: "Preencha o campo Abstract com a versão do resumo em inglês ou idioma estrangeiro." });
+    issues.push({ severity, code: "abstract-recommended", fieldKey: "abstractText", message: severity === "error" ? "Informe o abstract antes de gerar o DOCX." : "Inclua o abstract quando exigido pelo trabalho.", what: "O abstract está vazio.", why: "O abstract é obrigatório para a maioria dos trabalhos acadêmicos da UFLA.", action: "Preencha o campo Abstract com a versão do resumo em inglês ou idioma estrangeiro." });
   }
 
   addResumoAbstractIssues(fields, issues);
@@ -506,6 +589,7 @@ export function validateWork(fields: AcademicFields, editorText = ""): Validatio
     issues.push({
       severity: "warning",
       code: "summary-empty-headings",
+      fieldKey: FIELD_TARGET_EDITOR,
       message: "O sumário será gerado como campo a atualizar no Word/LibreOffice. Sem títulos de seção no texto, ele pode ficar vazio até a atualização.",
       what: "Não foram detectados títulos de seção (cabeçalhos) no texto.",
       why: "O sumário automático (TOC) do Word/LibreOffice depende de cabeçalhos numerados no corpo do texto.",
@@ -525,8 +609,9 @@ export function validateWork(fields: AcademicFields, editorText = ""): Validatio
   addGenericAiLikeIssues(fields, editorText, issues);
   addTextDiagnosticIssues(fields, issues);
   addCpgForbiddenIssues(fields, editorText, issues);
-  if (hasLikelyImageWithoutCaption(editorText)) issues.push({ severity: "warning", code: "image-caption-warning", message: "Imagem detectada sem legenda provável. Confira posição, qualidade e legenda antes da versão final.", what: "Há possível imagem sem legenda no texto.", why: "Ilustrações precisam de legenda e fonte conforme ABNT/UFLA.", action: "Adicione legenda no formato 'Figura X - Título' e verifique a fonte da imagem." });
-  if (hasLikelyUnmarkedLongQuote(editorText)) issues.push({ severity: "warning", code: "long-quote-warning", message: "Há possível citação longa não marcada como citação longa. Revise antes da versão final.", what: "Há parágrafo longo com data que pode ser citação direta.", why: "Citações longas exigem recuo de 4 cm, fonte 11 e espaço simples.", action: "Selecione o trecho e clique em Citação longa na barra de ferramentas." });
+  if (hasLikelyImageWithoutCaption(editorText)) issues.push({ severity: "warning", code: "image-caption-warning", fieldKey: FIELD_TARGET_EDITOR, message: "Imagem detectada sem legenda provável. Confira posição, qualidade e legenda antes da versão final.", what: "Há possível imagem sem legenda no texto.", why: "Ilustrações precisam de legenda e fonte conforme ABNT/UFLA.", action: "Adicione legenda no formato 'Figura X - Título' e verifique a fonte da imagem." });
+  if (hasLikelyUnmarkedLongQuote(editorText)) issues.push({ severity: "warning", code: "long-quote-warning", fieldKey: FIELD_TARGET_EDITOR, message: "Há possível citação longa não marcada como citação longa. Revise antes da versão final.", what: "Há parágrafo longo com data que pode ser citação direta.", why: "Citações longas exigem recuo de 4 cm, fonte 11 e espaço simples.", action: "Selecione o trecho e clique em Citação longa na barra de ferramentas." });
+  issues.push(...validateShortCitation(editorText));
   if (hasValue(fields.imageWarnings)) issues.push({ severity: "warning", code: "imported-image-warning", message: fields.imageWarnings, what: "Imagens foram detectadas no arquivo original.", why: "A importacao preserva imagens quando os bytes estao acessiveis; quando isso nao e possivel, a imagem vira alerta revisavel, nao texto do trabalho.", action: "Confira imagens importadas, reinsira manualmente as ausentes e revise legendas e fontes." });
   if (hasValue(fields.anexos) && /\[Imagem detectada:/i.test(fields.anexos)) issues.push({ severity: "warning", code: "annex-image-partial", message: "Há imagem detectada em anexos; confira posição, qualidade e legenda antes da versão final.", what: "Imagens foram detectadas na seção de anexos.", why: "Anexos com imagens exigem verificação de legenda, fonte e qualidade.", action: "Revise a seção de anexos no DOCX gerado." });
   return issues;

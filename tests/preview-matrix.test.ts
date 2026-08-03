@@ -92,4 +92,29 @@ describe("Matriz de pré-visualização por tipo de trabalho", () => {
       expect(html).toContain("data-first-line-cm=\"1.25\"");
     }
   });
+
+  it.each<WorkTypeId>(["dissertacao", "tese"])("%s renderiza pré-textuais completas (ficha, aprovacao, indicadores, lista)", (workType) => {
+    const html = buildPreviewHtml({
+      fields: baseFields(workType),
+      editorText: `${EDITOR_WITH_HEADINGS}Figura 1 - Grafico do crescimento.\n`,
+    });
+    expect(html).toContain("Ficha catalográfica");
+    expect(html).toContain("Folha de aprovação");
+    expect(html).toContain("INDICADORES DE IMPACTO");
+    expect(html).toContain("LISTA DE ILUSTRAÇÕES");
+  });
+
+  it("monografia renderiza folha de aprovação no preview", () => {
+    const html = buildPreviewHtml({ fields: baseFields("monografia"), editorText: EDITOR_WITH_HEADINGS });
+    expect(html).toContain("Folha de aprovação");
+  });
+
+  it.each<WorkTypeId>(["artigo", "resumo_cpg", "resumo_expandido_cpg"])(
+    "%s não renderiza ficha catalográfica nem folha de aprovação",
+    (workType) => {
+      const html = buildPreviewHtml({ fields: baseFields(workType), editorText: EDITOR_WITH_HEADINGS });
+      expect(html).not.toContain("Ficha catalográfica");
+      expect(html).not.toContain("Folha de aprovação");
+    },
+  );
 });

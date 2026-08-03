@@ -28,7 +28,7 @@ const EDITOR_TEXT = "# 1 Introducao\nTexto comum.\n# 2 Metodologia\nTexto.\n";
 type ModalOverrides = {
   onCommitEditorText?: Mock<(text: string) => void>;
   onUpdateField?: Mock<(key: AcademicFieldKey, value: string) => void>;
-  onGenerate?: Mock<() => void>;
+  onGenerate?: Mock<(overrides?: Partial<AcademicFields>) => void>;
   onClose?: Mock<() => void>;
 };
 
@@ -115,5 +115,24 @@ describe("PreviewModal - edição inline", () => {
     fireEvent.change(authorInput, { target: { value: "Novo Autor" } });
     fireEvent.blur(authorInput);
     expect(onUpdateField).toHaveBeenCalledWith("author", "Novo Autor");
+  });
+
+  it("Gerar DOCX passa os campos editados como overrides (P1: autor digitado no modal chega na geração)", () => {
+    const { onGenerate } = renderPreview();
+    fireEvent.click(screen.getByRole("button", { name: /Editar/i }));
+    const authorInput = screen.getByLabelText(/Autor\(a\):/);
+    fireEvent.change(authorInput, { target: { value: "Ana Souza" } });
+    const titleInput = screen.getByLabelText(/Título:/);
+    fireEvent.change(titleInput, { target: { value: "Novo titulo" } });
+    fireEvent.click(screen.getByRole("button", { name: /Gerar DOCX/i }));
+    expect(onGenerate).toHaveBeenCalledTimes(1);
+    expect(onGenerate.mock.calls[0][0]).toEqual({ author: "Ana Souza", title: "Novo titulo" });
+  });
+
+  it("Gerar DOCX sem edição não envia overrides de campos não tocados", () => {
+    const { onGenerate } = renderPreview();
+    fireEvent.click(screen.getByRole("button", { name: /Gerar DOCX/i }));
+    expect(onGenerate).toHaveBeenCalledTimes(1);
+    expect(onGenerate.mock.calls[0][0]).toEqual({});
   });
 });

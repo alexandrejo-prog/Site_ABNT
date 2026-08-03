@@ -18,6 +18,14 @@ function hasPublisherBeforeYear(value: string): boolean {
   return /:\s*[^.]+,\s*(?:19|20)\d{2}\b/u.test(value);
 }
 
+function looksLikeBookWithoutPublisher(value: string): boolean {
+  const text = value.trim();
+  if (!/^[A-ZÁÉÍÓÚÂÊÔÃÕÇ][^,.]{2,},/u.test(text)) return false;
+  const hasYearAtEnd = /[.;]?\s*(?:19|20)\d{2}\.?$/u.test(text);
+  if (!hasYearAtEnd) return false;
+  return !/:\s*[^.;]+,\s*(?:19|20)\d{2}\.?$/u.test(text);
+}
+
 function hasLikelyRawDoiUrl(value: string): boolean {
   return /\bDOI\s*:\s*https?:\/\/(?:dx\.)?doi\.org\//iu.test(value);
 }
@@ -28,6 +36,23 @@ function hasMarkdownOrAngleUrl(value: string): boolean {
 
 function hasKnownAuthorSpellingRisk(value: string): boolean {
   return /\bDEJOURS,\s*Christophe\b/iu.test(value) || /\bGUBA,\s*Egon\s+G\.\b/iu.test(value);
+}
+
+function authorSortKey(reference: { text: string }): string {
+  const text = reference.text.trim();
+  const commaIndex = text.indexOf(",");
+  const key = commaIndex > 0 ? text.substring(0, commaIndex).trim() : text.search(/\s/) > 0 ? text.substring(0, text.search(/\s/)) : text;
+  return key.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+}
+
+function countOutOfOrder(references: { text: string }[]): number {
+  let outOfOrder = 0;
+  for (let i = 1; i < references.length; i += 1) {
+    const prev = authorSortKey(references[i - 1]);
+    const cur = authorSortKey(references[i]);
+    if (prev && cur && cur.localeCompare(prev, "pt-BR", { sensitivity: "base" }) < 0) outOfOrder += 1;
+  }
+  return outOfOrder;
 }
 
 export function validateReferencesText(referencesText: string): ReferenceValidationIssue[] {
@@ -45,6 +70,7 @@ export function validateReferencesText(referencesText: string): ReferenceValidat
     academicPagesMissing: 0,
     legalPublisherMissing: 0,
     institutionalPublisherMissing: 0,
+    livroPublisherMissing: 0,
     rawDoiUrl: 0,
     markdownOrAngleUrl: 0,
     authorSpellingRisk: 0,
@@ -82,6 +108,14 @@ export function validateReferencesText(referencesText: string): ReferenceValidat
 
     if (reference.detectedType === "documento-institucional" && !hasPublisherBeforeYear(reference.text)) {
       counts.institutionalPublisherMissing += 1;
+    }
+
+    if (reference.detectedType === "livro" && !hasPublisherBeforeYear(reference.text)) {
+      counts.livroPublisherMissing += 1;
+    }
+
+    if (looksLikeBookWithoutPublisher(reference.text)) {
+      counts.livroPublisherMissing += 1;
     }
 
     if (hasLikelyRawDoiUrl(reference.original)) {
@@ -153,6 +187,13 @@ export function validateReferencesText(referencesText: string): ReferenceValidat
     });
   }
 
+  if (counts.livroPublisherMissing) {
+    issues.push({
+      code: "reference-livro-publisher-missing",
+      message: `Há ${counts.livroPublisherMissing} livro(s) sem editora detectada. Use a forma 'Local: Editora, ano' (NBR 6023).`,
+    });
+  }
+
   if (counts.rawDoiUrl) {
     issues.push({
       code: "reference-doi-url-normalized",
@@ -171,6 +212,14 @@ export function validateReferencesText(referencesText: string): ReferenceValidat
     issues.push({
       code: "reference-author-spelling-review",
       message: `Há ${counts.authorSpellingRisk} referência(s) com grafia de autor que merece conferência bibliográfica.`,
+    });
+  }
+
+  const outOfOrder = countOutOfOrder(references);
+  if (outOfOrder) {
+    issues.push({
+      code: "reference-order",
+      message: `Há ${outOfOrder} referência(s) fora da ordem alfabética (ordenação pt-BR). O DOCX reordena ao gerar, mas confira a sequência final.`,
     });
   }
 

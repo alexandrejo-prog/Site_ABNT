@@ -20,6 +20,7 @@ export interface NormalizedReference {
     | "artigo"
     | "livro"
     | "capitulo"
+    | "evento"
     | "tese-dissertacao"
     | "documento-institucional"
     | "legislacao"
@@ -326,6 +327,14 @@ function normalizeUflaManualReference(text: string): NormalizedReference | null 
   };
 }
 
+function eventReference(remainder: string): boolean {
+  return /in:\s/iu.test(remainder) && /(anais|congresso|simposio|seminario|encontro|conferencia|reuniao)/iu.test(fold(remainder));
+}
+function eventHighlight(remainder: string): string | undefined {
+  const m = remainder.match(/In:\s*([^.:,;]+)/iu);
+  return m ? m[1].trim() : undefined;
+}
+
 function detect(value: string): { highlight?: string; confidence: ReferenceConfidence; detectedType: NormalizedReference["detectedType"] } {
   if (isLegislation(value)) return { highlight: legislationTitle(value), confidence: "media", detectedType: "legislacao" };
   const parsed = splitAuthor(value);
@@ -337,6 +346,7 @@ function detect(value: string): { highlight?: string; confidence: ReferenceConfi
     }
     return { confidence: "baixa", detectedType: "livro" };
   }
+  if (eventReference(parsed.remainder)) return { highlight: eventHighlight(parsed.remainder), confidence: "media", detectedType: "evento" };
   const chapter = chapterBookTitle(parsed.remainder);
   if (chapter) return { highlight: chapter, confidence: "media", detectedType: "capitulo" };
   const article = articleJournal(parsed.remainder);

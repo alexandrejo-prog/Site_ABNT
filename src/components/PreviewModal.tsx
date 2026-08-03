@@ -5,14 +5,14 @@ import { buildPreviewHtml } from "../preview-html";
 import { editorMarkupToHtml, editorHtmlToMarkup } from "../editor-markup";
 import { editorCommandAdapter } from "../editor-command-adapter";
 import type { DocxGenerationInput } from "../export-docx";
-import type { AcademicFieldKey } from "../ufla-rules";
+import type { AcademicFieldKey, AcademicFields } from "../ufla-rules";
 
 export interface PreviewModalProps {
   input: DocxGenerationInput;
   onClose: () => void;
   onCommitEditorText: (text: string) => void;
   onUpdateField: (key: AcademicFieldKey, value: string) => void;
-  onGenerate: () => void;
+  onGenerate: (overrides?: Partial<AcademicFields>) => void;
 }
 
 const MIN_SCALE = 50;
@@ -38,6 +38,7 @@ export function PreviewModal({
   const [scale, setScale] = useState(90);
   const [draftText, setDraftText] = useState(input.editorText);
   const editableRef = useRef<HTMLDivElement | null>(null);
+  const editableFieldValuesRef = useRef<Record<AcademicFieldKey, string>>({} as Record<AcademicFieldKey, string>);
 
   const html = useMemo(() => buildPreviewHtml(input), [input]);
 
@@ -64,6 +65,15 @@ export function PreviewModal({
     const markup = editorHtmlToMarkup(editableRef.current);
     setDraftText(markup);
     onCommitEditorText(markup);
+  };
+
+  const collectEditableFieldOverrides = (): Partial<AcademicFields> => {
+    const overrides: Partial<AcademicFields> = {};
+    for (const field of EDITABLE_FIELDS) {
+      const value = (editableFieldValuesRef.current as Record<string, string>)[field.key];
+      if (value !== undefined) (overrides as Record<string, string>)[field.key] = value;
+    }
+    return overrides;
   };
 
   const runEditCommand = (command: string, value?: string): void => {
@@ -115,7 +125,7 @@ export function PreviewModal({
             <span className="preview-scale-controls">{pages} página(s) simuladas</span>
             <button className={`preview-action ${mode === "view" ? "active" : ""}`} type="button" onClick={() => { commitDraft(); setMode("view"); }}><Eye size={16} aria-hidden="true" />Visualizar</button>
             <button className={`preview-action ${mode === "edit" ? "active" : ""}`} type="button" onClick={() => { commitDraft(); setMode("edit"); }}><PencilLine size={16} aria-hidden="true" />Editar</button>
-            <button className="preview-action primary" type="button" onClick={() => { commitDraft(); onGenerate(); }}><FileDown size={16} aria-hidden="true" />Gerar DOCX</button>
+            <button className="preview-action primary" type="button" onClick={() => { commitDraft(); onGenerate(collectEditableFieldOverrides()); }}><FileDown size={16} aria-hidden="true" />Gerar DOCX</button>
             <button className="preview-action-close" type="button" onClick={onClose} aria-label="Fechar pré-visualização"><X size={16} aria-hidden="true" /></button>
           </div>
         </header>
@@ -159,6 +169,7 @@ export function PreviewModal({
                 <input
                   type="text"
                   defaultValue={input.fields[field.key] as string}
+                  onChange={(event) => { (editableFieldValuesRef.current as Record<string, string>)[field.key] = event.target.value; }}
                   onBlur={(event) => onUpdateField(field.key, event.target.value)}
                 />
               </label>

@@ -135,11 +135,11 @@ function preTextualChildren(fields: DocxGenerationInput["fields"]): Array<Paragr
     pageBreak(),
     unnumberedTitle("Resumo"),
     ...preTextualParagraphs(fields.resumo).map((line) => markupParagraph(line, true, 0)),
-    ...(palavrasChave ? [new Paragraph({ alignment: AlignmentType.BOTH, spacing: { line: SINGLE_LINE, after: 120 }, indent: { firstLine: 0 }, children: [run("Palavras-chave: ", true), ...textRunsFromMarkup(palavrasChave)] })] : []),
+    ...(palavrasChave ? [new Paragraph({ alignment: AlignmentType.BOTH, spacing: { line: SINGLE_LINE, after: UFLA_RULES.spacing.afterParagraphTwip }, indent: { firstLine: 0 }, children: [run("Palavras-chave: ", true), ...textRunsFromMarkup(palavrasChave)] })] : []),
     pageBreak(),
     unnumberedTitle("Abstract"),
     ...preTextualParagraphs(fields.abstractText).map((line) => markupParagraph(line, true, 0)),
-    ...(keywords ? [new Paragraph({ alignment: AlignmentType.BOTH, spacing: { line: SINGLE_LINE, after: 120 }, indent: { firstLine: 0 }, children: [run("Keywords: ", true), ...textRunsFromMarkup(keywords)] })] : []),
+    ...(keywords ? [new Paragraph({ alignment: AlignmentType.BOTH, spacing: { line: SINGLE_LINE, after: UFLA_RULES.spacing.afterParagraphTwip }, indent: { firstLine: 0 }, children: [run("Keywords: ", true), ...textRunsFromMarkup(keywords)] })] : []),
     pageBreak(),
     unnumberedTitle("Sumário"),
     // O Projeto de pesquisa usa sumário atualizável para evitar paginação falsa.
@@ -181,7 +181,7 @@ function headingParagraph(block: EditorBlock, first: boolean): Paragraph[] {
   const headingText = normalizeProjectHeadingText(block.text);
   const title = new Paragraph({
     heading: level,
-    spacing: { before: first ? 0 : 240, after: 240, line: ONE_AND_HALF_LINE },
+    spacing: { before: first ? UFLA_RULES.spacing.afterParagraphTwip : UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
     children: [run(block.type === "heading1" ? headingText.toUpperCase() : headingText, block.type !== "heading3")],
   });
   return first || block.type !== "heading1" ? [title] : [pageBreak(), title];
@@ -234,7 +234,7 @@ function tableChildrenFromRows(rows: string[][], caption?: string, source?: stri
     children.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        spacing: { before: 240, after: 120, line: SINGLE_LINE },
+        spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterParagraphTwip, line: SINGLE_LINE },
         children: [new TextRun({ text: cleanMojibakeText(caption), bold: true, font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK })],
       }),
     );
@@ -244,8 +244,8 @@ function tableChildrenFromRows(rows: string[][], caption?: string, source?: stri
     children.push(
       new Paragraph({
         alignment: AlignmentType.LEFT,
-        spacing: { before: 120, after: 240, line: SINGLE_LINE },
-        children: [new TextRun({ text: cleanMojibakeText(source), font: UFLA_RULES.typography.fontFamily, size: 20, color: BLACK })],
+        spacing: { before: UFLA_RULES.spacing.afterParagraphTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: SINGLE_LINE },
+        children: [new TextRun({ text: cleanMojibakeText(source), font: UFLA_RULES.typography.fontFamily, size: UFLA_RULES.typography.sourceFontSizePt * 2, color: BLACK })],
       }),
     );
   }
@@ -302,7 +302,7 @@ function isTabularParagraph(block: EditorBlock): boolean {
 function blockToParagraph(block: EditorBlock, first: boolean, importedTables: ImportedTable[] = []): Array<Paragraph | Table> {
   if (block.type === "heading1" || block.type === "heading2" || block.type === "heading3") return headingParagraph(block, first);
   if (block.type === "longQuote") {
-    return [new Paragraph({ alignment: AlignmentType.BOTH, spacing: { line: SINGLE_LINE, after: 120 }, indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip }, children: textRunsFromMarkup(normalizeProjectBodyText(block.text || " "), UFLA_RULES.typography.longQuoteFontSizePt * 2, UFLA_RULES.typography.fontFamily, BLACK) })];
+    return [new Paragraph({ alignment: AlignmentType.BOTH, spacing: { line: SINGLE_LINE, after: UFLA_RULES.spacing.afterParagraphTwip }, indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip }, children: textRunsFromMarkup(normalizeProjectBodyText(block.text || " "), UFLA_RULES.typography.longQuoteFontSizePt * 2, UFLA_RULES.typography.fontFamily, BLACK) })];
   }
   if (block.type === "markdownTable") return markdownTableChildren(block.text);
   if (block.type === "plainScheduleTable") return tabularBlockChildren(block.text);
@@ -384,7 +384,7 @@ function referenceParagraphs(references: string[], bodyBlocks: EditorBlock[] = [
   const children: Array<Paragraph | Table> = [];
   if (!hasEditorHeading(bodyBlocks, "REFERENCIAS") && !hasEditorHeading(bodyBlocks, "REFERÊNCIAS")) {
     children.push(pageBreak());
-    children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 0, after: 240, line: ONE_AND_HALF_LINE }, children: [run("REFERÊNCIAS", true)] }));
+    children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: UFLA_RULES.spacing.afterParagraphTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE }, children: [run("REFERÊNCIAS", true)] }));
   }
   const normalized = normalizeReferences(references);
   const seen = new Set<string>();

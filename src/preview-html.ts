@@ -36,6 +36,162 @@ const SOURCE_SIZE_PT = UFLA_RULES.typography.sourceFontSizePt;
 const FIRST_LINE_CM = UFLA_RULES.typography.paragraphFirstLineCm;
 const LONG_QUOTE_INDENT_CM = UFLA_RULES.typography.longQuoteLeftIndentCm;
 
+// ===== Paginação real simulada (baseada em altura de conteúdo) =====
+// A4: 29,7 cm x 21 cm. Margens UFLA: sup 3, esq 3, inf 2, dir 2.
+const PAGE_HEIGHT_CM = 29.7;
+const PAGE_WIDTH_CM = 21;
+const MARGIN_TOP_CM = 3;
+const MARGIN_BOTTOM_CM = 2;
+const MARGIN_LEFT_CM = 3;
+const MARGIN_RIGHT_CM = 2;
+const PX_PER_CM = 96 / 2.54;
+const USABLE_HEIGHT_PX = (PAGE_HEIGHT_CM - MARGIN_TOP_CM - MARGIN_BOTTOM_CM) * PX_PER_CM;
+const USABLE_WIDTH_PX = (PAGE_WIDTH_CM - MARGIN_LEFT_CM - MARGIN_RIGHT_CM) * PX_PER_CM;
+const CHAR_SPACING_FACTOR = 0.5;
+
+function ptToPx(pt: number): number {
+  return (pt * 96) / 72;
+}
+
+function charsPerLine(fontSizePt: number, widthPx = USABLE_WIDTH_PX): number {
+  const averageGlyphPx = ptToPx(fontSizePt) * CHAR_SPACING_FACTOR;
+  return Math.max(10, Math.floor(widthPx / averageGlyphPx));
+}
+
+function estimateLineCount(text: string, fontSizePt: number, widthPx = USABLE_WIDTH_PX): number {
+  const cleaned = cleanMojibakeText(text);
+  if (!cleaned.trim()) return 1;
+  const perLine = charsPerLine(fontSizePt, widthPx);
+  const words = cleaned.split(/\s+/);
+  let lines = 0;
+  let current = 0;
+  for (const word of words) {
+    const wordLen = word.length;
+    if (wordLen >= perLine) {
+      lines += 1;
+      current = wordLen;
+      continue;
+    }
+    if (current === 0) {
+      lines += 1;
+      current = wordLen;
+    } else if (current + 1 + wordLen <= perLine) {
+      current += 1 + wordLen;
+    } else {
+      lines += 1;
+      current = wordLen;
+    }
+  }
+  return Math.max(1, lines);
+}
+
+function estimateBlockHeight(
+  block: EditorBlock,
+  importedImages: ImportedDocumentImage[],
+  importedTables: ImportedTable[],
+): number {
+  const bodyLinePx = ptToPx(BODY_SIZE_PT) * 1.5;
+  switch (block.type) {
+    case "heading1":
+    case "heading2":
+    case "heading3": {
+      const sizePt = BODY_SIZE_PT;
+      const lines = estimateLineCount(block.text, sizePt);
+      const marginsPx = ptToPx(sizePt) * 2; // 1,5em antes + 0,5em depois
+      return bodyLinePx * lines + marginsPx;
+    }
+    case "longQuote": {
+      const sizePt = LONG_QUOTE_SIZE_PT;
+      const widthPx = USABLE_WIDTH_PX - LONG_QUOTE_INDENT_CM * PX_PER_CM;
+      const lines = estimateLineCount(block.text, sizePt, widthPx);
+      return ptToPx(sizePt) * lines + ptToPx(BODY_SIZE_PT);
+    }
+    case "source": {
+      const sizePt = SOURCE_SIZE_PT;
+      const lines = estimateLineCount(block.text, sizePt);
+      return ptToPx(sizePt) * lines + ptToPx(BODY_SIZE_PT);
+    }
+    case "paragraph": {
+      const lines = estimateLineCount(block.text, BODY_SIZE_PT);
+      return bodyLinePx * lines + 8;
+    }
+    case "reference":
+      return 0;
+    case "scheduleTable":
+    case "plainScheduleTable":
+    case "markdownTable":
+    case "tabbedTable": {
+      const rows = block.text.split("\n").filter((line) => line.trim()).length;
+      return Math.max(rows, 1) * 24 + 20;
+    }
+    case "importedImage": {
+      const image = importedImages.find((img) => img.id === block.text);
+      if (image?.width && image?.height) {
+        const scale = Math.min(1, USABLE_WIDTH_PX / image.width);
+        return image.height * scale + ptToPx(BODY_SIZE_PT) * 2;
+      }
+      return 260;
+    }
+    case "importedTable":
+      return importedTables.find((table) => table.id === block.text) ? 200 : 0;
+    default: {
+      const lines = estimateLineCount(block.text, BODY_SIZE_PT);
+      return bodyLinePx * lines + 8;
+    }
+  }
+}
+
+function calculateRealPages(
+  bodyBlocks: EditorBlock[],
+  references: string[],
+  apendices: string,
+  anexos: string,
+  importedImages: ImportedDocumentImage[],
+  importedTables: ImportedTable[],
+  bodyStartPage: number,
+): Map<string, number> {
+  const pageMap = new Map<string, number>();
+  const record = (text: string, page: number): void => {
+    const key = normalizeForDetection(cleanMojibakeText(text));
+    if (!pageMap.has(key)) pageMap.set(key, page);
+  };
+
+  let currentHeight = 0;
+  let currentPage = bodyStartPage;
+  const minRemainingPx = ptToPx(BODY_SIZE_PT) * 1.5 * 2;
+
+  for (const block of bodyBlocks) {
+    const isHeading =
+      block.type === "heading1" || block.type === "heading2" || block.type === "heading3";
+    const height = estimateBlockHeight(block, importedImages, importedTables);
+    const remaining = USABLE_HEIGHT_PX - currentHeight;
+    if (isHeading && remaining < height + minRemainingPx) {
+      currentPage += 1;
+      currentHeight = height;
+    } else if (currentHeight + height > USABLE_HEIGHT_PX) {
+      currentPage += 1;
+      currentHeight = height;
+    } else {
+      currentHeight += height;
+    }
+    if (isHeading) record(block.text, currentPage);
+  }
+
+  if (references.length > 0) {
+    currentPage += 1;
+    record("REFERÊNCIAS", currentPage);
+  }
+  if (hasText(apendices)) {
+    currentPage += 1;
+    record("APÊNDICE A", currentPage);
+  }
+  if (hasText(anexos)) {
+    currentPage += 1;
+    record("ANEXOS", currentPage);
+  }
+  return pageMap;
+}
+
 export type PreviewTemplateId = "general" | "article" | "cpg" | "research-project";
 
 function previewTemplateFor(workType: WorkTypeValue): PreviewTemplateId {
@@ -194,10 +350,12 @@ function uint8ArrayToBase64(data: Uint8Array): string {
   return btoa(binary);
 }
 
-function importedImageHtml(image: ImportedDocumentImage | undefined): string {
+function importedImageHtml(image: ImportedDocumentImage | undefined, presentTexts?: Set<string>): string {
   if (!image) return simpleParagraph("[Imagem importada: dados originais indisponíveis — reinsira manualmente]");
-  const caption = image.caption ? captionHtml(image.caption) : "";
-  const source = image.source ? sourceHtml(image.source) : "";
+  const captionAlreadyInBody = presentTexts?.has(normalizeForDetection(cleanMojibakeText(image.caption ?? ""))) ?? false;
+  const sourceAlreadyInBody = presentTexts?.has(normalizeForDetection(cleanMojibakeText(image.source ?? ""))) ?? false;
+  const caption = image.caption && !captionAlreadyInBody ? captionHtml(image.caption) : "";
+  const source = image.source && !sourceAlreadyInBody ? sourceHtml(image.source) : "";
   const base64 = image.base64 || (image.data?.byteLength ? uint8ArrayToBase64(image.data) : "");
   let imageHtml: string;
   if (base64) {
@@ -209,12 +367,14 @@ function importedImageHtml(image: ImportedDocumentImage | undefined): string {
   return `${caption}${imageHtml}${source}`;
 }
 
-function importedTableHtml(table: ImportedTable | undefined): string {
+function importedTableHtml(table: ImportedTable | undefined, presentTexts?: Set<string>): string {
   if (!table || !table.rows.length) {
     return simpleParagraph("[Tabela importada: dados originais indisponíveis — reinsira manualmente]");
   }
-  const caption = table.caption ? captionHtml(table.caption) : "";
-  const source = table.source ? sourceHtml(table.source) : "";
+  const captionAlreadyInBody = presentTexts?.has(normalizeForDetection(cleanMojibakeText(table.caption ?? ""))) ?? false;
+  const sourceAlreadyInBody = presentTexts?.has(normalizeForDetection(cleanMojibakeText(table.source ?? ""))) ?? false;
+  const caption = table.caption && !captionAlreadyInBody ? captionHtml(table.caption) : "";
+  const source = table.source && !sourceAlreadyInBody ? sourceHtml(table.source) : "";
   const columnCount = table.columnCount || Math.max(...table.rows.map((row) => row.length), 1);
   const rowsHtml = table.rows
     .map((cells, rowIndex) => {
@@ -232,10 +392,21 @@ function importedTableHtml(table: ImportedTable | undefined): string {
   return `${caption}<table class="preview-table"><tbody>${rowsHtml}</tbody></table>${source}`;
 }
 
+function bodyTextsInBody(bodyBlocks: EditorBlock[]): Set<string> {
+  const present = new Set<string>();
+  for (const block of bodyBlocks) {
+    if (block.type === "paragraph" || block.type === "source" || block.type === "heading1" || block.type === "heading2" || block.type === "heading3") {
+      present.add(normalizeForDetection(cleanMojibakeText(block.text)));
+    }
+  }
+  return present;
+}
+
 function bodyBlockHtml(
   block: EditorBlock,
   importedImages: ImportedDocumentImage[],
   importedTables: ImportedTable[],
+  presentTexts?: Set<string>,
 ): string {
   switch (block.type) {
     case "heading1":
@@ -252,9 +423,9 @@ function bodyBlockHtml(
     case "tabbedTable":
       return tableHtmlFromText(block.text);
     case "importedImage":
-      return importedImageHtml(importedImages.find((image) => image.id === block.text));
+      return importedImageHtml(importedImages.find((image) => image.id === block.text), presentTexts);
     case "importedTable":
-      return importedTableHtml(importedTables.find((table) => table.id === block.text));
+      return importedTableHtml(importedTables.find((table) => table.id === block.text), presentTexts);
     case "source":
       return sourceHtml(block.text);
     case "reference":
@@ -300,14 +471,19 @@ function summaryHtml(
   references: string[],
   apendices: string,
   anexos: string,
+  bodyStartPage = 1,
+  importedImages: ImportedDocumentImage[] = [],
+  importedTables: ImportedTable[] = [],
 ): string {
   const entries = collectPreviewSummaryEntries(bodyBlocks, references, apendices, anexos);
   if (!entries.length) return "";
+  const pageMap = calculateRealPages(bodyBlocks, references, apendices, anexos, importedImages, importedTables, bodyStartPage);
   const entriesHtml = entries
     .map((entry) => {
       const cls = entry.level === 1 ? "preview-summary-1" : entry.level === 2 ? "preview-summary-2" : "preview-summary-3";
       const bold = entry.level === 1;
-      return `<p class="preview-summary ${cls}${bold ? " preview-bold" : ""}">${escapeHtml(entry.text)}</p>`;
+      const pageNumber = pageMap.get(normalizeForDetection(cleanMojibakeText(entry.text)));
+      return `<p class="preview-summary ${cls}${bold ? " preview-bold" : ""}"><span class="preview-summary-text">${escapeHtml(entry.text)}</span><span class="preview-summary-leader" aria-hidden="true"></span><span class="preview-summary-page">${pageNumber ?? "—"}</span></p>`;
     })
     .join("");
   return `<div class="preview-summary-block">${unnumberedTitle("Sumário")}${entriesHtml}</div>`;
@@ -524,7 +700,8 @@ function generalPreview(input: DocxGenerationInput): string {
   const importedImages = input.importedImages ?? [];
   const importedTables = input.importedTables ?? [];
 
-  const bodyHtml = bodyBlocks.map((block) => bodyBlockHtml(block, importedImages, importedTables)).filter(Boolean).join("");
+  const presentTexts = bodyTextsInBody(bodyBlocks);
+  const bodyHtml = bodyBlocks.map((block) => bodyBlockHtml(block, importedImages, importedTables, presentTexts)).filter(Boolean).join("");
 
   const preTextual: string[] = [];
   preTextual.push(page(coverHtml(fields), "preview-cover"));
@@ -545,6 +722,7 @@ function generalPreview(input: DocxGenerationInput): string {
   preTextual.push(optionalFrontPage("Dedicatória", fields.dedicatoria));
   preTextual.push(optionalFrontPage("Agradecimentos", fields.agradecimentos));
   preTextual.push(optionalFrontPage("Epígrafe", fields.epigrafe));
+  preTextual.push(optionalFrontPage("Errata", fields.errata));
   preTextual.push(resumoAbstractHtml(fields));
   preTextual.push(impactIndicatorsHtml(fields));
   preTextual.push(autoListsHtml(bodyBlocks, importedImages, importedTables));
@@ -552,8 +730,11 @@ function generalPreview(input: DocxGenerationInput): string {
   preTextual.push(optionalFrontPage("Lista de gráficos", fields.listaGraficos));
   preTextual.push(optionalFrontPage("Lista de tabelas", fields.listaTabelas));
   preTextual.push(optionalFrontPage("Lista de siglas", fields.listaSiglas));
+  preTextual.push(optionalFrontPage("Lista de abreviaturas", fields.listaAbreviaturas));
+  preTextual.push(optionalFrontPage("Lista de símbolos", fields.listaSimbolos));
+  preTextual.push(optionalFrontPage("Glossário", fields.glossario));
   if (hasSummary) {
-    preTextual.push(page(summaryHtml(bodyBlocks, references, fields.apendices, fields.anexos)));
+    preTextual.push(page(summaryHtml(bodyBlocks, references, fields.apendices, fields.anexos, preTextual.length + 2, importedImages, importedTables)));
   }
 
   const postTextual: string[] = [];
@@ -591,7 +772,7 @@ function articlePreview(input: DocxGenerationInput): string {
   const effectiveReferences = references.length ? references : splitParagraphs(fields.referencias);
 
   const bodyHtml = bodyBlocks
-    .map((block) => bodyBlockHtml(block, input.importedImages ?? [], input.importedTables ?? []))
+    .map((block) => bodyBlockHtml(block, input.importedImages ?? [], input.importedTables ?? [], bodyTextsInBody(bodyBlocks)))
     .filter(Boolean)
     .join("");
 
@@ -638,7 +819,7 @@ function cpgPreview(input: DocxGenerationInput): string {
   ];
 
   const bodyHtml = bodyBlocks
-    .map((block) => bodyBlockHtml(block, input.importedImages ?? [], input.importedTables ?? []))
+    .map((block) => bodyBlockHtml(block, input.importedImages ?? [], input.importedTables ?? [], bodyTextsInBody(bodyBlocks)))
     .filter(Boolean)
     .join("");
 
@@ -677,7 +858,7 @@ function researchProjectPreview(input: DocxGenerationInput): string {
     ...blocks.filter((block) => block.type === "reference").map((block) => block.text),
   ];
   const bodyHtml = bodyBlocks
-    .map((block) => bodyBlockHtml(block, input.importedImages ?? [], input.importedTables ?? []))
+    .map((block) => bodyBlockHtml(block, input.importedImages ?? [], input.importedTables ?? [], bodyTextsInBody(bodyBlocks)))
     .filter(Boolean)
     .join("");
 

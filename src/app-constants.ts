@@ -6,7 +6,8 @@ export const FIELD_LABELS: Record<string, string> = {
   location: "Local", year: "Ano", resumo: "Resumo", palavrasChave: "Palavras-chave",
   abstractText: "Abstract", keywords: "Keywords", introducao: "Introdução", conclusao: "Conclusão",
   referencias: "Referências", anexos: "Anexos", apendices: "Apêndices",
-  dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe",
+  dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", errata: "Errata",
+  listaAbreviaturas: "Lista de abreviaturas", listaSimbolos: "Lista de símbolos", glossario: "Glossário",
   indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators",
   imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema",
   problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese",
@@ -41,13 +42,15 @@ export function rowsForField(key: string): number {
   return LONG_FIELDS.has(key) ? 5 : 1;
 }
 
+const HIDDEN_PRETEXTUAL = ["dedicatoria", "agradecimentos", "epigrafe", "errata", "listaSiglas", "listaQuadros", "listaGraficos", "listaTabelas", "listaAbreviaturas", "listaSimbolos", "glossario", "indicadoresImpacto", "impactIndicators"];
+
 export function visibleField(key: string, workType: string): boolean {
   if (RESEARCH_PROJECT_FIELD_KEYS.includes(key)) return isResearchProject(workType as any);
   if (IMPACT_KEYS.includes(key)) return false;
   if (key === "englishTitle") return workType === "dissertacao" || workType === "tese";
-  if (workType === "artigo") return !["workNature", "dedicatoria", "agradecimentos", "epigrafe", "indicadoresImpacto", "impactIndicators"].includes(key);
-  if (isUflaCollectionWork(workType as any)) return !["dedicatoria", "agradecimentos", "epigrafe", "indicadoresImpacto", "impactIndicators"].includes(key);
-  if (isCpgWork(workType as any)) return !["workNature", "dedicatoria", "epigrafe", "indicadoresImpacto", "impactIndicators", "anexos", "apendices"].includes(key);
+  if (workType === "artigo") return !HIDDEN_PRETEXTUAL.includes(key);
+  if (isUflaCollectionWork(workType as any)) return !HIDDEN_PRETEXTUAL.includes(key);
+  if (isCpgWork(workType as any)) return ![...HIDDEN_PRETEXTUAL, "workNature", "anexos", "apendices"].includes(key);
   return true;
 }
 

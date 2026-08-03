@@ -101,6 +101,9 @@ export interface DocxAnalysis {
     excludesCover: boolean;
     excludesPreTextual: boolean;
   };
+  resumo: {
+    titleCentered: boolean;
+  };
   colors: {
     hasBlueInBody: boolean;
     hasBlueInReferences: boolean;

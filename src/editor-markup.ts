@@ -2,18 +2,22 @@ export function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+function emEtAl(value: string): string {
+  return value.replace(/(et\s+al\.)/giu, "<em>$1</em>");
+}
+
 export function inlineMarkupToHtml(value: string): string {
   const parts: string[] = [];
   const tokenPattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
   let cursor = 0;
   let match: RegExpExecArray | null;
   while ((match = tokenPattern.exec(value)) !== null) {
-    if (match.index > cursor) parts.push(escapeHtml(value.slice(cursor, match.index)));
+    if (match.index > cursor) parts.push(emEtAl(escapeHtml(value.slice(cursor, match.index))));
     const token = match[0];
     parts.push(token.startsWith("**") ? `<strong>${escapeHtml(token.slice(2, -2))}</strong>` : `<em>${escapeHtml(token.slice(1, -1))}</em>`);
     cursor = match.index + token.length;
   }
-  if (cursor < value.length) parts.push(escapeHtml(value.slice(cursor)));
+  if (cursor < value.length) parts.push(emEtAl(escapeHtml(value.slice(cursor))));
   return parts.join("") || "<br />";
 }
 

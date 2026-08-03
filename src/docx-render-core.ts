@@ -94,7 +94,30 @@ export function tokenizeMarkup(text: string): ParsedRun[] {
     runs.push({ text: text.slice(cursor) });
   }
 
-  return runs.length ? runs : [{ text: "" }];
+  return applyEtAlItalic(runs.length ? runs : [{ text: "" }]);
+}
+
+function applyEtAlItalic(runs: ParsedRun[]): ParsedRun[] {
+  const etAlPattern = /(et\s+al\.)/giu;
+  const expanded = runs.flatMap((run) => {
+    const pieces: ParsedRun[] = [];
+    let cursor = 0;
+    let m: RegExpExecArray | null;
+    while ((m = etAlPattern.exec(run.text)) !== null) {
+      if (m.index > cursor) pieces.push({ text: run.text.slice(cursor, m.index), bold: run.bold, italics: run.italics });
+      pieces.push({ text: m[0], bold: run.bold, italics: true });
+      cursor = m.index + m[0].length;
+    }
+    if (cursor < run.text.length) pieces.push({ text: run.text.slice(cursor), bold: run.bold, italics: run.italics });
+    return pieces.length ? pieces : [{ ...run }];
+  });
+  const merged: ParsedRun[] = [];
+  for (const run of expanded.filter((item) => item.text.length > 0)) {
+    const last = merged[merged.length - 1];
+    if (last && last.bold === run.bold && last.italics === run.italics) last.text += run.text;
+    else merged.push({ ...run });
+  }
+  return merged.length ? merged : runs;
 }
 
 export function textRunsForSingleLine(
