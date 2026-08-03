@@ -5,5 +5,8 @@ export default defineConfig({
     include: ['tests/**/*.test.{ts,tsx}', 'skills/**/*.test.{ts,tsx}'],
     environment: 'node',
     setupFiles: ['./tests/setup.ts'],
+    environmentMatchGlobs: [
+      ['tests/**/*.test.tsx', 'jsdom'],
+    ],
   },
 });
