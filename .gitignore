@@ -16,6 +16,13 @@ fix-runs.cjs
 .env.local
 .env.*.local
 
+# Segredos e arquivos temporarios de teste de chaves (nunca versionar)
+temp-keys.json
+*keys.json
+test-keys.ps1
+test-openai-keys.ps1
+test-*.ps1
+
 tsconfig.tsbuildinfo
 
 tsconfig.tsbuildinfo

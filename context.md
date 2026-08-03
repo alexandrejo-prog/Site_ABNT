@@ -101,7 +101,7 @@ As pendências abaixo constam no [CHECKLIST_SITE_UFLA_MANUAL.md](file:///C:/User
 2. **Apêndices/Anexos:** numeração de páginas contínua **[x]** (já na mesma seção textual; teste cobre).  
 3. **Folha de Aprovação:** título em inglês e coorientador **[x]** (implementado — dissertação/tese; `englishTitle` no form).  
 4. **Referências com 4+ Autores:** itálico em “et al.” **[x]** (implementado).  
-5. **Citação Direta Curta:** validação estrutural básica autor‑data **[x]** (validada); validação completa de autor‑data‑página **adiada** — risco de falso‑positivo.  
+5. **Citação Direta Curta:** validação completa autor‑data‑página **[x]** (implementado em 03/08 — `validateShortCitation` em `validators.ts`; ver 6e).  
 6. **Resumos:** validação da extensão (150‑500 palavras) **[x]** (validada).
 
 ---
@@ -143,13 +143,77 @@ As pendências abaixo constam no [CHECKLIST_SITE_UFLA_MANUAL.md](file:///C:/User
 
 ---
 
+## 6c. CORREÇÕES P1–P3 DO MODAL DE PREVIEW (01/08/2026)
+1. **P1 — "Gerar DOCX" no modal não usava campos de metadados editados** — o clique disparava `handleGenerateDocx` com `fields` antigos (inputs usavam `defaultValue`+`onBlur`, e o setState assíncrono não chegava antes do clique), bloqueando por `author-required`.
+   - `src/App.tsx`: `handleGenerateDocx(fieldOverrides?: Partial<AcademicFields>)` mescla overrides em `fields` antes de `runValidation`/`generate`/`buildDownloadFileName`/`finalVersionPendingReport`; `handleGenerateFromPreview(overrides)` fecha o modal e gera com overrides; botão do header usa `() => handleGenerateDocx()` para não passar `MouseEvent`.
+   - `src/components/PreviewModal.tsx`: `onGenerate` agora recebe `(overrides?: Partial<AcademicFields>) => void`; `editableFieldValuesRef` coleta valores no `onChange`; `collectEditableFieldOverrides()` percorre `EDITABLE_FIELDS` (author/title/subtitle/advisor/coadvisor/year); o botão "Gerar DOCX" envia os overrides.
+   - Validação de campos obrigatórios **mantida** (bloqueio com vazios é intencional e testado; o checkbox funciona pelo header).
+2. **P2 — legenda/fonte duplicadas no preview** — `src/preview-html.ts`: `importedImageHtml`/`importedTableHtml` agora recebem `presentTexts?: Set<string>` e só emitem caption/source se o corpo **não** os contiver (via `normalizeForDetection`); nova `bodyTextsInBody(bodyBlocks)`; 4 chamadas (general/article/cpg/research-project) passam os textos do corpo. No DOCX as ocorrências extras eram `altText` (metadado não-visível) + lista de ilustrações (legítima) — o corpo real tem 1 legenda + 1 fonte.
+3. **P3 — sumário do preview sem números de página** — `summaryHtml()` agora recebe `bodyStartPage` (páginas pré-textuais + sumário) e gera cada entrada com `<span class="preview-summary-page">N</span>`; CSS novo em `preview-styles.css`: `.preview-summary` em flex com `.preview-summary-leader` (linha pontilhada) e página à direita. Números simulados (o DOCX usa TOC/PAGEREF real do Word).
+4. **Testes permanentes** — `tests/preview-html.test.ts` +4 (Bug 4 dedup imagem, entradas com página, corpo não começa na página 1); `tests/preview-modal.test.tsx` +2 (overrides enviados; `{}` sem edição). Tipagem do mock `onGenerate` corrigida (`Mock<(overrides?: Partial<AcademicFields>) => void>`).
+5. Temporários `tests/repro-*.test.ts(x)` removidos (15 arquivos). `npm run verify` 100% verde: 127 arquivos, 1101 testes (10 skipped), build OK.
+
+---
+
+## 6d. AUDITORIA VALIDADOR × GERADOR — 7/7 TIPOS APROVADOS (03/08/2026)
+Objetivo: comprovar que o validador `skills/ufla-docx-compliance` não precisa mais de revisão manual. Gerei DOCX de teste para os 7 tipos e corrigi divergências reais do validador (bugs de detecção e itens estruturais fora de contexto). **Todos os 7 tipos passam com `exit 0`.**
+
+1. **Correções no gerador `src/export-docx.ts`**:
+   - Heading `REFERÊNCIAS` só era suprimido quando a palavra aparecia no corpo em prosa — condição `[...includes(...)]` substituída por lista explícita (`REFERENCIAS`/`REFERENCIAS BIBLIOGRAFICAS`/`BIBLIOGRAFICAS`) com remoção de numeração. Dissertação/tese/TCC voltaram a emitir a seção.
+   - Indentação corrigida em `src/export-docx.ts:1100` (`font: UFLA_RULES.typography.fontFamily`) e `REFERENCE_FONT`/`REFERENCE_SIZE` passam a usar as constantes `UFLA_RULES`.
+2. **Bug do artigo (2ª geração no mesmo processo)** — removida a flag module-level `_articleReferencesAdded` em `src/export-article-docx.ts`; a 2ª chamada de `generateArticleDocxBlob` não perdia mais as referências.
+3. **Bugs do validador** (`skills/ufla-docx-compliance/src/`):
+   - `docx-analyzer.ts`: autor da capa lido do primeiro parágrafo **com texto** (antes lia o parágrafo da logo, vazio → autor incorreto).
+   - `docx-analyzer.ts`: `hasLogo` agora case-insensitive (`/ufla|logo|image|drawing/i`) — o altText do logo é "Logo UFLA" (maiúsculo) e não casava; projeto de pesquisa passou a reconhecer o logo.
+   - `docx-analyzer.ts` + `types.ts`: novo campo `resumo.titleCentered` — item 11.1 passou a checar o título `RESUMO` (antes lia o `SUMÁRIO`).
+   - `checklist-checker.ts` + `index.ts`: validador agora é **ciente do tipo de trabalho** (`--type=...`). Itens estruturalmente inaplicáveis (capa UFLA/sumário em artigo e CPG, paginação no resumo curto, anexos/apêndices) viram `unchecked` ("não verificado") em vez de `fail`.
+   - `index.ts`: itens `unchecked` não contam mais como GRAVE/MÉDIO/BAIXO nas somas (antes itens excluídos de severidade grave faziam `passed=false` mesmo com 0 falhas).
+4. **Evidências (saída real do validador, `exit` code)**:
+   - `dissertacao-validacao.docx` → `--type=dissertacao` → **exit 0**
+   - `tese-validacao.docx` → `--type=tese` → **exit 0**
+   - `tcc-validacao.docx` → `--type=tcc` → **exit 0**
+   - `artigo-validacao.docx` → `--type=artigo` → **exit 0**
+   - `resumo-cpg-validacao.docx` → `--type=resumo_cpg` → **exit 0**
+   - `resumo-expandido-cpg-validacao.docx` → `--type=resumo_expandido_cpg` → **exit 0**
+   - `projeto-pesquisa-validacao.docx` → `--type=projeto_pesquisa` → **exit 0**
+   - Relatórios em `tmp/*3..5.md`; DOCX novos na raiz (o conteúdo de `validation-docs/` é de 30/07 — **antigo**, não regenerado).
+5. **Testes** — `skills/ufla-docx-compliance/tests/ufla-docx-compliance.test.ts` +5 testes (exclusão por tipo artigo/resumo_cpg, item 11.1 via `resumo.titleCentered`, unchecked não conta como grave, `validateDocx` com `workType`). `npm run verify` 100% verde: **128 arquivos, 1108 testes (10 skipped), build OK**.
+
+---
+
+## 6e. REFORÇO DE VALIDAÇÃO POR BLOCOS — R14→R8 (03/08/2026)
+Sequência executada contra o `CHECKLIST_SITE_UFLA_MANUAL_v3.md` (seções A–F). Todos os blocos verde: **131 arquivos, 1141 testes (10 skipped), build OK**.
+
+1. **Bloco 1 — R14 higiene de fixtures** — `generate-all-validation.ts` (na raiz, importa `./src/...`) gera 8 tipos canônicos em `tmp/scope-docs/*-full.docx` (**monografia** no lugar de `tcc`, alinhado ao mapeamento operacional); `run-validations.cjs` (na raiz) valida os 8 com `--type`. `validation-docs/` antigo (30/07) foi descartado (03/08) e `teste-final.docx` ficou na raiz, regenerado por `scripts/generate-fixtures.mjs`.
+2. **Bloco 2 — C.1/C.2/C.3/C.5/C.7 revalidados em DOCX real** — novo `tests/v3-regression-docx-real.test.ts` (5): gera monografia com tabela/anexo/apêndice, roda o `analyzeDocx` do validador e asserts A4 (11906×16838 twip), margens 3/3/2/2 cm, capa (autor/título maiúsculo), sumário e `checkCompliance(monografia)` com 58 ok/0 falha. **Bônus:** ao compilar o validador pelo build raiz, expôs 7 erros latentes de tipagem em `skills/ufla-docx-compliance/src/` (locatorBold com `string|undefined`, vars mortas `isA4`/`headerRef`/`hasHeader`/`hasBlueColor`, import morto `normalizeOperationalType`) — todos corrigidos.
+3. **Bloco 3 — R9/P6 citação direta curta autor‑data‑página** — `validateShortCitation` em `validators.ts` (NBR 10520:2023): `citation-year-missing`, `citation-author-missing`, `citation-page-missing` (warning) e `citation-direct-locator` (info, só quando há aspas — evita falso‑positivo em citação indireta). Testes: `tests/citation-locator.test.ts` (7).
+4. **Bloco 4 — R6 referências ABNT ampliada** — `references-validator.ts` ganhou `reference-order`: valida ordem alfabética usando a mesma chave do gerador (`getAuthorKey`), `localeCompare` pt-BR base. Testes: `tests/ref-validator.test.ts` (9, +3 de ordem).
+5. **Bloco 5 — R10 pré-textuais no preview** — `tests/preview-matrix.test.ts` (21, +6): dissertação/tese renderizam ficha catalográfica, folha de aprovação, indicadores e lista de ilustrações; monografia tem folha de aprovação; artigo/resumo CPG não têm ficha/aprovação.
+6. **Bloco 6 — R8 tela única + preview integrados** — novo `tests/app-preview-flow.test.tsx` (3): "Visualizar" abre o `role="dialog"`, "Gerar DOCX" no modal gera via overrides e fecha, edição no modal comita e não gera sem ação.
+
+---
+
+## 6f. FECHAMENTO DE BACKLOG — R6/R10/R11/R12/R13 (03/08/2026)
+Sequência executada em ordem única (sem refazer comprovados R9/P6 e R14). Todos os blocos verde: **134 arquivos, 1153 testes (10 skipped), build OK**.
+
+1. **R6 — referência de livro sem editora** — `references-validator.ts` ganhou `reference-livro-publisher-missing` (NBR 6023: `Local: Editora, ano`), via `looksLikeBookWithoutPublisher` (detecção de forma quando `detectedType` vira `desconhecido`). Testes: `tests/ref-validator.test.ts` (11, +2). C.6 no checklist.
+2. **R10 — Errata como elemento pré-textual** — novo campo `errata` em `ufla-rules.ts` (tipo+default+`ACADEMIC_FIELD_KEYS`), render em `export-docx.ts` (`optionalPage("Errata")` antes da Dedicatória) e `preview-html.ts` (`optionalFrontPage`); rótulo em `app-constants.ts` (exigido por `keyboard-accessibility.test.tsx`). Testes: `tests/pre-textuais-opcionais.test.ts` (3).
+3. **R11 — "et al." em itálico no corpo** — `docx-render-core.ts` (`tokenizeMarkup` → novo `applyEtAlItalic`, que divide runs em `et al.` com itálico estático e mescla adjacentes) compartilhado por todos os exportadores; `export-docx.ts` refatorou `textRunsForSingleLine` (única cópia local) para delegar ao core; preview em `editor-markup.ts` (`inlineMarkupToHtml` embrulha `et al.` em `<em>`). Testes: `tests/et-al-corpo.test.ts` (3).
+4. **R12 — listas de abreviaturas/símbolos e glossário** — 3 campos novos em `ufla-rules.ts` (`listaAbreviaturas`, `listaSimbolos`, `glossario`), ocultados por tipo via `HIDDEN_PRETEXTUAL` em `app-constants.ts`; render DOCX (`optionalPage("Lista de abreviaturas"/"Lista de símbolos"/"Glossário")` + contagem de páginas pré-textuais) e preview (`optionalFrontPage`). Testes: `tests/listas-abreviaturas-simbolos.test.ts` (3).
+5. **R13 — tipo específico de referência "evento"** — `references-normalizer.ts` ganhou `detectedType "evento"` (trabalhos em anais/congressos, NBR 6023): `eventReference` (exige `In:` + palavra-chave de evento no restante) + `eventHighlight` (destaca o nome do evento após `In:`), testado com congresso em caixa alta. Teste em `tests/references-normalizer.test.ts` (32, +1).
+   - **Nota — ambiguidade `In:`:** referência de **evento** e **capítulo de livro** usam o marcador `In:`. A distinção atual depende da presença de palavra-chave de evento (`anais|congresso|simposio|seminario|encontro|conferencia|reuniao`) no restante após `In:`; caso contrário, cai em `capitulo`. Registrar esta regra para evitar erro de normalização futura ao adicionar novos formatos de referência.
+6. **R14 — confirmado já concluído** (8 tipos canônicos, `run-validations.cjs`, tabela B2) — sem novo trabalho.
+7. `npm run verify` 100% verde: 134 arquivos, 1153 testes (10 skipped), build OK.
+
+---
+
 ## 7. COMANDOS ÚTEIS
 ```bash
 npm run dev              # Inicia o servidor de desenvolvimento SPA
 npm test                 # Executa testes unitários e de integração com Vitest
 npm run build            # Executa o build de produção (tsc build + vite compile)
 npm run verify           # Executa testes e build (validador oficial de PR)
-npm run skill:validate   # Valida um arquivo DOCX gerado contra o checklist UFLA/ABNT
+npm run skill:validate   # Valida um DOCX; use --type para classificar itens estruturais: --type=artigo|resumo_cpg|projeto_pesquisa|...
 ```
 
 ---

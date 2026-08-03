@@ -6,6 +6,7 @@ Skill de validação de arquivos DOCX contra o **Manual de Normalização da UFL
 
 - ✅ Analisa DOCX: margens, fontes, espaçamentos, títulos, tabelas, referências, sumário, paginação
 - ✅ Compara cada item contra o `CHECKLIST_SITE_UFLA_MANUAL.md`
+- ✅ É **ciente do tipo de trabalho**: itens estruturalmente inaplicáveis (ex.: sumário e capa UFLA em artigo/CPG) são marcados como *não verificado* em vez de *falha*
 - ✅ Gera relatório markdown com status (✅ ❌ ⚠️ 🔍)
 - ✅ Sugere correções no código ou passos manuais para o Word
 - ✅ Ativável por chat (`@ufla-docx-compliance`) ou por CLI
@@ -38,6 +39,10 @@ npx tsx skills/ufla-docx-compliance/src/index.ts teste-final.docx --verbose
 
 # Combinado
 npx tsx skills/ufla-docx-compliance/src/index.ts teste-final.docx --report=relatorio.md --verbose
+
+# Tipo de trabalho (permite classificar itens estruturais como não verificados)
+# Valores: dissertacao | tese | monografia (=tcc) | artigo | resumo_cpg | resumo_expandido_cpg | artigo_completo_cpg | projeto_pesquisa
+npx tsx skills/ufla-docx-compliance/src/index.ts tmp/scope-docs/artigo-full.docx --type=artigo --report=relatorio.md
 ```
 
 ### Via npm script
