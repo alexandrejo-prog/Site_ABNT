@@ -11,7 +11,11 @@
     "acceptance:docx": "node scripts/acceptance/audit-docx.mjs",
     "acceptance:word": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/validate-word.ps1",
     "acceptance:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run-docx-acceptance.ps1",
-    "skill:validate": "npx tsx skills/ufla-docx-compliance/src/index.ts"
+    "skill:validate": "npx tsx skills/ufla-docx-compliance/src/index.ts",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",
+    "lint:fix": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" --fix",
+    "format": "prettier --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,tsx}\"",
+    "format:fix": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,tsx}\""
   },
   "dependencies": {
     "@tiptap/extension-text-align": "^3.27.3",
@@ -38,9 +42,14 @@
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
     "axe-core": "^4.12.1",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "jest-axe": "^10.0.0",
     "jsdom": "^29.1.1",
+    "prettier": "^3.9.6",
     "typescript": "^5.7.3",
+    "typescript-eslint": "^8.66.0",
     "vite": "^5.4.11",
     "vitest": "^2.1.8"
   }
