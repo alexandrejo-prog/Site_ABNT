@@ -20,7 +20,7 @@ describe("Inspecao profunda DOCX vs Manual UFLA 6ed", () => {
   let xml: string;
   let parTexts: string[];
   let normalizedParTexts: string[];
-  let report: ReportRow[] = [];
+  const report: ReportRow[] = [];
 
   beforeAll(async () => {
     const fields = {

@@ -96,7 +96,7 @@ describe("criterios de aceite P0", () => {
 
   it("runValidation e leitura pura e nao reescreve fields", () => {
     const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-    const body = source.match(/function runValidation[\s\S]*?\n  async function handleGenerateDocx/)?.[0] ?? "";
+    const body = source.match(/function runValidation[\s\S]*?\n {2}async function handleGenerateDocx/)?.[0] ?? "";
     expect(body).not.toContain("setFields(");
     expect(source).not.toContain("setFields(normalizedFields)");
   });
