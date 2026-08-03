@@ -207,6 +207,19 @@ Sequência executada em ordem única (sem refazer comprovados R9/P6 e R14). Todo
 
 ---
 
+## 6g. FECHAMENTO DO ROADMAP DE PRODUTO E CONFIABILIDADE (03/08/2026)
+Backlog de produto e confiabilidade concluído em 5 fases (A–E), cada uma fechada com `npm run verify` verde. Nenhum teste pré-existente foi ajustado e a conformidade UFLA/ABNT foi preservada.
+
+1. **Fase A (UX-01, UX-02, UX-03, TEC-03)** — mapa de progresso (`flow-progress.ts`/`FlowProgress`), navegação por campo (`field-navigation.ts`, `fieldKey` em `validators.ts`), erro amigável (`error-utils.ts`) e autosave com hora (`lastSavedAt`). Verify: 138/1174.
+2. **Fase B (UX-04, OP-02, PROD-02)** — selo de saída (`output-type.ts`), guia rápido colapsável (`ValidationSidebar`) e exemplo demonstrativo (`demo-example.ts`). Verify: 141/1188.
+3. **Fase C (PROD-01)** — onboarding de primeiro uso (`onboarding.ts`/`FirstUseGuide`), descartável via `localStorage`. Verify: 143/1197.
+4. **Fase D (TEC-02, TEC-01)** — persistência robusta (`draft-storage-error.ts`; `saveDraft` devolve `{ ok, kind }`) e equivalência legacy↔Tiptap por round-trip (`editor-equivalence.ts`). Verify: 145/1207 e 146/1212.
+5. **Fase E (TEC-04, OP-01)** — `PreviewModal` via `React.lazy`+`Suspense` (lazy-load do `docx`) e observabilidade (`observability.ts`). Verify final: 147/1216.
+
+Números finais: **147 arquivos, 1216 testes (10 skipped), build OK**. Relatório oficial: `docs/RELATORIO_ROADMAP_BACKLOG.md`. Redução do bundle principal: **791,72 kB → 732,85 kB** (gzip 215,03 → 198,61 kB).
+
+---
+
 ## 7. COMANDOS ÚTEIS
 ```bash
 npm run dev              # Inicia o servidor de desenvolvimento SPA
