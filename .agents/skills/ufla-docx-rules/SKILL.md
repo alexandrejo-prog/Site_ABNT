@@ -103,6 +103,7 @@ Sempre que houver conflitos de estilização, siga a seguinte prioridade:
   - Ordem estritamente **alfabética** pelo sobrenome do primeiro autor (usando o método `localeCompare` do JavaScript com o locale `pt-BR`).
   - Título da obra destacado (geralmente em **negrito**).
   - Se houver 4 ou mais autores, o manual permite usar o nome do primeiro seguido de "et al." em itálico (*et al.*).
+- **Itálico de "et al." (regra transversal):** "et al." deve constar **em itálico** tanto nas referências quanto **no corpo das citações**. Implementação centralizada em `src/docx-render-core.ts` (`tokenizeMarkup` → `applyEtAlItalic`), reutilizada por todos os exportadores; preview em `src/editor-markup.ts` (embrulha em `<em>`). Garantido por `tests/et-al-corpo.test.ts`.
 - **Apêndices e Anexos (Opcionais):**
   - Devem ser identificados por letras maiúsculas consecutivas, travessão e seus respectivos títulos (ex: APÊNDICE A – Roteiro de entrevista).
   - A paginação continua de forma sequencial ao corpo do trabalho.
