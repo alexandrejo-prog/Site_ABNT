@@ -348,7 +348,7 @@ export function detectYearFromCover(blocks: ImportedBlock[]): {
   const coverLines = coverTextLines(blocks);
 
   for (const line of coverLines) {
-    const labelMatch = line.match(/^\s*ano\s*[:\-]\s*((?:19|20)\d{2})\s*$/i);
+    const labelMatch = line.match(/^\s*ano\s*[:-]\s*((?:19|20)\d{2})\s*$/i);
     if (labelMatch?.[1]) {
       return { value: labelMatch[1], confidence: "alta" };
     }
@@ -486,7 +486,7 @@ function detectWorkNature(lines: string[]): string {
   for (let i = index; i < lines.length; i += 1) {
     const text = cleanValue(lines[i]);
     if (!text) continue;
-    if (/palavras[- ]chave\s*[:\-]/i.test(text) || /^keywords\s*[:\-]/i.test(text)) break;
+    if (/palavras[- ]chave\s*[:-]/i.test(text) || /^keywords\s*[:-]/i.test(text)) break;
     if (/^bibliografia$/i.test(text) || /^referencias$/i.test(text) || /^sumario$/i.test(text)) break;
     if (/^ficha catalogr/i.test(text) || /^folha de aprov/i.test(text)) break;
     if (parts.join(" ").length > 1200) break;
@@ -511,7 +511,7 @@ function splitResumo(blocks: ImportedBlock[]): {
     const text = textFromBlockForSection(block).trim();
     if (!text) continue;
 
-    const keywordMatch = text.match(/^palavras[- ]chave\s*[:\-]\s*(.+)$/i);
+    const keywordMatch = text.match(/^palavras[- ]chave\s*[:-]\s*(.+)$/i);
     if (keywordMatch?.[1]) {
       palavrasChave = cleanValue(keywordMatch[1]);
       break;
@@ -554,7 +554,7 @@ function splitAbstract(blocks: ImportedBlock[]): {
     const text = textFromBlockForSection(block).trim();
     if (!text) continue;
 
-    const keywordMatch = text.match(/^keywords\s*[:\-]\s*(.+)$/i);
+    const keywordMatch = text.match(/^keywords\s*[:-]\s*(.+)$/i);
     if (keywordMatch?.[1]) {
       keywords = cleanValue(keywordMatch[1]);
       break;
@@ -590,17 +590,17 @@ function splitAbstract(blocks: ImportedBlock[]): {
 function keywordValue(text: string, label: "palavras" | "keywords"): string {
   const pattern =
     label === "palavras"
-      ? /^palavras[- ]chave\s*[:\-]\s*(.+)$/i
-      : /^keywords\s*[:\-]\s*(.+)$/i;
+      ? /^palavras[- ]chave\s*[:-]\s*(.+)$/i
+      : /^keywords\s*[:-]\s*(.+)$/i;
   return cleanValue(text.match(pattern)?.[1] ?? "");
 }
 
 function isPalavrasChaveLine(text: string): boolean {
-  return /^palavras[- ]chave\s*[:\-]/i.test(text.trim());
+  return /^palavras[- ]chave\s*[:-]/i.test(text.trim());
 }
 
 function isKeywordsLine(text: string): boolean {
-  return /^keywords\s*[:\-]/i.test(text.trim());
+  return /^keywords\s*[:-]/i.test(text.trim());
 }
 
 function isLikelyDelimiterBoundary(block: ImportedBlock, text: string): boolean {
@@ -735,7 +735,7 @@ function detectApprovalSheet(lines: string[]): { date: string; members: string[]
       start = lines.findIndex((line) => /^\s*(professor(?:es)?\s+(orientador|convidado)|membro\s+(da\s+)?banca)/i.test(line));
     }
     if (start >= 0) {
-      dateLine = lines.find((line) => /^\s*(lavras|lugar|data)\s*[,:\-]?\s*(?:19|20)\d{2}/i.test(line));
+      dateLine = lines.find((line) => /^\s*(lavras|lugar|data)\s*[,:-]?\s*(?:19|20)\d{2}/i.test(line));
       date = dateLine ? dateLine.replace(/.*?(\d{4}).*/, "$1").trim() : "";
     }
   }
@@ -1037,7 +1037,7 @@ function collectPreTextualByContent(blocks: ImportedBlock[]): {
 function isLikelyNoiseReferenceItem(text: string): boolean {
   const normalized = normalizeForDetection(text);
   const looksLikeSentence = /^(O|A|Os|As|Um|Uma|Nest|Neste|Esta|Este|Conforme|Segundo|Para|Quanto|Esse|Essa|Esses|Essas|O panorama|Resultados|Portanto|Esse estudo|A necessidade|A universidade|O governo|A pesquisa|O atual|A atual|Um estudo|Estudos afirmam|O panorama da|Na Introdução|Na seção|Nos Resultados|Já na Conclusão|Apresenta-se uma contextualização|A presente pesquisa|O tema se enquadra|Os resultados desta pesquisa|Espera-se portanto|A importância|O panorama da pesquisa|A contribuições científicas|A necessidade de compreender|A implementação do PGD na Universidade|O teletrabalho|A implementação do Programa|Este trabalho|A atual crise|O sistema de gestão|Os dados foram|A análise dos dados|A pesquisa é de|Os participantes|Os servidores|Os gestores|A universidade é|O ambiente|O presente trabalho|A pesquisa qualitativa|A pesquisa quantitativa)\b/i.test(text.trim());
-  if (looksLikeSentence && !/^[A-Z][A-Z\s,;.\-]+$/.test(text.trim())) return true;
+  if (looksLikeSentence && !/^[A-Z][A-Z\s,;.-]+$/.test(text.trim())) return true;
   if (/^(APENDICE|APÊNDICE|ANEXO|TCLE|TERMO|CONVITE|PESQUISADOR|CARGO|FUNÇÃO|SIGILO|PRIVACIDADE|RESULTADOS|VOLUNTÁRIA|PARTICIPAR|UNIVERSIDADE FEDERAL|PREZADO|SENHOR|VOCÊ)\b/i.test(normalized)) return true;
   if (/^(TÍTULO DO TRABALHO EXPERIMENTAL)/i.test(normalized)) return true;
   return (
@@ -1180,12 +1180,12 @@ export function detectAcademicFieldsFromStructure(
     }
   }
 
-  fields.author = findByLabel(text, [/^\s*(?:autor(?:\(?[aA]\)?)?|discente|aluno(?:\(?[aA]\)?)?)\s*[:\-]\s*(.+)$/im]);
-  fields.title = findByLabel(text, [/^\s*t[íi]tulo\s*[:\-]\s*(.+)$/im]);
-  fields.subtitle = findByLabel(text, [/^\s*subt[íi]tulo\s*[:\-]\s*(.+)$/im]);
-  fields.course = findByLabel(text, [/^\s*curso\s*[:\-]\s*(.+)$/im]);
-  fields.program = findByLabel(text, [/^\s*programa\s*[:\-]\s*(.+)$/im]);
-  fields.location = findByLabel(text, [/^\s*(?:local|cidade)\s*[:\-]\s*(.+)$/im]);
+  fields.author = findByLabel(text, [/^\s*(?:autor(?:\(?[aA]\)?)?|discente|aluno(?:\(?[aA]\)?)?)\s*[:-]\s*(.+)$/im]);
+  fields.title = findByLabel(text, [/^\s*t[íi]tulo\s*[:-]\s*(.+)$/im]);
+  fields.subtitle = findByLabel(text, [/^\s*subt[íi]tulo\s*[:-]\s*(.+)$/im]);
+  fields.course = findByLabel(text, [/^\s*curso\s*[:-]\s*(.+)$/im]);
+  fields.program = findByLabel(text, [/^\s*programa\s*[:-]\s*(.+)$/im]);
+  fields.location = findByLabel(text, [/^\s*(?:local|cidade)\s*[:-]\s*(.+)$/im]);
 
   for (const key of ACADEMIC_FIELD_KEYS) {
     if (fields[key]) {
@@ -1214,11 +1214,11 @@ export function detectAcademicFieldsFromStructure(
   confidence.year = coverYear.confidence;
 
   fields.advisor = stripAdvisorNoise(
-    findByLabel(text, [/^\s*orientador(?:\(?[aA]\)?)?\s*[:\-]\s*(.+)$/im]) ||
+    findByLabel(text, [/^\s*orientador(?:\(?[aA]\)?)?\s*[:-]\s*(.+)$/im]) ||
       findFollowingLabel(lines, ["Orientador", "Orientadora"]),
   );
   fields.coadvisor =
-    findByLabel(text, [/^\s*coorientador(?:\(?[aA]\)?)?\s*[:\-]\s*(.+)$/im]) ||
+    findByLabel(text, [/^\s*coorientador(?:\(?[aA]\)?)?\s*[:-]\s*(.+)$/im]) ||
     findFollowingLabel(lines, ["Coorientador", "Coorientadora"]);
   fields.workNature = detectWorkNature(lines);
 
@@ -1521,7 +1521,7 @@ function detectCpgAcademicFieldsFromStructure(structure: DocxStructure): FieldDe
     if (!text) { cursor += 1; continue; }
     const normalized = normalizeForDetection(text);
     if (!abstractFound) {
-      if (/^ABSTRACT[.:\-]?\s*$/.test(normalized)) {
+      if (/^ABSTRACT[.:-]?\s*$/.test(normalized)) {
         abstractFound = true;
         cursor += 1;
         continue;
@@ -1539,7 +1539,7 @@ function detectCpgAcademicFieldsFromStructure(structure: DocxStructure): FieldDe
     const text = blockTextTrimmed(blocks[cursor]);
     if (!text) { cursor += 1; continue; }
     const normalized = normalizeForDetection(text);
-    const keywordMatch = text.match(/^KEYWORDS[.:\-]?\s*(.+)$/i);
+    const keywordMatch = text.match(/^KEYWORDS[.:-]?\s*(.+)$/i);
     if (keywordMatch?.[1]) {
       fields.keywords = cleanValue(keywordMatch[1]);
       confidence.keywords = "alta";
@@ -1557,7 +1557,7 @@ function detectCpgAcademicFieldsFromStructure(structure: DocxStructure): FieldDe
     if (!text) { cursor += 1; continue; }
     const normalized = normalizeForDetection(text);
     if (!resumoFound) {
-      if (/^RESUMO[.:\-]?\s*$/.test(normalized)) {
+      if (/^RESUMO[.:-]?\s*$/.test(normalized)) {
         resumoFound = true;
         cursor += 1;
         continue;
@@ -1575,7 +1575,7 @@ function detectCpgAcademicFieldsFromStructure(structure: DocxStructure): FieldDe
     const text = blockTextTrimmed(blocks[cursor]);
     if (!text) { cursor += 1; continue; }
     const normalized = normalizeForDetection(text);
-    const palavrasMatch = text.match(/^PALAVRAS[- ]CHAVE[.:\-]?\s*(.+)$/i);
+    const palavrasMatch = text.match(/^PALAVRAS[- ]CHAVE[.:-]?\s*(.+)$/i);
     if (palavrasMatch?.[1]) {
       fields.palavrasChave = cleanValue(palavrasMatch[1]);
       confidence.palavrasChave = "alta";

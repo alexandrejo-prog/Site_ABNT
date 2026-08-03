@@ -154,7 +154,7 @@ function findNextMarker(text: string): InlineMarker | undefined {
   const wholeLine = wholeLineHeadingMarker(text);
   if (wholeLine) candidates.push(wholeLine);
 
-  const resumo = text.match(/(?:^|\s)(?:#{1,6}\s*)?(?:RESUMO|Resumo)\b\s*[:.\-]?\s*/);
+  const resumo = text.match(/(?:^|\s)(?:#{1,6}\s*)?(?:RESUMO|Resumo)\b\s*[:.-]?\s*/);
   if (resumo?.index !== undefined) {
     candidates.push({
       index: resumo.index,
@@ -166,7 +166,7 @@ function findNextMarker(text: string): InlineMarker | undefined {
     });
   }
 
-  const abstract = text.match(/(?:^|\s)(?:#{1,6}\s*)?(?:ABSTRACT|Abstract)\b\s*[:.\-]?\s*/);
+  const abstract = text.match(/(?:^|\s)(?:#{1,6}\s*)?(?:ABSTRACT|Abstract)\b\s*[:.-]?\s*/);
   if (abstract?.index !== undefined) {
     candidates.push({
       index: abstract.index,
@@ -178,7 +178,7 @@ function findNextMarker(text: string): InlineMarker | undefined {
     });
   }
 
-  const referencias = text.match(/(?:^|\s)(?:#{1,6}\s*)?(?:REFERÊNCIAS|REFERENCIAS|Referências)\b\s*[:.\-]?\s*/);
+  const referencias = text.match(/(?:^|\s)(?:#{1,6}\s*)?(?:REFERÊNCIAS|REFERENCIAS|Referências)\b\s*[:.-]?\s*/);
   if (referencias?.index !== undefined) {
     candidates.push({
       index: referencias.index,
@@ -293,7 +293,7 @@ function isTocEntry(text: string): boolean {
   const normalized = normalizeForDetection(cleaned);
   if (!normalized) return false;
   if (isStandalonePageNumber(cleaned)) return true;
-  if (/^[\-–—]\s*\d{1,4}$/.test(cleaned)) return true;
+  if (/^[-–—]\s*\d{1,4}$/.test(cleaned)) return true;
   if (/^\d+(?:\.\d+)*\s*$/.test(normalized)) return true;
   if (/^\d+(?:\.\d+)*\s+.+\s+\d{1,4}$/.test(normalized)) return true;
   if (/^(REFERENCIAS|APENDICE|APENDICES|ANEXO|ANEXOS|CONCLUSAO|CONSIDERACOES FINAIS)\b.*\s+\d{1,4}$/.test(normalized)) return true;

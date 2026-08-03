@@ -90,7 +90,7 @@ function paragraphCount(value: string): number {
 }
 
 function keywordItems(value: string): string[] {
-  return value.split(/[;\.]/).map((item) => item.trim()).filter(Boolean);
+  return value.split(/[;.]/).map((item) => item.trim()).filter(Boolean);
 }
 
 function addPlaceholderIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
@@ -383,7 +383,7 @@ function validateShortCitation(editorText: string): ValidationIssue[] {
       }
 
       // Citação direta (com aspas) deve indicar a página (NBR 10520:2023)
-      if (hasQuotationMarks(paragraph) && !/\b(p\.?|pag\.?|f\.?|página[s]?)\s*[\.:]?\s*\d+/i.test(inner)) {
+      if (hasQuotationMarks(paragraph) && !/\b(p\.?|pag\.?|f\.?|página[s]?)\s*[.:]?\s*\d+/i.test(inner)) {
         found.push({
           severity: "info",
           code: "citation-direct-locator",

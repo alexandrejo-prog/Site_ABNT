@@ -1859,7 +1859,7 @@ function stripTrailingAdvisorLocationYear(value: string): string {
     /prof\.?\s*dr\.?\s+[a-zà-úç\s]+orientador(?:a)?(?:\s*uf)?(?:\s*-?\s*ufla)?/i,
     /dra\.?\s+[a-zà-úç\s]+uf(?:c?g|mg)/i,
     /dr\.?\s+[a-zà-úç\s]+uf(?:c?g|mg)/i,
-    /orientador(?:a)?\s*[:\-]?\s*[a-zà-úç\s]+/i,
+    /orientador(?:a)?\s*[:-]?\s*[a-zà-úç\s]+/i,
     /lavras\s*-\s*mg\s*\d{4}/i,
     /\b(?:19|20)\d{2}\b/,
   ];
