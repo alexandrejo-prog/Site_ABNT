@@ -14,7 +14,7 @@ describe("Tiptap visible toggle", () => {
   });
 
   it("mantem ativacao por URL como recurso tecnico", () => {
-    expect(source).toContain("useTiptapExperimentalEditor");
+    expect(source).toContain("isTiptapExperimentalEditor");
   });
 
   it("mantem legacy como padrao quando Tiptap nao esta ativo", () => {

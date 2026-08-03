@@ -16,6 +16,6 @@ describe("Editor não expõe termos técnicos de legado na UI", () => {
   });
 
   it("mantém apenas ativação técnica por URL", () => {
-    expect(source).toContain("useTiptapExperimentalEditor");
+    expect(source).toContain("isTiptapExperimentalEditor");
   });
 });

@@ -3,7 +3,7 @@ import { saveAs } from "file-saver";
 import { Eye, FileCheck2, FileDown } from "lucide-react";
 import { isCpgWork, type AcademicFields } from "./ufla-rules";
 import { editorHtmlToMarkup, editorMarkupToHtml } from "./editor-markup";
-import { useTiptapExperimentalEditor } from "./editor-feature-flags";
+import { isTiptapExperimentalEditor } from "./editor-feature-flags";
 import { templateForWorkType } from "./document-template";
 import { buildDownloadFileName } from "./download-filename";
 import { buildDraftFromFields, hasUnfilledPlaceholders } from "./draft-builder";
@@ -64,7 +64,7 @@ export default function App() {
   const [confirmReplaceDraft, setConfirmReplaceDraft] = useState(false);
   const [showFirstUseGuide, setShowFirstUseGuide] = useState(() => !isOnboardingDismissed(window.localStorage));
 
-  void useTiptapExperimentalEditor;
+  void isTiptapExperimentalEditor;
 
   void isCpgWork(fields.workType);
   const activeEditorText = editorMode === "references" ? fields.referencias : editorText;

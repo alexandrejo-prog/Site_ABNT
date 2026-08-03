@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { editorCommandAdapter, getActiveRichEditor } from "../editor-command-adapter";
-import { useTiptapExperimentalEditor } from "../editor-feature-flags";
+import { isTiptapExperimentalEditor } from "../editor-feature-flags";
 
 const CM_STEP = 0.25;
 const MAX_FIRST_LINE_CM = 3;
@@ -84,7 +84,7 @@ function markerPosition(value: number): string {
 
 export default function EditorRuler({ onCommand }: EditorRulerProps) {
   const [values, setValues] = useState<RulerValues>(DEFAULT_VALUES);
-  const isTiptapEnabled = useTiptapExperimentalEditor();
+  const isTiptapEnabled = isTiptapExperimentalEditor();
 
   const refreshValues = useCallback(() => {
     setValues(readCurrentValues());

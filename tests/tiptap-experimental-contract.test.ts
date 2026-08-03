@@ -10,7 +10,7 @@ describe("contrato do Tiptap experimental", () => {
 
   it("ativa Tiptap somente por parametro experimental", () => {
     expect(featureFlagSource).toContain('get("editor") === "tiptap"');
-    expect(appSource).toContain("useTiptapExperimentalEditor");
+    expect(appSource).toContain("isTiptapExperimentalEditor");
     expect(appSource).toContain("isTiptapEditorEnabled");
   });
 

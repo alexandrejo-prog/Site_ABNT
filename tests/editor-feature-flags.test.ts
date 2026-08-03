@@ -1,5 +1,5 @@
 ﻿import { describe, expect, it, vi, afterEach } from "vitest";
-import { useTiptapExperimentalEditor } from "../src/editor-feature-flags";
+import { isTiptapExperimentalEditor } from "../src/editor-feature-flags";
 
 describe("editor feature flags", () => {
   afterEach(() => {
@@ -8,16 +8,16 @@ describe("editor feature flags", () => {
 
   it("retorna false sem window", () => {
     vi.stubGlobal("window", undefined);
-    expect(useTiptapExperimentalEditor()).toBe(false);
+    expect(isTiptapExperimentalEditor()).toBe(false);
   });
 
   it("retorna true com editor=tiptap", () => {
     vi.stubGlobal("window", { location: { search: "?editor=tiptap" } });
-    expect(useTiptapExperimentalEditor()).toBe(true);
+    expect(isTiptapExperimentalEditor()).toBe(true);
   });
 
   it("retorna false com outro valor", () => {
     vi.stubGlobal("window", { location: { search: "?editor=legacy" } });
-    expect(useTiptapExperimentalEditor()).toBe(false);
+    expect(isTiptapExperimentalEditor()).toBe(false);
   });
 });

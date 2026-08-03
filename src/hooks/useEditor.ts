@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { useTiptapExperimentalEditor } from "../editor-feature-flags";
+import { isTiptapExperimentalEditor } from "../editor-feature-flags";
 import type { TiptapEditorCommand } from "../tiptap-command-bridge";
 
 export type EditorMode = "body" | "references";
@@ -12,7 +12,7 @@ export function useEditor() {
   const editorContentVersionRef = useRef(0);
   const lastAppliedEditorTextRef = useRef("");
 
-  const isTiptapEditorEnabled = useMemo(() => useTiptapExperimentalEditor(), []);
+  const isTiptapEditorEnabled = useMemo(() => isTiptapExperimentalEditor(), []);
 
   function runTiptapCommand(command: TiptapEditorCommand) {
     setTiptapCommandSignal((current) => ({ id: (current?.id ?? 0) + 1, command }));

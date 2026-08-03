@@ -1,6 +1,6 @@
 import { type MouseEvent, type ReactNode } from "react";
 import { type EditorCommand, editorCommandAdapter, getActiveRichEditor, saveEditorSelection } from "../editor-command-adapter";
-import { useTiptapExperimentalEditor } from "../editor-feature-flags";
+import { isTiptapExperimentalEditor } from "../editor-feature-flags";
 
 interface ToolButtonProps {
   title: string;
@@ -16,19 +16,19 @@ function rememberEditorSelection() {
 }
 
 export function runEditorCommand(command: EditorCommand | string) {
-  if (useTiptapExperimentalEditor()) return;
+  if (isTiptapExperimentalEditor()) return;
   rememberEditorSelection();
   editorCommandAdapter.applyEditorCommand(command as EditorCommand);
 }
 
 export function insertEditorText(text: string) {
-  if (useTiptapExperimentalEditor()) return;
+  if (isTiptapExperimentalEditor()) return;
   rememberEditorSelection();
   editorCommandAdapter.insertEditorText(text);
 }
 
 export function setLineSpacing(value: string) {
-  if (useTiptapExperimentalEditor()) return;
+  if (isTiptapExperimentalEditor()) return;
   rememberEditorSelection();
   editorCommandAdapter.setCurrentBlockLineSpacing(value);
 }
