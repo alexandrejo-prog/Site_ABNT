@@ -83,7 +83,7 @@ function markerPosition(value: number): string {
 }
 
 export default function EditorRuler({ onCommand }: EditorRulerProps) {
-  const [values, setValues] = useState<RulerValues>(DEFAULT_VALUES);
+  const [values, setValues] = useState<RulerValues>(() => readCurrentValues());
   const isTiptapEnabled = isTiptapExperimentalEditor();
 
   const refreshValues = useCallback(() => {
@@ -91,7 +91,6 @@ export default function EditorRuler({ onCommand }: EditorRulerProps) {
   }, []);
 
   useEffect(() => {
-    refreshValues();
     const events = ["selectionchange", "keyup", "mouseup", "focusin", "input"];
     events.forEach((eventName) => document.addEventListener(eventName, refreshValues, true));
     return () => events.forEach((eventName) => document.removeEventListener(eventName, refreshValues, true));

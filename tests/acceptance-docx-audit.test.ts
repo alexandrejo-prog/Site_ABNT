@@ -109,7 +109,9 @@ beforeAll(() => {
 afterAll(() => {
   try {
     fs.rmSync(workDir, { recursive: true, force: true });
-  } catch {}
+  } catch (err) {
+    void err;
+  }
 });
 
 describe("Cenários estruturais básicos", () => {

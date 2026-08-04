@@ -15,6 +15,7 @@ export function cleanMojibakeText(value: string): string {
   return value
     .replace(/([\p{L}\p{N}])[\u00ad\ufeff\ufffe\uffff\u2060]([\p{L}\p{N}])/gu, "$1-$2")
     .replace(/[\u00ad\ufeff\ufffe\uffff\u2060\u200b]/g, "")
+    // eslint-disable-next-line no-control-regex -- remove deliberadamente caracteres de controle do texto importado
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
     .replace(/Ã¡/g, "á")
     .replace(/Ã /g, "à")

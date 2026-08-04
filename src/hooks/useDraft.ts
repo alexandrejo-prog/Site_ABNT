@@ -44,6 +44,7 @@ export function useDraft(fields: AcademicFields, editorText: string) {
       for (const [key, value] of Object.entries(draft.fields ?? {})) {
         if (typeof value === "string") (restored as any)[key] = value;
       }
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restaura rascunho externo (localStorage) na montagem
       setRestoredDraft({ fields: restored, editorText: draft.editorText ?? "" });
       setHasStoredDraft(true);
       setDraftStatus("restored");
@@ -68,6 +69,7 @@ export function useDraft(fields: AcademicFields, editorText: string) {
     if (!hasDraftableContent(fields, editorText)) {
       clearDraft(window.localStorage);
       autosaveTimeoutRef.current = null;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reflete limpeza do rascunho externo no mesmo tick
       setHasStoredDraft(false);
       return;
     }
