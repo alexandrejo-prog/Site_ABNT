@@ -220,6 +220,15 @@ Números finais: **147 arquivos, 1216 testes (10 skipped), build OK**. Relatóri
 
 ---
 
+## 6h. LINT NO GATE + CI CONSOLIDADA (04/08/2026)
+Fechamento da etapa de qualidade da CI, sem alterar lógica do projeto. Lint verde: **0 erros (6 warnings de `exhaustive-deps` mantidos por decisão), verify exit 0**.
+
+1. **Lint integrado ao gate** — `npm run lint` adicionado ao `verify.yml` (executa antes de `npm test`/`npm run build`). Os 5 erros restantes foram zerados com mudanças mínimas: lazy init de `useState` em `EditorRuler.tsx` (elimina setState síncrono no effect), disables pontuais de `no-control-regex` (sanitização intencional em `docx-render-core.ts`) e `set-state-in-effect` (sync com `localStorage` em `useDraft.ts`), e `catch (err) { void err }` em `tests/acceptance-docx-audit.test.ts`. Commit `7e74312`.
+2. **CI consolidada em um único workflow** — `ci.yml` (Node 20, sem lint) removido; `verify.yml` (Node 24 + lint + testes + build, push+PR) vira pipeline único. Branch `main` não protegida, sem dependências externas → remoção segura. Commit `4ded2ad`.
+3. **Validação real no GitHub bem-sucedida** — no commit `4ded2ad`, apenas `Verify` dispara (1 workflow por push): `success` em 1m10s, todos os passos verdes (ci → lint → test → build). Annotation de depreciação do Node 20 eliminada da config; restou só o aviso infra do runner de `actions/checkout@v4`/`setup-node@v4`, fora do nosso controle.
+
+---
+
 ## 7. COMANDOS ÚTEIS
 ```bash
 npm run dev              # Inicia o servidor de desenvolvimento SPA
