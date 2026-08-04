@@ -32,13 +32,14 @@ export function useDraft(fields: AcademicFields, editorText: string) {
 
   const [restoredDraft, setRestoredDraft] = useState<RestoredDraft | null>(null);
   const [draftErrorKind, setDraftErrorKind] = useState<DraftStorageErrorKind | null>(null);
+  const initialHasContentRef = useRef(Boolean(fields.author || fields.title || editorText));
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const draft = loadDraft(window.localStorage);
     if (!draft) return;
     if (!draft.fields && !draft.editorText) return;
-    if (fields.author || fields.title || editorText) return;
+    if (initialHasContentRef.current) return;
     try {
       const restored: Partial<AcademicFields> = {};
       for (const [key, value] of Object.entries(draft.fields ?? {})) {

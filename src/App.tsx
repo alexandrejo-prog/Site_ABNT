@@ -1,4 +1,4 @@
-import { lazy, MouseEvent, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, MouseEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { saveAs } from "file-saver";
 import { Eye, FileCheck2, FileDown } from "lucide-react";
 import { isCpgWork, type AcademicFields } from "./ufla-rules";
@@ -64,6 +64,9 @@ export default function App() {
   const [confirmReplaceDraft, setConfirmReplaceDraft] = useState(false);
   const [showFirstUseGuide, setShowFirstUseGuide] = useState(() => !isOnboardingDismissed(window.localStorage));
 
+  const replaceFieldsRef = useRef(replaceFields);
+  useEffect(() => { replaceFieldsRef.current = replaceFields; });
+
   void isTiptapExperimentalEditor;
 
   void isCpgWork(fields.workType);
@@ -88,7 +91,7 @@ export default function App() {
   );
 
   useEffect(() => installEditorScrollFix(), []);
-  useEffect(() => { if (restoredDraft) { replaceFields(restoredDraft.fields as any); if (restoredDraft.editorText) setEditorText(restoredDraft.editorText); } }, [restoredDraft]);
+  useEffect(() => { if (restoredDraft) { replaceFieldsRef.current(restoredDraft.fields as any); if (restoredDraft.editorText) setEditorText(restoredDraft.editorText); } }, [restoredDraft, setEditorText]);
   useEffect(() => { runValidation(fields, editorText, editorMode); }, [runValidation, fields, editorText, editorMode]);
 
   const handleEditorInput = useCallback(() => {
@@ -97,7 +100,7 @@ export default function App() {
     if (editorMode === "references") { updateField("referencias", markup); return; }
     setEditorText(markup);
     lastAppliedEditorTextRef.current = markup;
-  }, [editorMode, updateField, setEditorText]);
+  }, [editorMode, updateField, setEditorText, editorRef, lastAppliedEditorTextRef]);
 
   const applyBlockStyle = useCallback((prefix: string) => {
     editorRef.current?.focus();
@@ -105,7 +108,7 @@ export default function App() {
     editorCommandAdapter.formatEditorBlock(block);
     if (prefix === "[REF] ") editorCommandAdapter.insertEditorText("[REF] ");
     setTimeout(() => requestAnimationFrame(handleEditorInput), 0);
-  }, [handleEditorInput]);
+  }, [handleEditorInput, editorRef]);
 
   const runEditorAction = useCallback((tiptapCommand: TiptapEditorCommand, legacy: () => void) => {
     if (isTiptapEditorEnabled) { runTiptapCommand(tiptapCommand); return; }
@@ -129,7 +132,7 @@ export default function App() {
     const msg = result.messages.length ? `Arquivo importado com ${result.messages.length} aviso(s). Metadados anteriores foram substituídos.` : "Arquivo importado. Metadados anteriores foram substituídos; revise os campos antes de gerar.";
     const conflict = importedFileNameSuggestsOtherType(result.fileName, fields.workType) ? " O tipo atual é Projeto de pesquisa. O nome do arquivo importado não será usado para alterar o modelo." : "";
     setStatus(msg + conflict);
-  }, [replaceFields, fields.workType, editorRef, setEditorText, setEditorMode, resetValidation, setGenerateAnyway, setImportedFileName, setImportedImages, setImportedTables]);
+  }, [replaceFields, fields.workType, editorRef, setEditorText, setEditorMode, resetValidation, setGenerateAnyway, setImportedFileName, setImportedImages, setImportedTables, editorContentVersionRef, lastAppliedEditorTextRef]);
 
   const handleLoadExample = useCallback(() => {
     replaceFields(demoFieldsWithWorkType(), demoConfidenceMap());
@@ -218,7 +221,7 @@ export default function App() {
     if (editorRef.current) editorRef.current.innerHTML = editorMarkupToHtml(draft);
     editorContentVersionRef.current += 1;
     setStatus(hasUnfilledPlaceholders(draft) ? "Rascunho montado. Campos vazios geraram marcadores [PREENCHER: ...]; preencha-os antes da versão final." : "Rascunho montado a partir dos campos informados.");
-  }, [fields, editorText, confirmReplaceDraft, setEditorText, editorRef]);
+  }, [fields, editorText, confirmReplaceDraft, setEditorText, editorRef, lastAppliedEditorTextRef, editorContentVersionRef]);
 
   return (
     <div className="app-shell">
