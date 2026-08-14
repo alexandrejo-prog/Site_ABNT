@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { it, expect } from "vitest";
 import JSZip from "jszip";
 import { readFileSync } from "node:fs";
+import { describeWithArtifacts } from "../test-utils/artifact-guard";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,7 +14,17 @@ function countFootnoteReferences(xml: string): number {
   return matches ? matches.length : 0;
 }
 
-describe("Fixtures condicionais — validação OOXML", () => {
+describeWithArtifacts(
+  "Fixtures condicionais — validação OOXML",
+  [
+    "ufla-compliance/fixtures/fixture-monografia-anexo-referencias.docx",
+    "ufla-compliance/fixtures/fixture-artigo-referencias-rodape.docx",
+    "ufla-compliance/fixtures/fixture-projeto-notas.docx",
+    "ufla-compliance/fixtures/fixture-fonte-tabela.docx",
+    "ufla-compliance/fixtures/fixture-fonte-ilustracao.docx",
+  ],
+  () => {
+
   it("monografia com anexo contendo referências deve gerar notas de rodapé", async () => {
     const data = readFileSync(join(fixturesDir, "fixture-monografia-anexo-referencias.docx"));
     const zip = await JSZip.loadAsync(data);

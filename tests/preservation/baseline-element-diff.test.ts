@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { it, expect, beforeAll } from "vitest";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import JSZip from "jszip";
 import { baselineRoundTrip, type BaselineRoundTrip } from ".././test-utils/baseline-roundtrip";
+import { describeWithArtifacts } from "../test-utils/artifact-guard";
 import { auditReferenceRoundTrip } from ".././test-utils/reference-roundtrip-audit";
 import { testEvidenceDir } from ".././test-utils/test-evidence";
 import { normalizeReferences } from "../../src/references-normalizer";
@@ -35,7 +36,7 @@ function countParts(xml: string): ElementCounts {
   };
 }
 
-describe("acceptance: diff DOCX gerado vs baseline por elemento", () => {
+describeWithArtifacts("acceptance: diff DOCX gerado vs baseline por elemento", ["baselines/dissertacao-referencia.docx"], () => {
   let rt: BaselineRoundTrip;
   let baselineXml: string;
   let generatedXml: string;

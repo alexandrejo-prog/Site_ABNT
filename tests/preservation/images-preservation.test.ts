@@ -1,12 +1,13 @@
-﻿import { describe, it, expect } from "vitest";
+﻿import { it, expect } from "vitest";
 import { baselineRoundTrip } from ".././test-utils/baseline-roundtrip";
+import { describeWithArtifacts } from "../test-utils/artifact-guard";
 import { loadDocxParts } from ".././test-utils/ooxml";
 
 /**
  * Round-trip vivo de imagens. Falha se imagens forem perdidas no caminho
  * import->export (contagem, w:drawing e r:embed no OOXML gerado).
  */
-describe("acceptance: preservacao de imagens (round-trip vivo)", () => {
+describeWithArtifacts("acceptance: preservacao de imagens (round-trip vivo)", ["baselines/dissertacao-referencia.docx"], () => {
   it("nao perde imagens (contagem preservada)", async () => {
     const rt = await baselineRoundTrip();
     expect(rt.input.importedImages.length).toBeGreaterThan(0);

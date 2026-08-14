@@ -1,9 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { it, expect } from "vitest";
 import { readFileSync } from "node:fs";
+import { describeWithArtifacts } from "../test-utils/artifact-guard";
 
 const jsonPath = new URL("../../artifacts/ufla-compliance/baseline-extraction.json", import.meta.url);
 
-describe("acceptance: baseline extraction", () => {
+describeWithArtifacts("acceptance: baseline extraction", ["ufla-compliance/baseline-extraction.json"], () => {
   it("produces a valid JSON artifact with required fields", () => {
     const raw = readFileSync(jsonPath, "utf8");
     const data = JSON.parse(raw);

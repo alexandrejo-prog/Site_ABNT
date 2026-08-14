@@ -1,10 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { it, expect } from "vitest";
 import { readFileSync } from "node:fs";
+import { describeWithArtifacts } from "../test-utils/artifact-guard";
 
 const renderedAnalysisPath = new URL("../../artifacts/ufla-compliance/rendered-analysis.json", import.meta.url);
 const physicalAnalysisPath = new URL("../../artifacts/ufla-compliance/pdf-physical-analysis.json", import.meta.url);
 
-describe("page count consistency: Word COM vs PDF físico", () => {
+describeWithArtifacts("page count consistency: Word COM vs PDF físico", ["ufla-compliance/rendered-analysis.json", "ufla-compliance/pdf-physical-analysis.json"], () => {
   it("Word COM pagesBeforeFields deve ser igual à contagem física do PDF (tolerância zero)", () => {
     const renderedAnalysis = JSON.parse(readFileSync(renderedAnalysisPath, "utf-8"));
     const physicalAnalysis = JSON.parse(readFileSync(physicalAnalysisPath, "utf-8"));

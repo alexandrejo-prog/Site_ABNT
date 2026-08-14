@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { it, expect, beforeAll } from "vitest";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { baselineRoundTrip, type BaselineRoundTrip } from ".././test-utils/baseline-roundtrip";
+import { describeWithArtifacts } from "../test-utils/artifact-guard";
 import { auditReferenceRoundTrip, type ReferenceAudit } from ".././test-utils/reference-roundtrip-audit";
 import { testEvidenceDir } from ".././test-utils/test-evidence";
 import { normalizeOoxmlText } from ".././test-utils/ooxml";
@@ -24,7 +25,7 @@ import { normalizeOoxmlText } from ".././test-utils/ooxml";
 
 const auditPath = join(testEvidenceDir(), "reference-roundtrip-diff.json");
 
-describe("acceptance: preservacao de referencias (round-trip vivo)", () => {
+describeWithArtifacts("acceptance: preservacao de referencias (round-trip vivo)", ["baselines/dissertacao-referencia.docx"], () => {
   let rt: BaselineRoundTrip;
   let audit: ReferenceAudit;
 

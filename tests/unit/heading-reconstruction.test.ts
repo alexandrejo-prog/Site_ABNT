@@ -1,6 +1,7 @@
-﻿import { describe, it, expect } from "vitest";
+﻿import { it, expect } from "vitest";
 import { headingParagraphsAtLevel } from "../../src/docx-heading-semantics";
 import { baselineRoundTrip } from ".././test-utils/baseline-roundtrip";
+import { describeWithArtifacts } from "../test-utils/artifact-guard";
 import { loadDocxParts, normalizedParagraphTexts, normalizeOoxmlText } from ".././test-utils/ooxml";
 
 /**
@@ -8,7 +9,7 @@ import { loadDocxParts, normalizedParagraphTexts, normalizeOoxmlText } from "../
  * (INTRODUCAO, REFERENCIAL TEORICO, METODOLOGIA, RESULTADOS, CONSIDERACOES,
  * REFERENCIAS) forem perdidos ou degradados no caminho import->export.
  */
-describe("acceptance: reconstrucao de cabecalhos (round-trip vivo)", () => {
+describeWithArtifacts("acceptance: reconstrucao de cabecalhos (round-trip vivo)", ["baselines/dissertacao-referencia.docx"], () => {
   const required = [
     "INTRODUCAO",
     "REFERENCIAL TEORICO",

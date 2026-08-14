@@ -1,12 +1,13 @@
-﻿import { describe, it, expect } from "vitest";
+﻿import { it, expect } from "vitest";
 import { baselineRoundTrip } from ".././test-utils/baseline-roundtrip";
+import { describeWithArtifacts } from "../test-utils/artifact-guard";
 import { loadDocxParts, normalizeOoxmlText } from ".././test-utils/ooxml";
 
 /**
  * Round-trip vivo de tabelas. Falha se tabelas forem perdidas no caminho
  * import->export (contagem e conteudo de celulas).
  */
-describe("acceptance: preservacao de tabelas (round-trip vivo)", () => {
+describeWithArtifacts("acceptance: preservacao de tabelas (round-trip vivo)", ["baselines/dissertacao-referencia.docx"], () => {
   const norm = (t: string) => normalizeOoxmlText(t).replace(/\s+/g, " ").trim();
 
   it("nao perde tabelas (contagem preservada)", async () => {

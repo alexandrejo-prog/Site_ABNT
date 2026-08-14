@@ -1,10 +1,11 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { it, expect, beforeAll } from "vitest";
 import { readFileSync } from "node:fs";
+import { describeWithArtifacts } from "../test-utils/artifact-guard";
 
 const renderedAnalysisPath = new URL("../../artifacts/ufla-compliance/rendered-analysis.json", import.meta.url);
 const physicalAnalysisPath = new URL("../../artifacts/ufla-compliance/pdf-physical-analysis.json", import.meta.url);
 
-describe("gates de conformidade física", () => {
+describeWithArtifacts("gates de conformidade física", ["ufla-compliance/rendered-analysis.json", "ufla-compliance/pdf-physical-analysis.json", "ufla-compliance/report.md"], () => {
   let renderedAnalysis: any;
   let physicalAnalysis: any;
 

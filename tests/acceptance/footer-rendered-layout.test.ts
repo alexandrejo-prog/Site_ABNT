@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { it, expect, beforeAll } from "vitest";
+import { describeWithArtifacts } from "../test-utils/artifact-guard";
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,7 +41,7 @@ interface FooterOccurrence {
   status: "covered" | "partial" | "not-covered";
 }
 
-describe("acceptance: rodapé — conteúdo, OOXML e renderização (três níveis)", () => {
+describeWithArtifacts("acceptance: rodapé — conteúdo, OOXML e renderização (três níveis)", ["ufla-compliance/rendered-analysis.json"], () => {
   let documentXml: string;
   let headerXml: string;
   let footerParts: number;

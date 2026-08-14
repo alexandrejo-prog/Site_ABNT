@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { it, expect, beforeAll } from "vitest";
 import { baselineRoundTrip } from ".././test-utils/baseline-roundtrip";
+import { describeWithArtifacts } from "../test-utils/artifact-guard";
 import { generateDocxBlob } from "../../src/export-docx";
 import { loadDocxParts } from ".././test-utils/ooxml";
 import { emptyAcademicFields } from "../../src/ufla-rules";
@@ -21,7 +22,7 @@ function paragraphTexts(documentXml: string): string[] {
 const indexOf = (paras: string[], needle: string) =>
   paras.findIndex((p) => fold(p).includes(fold(needle)));
 
-describe("acceptance: folha de aprovacao e linhas de assinatura", () => {
+describeWithArtifacts("acceptance: folha de aprovacao e linhas de assinatura", ["baselines/dissertacao-referencia.docx"], () => {
   let paras: string[];
 
   beforeAll(async () => {

@@ -1,15 +1,12 @@
-import { describe, it, expect } from "vitest";
-import { existsSync, statSync } from "node:fs";
+import { it, expect } from "vitest";
+import { statSync } from "node:fs";
+import { describeWithArtifacts } from "../test-utils/artifact-guard";
 
 const pdfPath = new URL("../../artifacts/ufla-compliance/rendered/normalized-dissertacao.pdf", import.meta.url);
 
-describe("acceptance: word render", () => {
+describeWithArtifacts("acceptance: word render", ["ufla-compliance/rendered/normalized-dissertacao.pdf"], () => {
   it("rendered PDF exists when Word COM is available", async () => {
-    if (existsSync(pdfPath)) {
-      const stats = statSync(pdfPath);
-      expect(stats.size).toBeGreaterThan(0);
-    } else {
-      expect(false).toBe(true);
-    }
+    const stats = statSync(pdfPath);
+    expect(stats.size).toBeGreaterThan(0);
   });
 });

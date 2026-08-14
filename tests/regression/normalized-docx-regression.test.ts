@@ -1,7 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { it, expect } from "vitest";
 import { readFileSync } from "node:fs";
+import { describeWithArtifacts } from "../test-utils/artifact-guard";
 
-describe("regression: normalized docx", () => {
+describeWithArtifacts("regression: normalized docx", ["ufla-compliance/normalized-dissertacao.docx"], () => {
   it("normalized DOCX exists and is valid ZIP", () => {
     const path = new URL("../../artifacts/ufla-compliance/normalized-dissertacao.docx", import.meta.url);
     const buffer = readFileSync(path);

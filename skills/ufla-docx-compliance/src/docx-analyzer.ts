@@ -1,5 +1,6 @@
 import JSZip from "jszip";
 import * as fs from "fs";
+import { classifyHeadingParagraphs } from "../../../src/docx-heading-semantics";
 import type { DocxAnalysis } from "./types";
 
 const CM_IN_TWIP = 567;
@@ -37,6 +38,30 @@ function normalizedParagraphTexts(documentXml: string): string[] {
 
 function extractFirstMatch(xml: string, regex: RegExp): string | undefined {
   return regex.exec(xml)?.[1];
+}
+
+function paragraphHasBold(paragraphXml: string): boolean {
+  return /<w:b\s*\/?>|w:b w:val="(?:1|true|on)"/.test(paragraphXml);
+}
+
+function styleDefinitionXml(stylesXml: string, styleId: string): string | null {
+  const match = stylesXml.match(
+    new RegExp(`<w:style\\b(?=[^>]*w:styleId="${styleId}")[\\s\\S]*?<\\/w:style>`),
+  );
+  return match?.[0] ?? null;
+}
+
+/** Negrito efetivo do estilo (incluindo herança via basedOn, até 5 níveis). */
+function styleChainHasBold(stylesXml: string, styleId: string | null): boolean {
+  let current = styleId;
+  for (let hop = 0; current && hop < 5; hop++) {
+    const def = styleDefinitionXml(stylesXml, current);
+    if (!def) return false;
+    if (paragraphHasBold(def)) return true;
+    if (/w:b w:val="(?:0|false|off)"/.test(def)) return false;
+    current = def.match(/w:basedOn w:val="([^"]+)"/)?.[1] ?? null;
+  }
+  return false;
 }
 
 function countMatches(xml: string, regex: RegExp): number {
@@ -124,19 +149,19 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
   const bodyJustified = justifiedCount > 3;
   const firstLineIndentCount = bodyParas.filter((p) => p[0].includes("w:firstLine")).length;
 
-  // === TITLES ===
-  const isHeading1 = (p: string) =>
-    p.includes('w:pStyle w:val="Heading1"') || p.includes('w:pStyle w:val="1"') || p.includes('w:outlineLvl w:val="0"');
-  const isHeading2 = (p: string) =>
-    p.includes('w:pStyle w:val="Heading2"') || p.includes('w:pStyle w:val="2"') || p.includes('w:outlineLvl w:val="1"');
-
-  const heading1Count = bodyParas.filter((p) => isHeading1(p[0])).length;
-  const heading2Count = bodyParas.filter((p) => isHeading2(p[0])).length;
-  const heading1Bold = bodyParas.some(
-    (p) => isHeading1(p[0]) && (p[0].includes("<w:b/>") || p[0].includes('w:b w:val="true"')),
+  // === TITLES (classificação semântica: estilo aplicado + outlineLvl resolvido) ===
+  const headingParas = classifyHeadingParagraphs(documentXml, stylesXml).filter(
+    (h) => h.level !== null && h.errors.length === 0,
   );
-  const heading1PageBreak = bodyParas.some(
-    (p) => isHeading1(p[0]) && p[0].includes("w:pageBreakBefore"),
+  const heading1Paras = headingParas.filter((h) => h.level === 1);
+  const heading2Paras = headingParas.filter((h) => h.level === 2);
+  const heading1Count = heading1Paras.length;
+  const heading2Count = heading2Paras.length;
+  const heading1Bold = heading1Paras.some(
+    (h) => paragraphHasBold(h.paragraphXml) || styleChainHasBold(stylesXml, h.styleId),
+  );
+  const heading1PageBreak = heading1Paras.some(
+    (h) => h.paragraphXml.includes("w:pageBreakBefore") || /<w:br\b[^>]*w:type="page"/.test(h.paragraphXml),
   );
 
   // === REFERENCES ===

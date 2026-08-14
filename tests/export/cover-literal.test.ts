@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { it, expect, beforeAll } from "vitest";
 import { baselineRoundTrip, type BaselineRoundTrip } from ".././test-utils/baseline-roundtrip";
+import { describeWithArtifacts } from "../test-utils/artifact-guard";
 import { loadDocxParts } from ".././test-utils/ooxml";
 
 /**
@@ -30,7 +31,7 @@ function coverParagraphs(documentXml: string): CoverParagraph[] {
   return out;
 }
 
-describe("acceptance: capa literal (conteudo real, ordem e estilo)", () => {
+describeWithArtifacts("acceptance: capa literal (conteudo real, ordem e estilo)", ["baselines/dissertacao-referencia.docx"], () => {
   let rt: BaselineRoundTrip;
   let paras: CoverParagraph[];
 

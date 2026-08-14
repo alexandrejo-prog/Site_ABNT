@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { it, expect } from "vitest";
 import { readFileSync } from "node:fs";
+import { describeWithArtifacts } from "../test-utils/artifact-guard";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pathToFileURL } from "node:url";
@@ -10,7 +11,7 @@ const root = join(__dirname, "..", "..");
 const inputPath = new URL("../../artifacts/ufla-compliance/baseline-extraction.json", import.meta.url);
 const outputPath = new URL("../../artifacts/ufla-compliance/normalized-dissertacao.docx", import.meta.url);
 
-describe("acceptance: content preservation", () => {
+describeWithArtifacts("acceptance: content preservation", ["ufla-compliance/baseline-extraction.json", "ufla-compliance/normalized-dissertacao.docx", "baselines/dissertacao-referencia.docx"], () => {
   it("preserves paragraph count in input", () => {
     const input = JSON.parse(readFileSync(inputPath, "utf8"));
     expect(input.paragraphCount).toBeGreaterThan(4000);

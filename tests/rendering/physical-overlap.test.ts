@@ -1,10 +1,14 @@
-import { describe, it, expect } from "vitest";
+import { it, expect, beforeAll } from "vitest";
 import { readFileSync } from "node:fs";
+import { describeWithArtifacts } from "../test-utils/artifact-guard";
 
 const analysisPath = new URL("../../artifacts/ufla-compliance/pdf-physical-analysis.json", import.meta.url);
 
-describe("physical overlap detection", () => {
-  const analysis = JSON.parse(readFileSync(analysisPath, "utf-8"));
+describeWithArtifacts("physical overlap detection", ["ufla-compliance/pdf-physical-analysis.json"], () => {
+  let analysis: any;
+  beforeAll(() => {
+    analysis = JSON.parse(readFileSync(analysisPath, "utf-8"));
+  });
 
   it("não deve reportar sobreposição real no PDF atual", () => {
     const totalOverlaps = analysis.summary.totalOverlaps;
