@@ -29,6 +29,34 @@ APLICABILIDADE CONDICIONAL VALIDADA EM TODOS OS TIPOS DE DOCUMENTO.
 NENHUM ITEM CLASSIFICADO COMO NÃO APLICÁVEL DE FORMA GLOBAL.
 ```
 
+## Status das Fatias (14/08/2026)
+
+| Fatia | Status | Commit | Notas |
+|---|---|---|---|
+| **FATIA 0 — Rodapés** | ✅ CONCLUÍDA | `6b5c108…` | FINDING-FOOTER-001..008 cobertos |
+| **FATIA 1 — Tabelas (w:tblHeader)** | ⚠️ PARCIAL | `1d53239…` | 25/35 com header; 10 pendentes (issue #19) |
+| **FATIA 2 — Equações (OMML)** | ✅ BÁSICO | `618b414…` | UFLA-023 coberto; frações/raízes: DECISION_007 |
+| **FATIA 3 — Paginação** | ✅ IMPLEMENTADO | `d26ebf9…` | Checker automático |
+| **FATIA 4 — Físico PDF** | ✅ INTEGRADO | `d7526a5…` | Overlaps, cutoffs, blankPages no gate |
+
+### Gaps Remanescentes
+
+```
+FULL_COMPLIANCE_GATE: FAILED
+
+1. Tabelas: 10/35 sem w:tblHeader (issue #19)
+2. Equações avançadas: frações/raízes (DECISION_007)
+3. Paginação: validação real com PDF pendente
+```
+
+### Próximos Passos
+
+- Issue #19: intervenção editorial
+- Equações avançadas: OMML cru (opcional)
+- Paginação: validar com PDF
+
+---
+
 ---
 
 ## Base do projeto
