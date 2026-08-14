@@ -8,7 +8,7 @@
 |---|---|---|---|
 | **FATIA 0 — Rodapės** | ✅ CONCLUÍ·DA | `6b5c108…` | FINDING-FOOTER-001..008 cobertos |
 | **FATIA 1 — Tabelas (w:tblHeader)** | ⚠️ PARCIAL | `1d53239…` | 25/35 com header; 10 pendentes (issue #19) |
-| **FATIA 2 — EquaÃ§Ãµes (OMML)** | ✅ BÁSICO + ⚠️ AVANÃ§ADO | `618b414…` + `5711b42…` | UFLA-023 coberto; fraÃ§Ãµes/raí·¾es: DECISION_007 + DECISION_008 |
+| **FATIA 2 — EquaÃ§Ãµes (OMML)** | ✅ BÁSICO + ⚠️ AVANÃ§ADO | `618b414…` + `242104d` | UFLA-023 coberto; validaÃ§Ã£o integrada ao gate |
 | **FATIA 3 — PaginaÃ§Ã£o** | ✅ IMPLEMENTADO | `d26ebf9…` + `99b9af1…` | Checker automÃ¡tico + validaÃ§Ã£o integrada ao gate |
 | **FATIA 4 — FÃ©sico PDF** | ✅ INTEGRADO | `d7526a5…` | Overlaps, cutoffs, blankPages no gate |
 
@@ -24,7 +24,7 @@ FULL_COMPLIANCE_GATE: FAILED
 ## PrÃ³ximos Passos
 
 1. Issue #19: intervenÃ§Ã£o editorial
-2. EquaÃ§Ãµes avanÃ§adas: parser OOXML
+2. EquaÃ§Ãµes avanÃ§adas: parser OOXML para OMML cru
 3. ValidaÃ§Ã£o: ./scripts/run-gate.sh
 
 ## DecisÃµes TÃ©cnicas
