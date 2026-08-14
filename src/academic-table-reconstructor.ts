@@ -95,15 +95,30 @@ export function normalizeAcademicTableText(value: string): string {
   return result.join("; ").replace(/\s+/g, " ").trim();
 }
 
-export function detectAcademicTableHeaders(table: ImportedTable): string[] {
+const HEADER_VOCABULARY_RE =
+  /(categoria|grupo|fase|fases|caracter[ií]sticas?|vantagens?|desvantagens?|pontos cr[ií]ticos|autores?|refer[eê]ncias?|fonte|ano|data|norma|indicador|perfil|quest[aã]o|resposta|frequ[eê]ncia|percentual)/i;
+
+/**
+ * Detecta a linha de cabeçalho APENAS por vocabulário de coluna acadêmica.
+ *
+ * Sem vocabulário (ex.: "Instituição | Tipo de Documento | De quando | De
+ * quem | Endereço eletrônico"), a primeira linha NÃO é tratada como cabeçalho:
+ * a tabela permanece editable-table e é preservada integralmente. Uma heurística
+ * de "rótulos curtos em todas as colunas" reclassificava tabelas como o
+ * Quadro 2 da dissertação como grouped-with-authors, descartando a linha de
+ * cabeçalho e embaralhando colunas no round-trip vivo (regressão 2026-08-14).
+ */
+export function detectAcademicTableHeader(table: ImportedTable): { headers: string[]; rowIndex: number } {
   const rows = nonEmptyRows(table);
-  if (!rows.length) return [];
+  if (!rows.length) return { headers: [], rowIndex: 0 };
   const first = rows[0].map((text) => text.trim());
   const meaningful = first.filter(Boolean);
-  const hasHeaderVocabulary = meaningful.some((text) =>
-    /(categoria|grupo|fase|fases|caracter[ií]sticas?|vantagens?|desvantagens?|pontos cr[ií]ticos|autores?|refer[eê]ncias?|fonte|ano|data|norma|indicador|perfil|quest[aã]o|resposta|frequ[eê]ncia|percentual)/i.test(text),
-  );
-  return hasHeaderVocabulary ? first : [];
+  const hasHeaderVocabulary = meaningful.some((text) => HEADER_VOCABULARY_RE.test(text));
+  return hasHeaderVocabulary ? { headers: first, rowIndex: 0 } : { headers: [], rowIndex: 0 };
+}
+
+export function detectAcademicTableHeaders(table: ImportedTable): string[] {
+  return detectAcademicTableHeader(table).headers;
 }
 
 function columnValues(table: ImportedTable, columnIndex: number, skipHeader = true): string[] {
@@ -235,7 +250,8 @@ export function classifyAcademicTablePattern(table: ImportedTable): AcademicTabl
 }
 
 export function reconstructGroupedAcademicTable(table: ImportedTable): ReconstructedAcademicTable {
-  const headers = detectAcademicTableHeaders(table);
+  const { headers, rowIndex: headerRowIndex } = detectAcademicTableHeader(table);
+  const headerSourceRow = headers.length ? headerRowIndex : -1;
   const groupIndex = Math.max(0, detectGroupColumn(table));
   const authorsIndex = detectAuthorsColumn(table);
   const contentIndex = detectContentColumn(table);
@@ -243,7 +259,8 @@ export function reconstructGroupedAcademicTable(table: ImportedTable): Reconstru
   const rows: ReconstructedAcademicTableRow[] = [];
   let currentGroup = "";
 
-  for (let rowIndex = headers.length ? 1 : 0; rowIndex < table.rows.length; rowIndex += 1) {
+  for (let rowIndex = 0; rowIndex < table.rows.length; rowIndex += 1) {
+    if (rowIndex === headerSourceRow) continue;
     const row = table.rows[rowIndex];
     const group = cellText(row[groupIndex]);
     const content = cellText(row[contentIndex]);
@@ -270,7 +287,8 @@ export function reconstructGroupedAcademicTable(table: ImportedTable): Reconstru
 }
 
 export function reconstructGenericAcademicTable(table: ImportedTable): ReconstructedAcademicTable {
-  const headers = detectAcademicTableHeaders(table);
+  const { headers, rowIndex: headerRowIndex } = detectAcademicTableHeader(table);
+  const headerSourceRow = headers.length ? headerRowIndex : -1;
   const source = detectSourceText(table);
   const columnCount = Math.max(1, table.columnCount);
   const normalizedHeaders = Array.from({ length: columnCount }, (_, index) => {
@@ -279,7 +297,8 @@ export function reconstructGenericAcademicTable(table: ImportedTable): Reconstru
   });
   const rows: ReconstructedAcademicTableRow[] = [];
 
-  for (let rowIndex = headers.length ? 1 : 0; rowIndex < table.rows.length; rowIndex += 1) {
+  for (let rowIndex = 0; rowIndex < table.rows.length; rowIndex += 1) {
+    if (rowIndex === headerSourceRow) continue;
     const cells = Array.from({ length: columnCount }, (_, index) => cellText(table.rows[rowIndex]?.[index]));
     if (!cells.some(Boolean)) continue;
     rows.push({ cells });

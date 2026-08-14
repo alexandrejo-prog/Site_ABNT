@@ -855,3 +855,174 @@ function tableXmlWithPhantomColumns(rows: string[][]): string {
     expect(documentXml).toContain("<w:vMerge w:val=\"continue\"");
   });
 });
+
+describe("w:tblHeader — identificação semântica de linha de cabeçalho (NBR 17225 / WCAG 1.3.1)", () => {
+  const fields = {
+    ...emptyAcademicFields(),
+    workType: "monografia" as const,
+    author: "Autora Sintetica",
+    title: "Titulo Sintetico",
+    resumo: "Resumo sintetico.",
+    abstractText: "Synthetic abstract.",
+    palavrasChave: "teste.",
+    keywords: "test.",
+  };
+
+  async function exportXmlFromTableBody(tableBodyXml: string): Promise<string> {
+    const zip = new JSZip();
+    const body = [
+      paragraphXml("UNIVERSIDADE FEDERAL DE LAVRAS"),
+      paragraphXml("AUTORA SINTETICA"),
+      paragraphXml("TITULO SINTETICO"),
+      paragraphXml("1 INTRODUCAO"),
+      paragraphXml("Texto antes da tabela."),
+      paragraphXml("Quadro 1 - Perfil dos participantes."),
+      tableBodyXml,
+      paragraphXml("Fonte: elaboração própria (2025)."),
+      paragraphXml("REFERENCIAS"),
+      paragraphXml("SILVA, A. Referencia sintetica."),
+    ].join("");
+    zip.file(
+      "word/document.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}</w:body></w:document>`,
+    );
+    zip.file(
+      "word/styles.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`,
+    );
+    zip.file(
+      "word/_rels/document.xml.rels",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`,
+    );
+
+    const result = await importSyntheticDocx(await zip.generateAsync({ type: "arraybuffer" }));
+    const blob = await generateDocxBlob({
+      fields,
+      editorText: result.editorText,
+      importedImages: result.importedImages,
+      importedTables: result.importedTables,
+    });
+    const outputZip = await JSZip.loadAsync(await blob.arrayBuffer());
+    return (await outputZip.file("word/document.xml")?.async("string")) ?? "";
+  }
+
+  const row = (cells: string[], header = false) =>
+    `<w:tr>${header ? "<w:trPr><w:tblHeader/></w:trPr>" : ""}${cells
+      .map((cell) => `<w:tc><w:p><w:r><w:t>${cell}</w:t></w:r></w:p></w:tc>`)
+      .join("")}</w:tr>`;
+
+  const tableFromRows = (rowsXml: string) => `<w:tbl>${rowsXml}</w:tbl>`;
+
+  it("mantém a declaração de cabeçalho do DOCX de origem (w:tblHeader na primeira linha)", async () => {
+    const documentXml = await exportXmlFromTableBody(
+      tableFromRows([
+        row(["Coluna A", "Coluna B", "Coluna C"], true),
+        row(["1", "2", "3"]),
+        row(["4", "5", "6"]),
+      ].join("")),
+    );
+
+    expect(documentXml).toContain("<w:tbl>");
+    expect((documentXml.match(/<w:tblHeader\b[^>]*\/?>/g) ?? []).length).toBe(1);
+    expect(documentText(documentXml)).toContain("Coluna A");
+    expect(documentText(documentXml)).toContain("4");
+  });
+
+  it("usa a primeira linha como cabeçalho em tabela preservada com 2+ linhas (semântica atual de negrito)", async () => {
+    const documentXml = await exportXmlFromTableBody(
+      tableFromRows([
+        row(["Nome", "Cargo", "Setor"]),
+        row(["Ana", "Analista", "RH"]),
+      ].join("")),
+    );
+
+    expect((documentXml.match(/<w:tblHeader\b[^>]*\/?>/g) ?? []).length).toBe(1);
+  });
+
+  it("não emite w:tblHeader em tabela de linha única (sem linha de cabeçalho semântica)", async () => {
+    const documentXml = await exportXmlFromTableBody(
+      tableFromRows(row(["Unica linha", "sem cabeçalho"])),
+    );
+
+    expect((documentXml.match(/<w:tblHeader\b[^>]*\/?>/g) ?? []).length).toBe(0);
+  });
+
+  it("não trata w:tblHeader w:val=\"false\" como cabeçalho", async () => {
+    const documentXml = await exportXmlFromTableBody(
+      tableFromRows(
+        `<w:tr><w:trPr><w:tblHeader w:val="false"/></w:trPr><w:tc><w:p><w:r><w:t>Unica linha</w:t></w:r></w:p></w:tc></w:tr>`,
+      ),
+    );
+
+    expect((documentXml.match(/<w:tblHeader\b[^>]*\/?>/g) ?? []).length).toBe(0);
+  });
+
+  it("aplica w:tblHeader na linha de headers de tabela reconstruída semanticamente", async () => {
+    const result = await importSyntheticDocx(await makeSyntheticDocxWithGroupedAcademicTable());
+    const table = result.importedTables[0];
+    expect(table.renderMode).toBe("semantic-reconstructed-table");
+
+    const blob = await generateDocxBlob({
+      fields,
+      editorText: result.editorText,
+      importedImages: result.importedImages,
+      importedTables: result.importedTables,
+    });
+    const outputZip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const documentXml = (await outputZip.file("word/document.xml")?.async("string")) ?? "";
+    const text = documentText(documentXml);
+
+    expect((documentXml.match(/<w:tblHeader\b[^>]*\/?>/g) ?? []).length).toBe(1);
+    expect(text).toContain("Grupo");
+    expect(text).toContain("Vantagens");
+  });
+
+  it("tabela com cabeçalho declarado no meio mantém o índice correto após filtro de linhas vazias", async () => {
+    const documentXml = await exportXmlFromTableBody(
+      tableFromRows([
+        row(["", "", ""]),
+        row(["Coluna A", "Coluna B", "Coluna C"], true),
+        row(["1", "2", "3"]),
+      ].join("")),
+    );
+
+    expect((documentXml.match(/<w:tblHeader\b[^>]*\/?>/g) ?? []).length).toBe(1);
+  });
+
+  it("regressão Quadro 2: tabela sem vocabulário de cabeçalho permanece editable-table e preserva o conteúdo", async () => {
+    // Cabeçalho real sem vocabulário acadêmico reconhecível (Instituição | Tipo
+    // de Documento | De quando | De quem | Endereço eletrônico). Uma heurística
+    // de "rótulos curtos" reclassificava esta tabela como grouped-with-authors,
+    // descartando a linha de cabeçalho e embaralhando colunas no round-trip
+    // (regressão do Quadro 2, 2026-08-14).
+    const documentXml = await exportXmlFromTableBody(
+      tableFromRows([
+        row(["Instituição", "Tipo de Documento", "De quando", "De quem", "Endereço eletrônico"]),
+        row(["FURG", "Resolução nº 005", "16 de abril de 2010", "Conselho Universitário", "http://repositorio.furg.br:8080/jspui/politica.jsp"]),
+        row(["UFRGS", "Portaria nº 5068", "13 de outubro de 2010", "Gabinete do Reitor", "http://www.lume.ufrgs.br/portaria-5068.pdf"]),
+        row(["UTFPR", "[regulamento]", "4 de dezembro de 2009", "Comissão do Repositório Institucional", "http://repositorio.utfpr.edu.br/politica.pdf"]),
+        row(["UFBA", "Portaria nº 024", "7 de janeiro de 2010", "Gabinete do Reitor", "https://repositorio.ufba.br/politica.pdf"]),
+        row(["UFC", "Resolução nº 02", "29 de abril de 2011", "Conselho Universitário", "http://www.repositorio.ufc.br/Resolucao02.pdf"]),
+        row(["UFRN", "Resolução nº 059", "13 de abril de 2010", "Conselho de Ensino, Pesquisa e Extensão", "http://repositorio.ufrn.br/resolucao_59"]),
+      ].join("")),
+    );
+    const text = documentText(documentXml);
+
+    // Todo o conteúdo original presente (cabeçalho + linhas, sem embaralhamento).
+    expect(text).toContain("Instituição");
+    expect(text).toContain("Tipo de Documento");
+    expect(text).toContain("De quando");
+    expect(text).toContain("De quem");
+    expect(text).toContain("Endereço eletrônico");
+    expect(text).toContain("Conselho Universitário");
+    expect(text).toContain("Gabinete do Reitor");
+    expect(text).toContain("Comissão do Repositório Institucional");
+    expect(text).toContain("http://www.lume.ufrgs.br/portaria-5068.pdf");
+    expect(text).toContain("Resolução nº 059");
+    // Não foi reconstruída como Grupo/Conteúdo/Autores (embaralhamento).
+    expect(text).not.toContain("Grupo");
+    expect(text).not.toContain("Autores");
+    // Acessibilidade mantida: primeira linha é o cabeçalho semântico (2+ linhas).
+    expect((documentXml.match(/<w:tblHeader\b[^>]*\/?>/g) ?? []).length).toBe(1);
+  });
+});
