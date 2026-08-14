@@ -20,6 +20,8 @@ export type ImportedBlock =
       style?: string;
       styleName?: string;
       section?: ImportedSectionKind;
+      footnoteRefs?: string[];
+      hasMath?: boolean;
     }
   | {
       type: "heading";
@@ -30,6 +32,8 @@ export type ImportedBlock =
       style?: string;
       styleName?: string;
       section?: ImportedSectionKind;
+      footnoteRefs?: string[];
+      hasMath?: boolean;
     }
   | {
       type: "longQuote";
@@ -39,6 +43,8 @@ export type ImportedBlock =
       style?: string;
       styleName?: string;
       section?: ImportedSectionKind;
+      footnoteRefs?: string[];
+      hasMath?: boolean;
     }
   | {
       type: "table";
@@ -52,6 +58,7 @@ export type ImportedBlock =
       hasVerticalMerge?: boolean;
       cellWidths?: number[][];
       cellMerges?: Array<{ row: number; col: number; type: "vMerge-restart" | "vMerge-continue" | "gridSpan" }>;
+      headerRowIndices?: number[];
     }
   | {
       type: "image";
@@ -82,8 +89,10 @@ export interface ImportedParagraph {
   appearsTextual: boolean;
   appearsPostTextual: boolean;
   imageRelationshipIds: string[];
+  footnoteRefs: string[];
   runs: ImportedTextRun[];
   section: ImportedSectionKind;
+  hasMath?: boolean;
 }
 
 export interface ImportedImageAsset {
@@ -101,6 +110,7 @@ export interface DocxStructure {
   images: ImportedImageAsset[];
   relationships: Record<string, string>;
   styleNames: Record<string, string>;
+  footnotes: Record<string, string>;
   text: string;
   hasNumbering: boolean;
 }
@@ -110,7 +120,7 @@ export interface DocxStructureOptions {
 }
 
 const TEXT_TOKEN_PATTERN =
-  /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\b[^>]*\/>|<w:br\b[^>]*\/>|<w:lastRenderedPageBreak\b[^>]*\/>/g;
+  /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<m:t(?:\s[^>]*)?>([\s\S]*?)<\/m:t>|<w:tab\b[^>]*\/>|<w:br\b[^>]*\/>|<w:lastRenderedPageBreak\b[^>]*\/>/g;
 const PAGE_BREAK_PATTERN = /<w:br\b[^>]*w:type="page"[^>]*\/>|<w:lastRenderedPageBreak\b[^>]*\/>/g;
 
 const PRE_TEXTUAL_HEADINGS = new Set([
@@ -176,7 +186,8 @@ function extractTextFromXml(xml: string): { rawText: string; text: string } {
     } else if (match[0].startsWith("<w:br")) {
       parts.push("\n");
     } else {
-      parts.push(decodeXml(match[1] ?? ""));
+      // w:t e m:t têm o conteúdo no mesmo grupo de captura alternado.
+      parts.push(decodeXml(match[1] ?? match[2] ?? ""));
     }
   }
 
@@ -316,6 +327,12 @@ function headingLevelFromStyle(styleId = "", styleName = ""): number | undefined
     normalized.match(/\bTTULO\s*([1-9])\b/);
 
   if (!match) {
+    // Estilos nomeados UFLA-044 (§28.1 do Manual consolidado UFLA). Usa
+    // includes(): o identificador vem acompanhado do nome legível do estilo.
+    // normalizeForDetection preserva underscores do id (ex.: UFLA_TITULO_*).
+    if (normalized.includes("UFLA_TITULO_PRIMARIO") || normalized.includes("UFLA_TITULO_SEM_INDICATIVO")) return 1;
+    if (normalized.includes("UFLA_TITULO_SECUNDARIO")) return 2;
+    if (normalized.includes("UFLA_TITULO_TERCIARIO")) return 3;
     return undefined;
   }
 
@@ -405,6 +422,8 @@ function paragraphBlockFromMetadata(paragraph: ImportedParagraph): ImportedBlock
     return undefined;
   }
 
+  const mathProp = paragraph.hasMath ? { hasMath: true } : {};
+
   if (paragraph.isHeading) {
     return {
       type: "heading",
@@ -415,6 +434,7 @@ function paragraphBlockFromMetadata(paragraph: ImportedParagraph): ImportedBlock
       style: paragraph.styleId,
       styleName: paragraph.styleName,
       section: paragraph.section,
+      ...mathProp,
     };
   }
 
@@ -427,6 +447,7 @@ function paragraphBlockFromMetadata(paragraph: ImportedParagraph): ImportedBlock
       style: paragraph.styleId,
       styleName: paragraph.styleName,
       section: paragraph.section,
+      ...mathProp,
     };
   }
 
@@ -438,6 +459,7 @@ function paragraphBlockFromMetadata(paragraph: ImportedParagraph): ImportedBlock
     style: paragraph.styleId,
     styleName: paragraph.styleName,
     section: paragraph.section,
+    ...mathProp,
   };
 }
 
@@ -449,6 +471,18 @@ function extractTableRows(tableXml: string): string[][] {
       ),
     )
     .filter((row) => row.some((cell) => cell.trim()));
+}
+
+function keptTableRowIndices(tableXml: string): number[] {
+  const indices: number[] = [];
+  const rows = [...tableXml.matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)];
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    const cells = [...rows[rowIndex][0].matchAll(/<w:tc\b[\s\S]*?<\/w:tc>/g)].map((cellMatch) =>
+      extractTextFromXml(cellMatch[0]).text,
+    );
+    if (cells.some((cell) => cell.trim())) indices.push(rowIndex);
+  }
+  return indices;
 }
 
 function twipValue(attrXml: string): number | undefined {
@@ -476,6 +510,24 @@ function extractTableWidthTwips(tableXml: string): number | undefined {
   const tblWMatch = tblPrMatch[1].match(/<w:tblW\b[^>]*>/i);
   if (!tblWMatch) return undefined;
   return twipValue(tblWMatch[0]);
+}
+
+function extractTableHeaderRows(tableXml: string): number[] {
+  const rows = [...tableXml.matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)];
+  const kept = keptTableRowIndices(tableXml);
+  const keptSet = new Set(kept);
+  const headerRows: number[] = [];
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    if (!keptSet.has(rowIndex)) continue;
+    const trPrMatch = rows[rowIndex][0].match(/<w:trPr\b[^>]*>([\s\S]*?)<\/w:trPr>/);
+    if (!trPrMatch) continue;
+    const tblHeaderMatch = trPrMatch[1].match(/<w:tblHeader\b[^>]*>/i);
+    if (!tblHeaderMatch) continue;
+    const val = tblHeaderMatch[0].match(/w:val="([^"]+)"/i)?.[1];
+    if (val !== undefined && val.toLowerCase() === "false") continue;
+    headerRows.push(kept.indexOf(rowIndex));
+  }
+  return headerRows;
 }
 
 function extractCellProperties(tableXml: string): { hasGridSpan: boolean; hasVerticalMerge: boolean; cellWidths: number[][]; cellMerges: Array<{ row: number; col: number; type: "vMerge-restart" | "vMerge-continue" | "gridSpan" }> } {
@@ -524,12 +576,14 @@ function parseTableBlock(tableXml: string): {
   hasVerticalMerge: boolean;
   cellWidths: number[][];
   cellMerges: Array<{ row: number; col: number; type: "vMerge-restart" | "vMerge-continue" | "gridSpan" }>;
+  headerRowIndices: number[];
 } {
   const rows = extractTableRows(tableXml);
   const gridWidths = extractTableGridWidths(tableXml);
   const tableWidthTwips = extractTableWidthTwips(tableXml);
   const { hasGridSpan, hasVerticalMerge, cellWidths, cellMerges } = extractCellProperties(tableXml);
-  return { rows, gridWidths, tableWidthTwips, hasGridSpan, hasVerticalMerge, cellWidths, cellMerges };
+  const headerRowIndices = extractTableHeaderRows(tableXml);
+  return { rows, gridWidths, tableWidthTwips, hasGridSpan, hasVerticalMerge, cellWidths, cellMerges, headerRowIndices };
 }
 
 async function extractImages(
@@ -573,6 +627,36 @@ async function extractImages(
   return [...imagesByTarget.values()];
 }
 
+const FOOTNOTE_REFERENCE_PATTERN = /<w:footnoteReference\b[^>]*w:id="(\d+)"/g;
+
+/**
+ * Extrai as notas de rodapé reais de word/footnotes.xml (id → texto), ignorando
+ * os separadores (w:type="separator" / "continuationSeparator"). O texto de
+ * cada nota é a concatenação dos parágrafos, preservando quebras de linha
+ * internas. Mecanismo distinto de "Fonte:" de tabelas/ilustrações, que vive em
+ * document.xml abaixo do elemento.
+ */
+export function extractFootnotesFromXml(footnotesXml: string): Record<string, string> {
+  const footnotes: Record<string, string> = {};
+  const footnotePattern = /<w:footnote\b([^>]*)>([\s\S]*?)<\/w:footnote>/g;
+  let match: RegExpExecArray | null;
+  while ((match = footnotePattern.exec(footnotesXml)) !== null) {
+    const attributes = match[1] ?? "";
+    if (/w:type="(?:separator|continuationSeparator)"/.test(attributes)) continue;
+    const idMatch = attributes.match(/w:id="(\d+)"/);
+    if (!idMatch) continue;
+    const body = match[2] ?? "";
+    const paragraphTexts = [...body.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)].map((paragraphMatch) =>
+      [...paragraphMatch[0].matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)]
+        .map((textMatch) => textMatch[1])
+        .join(""),
+    );
+    const text = paragraphTexts.filter(Boolean).join("\n").trim();
+    if (text) footnotes[idMatch[1]] = text;
+  }
+  return footnotes;
+}
+
 export async function extractDocxStructure(
   input: ArrayBuffer | Uint8Array,
   options: DocxStructureOptions = {},
@@ -585,6 +669,8 @@ export async function extractDocxStructure(
   }
 
   const stylesXml = (await zip.file("word/styles.xml")?.async("string")) ?? "";
+  const footnotesXml = (await zip.file("word/footnotes.xml")?.async("string")) ?? "";
+  const footnotes = extractFootnotesFromXml(footnotesXml);
   const relsXml =
     (await zip.file("word/_rels/document.xml.rels")?.async("string")) ?? "";
   const relationships = extractRelationships(relsXml);
@@ -605,7 +691,7 @@ export async function extractDocxStructure(
     const xml = elementMatch[0];
 
     if (xml.startsWith("<w:tbl")) {
-      const { rows, gridWidths, tableWidthTwips, hasGridSpan, hasVerticalMerge, cellWidths, cellMerges } = parseTableBlock(xml);
+      const { rows, gridWidths, tableWidthTwips, hasGridSpan, hasVerticalMerge, cellWidths, cellMerges, headerRowIndices } = parseTableBlock(xml);
       blocks.push({
         type: "table",
         rows,
@@ -616,6 +702,7 @@ export async function extractDocxStructure(
         hasVerticalMerge,
         cellWidths,
         cellMerges,
+        headerRowIndices,
       });
       continue;
     }
@@ -635,8 +722,15 @@ export async function extractDocxStructure(
       const imageRelationshipIds = extractImageRelationshipIds(segment.xml, relationships);
       const isLongQuote = !isHeading && isLongQuoteParagraph(xml, styleId, styleName);
       const runs = extractRunsFromParagraphXml(segment.xml, styleId);
+      const footnoteRefs: string[] = [];
+      let footnoteRefMatch: RegExpExecArray | null;
+      FOOTNOTE_REFERENCE_PATTERN.lastIndex = 0;
+      while ((footnoteRefMatch = FOOTNOTE_REFERENCE_PATTERN.exec(segment.xml)) !== null) {
+        footnoteRefs.push(footnoteRefMatch[1]);
+      }
 
       if (text || imageRelationshipIds.length) {
+        const hasMath = /<m:oMath(?:\s[^>]*)?>[\s\S]*<\/m:oMath>|<m:oMathPara\b/.test(segment.xml);
         const paragraph: ImportedParagraph = {
           index: paragraphIndex,
           text,
@@ -653,14 +747,19 @@ export async function extractDocxStructure(
           appearsTextual: currentSection === "textual",
           appearsPostTextual: currentSection === "post-textual",
           imageRelationshipIds,
+          footnoteRefs,
           section: currentSection,
+          ...(hasMath ? { hasMath: true } : {}),
         };
 
         paragraphs.push(paragraph);
 
         const textBlock = paragraphBlockFromMetadata(paragraph);
         if (textBlock) {
-          blocks.push(textBlock);
+          blocks.push({
+            ...textBlock,
+            ...(footnoteRefs.length ? { footnoteRefs } : {}),
+          });
         }
 
       for (const relationshipId of imageRelationshipIds) {
@@ -716,6 +815,7 @@ export async function extractDocxStructure(
     images,
     relationships,
     styleNames,
+    footnotes,
     text,
     hasNumbering: Boolean(zip.file("word/numbering.xml")),
   };

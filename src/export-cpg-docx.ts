@@ -17,7 +17,8 @@ import {
 } from "docx";
 import type { IParagraphOptions } from "docx";
 import { BLACK as SHARED_BLACK } from "./docx-shared";
-import { cleanMojibakeText, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, hasText, detectCaption, tabbedTableBlock } from "./docx-render-core";
+import { DOCUMENT_STYLES } from "./docx-styles";
+import { cleanMojibakeText, equationParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, hasText, detectCaption, tabbedTableBlock } from "./docx-render-core";
 import { parseEditorContent, importedTableParagraph, type DocxGenerationInput, type EditorBlock } from "./export-docx";
 import type { ImportedTable } from "./imported-tables";
 import { CPG_RULES, UFLA_RULES, cmToTwip } from "./ufla-rules";
@@ -222,6 +223,7 @@ function tableFromBlock(block: EditorBlock): Table {
     },
     rows: rows.map((row, rowIndex) =>
       new TableRow({
+        ...(rowIndex === 0 ? { tableHeader: true } : {}),
         children: Array.from({ length: columnCount }, (_, cellIndex) =>
           new TableCell({
             width: { size: Math.floor(100 / columnCount), type: WidthType.PERCENTAGE },
@@ -269,6 +271,10 @@ function blockToParagraph(block: EditorBlock, firstParagraphInSection: boolean, 
 
   if (block.type === "source") {
     return [sourceParagraph(block.text)];
+  }
+
+  if (block.type === "equation") {
+    return [equationParagraph(block.text)];
   }
 
   const caption = isCaption(block.text);
@@ -465,6 +471,7 @@ function createCpgDocument(input: DocxGenerationInput): Document {
     features: {
       updateFields: true,
     },
+    styles: DOCUMENT_STYLES,
     sections: [
       {
         properties: {

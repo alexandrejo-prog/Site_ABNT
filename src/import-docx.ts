@@ -102,6 +102,7 @@ export interface ImportResult {
   blocks: ImportedBlock[];
   importedImages: ImportedDocumentImage[];
   importedTables: ImportedTable[];
+  footnotes: Record<string, string>;
   workTypeSuggestion?: WorkTypeSuggestion;
 }
 
@@ -448,7 +449,11 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
   structure.blocks.forEach((block, index) => {
     if (block.type !== "table") return;
 
-    const rows = block.rows.filter((row) => row.some((cell) => cell.trim()));
+    const filteredRows = block.rows
+      .map((row, originalIndex) => ({ row, originalIndex }))
+      .filter(({ row }) => row.some((cell) => cell.trim()));
+    const rows = filteredRows.map(({ row }) => row);
+    const originalIndices = filteredRows.map(({ originalIndex }) => originalIndex);
     if (!rows.length) {
       imported.push({
         id: `tbl-${imported.length + 1}`,
@@ -477,6 +482,15 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
       normalizeRowLength(row.map((cell) => cleanCellText(cell)), columnCount).map((text) => ({ text })),
     );
 
+    const sourceHeaderRows = (block.headerRowIndices ?? []).filter((i) => originalIndices.includes(i));
+    const firstSourceHeader = sourceHeaderRows.length ? Math.min(...sourceHeaderRows) : undefined;
+    const headerRowIndex =
+      firstSourceHeader !== undefined
+        ? originalIndices.indexOf(firstSourceHeader)
+        : rows.length >= 2 && rows[0].some((cell) => cell.trim())
+          ? 0
+          : undefined;
+
     const rawTable: ImportedTable = {
       id: `tbl-${imported.length + 1}`,
       rows: tableRows,
@@ -493,6 +507,7 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
       hasGridSpan: block.hasGridSpan ?? false,
       hasVerticalMerge: block.hasVerticalMerge ?? false,
       cellMerges: block.cellMerges,
+      headerRowIndex,
       layoutWarning: hasLayoutWarning
         ? "Tabelas/quadros importados de DOCX convertido de PDF podem exigir revisao manual de layout."
         : undefined,
@@ -541,13 +556,32 @@ function isReferenceOrPostTextual(block: ImportedBlock): boolean {
   return /^(REFERENCIAS|ANEXOS|ANEXO|APENDICES|APENDICE)\b/.test(normalized);
 }
 
+function footnoteDefinitionLines(
+  footnotes: Record<string, string>,
+  usedIds: Set<string>,
+): string[] {
+  const ids = new Set<string>([...usedIds, ...Object.keys(footnotes)]);
+  return [...ids]
+    .sort((a, b) => Number(a) - Number(b))
+    .map((id) => {
+      const body = (footnotes[id] ?? "").trim();
+      if (!body) return `[^${id}]: nota sem texto preservado.`;
+      const firstLine = body.split(/\n/)[0];
+      const continuation = body.split(/\n/).slice(1);
+      return [`[^${id}]: ${firstLine}`, ...continuation.map((line) => `  ${line}`)].join("\n");
+    });
+}
+
 function editorTextWithImageMarkers(
   blocks: ImportedBlock[],
   fallbackEditorText: string,
   importedImages: ImportedDocumentImage[],
   importedTables: ImportedTable[],
+  footnotes: Record<string, string> = {},
 ): string {
-  if (!importedImages.length && !importedTables.length) return fallbackEditorText;
+  const hasFootnotes = Object.keys(footnotes).length > 0;
+  const hasMathBlocks = blocks.some((block) => (block as { hasMath?: boolean }).hasMath === true);
+  if (!importedImages.length && !importedTables.length && !hasFootnotes && !hasMathBlocks) return fallbackEditorText;
   const appendMissingPreserved = (
     output: string,
     emittedImageIds: Set<string>,
@@ -586,7 +620,9 @@ function editorTextWithImageMarkers(
     const normalized = normalizeForDetection(blockText(block));
     return normalized === "1 INTRODUCAO" || normalized === "INTRODUCAO";
   });
-  if (start < 0) return appendMissingPreserved(fallbackEditorText, new Set(), new Set());
+  // Sem INTRODUÇÃO detectada (ex.: documentos sintéticos), percorre todos os
+  // blocos para ainda posicionar as chamadas [^N] das notas de rodapé.
+  const walkStart = start >= 0 ? start : 0;
 
   const preservedTableTexts = new Set<string>();
   for (const table of importedTables) {
@@ -599,9 +635,10 @@ function editorTextWithImageMarkers(
   const lines: string[] = [];
   const emittedImageIds = new Set<string>();
   const emittedTableIds = new Set<string>();
+  const usedFootnoteIds = new Set<string>();
   let sawConclusion = false;
   let tocArtifactMode = false;
-  for (let index = start; index < blocks.length; index += 1) {
+  for (let index = walkStart; index < blocks.length; index += 1) {
     const block = blocks[index];
     const normalized = normalizeForDetection(blockText(block));
     if (/^(CONCLUSAO|CONCLUSÃO|CONSIDERACOES FINAIS|CONSIDERAÇÕES FINAIS)\b/.test(normalized)) {
@@ -667,8 +704,22 @@ function editorTextWithImageMarkers(
     }
 
     const text = blockText(block);
-    if (text && !preservedTableTexts.has(text)) lines.push(text);
+    if (text && !preservedTableTexts.has(text)) {
+      const footnoteRefs = (block as { footnoteRefs?: string[] }).footnoteRefs ?? [];
+      const hasMath = (block as { hasMath?: boolean }).hasMath === true;
+      const prefix = hasMath ? "[EQ] " : "";
+      if (footnoteRefs.length) {
+        const markers = footnoteRefs.map((id) => `[^${id}]`).join("");
+        footnoteRefs.forEach((id) => usedFootnoteIds.add(id));
+        lines.push(`${prefix}${text}${markers}`);
+      } else {
+        lines.push(`${prefix}${text}`);
+      }
+    }
   }
+
+  const footnoteLines = footnoteDefinitionLines(footnotes, usedFootnoteIds);
+  if (footnoteLines.length) lines.push(...footnoteLines);
 
   const output = lines.join("\n\n").trim() || fallbackEditorText;
   return appendMissingPreserved(output, emittedImageIds, emittedTableIds);
@@ -682,11 +733,13 @@ function buildImportResult(
   const text = repairHeadingFragments(normalized.text);
   const importedImages = importedImagesFromStructure(normalized.structure);
   const importedTables = importedTablesFromStructure(normalized.structure);
+  const footnotes = normalized.structure.footnotes ?? {};
   const editorText = editorTextWithImageMarkers(
     normalized.structure.blocks,
     repairHeadingFragments(detected.editorText || text),
     importedImages,
     importedTables,
+    footnotes,
   );
   const fields = sanitizeFields(repairRecordHeadingFragments(detected.fields));
   const confidence = sanitizeConfidence(detected.confidence, fields);
@@ -698,6 +751,15 @@ function buildImportResult(
   const preservedTables = importedTables.filter((table) => table.status === "preserved" || table.status === "preserved-with-layout-warning").length;
   const missingTables = importedTables.filter((table) => table.status === "detected-but-not-preserved").length;
   const layoutWarningTables = importedTables.filter((table) => table.layoutWarning).length;
+  const mathBlocks = normalized.structure.blocks.filter(
+    (block) => (block as { hasMath?: boolean }).hasMath === true,
+  ).length;
+  const mathMessages: string[] = [];
+  if (mathBlocks > 0) {
+    mathMessages.push(
+      `${mathBlocks} equação(ões)/fórmula(s) detectada(s) no DOCX original. O texto foi preservado no rascunho como "[EQ]", mas a equação nativa (OMML) não é recriada automaticamente; verifique a formatação centralizada com numeração à direita antes da versão final.`,
+    );
+  }
   const imageMessages = [
     preservedImages
       ? `${preservedImages} imagem(ns) importada(s) e preservada(s) no rascunho. Revise posicao, legenda e fonte antes da versao final.`
@@ -732,10 +794,11 @@ function buildImportResult(
     editorText,
     fields,
     confidence,
-    messages: [...nonImageMessages, ...imageMessages, ...tableMessages],
+    messages: [...nonImageMessages, ...imageMessages, ...tableMessages, ...mathMessages],
     blocks: normalized.structure.blocks,
     importedImages,
     importedTables,
+    footnotes,
     workTypeSuggestion,
   };
 }
@@ -753,6 +816,7 @@ export function identifyAcademicFields(
     fields,
     confidence,
     workTypeSuggestion,
+    footnotes: {},
   };
 }
 
