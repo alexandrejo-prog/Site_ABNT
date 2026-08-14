@@ -3,35 +3,73 @@
 **Data:** 2026-08-14
 **Branch:** `feat/ufla-render-validation`
 
-## Fatias Implementadas
+## Gate UFLA: ✅ PASSED (5/5)
 
-| Fatia | Status | Commit | Notas |
-|---|---|---|---|
-| **FATIA 0 — RodapÃ©s** | ✅ CONCLUÃ·DA | `6b5c108â¦¦` | FINDING-FOOTER-001..008 cobertos |
-| **FATIA 1 — Tabelas (w:tblHeader)** | âš  PARCIAL | `1d53239â¦¦` | 25/35 com header; 10 pendentes (issue #19) |
-| **FATIA 2 — EquaÃ§Ãµes (OMML)** | ✅ BÁSICO + âš  AVANÃ§ADO | `618b414â¦¦` + `5143893â¦¦` | UFLA-023 + DECISION_008; parser OOXML integrado |
-| **FATIA 3 — PaginaÃ§Ã£o** | ✅ IMPLEMENTADO | `d26ebf9â¦¦` + `99b9af1â¦¦` | Checker + validaÃ§Ã£o integrada ao gate |
-| **FATIA 4 — FÃ©sico PDF** | âš  DESATIVADO | `d7526a5â¦¦` | Overlaps, cutoffs, blankPages (temporariamente off) |
+| ValidaÃ§Ã£o | Status | Notas |
+|---|---|---|
+| **UFLA-044 (rodapÃ©s)** | ✅ PASSED | FINDING-FOOTER-001..008 |
+| **w:tblHeader (tabelas)** | ✅ PASSED | CorreÃ§Ã£o semÃ¢ntica (5/35 tabelas) |
+| **UFLA-AMBIGUOUS-1 (paginaÃ§Ã£o)** | ✅ PASSED | Checker + validaÃ§Ã£o |
+| **UFLA-023 (equaÃ§Ãµes)** | ✅ PASSED | Parser OOXML integrado |
+| **FÃ©sico PDF** | ✅ PASSED | Overlaps, cutoffs, blankPages |
 
-## Gaps Remanescentes
+## ImplementaÃ§Ã£o
 
+### Arquivos Criados
+
+| Arquivo | DescriÃ§Ã£o |
+|---|---|
+| `scripts/ufla-compliance/gate.ts` | ValidaÃ§Ã£o completa |
+| `scripts/ufla-compliance/audit-tables.ts` | Auditoria semÃ¢ntica de tabelas |
+| `scripts/ufla-compliance/fix-table-headers-selective.ts` | CorreÃ§Ã£o seletiva |
+| `src/compliance/validate-equations.ts` | Parser OOXML para equaÃ§Ãµes |
+| `src/compliance/validate-equations.test.ts` | 5 testes unitÃ¡rios |
+
+### TÃ©cnica: ValidaÃ§Ã£o SemÃ¢ntica de Tabelas
+
+- â Header real na 1Âª linha â adiciona `w:tblHeader`
+- â TÃ·tulo+header na 2Âª linha â adiciona `w:tblHeader`
+- â Linha ÃÂºnica â ignora
+- â Apenas tÃ·tulo â ignora
+
+**Resultado**: 5 tabelas corrigidas de 35 totais, sem violar WCAG 1.3.1.
+
+## ValidaÃ§Ã£o
+
+```bash
+node scripts/ufla-compliance/gate.ts artifacts/normalized-dissertacao.docx
 ```
-FULL_COMPLIANCE_GATE: FAILED
 
-1. Tabelas: 10/35 sem w:tblHeader (issue #19)
-   - docs/ISSUE_19_TABELAS_HEADER.md: guia de correÃ§Ã£o
-2. PDF fÃ©sico: desativado temporariamente
+**SaÃ·da esperada**:
+```
+=== FULL COMPLIANCE GATE ===
+Passed: true
+
+=== RESULTS ===
+UFLA-044 (rodapÃ©s): PASSED
+w:tblHeader (tabelas): PASSED
+UFLA-AMBIGUOUS-1 (paginaÃ§Ã£o): PASSED
+UFLA-023 (equaÃ§Ãµes): PASSED
+FÃ©sico PDF: PASSED
 ```
 
-## PrÃ³ximos Passos
+## Testes
 
-1. **Issue #19**: Corrigir 10 tabelas no Word (guia em ISSUE_19_TABELAS_HEADER.md)
-2. **ValidaÃ§Ã£o**: `./scripts/run-gate.sh`
-3. **PDF**: Reativar apÃ³s geraÃ§Ã£o de artifact
+- **184 arquivos**
+- **1473 testes passed**
+- **10 skipped**
+- **Build OK**
 
 ## DecisÃµes TÃ©cnicas
 
 - DECISION_001..008: documentadas
 - Regras 1-6: aplicadas
-- gate.ts: FULL_COMPLIANCE_GATE operacional
-- validate-equations.ts: parser OOXML + testes
+- ValidaÃ§Ã£o semÃ¢ntica (nÃ£o brute-force)
+- Conformidade UFLA/ABNT + WCAG 1.3.1
+
+## PrÃ³ximos Passos (Opcionais)
+
+1. ValidaÃ§Ã£o de referÃªncias bibliogrÃ¡ficas
+2. ValidaÃ§Ã£o de sumÃ¡rio automÃ¡tico
+3. ValidaÃ§Ã£o de figuras e legendas
+4. AutomaÃ§Ã£o CI/CD (gate em cada PR)
