@@ -167,7 +167,7 @@ const gates = {
     fullComplianceGate: {
       status: "failed",
       evidence:
-        `Gaps atuais: UFLA-023 equação sem OMML nativo (acessibilidade NBR 17225); ${tblHeaderSummary}; findings de rodapé parciais/not-covered; UFLA-AMBIGUOUS-1 (paginação: contínua vs reinício em 1). Conformidade UFLA NÃO declarada.`,
+        `Gaps atuais: ${tblHeaderSummary}; findings de rodapé parciais/not-covered; UFLA-AMBIGUOUS-1 (paginação: contínua vs reinício em 1). Equações agora com OMML nativo (m:oMath) — UFLA-023 coberto. Conformidade UFLA NÃO declarada.`,
     },
   },
   overall: "failed",
@@ -200,7 +200,7 @@ writeJson("artifacts/ufla-compliance/rendered-analysis.json", {
     ooxmlGate: { status: "passed", evidence: "Estrutura OOXML válida; Word abriu sem reparo; bookmarks/PAGEREF pareados; 0 mojibake. Achados não-estruturais em findings/requirements." },
     contentPreservationGate: { status: "passed", evidence: "Δ58 não-vazios; 0 mojibake; refs 138/138; tabelas 35/35; imagens 6/6." },
     renderedLayoutGate: { status: "failed", evidence: `Renderização OK (${renderedPages} p., 0 overlaps/cutoffs, PAGEREF resolvido) mas cobertura incompleta: images/tables not-detected; rodapés/equações não inspecionados; findings de rodapé parciais; ${tblHeaderSummary}.` },
-    fullComplianceGate: { status: "failed", evidence: `Gaps de acessibilidade (${tblHeaderSummary}; equações sem OMML), rodapé parcial, UFLA-AMBIGUOUS-1.` },
+    fullComplianceGate: { status: "failed", evidence: `Gaps de acessibilidade (${tblHeaderSummary}), rodapé parcial, UFLA-AMBIGUOUS-1; equações com OMML nativo (UFLA-023 coberto).` },
   },
   docx: { path: "artifacts/ufla-compliance/normalized-dissertacao.docx", sha256: sha256(docx) },
   pdf: { path: "artifacts/ufla-compliance/rendered/normalized-dissertacao.pdf", sha256: sha256(pdf), sizeBytes: readFileSync(pdf).length },
@@ -302,11 +302,11 @@ const reqPath = join(ROOT, "artifacts", "ufla-audit", "manual", "manual-ufla-req
 const req = JSON.parse(readFileSync(reqPath, "utf8"));
 const STATUS_UPDATE: Record<string, { status: string; evidence: string[] }> = {
   "UFLA-equacoes": {
-    status: "partial",
+    status: "covered",
     evidence: [
-      "reval-completo.docx: parágrafo de equação centralizado (w:jc center), tab stop direito 16 cm, número '(1.1)' à direita, line 360 (1,5) — Manual §3.2.8 p.73",
-      "PDF page 8 (Word): equação centralizada com '(1.1)' à direita na mesma linha",
-      "gap: sem OMML nativo (m:oMath) — acessibilidade NBR 17225 (leitor de tela não lê a equação como matemática)",
+      "FATIA 2 (2026-08-14): blocos [EQ] emitem <m:oMath><m:r><m:t> nativo na exportação, parágrafo centralizado (w:jc center) com tab stop direito 16 cm e número à direita (Manual §3.2.8 p.73)",
+      "round-trip: equação OMML importada é reemitida como m:oMath (tests/ooxml/ufla-equations.test.ts — UFLA-023)",
+      "limitação documentada: estrutura matemática avançada (frações/raízes) é achatada em texto (m:r/m:t); injeção do OMML cru de origem é melhoria futura",
     ],
   },
   "UFLA-paginacao-textual": {
@@ -344,7 +344,7 @@ const STATUS_UPDATE: Record<string, { status: string; evidence: string[] }> = {
     status: "partial",
     evidence: [
       "6/6 imagens inline preservam ordem de leitura; estrutura semântica de títulos validada",
-      "gap: tabelas sem cabeçalho identificado e equações sem OMML limitam a leitura assistiva",
+      "gap: tabelas de linha única sem cabeçalho semântico limitam a leitura assistiva (equações já emitem OMML nativo)",
     ],
   },
   "UFLA-preservacao": {
@@ -360,7 +360,7 @@ for (const r of req.requisitos as Array<{ id: string; status: string; evidencia?
   if (u) {
     r.status = u.status;
     r.evidencia = u.evidence;
-    if (r.id === "UFLA-equacoes") r.gap = "sem OMML nativo; acessibilidade de equações (NBR 17225)";
+    if (r.id === "UFLA-equacoes") r.gap = "estrutura matemática avançada (frações/raízes) achatada em texto — injeção do OMML cru de origem é melhoria futura";
   }
 }
 const count = (s: string) => (req.requisitos as Array<{ status: string }>).filter((r) => r.status === s).length;
