@@ -4,6 +4,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { validatePagination } from './validate-pagination';
+import { validateEquations } from './validate-equations';
 
 interface GateResult {
   name: string;
@@ -19,7 +20,7 @@ interface FullComplianceResult {
 }
 
 function checkFooters(): GateResult {
-  return { name: 'UFLA-044 (rodapÃ©s)', passed: true, errors: [], warnings: [] };
+  return { name: 'UFLA-044 (rodapés)', passed: true, errors: [], warnings: [] };
 }
 
 function checkTables(): GateResult {
@@ -28,26 +29,32 @@ function checkTables(): GateResult {
 
 function checkPaginationGate(docxPath: string): GateResult {
   const r = validatePagination(docxPath);
-  return { name: 'UFLA-AMBIGUOUS-1 (paginaÃ§Ã£o)', passed: r.isValid, errors: r.errors, warnings: r.warnings };
+  return { name: 'UFLA-AMBIGUOUS-1 (paginação)', passed: r.isValid, errors: r.errors, warnings: r.warnings };
 }
 
-function checkEquations(): GateResult {
-  return { name: 'UFLA-023 (equaÃ§Ãµes)', passed: true, errors: [], warnings: ['EquaÃ§Ãµes avanÃ§adas: limitaÃ§Ã£o documentada (DECISION_007)'] };
+async function checkEquations(docxPath: string): Promise<GateResult> {
+  const r = await validateEquations(docxPath);
+  return {
+    name: 'UFLA-023 (equações)',
+    passed: r.isValid,
+    errors: r.errors,
+    warnings: r.warnings,
+  };
 }
 
 function checkPdfPhysical(pdfPath: string): GateResult {
   if (!fs.existsSync(pdfPath)) {
-    return { name: 'FÃ©sico PDF', passed: false, errors: [`PDF nÃ£o encontrado: ${pdfPath}`], warnings: [] };
+    return { name: 'Físico PDF', passed: false, errors: [`PDF não encontrado: ${pdfPath}`], warnings: [] };
   }
-  return { name: 'FÃ©sico PDF', passed: true, errors: [], warnings: [] };
+  return { name: 'Físico PDF', passed: true, errors: [], warnings: [] };
 }
 
-export function runFullComplianceGate(docxPath: string, pdfPath?: string): FullComplianceResult {
+export async function runFullComplianceGate(docxPath: string, pdfPath?: string): Promise<FullComplianceResult> {
   const results: GateResult[] = [
     checkFooters(),
     checkTables(),
     checkPaginationGate(docxPath),
-    checkEquations(),
+    await checkEquations(docxPath),
   ];
   if (pdfPath) results.push(checkPdfPhysical(pdfPath));
 
@@ -62,18 +69,21 @@ export function runFullComplianceGate(docxPath: string, pdfPath?: string): FullC
 if (require.main === module) {
   const docxPath = process.argv[2] || 'artifacts/ufla-compliance/normalized-dissertacao.docx';
   const pdfPath = process.argv[3];
-  const result = runFullComplianceGate(path.resolve(docxPath), pdfPath);
   
-  console.log('\n=== FULL COMPLIANCE GATE ===');
-  console.log(`Passed: ${result.passed}`);
-  if (result.gaps.length > 0) {
-    console.log('Gaps:');
-    for (const gap of result.gaps) console.log(`  - ${gap}`);
-  }
-  console.log('\n=== RESULTS ===');
-  for (const r of result.results) {
-    console.log(`${r.name}: ${r.passed ? 'PASSED' : 'FAILED'}`);
-  }
-  
-  process.exit(result.passed ? 0 : 1);
+  (async () => {
+    const result = await runFullComplianceGate(path.resolve(docxPath), pdfPath);
+    
+    console.log('\n=== FULL COMPLIANCE GATE ===');
+    console.log(`Passed: ${result.passed}`);
+    if (result.gaps.length > 0) {
+      console.log('Gaps:');
+      for (const gap of result.gaps) console.log(`  - ${gap}`);
+    }
+    console.log('\n=== RESULTS ===');
+    for (const r of result.results) {
+      console.log(`${r.name}: ${r.passed ? 'PASSED' : 'FAILED'}`);
+    }
+    
+    process.exit(result.passed ? 0 : 1);
+  })();
 }
