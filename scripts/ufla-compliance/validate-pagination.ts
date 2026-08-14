@@ -31,9 +31,3 @@ export function validatePagination(docxPath: string): PaginationValidation {
   return result;
 }
 
-if (require.main === module) {
-  const p = process.argv[2] || 'artifacts/ufla-compliance/normalized-dissertacao.docx';
-  const r = validatePagination(path.resolve(p));
-  console.log(`[pagination] VÃ¡lido: ${r.isValid}`);
-  process.exit(r.isValid ? 0 : 1);
-}
