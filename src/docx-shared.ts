@@ -28,6 +28,7 @@ export function run(text: string, bold = false, size = BODY_SIZE): TextRun {
 
 export function paragraph(text: string, options: Partial<IParagraphOptions> = {}): Paragraph {
   return new Paragraph({
+    style: "ufla_corpo_texto",
     alignment: AlignmentType.BOTH,
     spacing: { line: ONE_AND_HALF_LINE, after: UFLA_RULES.spacing.afterParagraphTwip },
     indent: { firstLine: UFLA_RULES.typography.paragraphFirstLineTwip },
@@ -36,10 +37,12 @@ export function paragraph(text: string, options: Partial<IParagraphOptions> = {}
   });
 }
 
-export function centered(text: string, bold = false, size = BODY_SIZE, before = 0, after = 240): Paragraph {
+export function centered(text: string, bold = false, size = BODY_SIZE, before = 0, after = 240, pageBreakBefore = false, style?: string): Paragraph {
   return new Paragraph({
+    ...(style ? { style } : {}),
     alignment: AlignmentType.CENTER,
     spacing: { before, after, line: SINGLE_LINE },
+    pageBreakBefore,
     children: [run(text || " ", bold, size)],
   });
 }
@@ -48,8 +51,8 @@ export function pageBreak(): Paragraph {
   return new Paragraph({ children: [new PageBreak()] });
 }
 
-export function unnumberedTitle(text: string): Paragraph {
-  return centered(text.toUpperCase(), true, BODY_SIZE, 240, 240);
+export function unnumberedTitle(text: string, pageBreakBefore = false): Paragraph {
+  return centered(text.toUpperCase(), true, BODY_SIZE, 240, 240, pageBreakBefore, "ufla_titulo_sem_indicativo");
 }
 
 export function logoParagraph(logo?: DocxLogoAsset): Paragraph[] {

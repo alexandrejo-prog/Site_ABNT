@@ -97,22 +97,28 @@ function cleanText(value: string): string {
     .trim();
 }
 
-function textBlock(text: string, type: "paragraph" | "longQuote" = "paragraph"): ImportedBlock {
+function textBlock(
+  text: string,
+  type: "paragraph" | "longQuote" = "paragraph",
+  footnoteRefs?: string[],
+): ImportedBlock {
   return {
     type,
     text,
     rawText: text,
     runs: [{ text }],
+    ...(footnoteRefs?.length ? { footnoteRefs } : {}),
   };
 }
 
-function headingBlock(text: string, level: number): ImportedBlock {
+function headingBlock(text: string, level: number, footnoteRefs?: string[]): ImportedBlock {
   return {
     type: "heading",
     level,
     text,
     rawText: text,
     runs: [{ text }],
+    ...(footnoteRefs?.length ? { footnoteRefs } : {}),
   };
 }
 
@@ -214,16 +220,38 @@ function shouldSuppressPageBreak(output: ImportedBlock[]): boolean {
   return !previous || previous.type === "pageBreak";
 }
 
-function splitInlineAcademicText(value: string, originalType: "paragraph" | "heading" | "longQuote"): ImportedBlock[] {
+function splitInlineAcademicText(
+  value: string,
+  originalType: "paragraph" | "heading" | "longQuote",
+  footnoteRefs: string[] = [],
+  hasMath = false,
+): ImportedBlock[] {
   let remaining = cleanText(value);
   const output: ImportedBlock[] = [];
+  let refsPlaced = false;
+  // Anexa as chamadas de nota da entrada ao primeiro bloco textual resultante
+  // da segmentação (evita duplicar o marcador em blocos derivados do mesmo
+  // parágrafo).
+  const placeRefs = (block: ImportedBlock): ImportedBlock => {
+    if (footnoteRefs.length && !refsPlaced && block.type !== "pageBreak") {
+      refsPlaced = true;
+      return { ...block, footnoteRefs } as ImportedBlock;
+    }
+    return block;
+  };
+  const withMath = (block: ImportedBlock): ImportedBlock =>
+    hasMath && block.type !== "pageBreak" ? ({ ...block, hasMath: true } as ImportedBlock) : block;
 
   while (remaining) {
     const marker = findNextMarker(remaining);
 
     if (!marker) {
       output.push(
-        originalType === "longQuote" ? textBlock(remaining, "longQuote") : textBlock(remaining),
+        withMath(
+          placeRefs(
+            originalType === "longQuote" ? textBlock(remaining, "longQuote") : textBlock(remaining),
+          ),
+        ),
       );
       break;
     }
@@ -231,7 +259,11 @@ function splitInlineAcademicText(value: string, originalType: "paragraph" | "hea
     const before = cleanText(remaining.slice(0, marker.index));
     if (before) {
       output.push(
-        originalType === "longQuote" ? textBlock(before, "longQuote") : textBlock(before),
+        withMath(
+          placeRefs(
+            originalType === "longQuote" ? textBlock(before, "longQuote") : textBlock(before),
+          ),
+        ),
       );
     }
 
@@ -239,7 +271,7 @@ function splitInlineAcademicText(value: string, originalType: "paragraph" | "hea
       output.push(pageBreakBlock());
     }
 
-    output.push(headingBlock(marker.heading, marker.level));
+    output.push(withMath(placeRefs(headingBlock(marker.heading, marker.level))));
     remaining = cleanText(remaining.slice(marker.index + marker.length));
   }
 
@@ -247,18 +279,20 @@ function splitInlineAcademicText(value: string, originalType: "paragraph" | "hea
 }
 
 function normalizeBlock(block: ImportedBlock): ImportedBlock[] {
+  const footnoteRefs = (block as { footnoteRefs?: string[] }).footnoteRefs ?? [];
+  const hasMath = (block as { hasMath?: boolean }).hasMath === true;
   if (block.type === "paragraph" || block.type === "longQuote") {
     const text = cleanText(block.text);
     if (!text) return [];
-    return splitInlineAcademicText(text, block.type);
+    return splitInlineAcademicText(text, block.type, footnoteRefs, hasMath);
   }
 
   if (block.type === "heading") {
     const text = cleanText(block.text);
     if (!text) return [];
-    const split = splitInlineAcademicText(text, "heading");
+    const split = splitInlineAcademicText(text, "heading", footnoteRefs, hasMath);
     if (split.length === 1 && split[0]?.type === "paragraph") {
-      return [headingBlock(split[0].text, block.level)];
+      return [headingBlock(split[0].text, block.level, footnoteRefs)];
     }
     return split;
   }
@@ -360,6 +394,34 @@ function stripTableOfContents(blocks: ImportedBlock[]): ImportedBlock[] {
   return output;
 }
 
+function separateCaptionAndSource(blocks: ImportedBlock[]): ImportedBlock[] {
+  const output: ImportedBlock[] = [];
+  for (const block of blocks) {
+    if (block.type !== "paragraph" && block.type !== "heading" && block.type !== "longQuote") {
+      output.push(block);
+      continue;
+    }
+    const text = cleanText(block.text);
+    const match = text.match(
+      /^((?:Figura|Tabela|Quadro|Gráfico|Mapa|Imagem|Ilustração)\s+\d+[\s\-:.]+.*?)(\s*Fonte:.*)$/is,
+    );
+    if (!match) {
+      output.push(block);
+      continue;
+    }
+    const caption = match[1].trim();
+    const fonte = match[2].trim();
+    if (!caption || !fonte) {
+      output.push(block);
+      continue;
+    }
+    const blockType = block.type === "heading" ? "paragraph" : block.type;
+    output.push(textBlock(caption, blockType === "longQuote" ? "longQuote" : "paragraph"));
+    output.push(textBlock(fonte, "paragraph"));
+  }
+  return output;
+}
+
 function shouldForcePageBreakBefore(block: ImportedBlock): boolean {
   if (block.type !== "heading") return false;
   return /^(RESUMO|ABSTRACT|REFERÊNCIAS|REFERENCIAS)$/i.test(block.text) || /^1\s+Introdu/i.test(block.text);
@@ -368,9 +430,10 @@ function shouldForcePageBreakBefore(block: ImportedBlock): boolean {
 function normalizeBlocks(blocks: ImportedBlock[]): ImportedBlock[] {
   const split = blocks.flatMap(normalizeBlock);
   const withoutToc = stripTableOfContents(split);
+  const separated = separateCaptionAndSource(withoutToc);
   const normalized: ImportedBlock[] = [];
 
-  for (const block of withoutToc) {
+  for (const block of separated) {
     if (shouldForcePageBreakBefore(block) && !shouldSuppressPageBreak(normalized)) {
       normalized.push(pageBreakBlock());
     }
@@ -406,6 +469,7 @@ export function normalizePlainAcademicText(text: string): ImportNormalizationRes
       images: [],
       relationships: {},
       styleNames: {},
+      footnotes: {},
       text: normalizedText,
       hasNumbering: false,
     },

@@ -139,6 +139,50 @@ function isOrphanYearFragment(value: string): boolean {
   return isYearLeadingFragment(value) && value.length < 120 && !/\p{Lu}{2,}[,.;]/u.test(value);
 }
 
+// Uma linha parece inicio de uma nova referencia quando comeca com o padrao de
+// autor pessoal (SOBRENOME, A.), autor institucional (lista curta conhecida) ou
+// nome de evento. Tudo o que nao se encaixa e tratado como continuacao da
+// referencia anterior.
+function isReferenceStartLine(line: string): boolean {
+  const l = line.trim();
+  if (!l) return false;
+  if (/^[\p{Lu}A-ZÀ-Ú][\p{L}.\-' ]{1,60},\s*[\p{Lu}A-ZÀ-Ú][\p{L}.\-' ]{0,60}\./u.test(l)) return true;
+  if (/^[\p{Lu}A-ZÀ-Ú][\p{L}.\-' ]{1,60};\s/u.test(l)) return true;
+  if (/^(?:BRASIL|MINAS\s+GERAIS|LAVRAS|UNIVERSIDADE|INSTITUTO|MINISTERIO|ASSOCIACAO|FUNDACAO|CONSELHO|CAMARA|SECRETARIA|EUROPEAN|REGISTRY)\b/iu.test(l)) return true;
+  if (/^[A-ZÀ-Ú][\p{Lu}A-ZÀ-Ú -]{3,45},\s*\d+\.?\s*,\s*(?:19|20)\d{2}/u.test(l)) return true;
+  if (isAllCapsInstitutional(l)) return true;
+  // Linha inteiramente em caixa alta (titulo/referencia sem virgula de autor)
+    if (/^[\p{Lu}A-ZÀ-Ú0-9][\p{Lu}A-ZÀ-Ú0-9 .()&'/:-]{2,}[\p{Lu}A-ZÀ-Ú0-9.]$/u.test(l) && !/[a-zà-ú]/.test(l) && /\s/u.test(l)) return true;
+  return false;
+}
+
+// Autor institucional em caixa alta (ex.: "OPEN ACCESS INFRASTRUCTURE RESEARCH
+// FOR EUROPE. Open..."): prefixo com 2+ palavras sem minusculas antes de ponto,
+// dois-pontos, virgula ou abre parenteses.
+function isAllCapsInstitutional(line: string): boolean {
+  const match = line.trim().match(/^([A-ZÀ-Ú0-9][A-ZÀ-Ú0-9 .()&'/-]*?)(?:[.:,]\s|\s\()/u);
+  if (!match) return false;
+  const prefix = match[1].trim();
+  const words = prefix.split(/\s+/).filter(Boolean);
+  if (words.length < 2) return false;
+  return words.filter((word) => /[a-z]/.test(word)).length === 0;
+}
+
+// Rótulos que iniciam uma nova cláusula da referência: a linha seguinte não é
+// continuação de URL mesmo que o grupo anterior termine em URL.
+const URL_CLAUSE_START = /^(?:acesso\s+em\s*:|dispon[ií]vel\s+em\s*:|in\s*:|apud\s+)/iu;
+
+// Junta uma linha de continuacao ao grupo anterior, reconstruindo URLs quebradas
+// (sem inserir espaco quando o grupo termina no meio de uma URL, inclusive com
+// esquema quebrado http:/ https:/ ou www.).
+function appendContinuationLine(group: string, line: string): string {
+  const g = group.trimEnd();
+  const l = line.trim();
+  const endsInPartialUrl = /(?:https?:\/{1,2}[^\s]*|www\.[^\s]*)$/iu.test(g);
+  if (endsInPartialUrl && !/[.,;)\]]$/u.test(g) && !URL_CLAUSE_START.test(l)) return g + l;
+  return `${g} ${l}`;
+}
+
 function splitItems(value: string): string[] {
   const items = value
     .split(/\n+/)
@@ -159,13 +203,20 @@ function splitItems(value: string): string[] {
     if (
       previous &&
       isYearLeadingFragment(item) &&
-      item.length < 100 &&
       !/^[A-ZÀ-Ú]/.test(item)
     ) {
       merged[merged.length - 1] = mergeNormativeYearFragment(previous, item);
       continue;
     }
-    if (isOrphanYearFragment(item)) continue;
+    // Um fragmento que inicia com ano só é "órfão" (descartado) quando não há
+    // referência anterior para ser sua continuação. Com `previous`, ele é a
+    // continuação de uma referência (ex.: tese/dissertação: "2007. (Doutorado...)")
+    // e jamais deve ser truncado.
+    if (!previous && isOrphanYearFragment(item)) continue;
+    if (previous && !isReferenceStartLine(item)) {
+      merged[merged.length - 1] = appendContinuationLine(previous, item);
+      continue;
+    }
     merged.push(item);
   }
 

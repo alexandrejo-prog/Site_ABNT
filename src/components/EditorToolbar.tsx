@@ -1,6 +1,6 @@
 
 import { editorCommandAdapter } from "../editor-command-adapter";
-import { ToolButton, runEditorCommand } from "./ToolButton";
+import { FontSelector, ToolButton, runEditorCommand } from "./ToolButton";
 import { EDITOR_DESCRIPTION_ID } from "../app-constants";
 import type { EditorMode } from "../hooks/useEditor";
 
@@ -74,6 +74,10 @@ export default function EditorToolbar({ editorMode, setEditorMode, isTiptapEdito
             <ToolButton title="Citação longa" glyph="❝" onClick={() => runEditorAction("blockquote", () => applyBlockStyle("> "))} />
             <ToolButton title="Marcar como referência bibliográfica" glyph="Ref. ABNT" className="tool-reference" tooltip="Marca o parágrafo como referência bibliográfica para a seção REFERÊNCIAS do DOCX." onClick={() => runEditorAction("reference", () => applyBlockStyle("[REF] "))} />
           </div><span className="word-tool-group-label">Estrutura</span></div>
+          <div className="word-tool-group" aria-label="Fonte e tamanho"><div className="word-tool-row">
+            <FontSelector title="Fonte padrão UFLA/ABNT: Times New Roman (definida no DOCX)">Times New Roman</FontSelector>
+            <span className="word-font-size" title="Tamanho padrão UFLA/ABNT: 12 pt (definido no DOCX)" aria-label="Tamanho 12 pt">12 pt</span>
+          </div><span className="word-tool-group-label">Fonte e tamanho</span></div>
           <div className="word-tool-group" data-group="Parágrafo" aria-label="Parágrafo"><div className="word-tool-row">
             <ToolButton title="Lista com marcadores" glyph="•" onClick={() => runEditorAction("bulletList", () => runEditorCommand("insertUnorderedList"))} />
             <ToolButton title="Lista numerada" glyph="1." onClick={() => runEditorAction("orderedList", () => runEditorCommand("insertOrderedList"))} />

@@ -1136,6 +1136,7 @@ function structureFromText(text: string): DocxStructure {
     images: [],
     relationships: {},
     styleNames: {},
+    footnotes: {},
     text,
     hasNumbering: false,
   };

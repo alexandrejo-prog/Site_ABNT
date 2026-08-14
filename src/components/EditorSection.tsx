@@ -3,6 +3,7 @@ import { editorCommandAdapter } from "../editor-command-adapter";
 import { EDITOR_DESCRIPTION_ID } from "../app-constants";
 import EditorToolbar from "./EditorToolbar";
 import { AdherencePanel } from "./AdherencePanel";
+import { WelcomePanel, type WelcomeAction } from "./WelcomePanel";
 import type { EditorMode } from "../hooks/useEditor";
 
 const AcademicTiptapEditor = lazy(() => import("./AcademicTiptapEditor"));
@@ -21,12 +22,15 @@ interface Props {
   tiptapCommandSignal: any;
   adherenceExpanded: boolean;
   setAdherenceExpanded: (v: boolean) => void;
+  showWelcome?: boolean;
+  onWelcomeAction?: (action: WelcomeAction) => void;
 }
 
 export default function EditorSection({
   editorMode, setEditorMode, isTiptapEditorEnabled, editorRef, handleEditorInput,
   runEditorAction, applyBlockStyle, activeEditorText, updateField, setEditorText,
   tiptapCommandSignal, adherenceExpanded, setAdherenceExpanded,
+  showWelcome = false, onWelcomeAction,
 }: Props) {
   return (
     <section className="editor-pane" aria-label="Editor do texto">
@@ -41,6 +45,7 @@ export default function EditorSection({
             <div ref={editorRef as any} className="editor rich-editor" data-editor-mode={editorMode} contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-describedby={EDITOR_DESCRIPTION_ID} aria-label={editorMode === "references" ? "Editor de referências" : "Editor do texto principal"} onInput={handleEditorInput} onPaste={(e: ClipboardEvent<HTMLDivElement>) => { e.preventDefault(); editorCommandAdapter.insertEditorText(e.clipboardData.getData("text/plain")); setTimeout(() => requestAnimationFrame(handleEditorInput), 0); }} spellCheck />
           )}
         </div>
+        {showWelcome && onWelcomeAction && <WelcomePanel onAction={onWelcomeAction} />}
       </div>
       <p className="editor-page-note">Editor em visualização contínua. A paginação final deve ser conferida no Word/LibreOffice após atualizar campos e sumário.</p>
       <AdherencePanel expanded={adherenceExpanded} onToggle={() => setAdherenceExpanded(!adherenceExpanded)} />

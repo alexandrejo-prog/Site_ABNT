@@ -5,16 +5,18 @@ export interface UflaPpgProgram {
   doctorate: boolean;
 }
 
-export const UFLA_PPG_PROGRAMS_SOURCE = "https://prpg.ufla.br/servicos-em-destaque/mestrado-e-doutorado";
+export const UFLA_PPG_PROGRAMS_SOURCE = "https://prpg.ufla.br/mestrado-e-doutorado";
 
-// Snapshot local baseado na página da PRPG/UFLA. Atualizar manualmente se a PRPG alterar a lista de programas.
+// Snapshot local conferido com a página oficial da PRPG/UFLA (acesso em 2026-08-12).
+// 43 programas: 35 acadêmicos + 8 profissionais. Atualizar manualmente se a PRPG
+// alterar a lista de programas.
 
 export const UFLA_PPG_PROGRAMS: UflaPpgProgram[] = [
   { name: "Administração", type: "academico", masters: true, doctorate: true },
   { name: "Agroquímica", type: "academico", masters: true, doctorate: true },
   { name: "Biotecnologia Vegetal", type: "academico", masters: true, doctorate: true },
   { name: "Botânica Aplicada", type: "academico", masters: true, doctorate: true },
-  { name: "Ciência da Computação", type: "academico", masters: true, doctorate: false },
+  { name: "Ciência da Computação", type: "academico", masters: true, doctorate: true },
   { name: "Ciência do Solo", type: "academico", masters: true, doctorate: true },
   { name: "Ciência dos Alimentos", type: "academico", masters: true, doctorate: true },
   { name: "Ciência e Tecnologia da Madeira", type: "academico", masters: true, doctorate: true },

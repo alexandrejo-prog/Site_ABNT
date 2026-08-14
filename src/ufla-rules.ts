@@ -168,6 +168,7 @@ export interface AcademicFields {
   listaAbreviaturas: string;
   listaSimbolos: string;
   glossario: string;
+  referencesPlacement: "bibliography" | "footnote";
 }
 
 const TWIPS_PER_CM = 567;
@@ -250,7 +251,7 @@ export const UFLA_RULES = {
     coverAuthorFontSizePt: 14,
     coverTitleFontSizePt: 16,
     longQuoteFontSizePt: 11,
-    noteFontSizePt: 10,
+    noteFontSizePt: 11,
     captionFontSizePt: 12,
     captionDescriptionFontSizePt: 10,
     sourceFontSizePt: 11,
@@ -431,6 +432,7 @@ export function emptyAcademicFields(): AcademicFields {
     listaAbreviaturas: "",
     listaSimbolos: "",
     glossario: "",
+    referencesPlacement: "bibliography",
   };
 }
 
