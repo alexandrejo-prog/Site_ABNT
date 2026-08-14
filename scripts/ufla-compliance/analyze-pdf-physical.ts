@@ -150,7 +150,7 @@ function bboxIntersects(a: Bbox, b: Bbox): boolean {
   return minArea > 0 && intersectionArea / minArea > 0.3;
 }
 
-async function analyzePdf(pdfPath: string): Promise<PhysicalAnalysis> {
+export async function analyzePdf(pdfPath: string): Promise<PhysicalAnalysis> {
   const buffer = readFileSync(pdfPath);
   const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
   const firstPage = await doc.getPage(1);
