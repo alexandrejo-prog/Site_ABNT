@@ -23,8 +23,47 @@ function checkFooters(): GateResult {
   return { name: 'UFLA-044 (rodapés)', passed: true, errors: [], warnings: [] };
 }
 
-function checkTables(): GateResult {
-  return { name: 'w:tblHeader (tabelas)', passed: false, errors: ['10 tabelas sem w:tblHeader (issue #19)'], warnings: [] };
+import { validatePagination } from './validate-pagination';
+import { validateEquations } from './validate-equations';
+import JSZip from 'jszip';
+
+async function checkTables(docxPath: string): Promise<GateResult> {
+  try {
+    const buffer = fs.readFileSync(docxPath);
+    const zip = await JSZip.loadAsync(buffer);
+    const xml = await zip.file('word/document.xml')?.async('string') ?? '';
+
+    const tables = (xml.match(/<w:tbl\b/g) ?? []).length;
+    const headers = (xml.match(/<w:tblHeader\b/g) ?? []).length;
+
+    if (tables === 0) {
+      return { name: 'w:tblHeader (tabelas)', passed: true, errors: [], warnings: ['Sem tabelas no documento'] };
+    }
+
+    const missing = tables - headers;
+    if (missing > 0) {
+      return {
+        name: 'w:tblHeader (tabelas)',
+        passed: false,
+        errors: [`${missing}/${tables} tabelas sem w:tblHeader`],
+        warnings: [],
+      };
+    }
+
+    return {
+      name: 'w:tblHeader (tabelas)',
+      passed: true,
+      errors: [],
+      warnings: [`${headers}/${tables} tabelas com w:tblHeader`],
+    };
+  } catch (err) {
+    return {
+      name: 'w:tblHeader (tabelas)',
+      passed: false,
+      errors: [`Falha ao analisar tabelas: ${err instanceof Error ? err.message : String(err)}`],
+      warnings: [],
+    };
+  }
 }
 
 function checkPaginationGate(docxPath: string): GateResult {
@@ -52,7 +91,7 @@ function checkPdfPhysical(pdfPath: string): GateResult {
 export async function runFullComplianceGate(docxPath: string, pdfPath?: string): Promise<FullComplianceResult> {
   const results: GateResult[] = [
     checkFooters(),
-    checkTables(),
+    await checkTables(docxPath),
     checkPaginationGate(docxPath),
     await checkEquations(docxPath),
   ];
@@ -66,24 +105,3 @@ export async function runFullComplianceGate(docxPath: string, pdfPath?: string):
   return { passed: gaps.length === 0, gaps, results };
 }
 
-if (require.main === module) {
-  const docxPath = process.argv[2] || 'artifacts/ufla-compliance/normalized-dissertacao.docx';
-  const pdfPath = process.argv[3];
-  
-  (async () => {
-    const result = await runFullComplianceGate(path.resolve(docxPath), pdfPath);
-    
-    console.log('\n=== FULL COMPLIANCE GATE ===');
-    console.log(`Passed: ${result.passed}`);
-    if (result.gaps.length > 0) {
-      console.log('Gaps:');
-      for (const gap of result.gaps) console.log(`  - ${gap}`);
-    }
-    console.log('\n=== RESULTS ===');
-    for (const r of result.results) {
-      console.log(`${r.name}: ${r.passed ? 'PASSED' : 'FAILED'}`);
-    }
-    
-    process.exit(result.passed ? 0 : 1);
-  })();
-}
