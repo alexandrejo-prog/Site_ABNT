@@ -3,20 +3,19 @@ import {
   BorderStyle,
   IParagraphOptions,
   Paragraph,
+  TabStopType,
   Table,
   TableCell,
   TableRow,
   TextRun,
   WidthType,
 } from "docx";
-import { UFLA_RULES } from "./ufla-rules";
+import { UFLA_RULES, cmToTwip } from "./ufla-rules";
 
 export function cleanMojibakeText(value: string): string {
   return value
-    .replace(/([\p{L}\p{N}])[\u00ad\ufeff\ufffe\uffff\u2060]([\p{L}\p{N}])/gu, "$1-$2")
-    .replace(/[\u00ad\ufeff\ufffe\uffff\u2060\u200b]/g, "")
-    // eslint-disable-next-line no-control-regex -- remove deliberadamente caracteres de controle do texto importado
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
+    // Decodifica mojibake ANTES de remover soft-hyphen/controle, senão pares
+    // "Ã"+U+00AD (que codificam "í") seriam destruídos pela limpeza posterior.
     .replace(/Ã¡/g, "á")
     .replace(/Ã /g, "à")
     .replace(/Ã¢/g, "â")
@@ -28,6 +27,7 @@ export function cleanMojibakeText(value: string): string {
     .replace(/Ã´/g, "ô")
     .replace(/Ãµ/g, "õ")
     .replace(/Ãº/g, "ú")
+    .replace(/Ã¼/g, "ü")
     .replace(/Ã§/g, "ç")
     .replace(/Ã\u0080/g, "À")
     .replace(/Ã/g, "Á")
@@ -39,7 +39,11 @@ export function cleanMojibakeText(value: string): string {
     .replace(/Ã\u0094/g, "Ô")
     .replace(/Ã\u0095/g, "Õ")
     .replace(/Ã\u009A/g, "Ú")
-    .replace(/Ã‡/g, "Ç");
+    .replace(/Ã‡/g, "Ç")
+    .replace(/([\p{L}\p{N}])[\u00ad\ufeff\ufffe\uffff\u2060]([\p{L}\p{N}])/gu, "$1-$2")
+    .replace(/[\u00ad\ufeff\ufffe\uffff\u2060\u200b]/g, "")
+    // eslint-disable-next-line no-control-regex -- remove deliberadamente caracteres de controle do texto importado
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
 }
 
 export function splitParagraphs(value: string): string[] {
@@ -161,6 +165,7 @@ export function textParagraph(
   options: Partial<IParagraphOptions> = {},
 ): Paragraph {
   return new Paragraph({
+    style: "ufla_corpo_texto",
     alignment: AlignmentType.BOTH,
     spacing: { line: UFLA_RULES.spacing.bodyLineTwip, after: UFLA_RULES.spacing.afterParagraphTwip },
     indent: { firstLine: UFLA_RULES.typography.paragraphFirstLineTwip },
@@ -174,6 +179,7 @@ export function simpleParagraph(
   options: Partial<IParagraphOptions> = {},
 ): Paragraph {
   return new Paragraph({
+    style: "ufla_corpo_texto",
     alignment: AlignmentType.BOTH,
     spacing: { line: UFLA_RULES.spacing.singleLineTwip, after: UFLA_RULES.spacing.afterParagraphTwip },
     children: textRunsFromMarkup(text || " "),
@@ -186,8 +192,10 @@ export function centeredParagraph(
   bold = false,
   size = 24,
   spacing: NonNullable<IParagraphOptions["spacing"]> = { after: 240 },
+  style?: string,
 ): Paragraph {
   return new Paragraph({
+    ...(style ? { style } : {}),
     alignment: AlignmentType.CENTER,
     spacing,
     children: [
@@ -233,9 +241,10 @@ export function detectCaption(text: string): CaptionInfo | null {
 
 export function captionParagraph(
   text: string,
-  _kind: CaptionKind = "illustration",
+  kind: CaptionKind = "illustration",
 ): Paragraph {
   return new Paragraph({
+    style: kind === "table" ? "ufla_legenda_tabela" : "ufla_legenda_ilustracao",
     alignment: AlignmentType.CENTER,
     spacing: { before: 120, after: 120, line: UFLA_RULES.spacing.singleLineTwip },
     indent: { left: 454, right: 454 },
@@ -251,8 +260,9 @@ export function captionParagraph(
   });
 }
 
-export function sourceParagraph(text: string): Paragraph {
+export function sourceParagraph(text: string, kind: CaptionKind = "illustration"): Paragraph {
   return new Paragraph({
+    style: kind === "table" ? "ufla_fonte_tabela" : "ufla_fonte_ilustracao",
     alignment: AlignmentType.LEFT,
     spacing: { before: 60, after: 120, line: 240 },
     indent: { left: 454, right: 454 },
@@ -269,6 +279,7 @@ export function sourceParagraph(text: string): Paragraph {
 
 export function longQuoteParagraph(text: string): Paragraph {
   return new Paragraph({
+    style: "ufla_citacao_longa",
     alignment: AlignmentType.BOTH,
     spacing: { line: UFLA_RULES.spacing.singleLineTwip, after: 120 },
     indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
@@ -369,6 +380,7 @@ export function tabbedTableBlock(
   const tableRows = detected.rows.map((cells, rowIndex) => {
     const padded = Array.from({ length: columnCount }, (_, i) => cells[i] ?? "");
     return new TableRow({
+      ...(rowIndex === 0 ? { tableHeader: true } : {}),
       children: padded.map((cellText) => new TableCell({
         width: { size: columnWidth, type: WidthType.PERCENTAGE },
         margins: { top: 40, bottom: 40, left: 80, right: 80 },
@@ -393,8 +405,9 @@ export function tabbedTableBlock(
 
   const SOLID_BORDER = { style: BorderStyle.SINGLE, size: 4, color: "000000" };
 
+  const kind: CaptionKind = /^(quadro|tabela)\s+\d+/i.test(detected.caption.trim()) ? "table" : "illustration";
   const result: Array<Paragraph | Table> = [
-    captionParagraph(captionPrefix + detected.caption),
+    captionParagraph(captionPrefix + detected.caption, kind),
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       borders: {
@@ -413,6 +426,7 @@ export function tabbedTableBlock(
   if (sourceLine) {
     result.push(
       new Paragraph({
+        style: "ufla_fonte_tabela",
         alignment: AlignmentType.LEFT,
         spacing: { before: 120, after: 120, line: 240 },
         children: [
@@ -428,4 +442,31 @@ export function tabbedTableBlock(
   }
 
   return result;
+}
+
+/**
+ * Equação centralizada com numeração à direita (Manual UFLA §3.2.8).
+ * Número opcional no formato `(N.N)`/`(NN)` ao final da linha; espaçamento
+ * 1,5 acomoda expoentes e índices.
+ */
+export function equationParagraph(text: string): Paragraph {
+  const equationText = cleanMojibakeText(text);
+  const numberMatch = equationText.match(/\s*\((\d+(?:\.\d+)?)\)\s*$/);
+  const body = numberMatch ? equationText.slice(0, numberMatch.index).trim() : equationText;
+  const number = numberMatch ? `(${numberMatch[1]})` : "";
+  const font = UFLA_RULES.typography.fontFamily;
+  const size = UFLA_RULES.typography.bodyFontSizePt * 2;
+  const children = [
+    new TextRun({ text: body, font, size, color: "000000", italics: true }),
+  ];
+  if (number) {
+    children.push(new TextRun({ text: "\t", font, size, color: "000000" }));
+    children.push(new TextRun({ text: number, font, size, color: "000000" }));
+  }
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { line: 360, before: 120, after: 120 },
+    tabStops: [{ type: TabStopType.RIGHT, position: cmToTwip(16) }],
+    children,
+  });
 }

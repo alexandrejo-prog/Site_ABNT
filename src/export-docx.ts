@@ -4,7 +4,7 @@ import {
   BookmarkStart,
   BorderStyle,
   Document,
-  HeadingLevel,
+  FootnoteReferenceRun,
   Header,
   ImageRun,
   Packer,
@@ -22,15 +22,16 @@ import {
   TextRun,
   WidthType,
 } from "docx";
-import type { IParagraphOptions, IStylesOptions } from "docx";
+import type { IParagraphOptions } from "docx";
 import "./docx-toc-field-patch";
-import { pageMargins, ibgeTable, BODY_SIZE, SINGLE_LINE, ONE_AND_HALF_LINE, BLACK, AUTHOR_SIZE as COVER_AUTHOR_SIZE, TITLE_SIZE as COVER_TITLE_SIZE } from "./docx-shared";
+import { pageMargins, ibgeTable, BODY_SIZE, SINGLE_LINE, ONE_AND_HALF_LINE, BLACK, AUTHOR_SIZE as COVER_AUTHOR_SIZE, TITLE_SIZE as COVER_TITLE_SIZE, unnumberedTitle } from "./docx-shared";
+import { DOCUMENT_STYLES } from "./docx-styles";
 import { AcademicFields, UFLA_RULES, cmToTwip } from "./ufla-rules";
 import { getWorkTypeRequirements } from "./work-type-requirements";
 import { normalizeReferences, type NormalizedReference, type ReferenceRun } from "./references-normalizer";
 import { buildFlowingImpactText } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
-import { cleanMojibakeText, detectCaption, sourceParagraph, tabbedTableBlock, tokenizeMarkup, type CaptionKind } from "./docx-render-core";
+import { cleanMojibakeText, detectCaption, equationParagraph, sourceParagraph, tabbedTableBlock, tokenizeMarkup, type CaptionKind } from "./docx-render-core";
 import { ImportedDocumentImage, IMPORTED_IMAGE_MARKER_PATTERN } from "./imported-images";
 import { ImportedTable, IMPORTED_TABLE_MARKER_PATTERN, buildStructuredTextFromTable } from "./imported-tables";
 
@@ -47,7 +48,9 @@ export type EditorBlockType =
   | "importedImage"
   | "importedTable"
   | "source"
-  | "reference";
+  | "reference"
+  | "footnoteDefinition"
+  | "equation";
 
 export interface EditorBlock {
   type: EditorBlockType;
@@ -80,109 +83,16 @@ export const DEFAULT_UFLA_LOGO_PATH = "/assets/ufla-logo.jpeg";
 const LONG_QUOTE_SIZE = UFLA_RULES.typography.longQuoteFontSizePt * 2;
 const REFERENCE_FONT = UFLA_RULES.typography.fontFamily;
 const REFERENCE_SIZE = UFLA_RULES.typography.bodyFontSizePt * 2;
+// Notas de rodapé: 11 pt (meio-pontos 22) — §3.2.1 do Manual UFLA.
+const FOOTNOTE_SIZE = UFLA_RULES.typography.sourceFontSizePt * 2;
 const UFLA_LOGO_WIDTH_PX = 265;
 const UFLA_LOGO_HEIGHT_PX = 108;
 
-const DOCUMENT_STYLES: IStylesOptions = {
-  paragraphStyles: [
-    {
-      id: "TOC1",
-      name: "toc 1",
-      basedOn: "Normal",
-      next: "Normal",
-      quickFormat: true,
-      run: {
-        font: UFLA_RULES.typography.fontFamily,
-        size: BODY_SIZE,
-        bold: true,
-        color: BLACK,
-      },
-      paragraph: {
-        spacing: { before: UFLA_RULES.spacing.afterParagraphTwip, after: UFLA_RULES.spacing.afterParagraphTwip },
-      },
-    },
-    {
-      id: "TOC2",
-      name: "toc 2",
-      basedOn: "Normal",
-      next: "Normal",
-      quickFormat: true,
-      run: {
-        font: UFLA_RULES.typography.fontFamily,
-        size: BODY_SIZE,
-        bold: true,
-        color: BLACK,
-      },
-      paragraph: {
-        spacing: { before: UFLA_RULES.spacing.afterParagraphTwip, after: UFLA_RULES.spacing.afterParagraphTwip },
-      },
-    },
-    {
-      id: "TOC3",
-      name: "toc 3",
-      basedOn: "Normal",
-      next: "Normal",
-      quickFormat: true,
-      run: {
-        font: UFLA_RULES.typography.fontFamily,
-        size: BODY_SIZE,
-        bold: false,
-        color: BLACK,
-      },
-      paragraph: {
-        spacing: { before: UFLA_RULES.spacing.afterParagraphTwip, after: UFLA_RULES.spacing.afterParagraphTwip },
-      },
-    },
-    {
-      id: "Heading1",
-      name: "Heading 1",
-      basedOn: "Normal",
-      next: "Normal",
-      quickFormat: true,
-      run: {
-        font: UFLA_RULES.typography.fontFamily,
-        size: BODY_SIZE,
-        bold: true,
-        color: BLACK,
-      },
-      paragraph: {
-        spacing: { before: UFLA_RULES.spacing.afterParagraphTwip, after: UFLA_RULES.spacing.afterParagraphTwip },
-      },
-    },
-    {
-      id: "Heading2",
-      name: "Heading 2",
-      basedOn: "Normal",
-      next: "Normal",
-      quickFormat: true,
-      run: {
-        font: UFLA_RULES.typography.fontFamily,
-        size: BODY_SIZE,
-        bold: true,
-        color: BLACK,
-      },
-      paragraph: {
-        spacing: { before: UFLA_RULES.spacing.afterParagraphTwip, after: UFLA_RULES.spacing.afterParagraphTwip },
-      },
-    },
-    {
-      id: "Heading3",
-      name: "Heading 3",
-      basedOn: "Normal",
-      next: "Normal",
-      quickFormat: true,
-      run: {
-        font: UFLA_RULES.typography.fontFamily,
-        size: BODY_SIZE,
-        bold: true,
-        color: BLACK,
-      },
-      paragraph: {
-        spacing: { before: UFLA_RULES.spacing.afterParagraphTwip, after: UFLA_RULES.spacing.afterParagraphTwip },
-      },
-    },
-  ],
-};
+// Mapa nota-editada → w:id do DOCX, construído em createDocxDocument antes da
+// renderização dos runs (números únicos e consecutivos, 1-based, por ordem de
+// primeira ocorrência). Usado por textRunsWithFootnotes para emitir
+// FootnoteReferenceRun no corpo e pelas definições em word/footnotes.xml.
+let currentFootnoteIdMap: ReadonlyMap<number, number> | null = null;
 
 function headingTypeFromNumberedTitle(text: string, fallback: EditorBlockType): EditorBlockType {
   const normalized = text.trim();
@@ -269,10 +179,13 @@ function shouldStartTabbedTable(value: string, lines: string[], index: number): 
 }
 
 export function parseEditorContent(editorText: string): EditorBlock[] {
-  const lines = editorText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const rawLines = editorText.split(/\r?\n/);
+  const lines = rawLines.map((line) => line.trim()).filter(Boolean);
+  // Índice no array bruto (rawLines) de cada linha não vazia de `lines`.
+  const rawIndexOfLine: number[] = [];
+  rawLines.forEach((raw, rawIndex) => {
+    if (raw.trim()) rawIndexOfLine.push(rawIndex);
+  });
   const blocks: EditorBlock[] = [];
 
   for (let index = 0; index < lines.length; index += 1) {
@@ -391,6 +304,11 @@ export function parseEditorContent(editorText: string): EditorBlock[] {
       continue;
     }
 
+    if (/^\[EQ\]\s+/i.test(trimmed)) {
+      blocks.push({ type: "equation", text: trimmed.replace(/^\[EQ\]\s+/i, "") });
+      continue;
+    }
+
     const importedImageMatch = trimmed.match(IMPORTED_IMAGE_MARKER_PATTERN);
     if (importedImageMatch?.[1]) {
       blocks.push({ type: "importedImage", text: importedImageMatch[1] });
@@ -405,6 +323,23 @@ export function parseEditorContent(editorText: string): EditorBlock[] {
 
     if (/^Fonte\s*:/i.test(trimmed)) {
       blocks.push({ type: "source", text: trimmed });
+      continue;
+    }
+
+    const footnoteDefinitionMatch = trimmed.match(/^\[\^(\d+)\]:\s*(.*)$/);
+    if (footnoteDefinitionMatch) {
+      const id = footnoteDefinitionMatch[1];
+      const bodyLines = [footnoteDefinitionMatch[2]];
+      let cursor = index + 1;
+      while (cursor < lines.length) {
+        const raw = rawLines[rawIndexOfLine[cursor]] ?? "";
+        // Linhas de continuação da nota: começam com dois espaços ou tab no texto bruto.
+        if (!/^\s{2,}\S|^\t/.test(raw)) break;
+        bodyLines.push(raw.trim());
+        cursor += 1;
+      }
+      blocks.push({ type: "footnoteDefinition", text: `${id}\t${bodyLines.join("\n")}` });
+      index = cursor - 1;
       continue;
     }
 
@@ -451,12 +386,132 @@ function textRunsForSingleLine(text: string, size = BODY_SIZE): TextRun[] {
   return runs.length ? runs : [plainRun("", size)];
 }
 
-function textRunsFromMarkup(text: string, size = BODY_SIZE): TextRun[] {
+function textRunsFromMarkup(text: string, size = BODY_SIZE): Array<TextRun | FootnoteReferenceRun> {
   return text.split(/\n/).flatMap((line, index) => {
-    const runs = textRunsForSingleLine(line, size);
+    const runs = textRunsWithFootnotes(line, currentFootnoteIdMap, size);
     if (index === 0) return runs;
     return [new TextRun({ break: 1 }), ...runs];
   });
+}
+
+/**
+ * Converte marcadores [^N] (nota de rodapé real, word/footnotes.xml) em
+ * FootnoteReferenceRun. Marcadores sem definição correspondente permanecem
+ * como texto literal. Mecanismo distinto de "Fonte:" (parágrafo no corpo,
+ * abaixo do elemento — nunca uma nota).
+ */
+export function textRunsWithFootnotes(
+  text: string,
+  footnoteIdMap: ReadonlyMap<number, number> | null,
+  size = BODY_SIZE,
+): Array<TextRun | FootnoteReferenceRun> {
+  const segments = text.split(/(\[\^\d+\])/);
+  const runs: Array<TextRun | FootnoteReferenceRun> = [];
+  for (const segment of segments) {
+    if (!segment) continue;
+    const marker = /^\[\^(\d+)\]$/.exec(segment);
+    if (marker && footnoteIdMap) {
+      const assignedId = footnoteIdMap.get(Number(marker[1]));
+      if (assignedId !== undefined) {
+        runs.push(new FootnoteReferenceRun(assignedId));
+        continue;
+      }
+    }
+    runs.push(...textRunsForSingleLine(segment, size));
+  }
+  return runs.length ? runs : [plainRun("", size)];
+}
+
+/**
+ * Números únicos e consecutivos (1-based) por ordem de primeira ocorrência das
+ * definições [^N]: no texto editado. O rótulo de exibição no Word segue a ordem
+ * das chamadas no corpo; o w:id atribuído aqui mantém o DOCX válido mesmo com
+ * numeração do autor fora de ordem.
+ */
+export function buildFootnoteIdMap(definitions: EditorBlock[]): ReadonlyMap<number, number> {
+  const map = new Map<number, number>();
+  let nextId = 1;
+  for (const definition of definitions) {
+    const separatorIndex = definition.text.indexOf("\t");
+    const userNumber = Number(definition.text.slice(0, separatorIndex));
+    if (!Number.isInteger(userNumber) || userNumber < 1) continue;
+    if (!map.has(userNumber)) map.set(userNumber, nextId++);
+  }
+  return map;
+}
+
+/**
+ * Parágrafo da nota em word/footnotes.xml: 11 pt (w:sz 22), espaço simples
+ * (w:line 240), Times New Roman, alinhamento justificado, segunda linha abaixo
+ * da primeira letra da primeira palavra (recuo esquerdo com avanço).
+ */
+export function footnoteParagraph(body: string): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.BOTH,
+    spacing: { line: SINGLE_LINE, after: 0 },
+    indent: { left: 340, hanging: 340 },
+    children: textRunsFromMarkup(cleanMojibakeText(body) || " ", FOOTNOTE_SIZE),
+  });
+}
+
+export function buildFootnotes(
+  parsedBlocks: EditorBlock[],
+  footnoteIdMap: ReadonlyMap<number, number>,
+): Record<string, { children: Paragraph[] }> {
+  const footnotes: Record<string, { children: Paragraph[] }> = {};
+  for (const definition of parsedBlocks) {
+    if (definition.type !== "footnoteDefinition") continue;
+    const separatorIndex = definition.text.indexOf("\t");
+    const userNumber = Number(definition.text.slice(0, separatorIndex));
+    const assignedId = footnoteIdMap.get(userNumber);
+    if (assignedId === undefined) continue;
+    footnotes[String(assignedId)] = {
+      children: [footnoteParagraph(definition.text.slice(separatorIndex + 1))],
+    };
+  }
+  return footnotes;
+}
+
+export function buildReferenceFootnoteDefinitions(references: string[]): EditorBlock[] {
+  return references.map((ref, index) => ({
+    type: "footnoteDefinition" as const,
+    text: `${index + 1}\t${ref}`,
+  }));
+}
+
+export function appendFootnoteMarkers(text: string, count: number): string {
+  if (count <= 0) return text;
+  const markers = Array.from({ length: count }, (_, i) => `[^${i + 1}]`).join("");
+  const trimmed = text.trimEnd();
+  if (!trimmed) return markers;
+  return `${trimmed} ${markers}`;
+}
+
+export function looksLikeReferenceLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.length < 5) return false;
+  const upper = trimmed.toUpperCase();
+  if (/^(ANEXO|APÊNDICE|ANEXO\s+[A-Z]|APÊNDICE\s+[A-Z])/.test(upper)) return false;
+  if (/^(REFERÊNCIAS|REFERENCIAS|BIBLIOGRAFIA|BIBLIOGRAPHY)/.test(upper)) return false;
+  if (/^\d+\.\s*[A-ZÀ-Ú]/.test(trimmed)) return true;
+  if (/^[A-ZÀ-Ú][A-ZÀ-Ú\s.]+,\s*[A-ZÀ-Ú]/.test(trimmed)) return true;
+  if (/^[A-ZÀ-Ú][A-ZÀ-Ú\s.]+\.\s*\(\d{4}\)/.test(trimmed)) return true;
+  if (/^[A-ZÀ-Ú][A-ZÀ-Ú\s.]+,\s*\d{4}/.test(trimmed)) return true;
+  return false;
+}
+
+export function extractReferencesFromText(text: string): { cleaned: string; references: string[] } {
+  const lines = text.split(/\n+/);
+  const cleanedLines: string[] = [];
+  const references: string[] = [];
+  for (const line of lines) {
+    if (looksLikeReferenceLine(line)) {
+      references.push(line.trim());
+    } else {
+      cleanedLines.push(line);
+    }
+  }
+  return { cleaned: cleanedLines.join("\n"), references };
 }
 
 function textParagraph(text: string, options: Partial<IParagraphOptions> = {}): Paragraph {
@@ -471,6 +526,7 @@ function textParagraph(text: string, options: Partial<IParagraphOptions> = {}): 
 
 function simpleParagraph(text: string, options: Partial<IParagraphOptions> = {}): Paragraph {
   return new Paragraph({
+    style: "ufla_corpo_texto",
     alignment: AlignmentType.BOTH,
     spacing: { line: SINGLE_LINE, after: UFLA_RULES.spacing.afterParagraphTwip },
     children: textRunsFromMarkup(text || " "),
@@ -483,8 +539,10 @@ function centeredParagraph(
   bold = false,
   size = BODY_SIZE,
   spacing: NonNullable<IParagraphOptions["spacing"]> = { after: UFLA_RULES.spacing.afterPrimaryTitleTwip },
+  style?: string,
 ): Paragraph {
   return new Paragraph({
+    ...(style ? { style } : {}),
     alignment: AlignmentType.CENTER,
     spacing,
     children: [
@@ -531,25 +589,9 @@ function logoParagraph(logo?: DocxLogoAsset): Paragraph[] {
   ];
 }
 
-function sectionTitle(text: string): Paragraph {
+function sectionTitle(text: string, style = "ufla_titulo_sem_indicativo"): Paragraph {
   return new Paragraph({
-    heading: HeadingLevel.HEADING_1,
-    alignment: AlignmentType.CENTER,
-    spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
-    children: [
-      new TextRun({
-        text: text.toUpperCase(),
-        bold: true,
-        font: UFLA_RULES.typography.fontFamily,
-        size: BODY_SIZE,
-        color: BLACK,
-      }),
-    ],
-  });
-}
-
-function unnumberedTitle(text: string): Paragraph {
-  return new Paragraph({
+    style,
     alignment: AlignmentType.CENTER,
     spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
     children: [
@@ -566,21 +608,6 @@ function unnumberedTitle(text: string): Paragraph {
 
 function pageBreak(): Paragraph {
   return new Paragraph({ children: [new PageBreak()] });
-}
-
-function scheduleCaptionParagraph(text: string): Paragraph {
-  return new Paragraph({
-    alignment: AlignmentType.CENTER,
-    spacing: { before: 120, after: 120, line: SINGLE_LINE },
-    children: [
-      new TextRun({
-        text,
-        font: UFLA_RULES.typography.fontFamily,
-        size: BODY_SIZE,
-        color: BLACK,
-      }),
-    ],
-  });
 }
 
 function parseScheduleRow(line: string): ScheduleRow | null {
@@ -673,7 +700,7 @@ function markdownTableBlock(text: string): Array<Paragraph | Table> {
       });
     });
 
-    return new TableRow({ children: tableCells });
+    return new TableRow({ ...(rowIndex === 0 ? { tableHeader: true } : {}), children: tableCells });
   });
 
   return [
@@ -728,7 +755,7 @@ function plainScheduleTableBlock(text: string): Array<Paragraph | Table> {
       });
     });
 
-    return new TableRow({ children: tableCells });
+    return new TableRow({ ...(rowIndex === 0 ? { tableHeader: true } : {}), children: tableCells });
   });
 
   return [
@@ -761,9 +788,10 @@ function scheduleTableBlock(text: string): Array<Paragraph | Table> {
   });
 
   return [
-    scheduleCaptionParagraph(caption),
+    bookmarkedCaptionParagraph(caption, "table", captionBookmarkId(cleanMojibakeText(caption))),
     ibge,
     new Paragraph({
+      style: "ufla_fonte_tabela",
       alignment: AlignmentType.LEFT,
       spacing: { before: 120, after: 120, line: SINGLE_LINE },
       children: [
@@ -781,8 +809,10 @@ function scheduleTableBlock(text: string): Array<Paragraph | Table> {
 export function importedImageParagraph(image: ImportedDocumentImage | undefined): Paragraph[] {
   if (!image) return [];
 
+  const result: Paragraph[] = [];
+
   if (image.data?.byteLength) {
-    return [
+    result.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { before: 120, after: 120, line: SINGLE_LINE },
@@ -801,14 +831,37 @@ export function importedImageParagraph(image: ImportedDocumentImage | undefined)
           }),
         ],
       }),
-    ];
+    );
+  } else {
+    result.push(
+      simpleParagraph(
+        `[IMAGEM DETECTADA] ${image.caption ? image.caption + ". " : ""}Reinsira manualmente esta imagem no documento final.`,
+      ),
+    );
   }
 
-  return [
-    simpleParagraph(
-      `[IMAGEM DETECTADA] ${image.caption ? image.caption + ". " : ""}Reinsira manualmente esta imagem no documento final.`,
-    ),
-  ];
+  if (image.caption) {
+    const captionText = cleanMojibakeText(image.caption);
+    const fonteMatch = captionText.match(/^(.*?)(\s*Fonte:.*)$/is);
+    if (fonteMatch) {
+      const captionPart = fonteMatch[1].trim();
+      const fontePart = fonteMatch[2].trim();
+      result.push(
+        bookmarkedCaptionParagraph(captionPart, "illustration", captionBookmarkId(captionText)),
+      );
+      result.push(sourceParagraph(fontePart, "illustration"));
+    } else {
+      result.push(
+        bookmarkedCaptionParagraph(captionText, "illustration", captionBookmarkId(captionText)),
+      );
+    }
+  }
+
+  if (image.source) {
+    result.push(sourceParagraph(cleanMojibakeText(image.source)));
+  }
+
+  return result;
 }
 
 function normalizeConsecutiveRestarts(
@@ -859,36 +912,33 @@ export function semanticReconstructedTableParagraph(table: ImportedTable): Array
   const result: Array<Paragraph | Table> = [];
 
   if (table.caption || reconstructed.caption) {
-    result.push(
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { before: 120, after: 120, line: SINGLE_LINE },
-        children: [
-          new TextRun({
-            text: cleanMojibakeText(table.caption || reconstructed.caption || ""),
-            bold: true,
-            font: UFLA_RULES.typography.fontFamily,
-            size: BODY_SIZE,
-            color: BLACK,
-          }),
-        ],
-      }),
-    );
+    const captionCleaned = cleanMojibakeText(table.caption || reconstructed.caption || "");
+    const fonteMatch = captionCleaned.match(/^(.*?)(\s*Fonte:.*)$/is);
+    if (fonteMatch) {
+      result.push(bookmarkedCaptionParagraph(fonteMatch[1].trim(), "table", captionBookmarkId(captionCleaned)));
+      result.push(sourceParagraph(fonteMatch[2].trim(), "table"));
+    } else {
+      result.push(bookmarkedCaptionParagraph(captionCleaned, "table", captionBookmarkId(captionCleaned)));
+    }
   }
 
-  const headerRow = new TableRow({
-    children: reconstructed.headers.map((header, index) => new TableCell({
-      width: { size: widths[index] ?? Math.floor(100 / reconstructed.headers.length), type: WidthType.PERCENTAGE },
-      margins: { top: 40, bottom: 40, left: 80, right: 80 },
-      children: [
-        new Paragraph({
-          alignment: AlignmentType.LEFT,
-          spacing: { line: SINGLE_LINE, after: 0 },
-          children: [new TextRun({ text: cleanMojibakeText(header), bold: true, font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK })],
-        }),
-      ],
-    })),
-  });
+  const hasRealHeaders = reconstructed.headers.some((header) => header.trim());
+  const headerRow = hasRealHeaders
+    ? new TableRow({
+        tableHeader: true,
+        children: reconstructed.headers.map((header, index) => new TableCell({
+          width: { size: widths[index] ?? Math.floor(100 / reconstructed.headers.length), type: WidthType.PERCENTAGE },
+          margins: { top: 40, bottom: 40, left: 80, right: 80 },
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.LEFT,
+              spacing: { line: SINGLE_LINE, after: 0 },
+              children: [new TextRun({ text: cleanMojibakeText(header), bold: true, font: UFLA_RULES.typography.fontFamily, size: BODY_SIZE, color: BLACK })],
+            }),
+          ],
+        })),
+      })
+    : null;
 
   const bodyRows = reconstructed.rows.map((row, rowIndex) => {
     const cells = Array.from({ length: reconstructed.headers.length }, (_, index) => row.cells[index] ?? "");
@@ -925,7 +975,7 @@ export function semanticReconstructedTableParagraph(table: ImportedTable): Array
         insideHorizontal: SOLID_BORDER,
         insideVertical: SOLID_BORDER,
       },
-      rows: [headerRow, ...bodyRows],
+      rows: [...(headerRow ? [headerRow] : []), ...bodyRows],
     }),
   );
 
@@ -963,21 +1013,14 @@ export function importedTableParagraph(table: ImportedTable | undefined): Array<
   if (table.status === "rendered-as-structured-text") {
     const result: Array<Paragraph | Table> = [];
     if (table.caption) {
-      result.push(
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 120, after: 120, line: SINGLE_LINE },
-          children: [
-            new TextRun({
-              text: cleanMojibakeText(table.caption),
-              bold: true,
-              font: UFLA_RULES.typography.fontFamily,
-              size: BODY_SIZE,
-              color: BLACK,
-            }),
-          ],
-        }),
-      );
+      const captionCleaned = cleanMojibakeText(table.caption);
+      const fonteMatch = captionCleaned.match(/^(.*?)(\s*Fonte:.*)$/is);
+      if (fonteMatch) {
+        result.push(bookmarkedCaptionParagraph(fonteMatch[1].trim(), "table", captionBookmarkId(captionCleaned)));
+        result.push(sourceParagraph(fonteMatch[2].trim(), "table"));
+      } else {
+        result.push(bookmarkedCaptionParagraph(captionCleaned, "table", captionBookmarkId(captionCleaned)));
+      }
     }
 
     const structuredText = buildStructuredTextFromTable(table);
@@ -1048,6 +1091,7 @@ export function importedTableParagraph(table: ImportedTable | undefined): Array<
   const tableRows = table.rows.map((cells, rowIndex) => {
     const padded = Array.from({ length: columnCount }, (_, i) => (cells[i]?.text ?? "").trim());
     return new TableRow({
+      ...(table.headerRowIndex !== undefined && rowIndex === table.headerRowIndex ? { tableHeader: true } : {}),
       children: padded.map((cellText, columnIndex) => {
         const originalMerge = normalizedMerges?.find(
           (m) => m.row === rowIndex && m.col === columnIndex,
@@ -1094,21 +1138,14 @@ export function importedTableParagraph(table: ImportedTable | undefined): Array<
 
   const result: Array<Paragraph | Table> = [];
   if (table.caption) {
-    result.push(
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { before: 120, after: 120, line: SINGLE_LINE },
-        children: [
-          new TextRun({
-            text: cleanMojibakeText(table.caption),
-            bold: true,
-            font: UFLA_RULES.typography.fontFamily,
-            size: BODY_SIZE,
-            color: BLACK,
-          }),
-        ],
-      }),
-    );
+    const captionCleaned = cleanMojibakeText(table.caption);
+    const fonteMatch = captionCleaned.match(/^(.*?)(\s*Fonte:.*)$/is);
+    if (fonteMatch) {
+      result.push(bookmarkedCaptionParagraph(fonteMatch[1].trim(), "table", captionBookmarkId(captionCleaned)));
+      result.push(sourceParagraph(fonteMatch[2].trim(), "table"));
+    } else {
+      result.push(bookmarkedCaptionParagraph(captionCleaned, "table", captionBookmarkId(captionCleaned)));
+    }
   }
 
   const SOLID_BORDER = { style: BorderStyle.SINGLE, size: 4, color: BLACK };
@@ -1155,7 +1192,7 @@ function blockToParagraph(
 ): Array<Paragraph | Table> {
   if (block.type === "heading1") {
     const title = new Paragraph({
-      heading: HeadingLevel.HEADING_1,
+      style: "ufla_titulo_primario",
       alignment: AlignmentType.LEFT,
       spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
       children: [
@@ -1175,7 +1212,7 @@ function blockToParagraph(
   if (block.type === "heading2") {
     return [
       new Paragraph({
-        heading: HeadingLevel.HEADING_2,
+        style: "ufla_titulo_secundario",
         spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
         children: [
           new TextRun({
@@ -1192,7 +1229,7 @@ function blockToParagraph(
   if (block.type === "heading3") {
     return [
       new Paragraph({
-        heading: HeadingLevel.HEADING_3,
+        style: "ufla_titulo_terciario",
         spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
         children: [
           new TextRun({
@@ -1207,9 +1244,14 @@ function blockToParagraph(
     ];
   }
 
+  if (block.type === "equation") {
+    return [equationParagraph(block.text)];
+  }
+
   if (block.type === "longQuote") {
     return [
       new Paragraph({
+        style: "ufla_citacao_longa",
         alignment: AlignmentType.BOTH,
         spacing: { line: SINGLE_LINE, after: 120 },
     indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
@@ -1256,14 +1298,44 @@ function blockToParagraph(
 
   const caption = detectCaption(cleanedText);
   if (caption) {
-    return [bookmarkedCaptionParagraph(cleanedText, caption.kind, `LISTA_${bookmarkSafeLabel(cleanedText)}`)];
+    const captionText = cleanedText;
+    const fonteMatch = captionText.match(/^(.*?)(\s*Fonte:.*)$/is);
+    if (fonteMatch) {
+      const captionPart = fonteMatch[1].trim();
+      const fontePart = fonteMatch[2].trim();
+      return [
+        bookmarkedCaptionParagraph(captionPart, caption.kind, captionBookmarkId(captionText)),
+        sourceParagraph(fontePart, caption.kind),
+      ];
+    }
+    return [bookmarkedCaptionParagraph(cleanedText, caption.kind, captionBookmarkId(cleanedText))];
   }
 
   if (/^Fonte\s*:/i.test(cleanedText)) {
     return [sourceParagraph(cleanedText)];
   }
 
+  if (isShortCitationParagraph(cleanedText)) {
+    return [
+      new Paragraph({
+        style: "ufla_citacao_curta",
+        alignment: AlignmentType.BOTH,
+        spacing: { line: ONE_AND_HALF_LINE, after: UFLA_RULES.spacing.afterParagraphTwip },
+        indent: { firstLine: UFLA_RULES.typography.paragraphFirstLineTwip },
+        children: textRunsFromMarkup(cleanedText),
+      }),
+    ];
+  }
+
   return [textParagraph(cleanedText)];
+}
+
+/** Citação direta curta (Manual §20.1): até 3 linhas, iniciada entre aspas duplas e fechada adiante no parágrafo. */
+function isShortCitationParagraph(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if (trimmed.split(/\n+/).length > 3) return false;
+  return /^[“"]/.test(trimmed) && /[”"][\s\S]*$/.test(trimmed.slice(1));
 }
 
 function splitParagraphs(value: string): string[] {
@@ -1291,7 +1363,7 @@ function summaryLevelForBlock(block: EditorBlock): SummaryEntry["level"] | null 
 
 function summaryEntryParagraph(entry: SummaryEntry): Paragraph {
   return new Paragraph({
-    style: `TOC${entry.level}`,
+    style: "ufla_sumario_item",
     spacing: { before: 0, after: 0, line: SINGLE_LINE },
     indent: { left: (entry.level - 1) * 360 },
     children: [
@@ -1358,6 +1430,7 @@ function buildReferences(references: string[]): Paragraph[] {
     .map(
       (reference) =>
         new Paragraph({
+          style: "ufla_referencia",
           alignment: AlignmentType.LEFT,
           spacing: { line: SINGLE_LINE, after: SINGLE_LINE },
           indent: { left: cmToTwip(0.5), hanging: cmToTwip(0.5) },
@@ -1550,11 +1623,12 @@ function captionListItem(
   if (!caption) return null;
   const type = captionTypeOf(text).toUpperCase();
   if (!type) return null;
+  const title = (caption.label ?? "").replace(/\s*Fonte:.*$/is, "").trim();
   return {
     kind,
     type,
     number: caption.number ?? "",
-    title: caption.label ?? "",
+    title,
     bookmarkId,
   };
 }
@@ -1564,16 +1638,28 @@ function importedImageListItem(image: ImportedDocumentImage | undefined): ListIt
   const type = captionTypeOf(image.caption);
   if (!type) return null;
   const isTable = /^tabela/i.test(type);
-  return captionListItem(image.caption, isTable ? "table" : "illustration", `LISTA_${bookmarkSafeLabel(image.caption)}`);
+  return captionListItem(image.caption, isTable ? "table" : "illustration", captionBookmarkId(cleanMojibakeText(image.caption)));
 }
 
 function importedTableListItem(table: ImportedTable | undefined): ListItem | null {
   if (!table?.caption) return null;
-  return captionListItem(table.caption, "table", `LISTA_${bookmarkSafeLabel(table.caption)}`);
+  return captionListItem(table.caption, "table", captionBookmarkId(cleanMojibakeText(table.caption)));
 }
 
 function bookmarkSafeLabel(text: string): string {
   return normalizeForDetection(text).replace(/[^A-Z0-9]/g, "_").slice(0, 60) || "ITEM";
+}
+
+/**
+ * Gera o ID de bookmark usado tanto pelo PAGEREF da lista quanto pelo BookmarkStart
+ * do corpo. Sempre normaliza a legenda (remove "Fonte:" etc.) para que os dois pontos
+ * gerem exatamente o mesmo ID — caso contrário o PAGEREF aponta para um bookmark
+ * inexistente e o Word exibe "Erro! Indicador não definido.".
+ */
+function captionBookmarkId(cleanedText: string): string {
+  const fonteMatch = cleanedText.match(/^(.*?)(\s*Fonte:.*)$/is);
+  const base = fonteMatch ? fonteMatch[1].trim() : cleanedText.trim();
+  return `LISTA_${bookmarkSafeLabel(base)}`;
 }
 
 let listBookmarkNumericId = 0;
@@ -1583,9 +1669,10 @@ function nextListBookmarkNumericId(): number {
   return listBookmarkNumericId;
 }
 
-function bookmarkedCaptionParagraph(text: string, _kind: CaptionKind, bookmarkId: string): Paragraph {
+function bookmarkedCaptionParagraph(text: string, kind: CaptionKind, bookmarkId: string): Paragraph {
   const numericId = nextListBookmarkNumericId();
   return new Paragraph({
+    style: kind === "table" ? "ufla_legenda_tabela" : "ufla_legenda_ilustracao",
     alignment: AlignmentType.CENTER,
     spacing: { before: 120, after: 120, line: SINGLE_LINE },
     indent: { left: 454, right: 454 },
@@ -1624,7 +1711,7 @@ function collectListItems(
       const cleaned = cleanMojibakeText(block.text);
       const caption = detectCaption(cleaned);
       if (caption) {
-        push(captionListItem(cleaned, caption.kind === "table" ? "table" : "illustration", `LISTA_${bookmarkSafeLabel(cleaned)}`));
+        push(captionListItem(cleaned, caption.kind === "table" ? "table" : "illustration", captionBookmarkId(cleaned)));
       }
       continue;
     }
@@ -1645,6 +1732,7 @@ function listEntryParagraph(item: ListItem): Paragraph {
   const normalizedTitle = item.title.replace(/^[\s\-–—:.]+\s*/, "").trim();
   const label = `${item.type} ${item.number} - ${normalizedTitle}`;
   return new Paragraph({
+    style: "ufla_lista_item",
     alignment: AlignmentType.LEFT,
     spacing: { line: SINGLE_LINE, after: 120 },
     tabStops: [{ type: TabStopType.RIGHT, position: 9071, leader: "dot" }],
@@ -1670,7 +1758,6 @@ function listPage(
   const filtered = items.filter(filter);
   if (!filtered.length) return [];
   return [
-    pageBreak(),
     unnumberedTitle(title),
     ...filtered.map(listEntryParagraph),
   ];
@@ -1745,6 +1832,9 @@ function hasApprovalPage(fields: AcademicFields): boolean {
 export function calculateTextualStartPage(
   fields: AcademicFields,
   hasSummary: boolean,
+  bodyBlocks: EditorBlock[] = [],
+  importedImages: ImportedDocumentImage[] = [],
+  importedTables: ImportedTable[] = [],
 ): number {
   const impactRequired = fields.workType === "dissertacao" || fields.workType === "tese";
   let countedPreTextualPages = 1; // Folha de rosto. Capa e ficha catalográfica não contam.
@@ -1758,7 +1848,11 @@ export function calculateTextualStartPage(
   countedPreTextualPages += 1; // Abstract gerado pelo exportador.
 
   if (hasText(fields.indicadoresImpacto) || impactRequired) countedPreTextualPages += 1;
-  if (hasText(fields.impactIndicators) || impactRequired) countedPreTextualPages += 1;
+  if (hasText(fields.impactIndicators)) countedPreTextualPages += 1;
+
+  const autoListItems = collectListItems(bodyBlocks, importedImages, importedTables);
+  if (autoListItems.some((item) => item.kind === "illustration")) countedPreTextualPages += 1;
+  if (autoListItems.some((item) => item.kind === "table")) countedPreTextualPages += 1;
 
   const hasAnyList = hasText(fields.listaQuadros) || hasText(fields.listaGraficos) || hasText(fields.listaTabelas) || hasText(fields.listaSiglas) || hasText(fields.listaAbreviaturas) || hasText(fields.listaSimbolos) || hasText(fields.glossario);
   if (hasAnyList) countedPreTextualPages += 1;
@@ -1777,6 +1871,7 @@ export function calculateTextualStartPage(
 
 function natureParagraph(text: string): Paragraph {
   return new Paragraph({
+    style: "ufla_natureza",
     alignment: AlignmentType.BOTH,
     indent: { left: UFLA_RULES.typography.longQuoteLeftIndentTwip },
     spacing: { line: SINGLE_LINE, after: 180 },
@@ -1799,29 +1894,29 @@ function coverChildren(fields: AcademicFields, logo?: DocxLogoAsset): Paragraph[
     centeredParagraph(cleanMojibakeText((fields.author || "AUTOR").toUpperCase()), true, COVER_AUTHOR_SIZE, {
       after: 0,
       line: SINGLE_LINE,
-    }),
+    }, "ufla_capa_autor"),
     new Paragraph({ spacing: { before: 1700 } }),
     centeredParagraph(cleanMojibakeText((fields.title || "TÍTULO DO TRABALHO").toUpperCase()), true, COVER_TITLE_SIZE, {
       after: 0,
       line: ONE_AND_HALF_LINE,
-    }),
+    }, "ufla_capa_titulo"),
     ...(fields.subtitle
       ? [
           centeredParagraph(cleanMojibakeText(fields.subtitle.toUpperCase()), false, COVER_TITLE_SIZE, {
             after: 0,
             line: ONE_AND_HALF_LINE,
-          }),
+          }, "ufla_capa_subtitulo"),
         ]
       : []),
     new Paragraph({ spacing: { before: 2200 } }),
     centeredParagraph(cleanMojibakeText((fields.location || "LAVRAS - MG").toUpperCase()), true, COVER_AUTHOR_SIZE, {
       after: 120,
       line: SINGLE_LINE,
-    }),
+    }, "ufla_capa_local_ano"),
     centeredParagraph(cleanMojibakeText(fields.year || new Date().getFullYear().toString()), true, COVER_AUTHOR_SIZE, {
       after: 0,
       line: SINGLE_LINE,
-    }),
+    }, "ufla_capa_local_ano"),
   ];
 }
 
@@ -1921,18 +2016,18 @@ function titlePageChildren(fields: AcademicFields): Paragraph[] {
     centeredParagraph(cleanMojibakeText((fields.author || "AUTOR").toUpperCase()), true, COVER_AUTHOR_SIZE, {
       after: 0,
       line: SINGLE_LINE,
-    }),
+    }, "ufla_folha_rosto_autor"),
     new Paragraph({ spacing: { before: 1500 } }),
     centeredParagraph(cleanMojibakeText((fields.title || "TÍTULO DO TRABALHO").toUpperCase()), true, BODY_SIZE, {
       after: 0,
       line: ONE_AND_HALF_LINE,
-    }),
+    }, "ufla_folha_rosto_titulo"),
     ...(fields.subtitle
       ? [
           centeredParagraph(cleanMojibakeText(fields.subtitle.toUpperCase()), false, BODY_SIZE, {
             after: 0,
             line: ONE_AND_HALF_LINE,
-          }),
+          }, "ufla_folha_rosto_titulo"),
         ]
       : []),
     new Paragraph({ spacing: { before: 900 } }),
@@ -2130,7 +2225,7 @@ function approvalPageChildren(fields: AcademicFields): Paragraph[] {
 
 function optionalPage(title: string, content: string): Paragraph[] {
   if (!content.trim()) return [];
-  return [pageBreak(), unnumberedTitle(title), ...buildSimpleParagraphs(content)];
+  return [unnumberedTitle(title, true), ...buildSimpleParagraphs(content)];
 }
 
 function optionalUntitledRightPage(content: string, italics = false): Paragraph[] {
@@ -2186,12 +2281,17 @@ function preTextualChildren(
     ...optionalUntitledRightPage(cleanMojibakeText(fields.dedicatoria)),
     ...optionalPage("Agradecimentos", cleanMojibakeText(fields.agradecimentos)),
     ...optionalUntitledRightPage(cleanMojibakeText(fields.epigrafe), true),
-    pageBreak(),
-    unnumberedTitle("Resumo"),
-    simpleParagraph(cleanMojibakeText(fields.resumo || " ")),
+    unnumberedTitle("Resumo", true),
+    new Paragraph({
+      style: "ufla_resumo",
+      alignment: AlignmentType.BOTH,
+      spacing: { line: SINGLE_LINE, after: 0 },
+      children: textRunsFromMarkup(cleanMojibakeText(fields.resumo || " ")),
+    }),
     ...(fields.palavrasChave
       ? [
           new Paragraph({
+            style: "ufla_palavras_chave",
             alignment: AlignmentType.BOTH,
             spacing: { line: ONE_AND_HALF_LINE, after: 0 },
             indent: { firstLine: UFLA_RULES.typography.paragraphFirstLineTwip },
@@ -2202,16 +2302,27 @@ function preTextualChildren(
           }),
         ]
       : []),
-    pageBreak(),
-    unnumberedTitle("Abstract"),
-    simpleParagraph(cleanMojibakeText(fields.abstractText || " ")),
+    unnumberedTitle("Abstract", true),
+    new Paragraph({
+      style: "ufla_abstract",
+      alignment: AlignmentType.BOTH,
+      spacing: { line: SINGLE_LINE, after: 0 },
+      children: textRunsFromMarkup(cleanMojibakeText(fields.abstractText || " ")),
+    }),
     ...(fields.keywords
-      ? [simpleParagraph(cleanMojibakeText(`Keywords: ${ensureTrailingPeriod(fields.keywords)}`))]
+      ? [
+          new Paragraph({
+            style: "ufla_keywords",
+            alignment: AlignmentType.BOTH,
+            spacing: { line: ONE_AND_HALF_LINE, after: 0 },
+            children: [new TextRun({ text: cleanMojibakeText(`Keywords: ${ensureTrailingPeriod(fields.keywords)}`) })],
+          }),
+        ]
       : []),
   );
   const impactRequired = fields.workType === "dissertacao" || fields.workType === "tese";
   if (impactRequired || hasText(indicadores)) {
-    children.push(pageBreak(), unnumberedTitle("Indicadores de impacto"));
+    children.push(unnumberedTitle("Indicadores de impacto", true));
     if (hasText(indicadores)) {
       children.push(simpleParagraph(cleanMojibakeText(indicadores)));
     } else {
@@ -2226,21 +2337,9 @@ function preTextualChildren(
   }
   children.push(
     ...(hasText(impactIndicators)
-      ? [pageBreak(), unnumberedTitle("Impact indicators"), simpleParagraph(cleanMojibakeText(impactIndicators))]
+      ? [unnumberedTitle("Impact indicators"), simpleParagraph(cleanMojibakeText(impactIndicators))]
       : []),
   );
-
-  if (
-    hasText(fields.listaQuadros) ||
-    hasText(fields.listaGraficos) ||
-    hasText(fields.listaTabelas) ||
-    hasText(fields.listaSiglas) ||
-    hasText(fields.listaAbreviaturas) ||
-    hasText(fields.listaSimbolos) ||
-    hasText(fields.glossario)
-  ) {
-    children.push(pageBreak());
-  }
 
   children.push(
     ...buildListaIlustracoes(bodyBlocks, importedImages, importedTables),
@@ -2273,12 +2372,46 @@ function preTextualChildren(
 }
 
 export function createDocxDocument(input: DocxGenerationInput): Document {
-  const { fields } = input;
-  const parsedBlocks = parseEditorContent(input.editorText);
+  let { fields } = input;
+  let editorText = input.editorText;
+  const parsedBlocks = parseEditorContent(editorText);
+
+  let annexReferenceFootnoteDefinitions: EditorBlock[] = [];
+  let _bodyFootnoteMarkers = 0;
+
+  if (hasText(fields.anexos)) {
+    const { cleaned, references: annexRefs } = extractReferencesFromText(fields.anexos);
+    if (annexRefs.length > 0) {
+      fields = { ...fields, anexos: appendFootnoteMarkers(cleaned, annexRefs.length) };
+      annexReferenceFootnoteDefinitions = buildReferenceFootnoteDefinitions(annexRefs);
+      _bodyFootnoteMarkers += annexRefs.length;
+    }
+  }
+
+  if (fields.referencesPlacement === "footnote") {
+    const editorRefs = parsedBlocks.filter((block) => block.type === "reference").map((block) => block.text);
+    const fieldRefs = splitParagraphs(fields.referencias);
+    const allRefs = [...fieldRefs, ...editorRefs];
+    if (allRefs.length > 0) {
+      const defs = buildReferenceFootnoteDefinitions(allRefs);
+      annexReferenceFootnoteDefinitions = [...annexReferenceFootnoteDefinitions, ...defs];
+      _bodyFootnoteMarkers += allRefs.length;
+      fields = { ...fields, referencias: "" };
+      editorText = appendFootnoteMarkers(editorText, allRefs.length);
+    }
+  }
+
+  const finalParsedBlocks = parseEditorContent(editorText);
+  const allFootnoteDefinitions = [
+    ...annexReferenceFootnoteDefinitions,
+    ...finalParsedBlocks.filter((block) => block.type === "footnoteDefinition"),
+  ];
+  const footnoteIdMap = buildFootnoteIdMap(allFootnoteDefinitions);
+  currentFootnoteIdMap = footnoteIdMap;
   const { blocks: dedupedBlocks, removedImpactNumber } = removeDuplicateIndicatorsSection(
     fieldSectionBlocks(
       fields,
-      parsedBlocks.filter((block) => block.type !== "reference"),
+      finalParsedBlocks.filter((block) => block.type !== "reference" && block.type !== "footnoteDefinition"),
     ),
     fields,
   );
@@ -2287,7 +2420,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
     dedupedBlocks,
     isGraduateThesis ? removedImpactNumber : undefined,
   );
-  const editorReferences = parsedBlocks
+  const editorReferences = finalParsedBlocks
     .filter((block) => block.type === "reference")
     .map((block) => block.text);
   const extractedReferencesSection = extractReferencesSection(bodyBlocks);
@@ -2304,7 +2437,13 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
     ) ||
     references.length > 0 ||
     Boolean(fields.apendices || fields.anexos);
-  const textualStartPage = calculateTextualStartPage(fields, hasSummary);
+  const textualStartPage = calculateTextualStartPage(
+    fields,
+    hasSummary,
+    bodyBlocksWithoutReferences,
+    input.importedImages ?? [],
+    input.importedTables ?? [],
+  );
   const summaryChildren = buildSummary(bodyBlocksWithoutReferences, references, fields, textualStartPage);
 
   const preTextualChildrenList: Array<Paragraph | TableOfContents> = [
@@ -2317,17 +2456,26 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
 
   const hasApendices = Boolean(fields.apendices?.trim());
   const hasAnexos = Boolean(fields.anexos?.trim());
+  const showReferences = fields.referencesPlacement !== "footnote";
 
   const textualAndPostTextualChildren: Array<Paragraph | Table> = [
     ...bodyBlocksWithoutReferences.flatMap((block, index) => blockToParagraph(block, index === 0, input.importedImages ?? [], input.importedTables ?? [])),
-    pageBreak(),
-    ...(hasEditorHeading(bodyBlocksWithoutReferences, "REFERÊNCIAS") || bodyBlocksWithoutReferences.some((b) => ["REFERENCIAS", "REFERENCIAS BIBLIOGRAFICAS", "BIBLIOGRAFICAS"].includes(normalizeForDetection(b.text).replace(/^\d+(?:\.\d+)*\s*/, ""))) ? [] : [sectionTitle("Referências")]),
-    ...buildReferences(references),
+    ...(showReferences ? [pageBreak()] : []),
+    ...(showReferences &&
+    (hasEditorHeading(bodyBlocksWithoutReferences, "REFERÊNCIAS") ||
+      bodyBlocksWithoutReferences.some((b) =>
+        ["REFERENCIAS", "REFERENCIAS BIBLIOGRAFICAS", "BIBLIOGRAFICAS"].includes(
+          normalizeForDetection(b.text).replace(/^\d+(?:\.\d+)*\s*/, ""),
+        ),
+      ))
+      ? []
+      : [sectionTitle("Referências")]),
+    ...(showReferences ? buildReferences(references) : []),
     ...(hasApendices
-      ? [pageBreak(), sectionTitle(appendixTitle(fields)), ...buildSimpleParagraphs(fields.apendices)]
+      ? [pageBreak(), sectionTitle(appendixTitle(fields), "ufla_apendice_titulo"), ...buildSimpleParagraphs(fields.apendices)]
       : []),
     ...(hasAnexos
-      ? [pageBreak(), sectionTitle("Anexos"), ...buildSimpleParagraphs(fields.anexos)]
+      ? [pageBreak(), sectionTitle("Anexos", "ufla_anexo_titulo"), ...buildSimpleParagraphs(fields.anexos)]
       : []),
   ];
 
@@ -2347,6 +2495,9 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
     ],
   });
 
+  const footnotes = buildFootnotes(allFootnoteDefinitions, footnoteIdMap);
+  currentFootnoteIdMap = null;
+
   return new Document({
     creator: "UFLA DOCX Acadêmico",
     title: fields.title || "Trabalho acadêmico",
@@ -2355,6 +2506,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
       updateFields: true,
     },
     styles: DOCUMENT_STYLES,
+    footnotes,
     sections: [
       {
         properties: {
@@ -2379,7 +2531,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
             },
             margin: pageMargins(),
             pageNumbers: {
-              start: 1,
+              start: textualStartPage,
             },
           },
         },
