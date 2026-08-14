@@ -454,6 +454,15 @@ export function footnoteParagraph(body: string): Paragraph {
   });
 }
 
+function tableNoteParagraph(body: string): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.BOTH,
+    spacing: { line: SINGLE_LINE, after: 0 },
+    indent: { left: 340, hanging: 340 },
+    children: textRunsFromMarkup(cleanMojibakeText(body) || " ", FOOTNOTE_SIZE),
+  });
+}
+
 export function buildFootnotes(
   parsedBlocks: EditorBlock[],
   footnoteIdMap: ReadonlyMap<number, number>,
@@ -626,7 +635,7 @@ function parseScheduleRow(line: string): ScheduleRow | null {
   };
 }
 
-function scheduleRowsFromBlock(text: string): { caption: string; rows: ScheduleRow[]; source: string } {
+function scheduleRowsFromBlock(text: string): { caption: string; rows: ScheduleRow[]; source: string; notes: string[] } {
   const lines = text
     .split(/\n+/)
     .map((line) => line.trim())
@@ -634,6 +643,7 @@ function scheduleRowsFromBlock(text: string): { caption: string; rows: ScheduleR
   const caption = lines[0] || "Quadro 1 - Cronograma de execução da pesquisa";
   const rows: ScheduleRow[] = [];
   let source = "Fonte: elaborado pelo autor (2026).";
+  const notes: string[] = [];
 
   for (const line of lines.slice(1)) {
     if (/^Fonte:/i.test(line)) {
@@ -642,6 +652,11 @@ function scheduleRowsFromBlock(text: string): { caption: string; rows: ScheduleR
     }
 
     if (/^Etapa\s+Meses\s+Per/i.test(line)) continue;
+
+    if (/^(Nota|Obs|Observação):/i.test(line)) {
+      notes.push(line);
+      continue;
+    }
 
     if (looksLikeScheduleRow(line)) {
       const row = parseScheduleRow(line);
@@ -654,7 +669,7 @@ function scheduleRowsFromBlock(text: string): { caption: string; rows: ScheduleR
     }
   }
 
-  return { caption, rows, source };
+  return { caption, rows, source, notes };
 }
 
 function markdownTableBlock(text: string): Array<Paragraph | Table> {
@@ -662,10 +677,27 @@ function markdownTableBlock(text: string): Array<Paragraph | Table> {
     .split(/\n+/)
     .map((line) => line.trim())
     .filter(Boolean);
-  const rows = rawLines
-    .filter((line) => !isMarkdownTableSeparator(line))
+
+  const tableLines: string[] = [];
+  const noteLines: string[] = [];
+  let inTable = true;
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i];
+    if (inTable && isMarkdownTableSeparator(line)) continue;
+    if (inTable && line.includes("|")) {
+      tableLines.push(line);
+      continue;
+    }
+    inTable = false;
+    if (/^(Nota|Obs|Observação|Fonte):/i.test(line)) {
+      noteLines.push(line);
+    }
+  }
+
+  const rows = tableLines
     .map((line) =>
       line
+        .replace(/^\s*\|/, "")
         .replace(/^\s*\|/, "")
         .replace(/\|\s*$/, "")
         .split("|")
@@ -703,13 +735,19 @@ function markdownTableBlock(text: string): Array<Paragraph | Table> {
     return new TableRow({ ...(rowIndex === 0 ? { tableHeader: true } : {}), children: tableCells });
   });
 
-  return [
+  const result: Array<Paragraph | Table> = [
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       columnWidths: Array.from({ length: columnCount }, () => Math.floor(100 / columnCount)),
       rows: tableRows,
     }),
   ];
+
+  for (const noteLine of noteLines) {
+    result.push(tableNoteParagraph(noteLine));
+  }
+
+  return result;
 }
 
 const SOURCE_FONT_SIZE = UFLA_RULES.typography.sourceFontSizePt * 2;
@@ -721,16 +759,29 @@ function plainScheduleTableBlock(text: string): Array<Paragraph | Table> {
     .filter(Boolean);
   if (!rawLines.length) return [simpleParagraph(text)];
 
-  // Colunas múltiplas só quando o bloco usa tab ou múltiplos espaços como separador.
-  // Caso contrário (espaço simples), cada linha vira uma única célula (quadro de 1 coluna),
-  // preservando o texto corrido original (ex.: "Importar documento X").
   const multiColumn = /[\t]| {2,}/.test(text);
   const toCells = (line: string): string[] => (multiColumn ? splitScheduleColumns(line) : [line]);
 
-  const headerCells = toCells(rawLines[0]);
+  const tableLines: string[] = [];
+  const noteLines: string[] = [];
+  let inTable = true;
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i];
+    if (inTable && /^(Nota|Obs|Observação|Fonte):/i.test(line)) {
+      noteLines.push(line);
+      continue;
+    }
+    if (inTable && (/^(Etapa|Meses|Per|Importar|Testar)/i.test(line) || looksLikeScheduleRow(line))) {
+      tableLines.push(line);
+      continue;
+    }
+    inTable = false;
+  }
+
+  const headerCells = toCells(tableLines[0] ?? rawLines[0]);
   const columnCount = Math.max(headerCells.length, 1);
 
-  const tableRows = rawLines.map((line, rowIndex) => {
+  const tableRows = tableLines.map((line, rowIndex) => {
     const cells = toCells(line);
     const padded = Array.from({ length: columnCount }, (_, columnIndex) => cells[columnIndex] ?? "");
     const tableCells = padded.map((cellText) => {
@@ -758,7 +809,7 @@ function plainScheduleTableBlock(text: string): Array<Paragraph | Table> {
     return new TableRow({ ...(rowIndex === 0 ? { tableHeader: true } : {}), children: tableCells });
   });
 
-  return [
+  const result: Array<Paragraph | Table> = [
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { before: 120, after: 120, line: SINGLE_LINE },
@@ -771,23 +822,34 @@ function plainScheduleTableBlock(text: string): Array<Paragraph | Table> {
       columnWidths: Array.from({ length: columnCount }, () => Math.floor(100 / columnCount)),
       rows: tableRows,
     }),
-    new Paragraph({
-      alignment: AlignmentType.LEFT,
-      spacing: { before: 120, after: 120, line: SINGLE_LINE },
-      children: [new TextRun({ text: "Fonte: elaborado pelo autor.", font: UFLA_RULES.typography.fontFamily, size: SOURCE_FONT_SIZE, color: BLACK })],
-    }),
   ];
+
+  if (noteLines.length) {
+    for (const noteLine of noteLines) {
+      result.push(tableNoteParagraph(noteLine));
+    }
+  } else {
+    result.push(
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        spacing: { before: 120, after: 120, line: SINGLE_LINE },
+        children: [new TextRun({ text: "Fonte: elaborado pelo autor.", font: UFLA_RULES.typography.fontFamily, size: SOURCE_FONT_SIZE, color: BLACK })],
+      }),
+    );
+  }
+
+  return result;
 }
 
 function scheduleTableBlock(text: string): Array<Paragraph | Table> {
-  const { caption, rows, source } = scheduleRowsFromBlock(text);
+  const { caption, rows, source, notes } = scheduleRowsFromBlock(text);
   const ibge = ibgeTable({
     headerLabels: ["Etapa", "Meses", "Período", "Atividades principais"],
     columnWidths: [17, 13, 24, 46],
     rows: rows.map((row) => [row.etapa, row.meses, row.periodo, row.atividades]),
   });
 
-  return [
+  const result: Array<Paragraph | Table> = [
     bookmarkedCaptionParagraph(caption, "table", captionBookmarkId(cleanMojibakeText(caption))),
     ibge,
     new Paragraph({
@@ -804,6 +866,12 @@ function scheduleTableBlock(text: string): Array<Paragraph | Table> {
       ],
     }),
   ];
+
+  for (const note of notes) {
+    result.push(tableNoteParagraph(note));
+  }
+
+  return result;
 }
 
 export function importedImageParagraph(image: ImportedDocumentImage | undefined): Paragraph[] {

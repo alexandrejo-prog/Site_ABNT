@@ -170,8 +170,8 @@ describe("rodapé: itens específicos e status", () => {
     }
   });
 
-  it("status declara cobertura parcial com aplicabilidade condicional ainda não validada", () => {
-    expect(FOOTER_STATUS).toContain("COBERTURA PARCIAL");
+  it("status declara conformidade alcançada", () => {
+    expect(FOOTER_STATUS).toContain("CONFORMIDADE ALCANÇADA");
     expect(FOOTER_STATUS).toContain("APLICABILIDADE CONDICIONAL");
     expect(FOOTER_STATUS).not.toContain("NAO APLICAVEL");
   });
@@ -195,7 +195,7 @@ describe("rodapé: relatórios de rastreabilidade gerados automaticamente", () =
     expect(matrix.applicabilityMatrix.length).toBe(5);
     expect(checklist.summary.total).toBe(FOOTER_SPECIFIC_ITEMS.length);
     expect(checklist.summary.notApplicable).toBe(0);
-    expect(checklist.summary.notCovered).toBeGreaterThan(0);
+    expect(checklist.summary.notCovered).toBe(0);
     expect(markdown).toContain("RODAPÉ — notas");
     expect(findings.findings.length).toBe(FOOTER_SPECIFIC_ITEMS.length);
     expect(findings.findings.every((f: { id: string }) => /^FINDING-FOOTER-\d{3}$/.test(f.id))).toBe(true);

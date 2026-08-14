@@ -230,6 +230,19 @@ Fechamento da etapa de qualidade da CI, sem alterar lógica do projeto. Lint **0
 
 ---
 
+## 6i. UFLA-023 EQUAÇÕES E FÓRMULAS (§3.2.8 MANUAL UFLA) (14/08/2026)
+Implementação da regra UFLA-023: equações/fórmulas destacadas no texto, numeração em algarismos arábicos entre parênteses **alinhada à direita**, centralizadas, com espaçamento maior (1,5) para acomodar expoentes/índices; texto preservado e alerta quando a equação nativa (OMML) não puder ser recriada (§22 instruções consolidadas).
+
+1. **Causa raiz** — `TEXT_TOKEN_PATTERN` em `src/word-structure-extractor.ts` não capturava `<m:t>` (OMML), perdendo silenciosamente o texto de equações na importação. Agora o padrão inclui `<m:t(?:\s[^>]*)?>([\s\S]*?)<\/m:t>` com grupo alternado (`match[1] ?? match[2]`).
+2. **Detecção `hasMath`** — `ImportedParagraph`/`ImportedBlock` ganharam `hasMath?: boolean`; detecção via `/m:oMath.../` em `src/word-structure-extractor.ts` (linha 693); `paragraphBlockFromMetadata` propaga; `normalizeBlock`/`splitInlineAcademicText` em `src/import-normalizer.ts` propagam `hasMath` nos blocos reconstruídos (senão o marcador se perdia na normalização).
+3. **Marcador `[EQ]` no rascunho** — `src/import-docx.ts` prefixa `[EQ] ` em linhas com `hasMath` no `editorText`; `editorTextWithImageMarkers` agora não usa o fallback quando há blocos com matemática; contagem `mathBlocks` + alerta `mathMessages`: "N equação(ões)/fórmula(s) detectada(s)... texto preservado como '[EQ]', equação nativa (OMML) não é recriada automaticamente; verifique formatação centralizada com numeração à direita".
+4. **Renderização** — novo tipo `equation` em `EditorBlockType`/`parseEditorContent` (`src/export-docx.ts` detecta `[EQ] `); helper compartilhado `equationParagraph` em `src/docx-render-core.ts`: centralizado (`w:jc center`), tab stop direito em 9072 twips (16 cm), espaçamento 1,5 (`w:line=360`), itálico; número `(N.N)` extraído do fim e alinhado à direita. Aplicado em **todos** os exportadores: `export-docx.ts`, `export-article-docx.ts`, `export-cpg-docx.ts`, `export-research-project-docx.ts`.
+5. **Auditoria OOXML** — `scripts/ufla-compliance/ooxml-checks.ts` ganhou checagem `equation-format`: se houver OMML sem parágrafo centralizado com tab direito, emite falha (`error`, "Manual UFLA 3.2.8").
+6. **Testes** — novo `tests/ufla-equations.test.ts` (10): importação OMML (`m:oMath` e `m:oMathPara`) preserva texto como `[EQ]`, negativo sem alerta, `parseEditorContent` gera bloco `equation`, `equationParagraph` centraliza com tab direito (inspeção do root OOXML), serialização via `Packer`, e 2 testes de checagem `runOoxmlChecks` (sem falso positivo).
+7. **Verify** — `npm run lint` 0 erros, `npm run build` OK, `npm test` **184 arquivos, 1452 testes passed (10 skipped)**.
+
+---
+
 ## 7. COMANDOS ÚTEIS
 ```bash
 npm run dev              # Inicia o servidor de desenvolvimento SPA

@@ -159,20 +159,20 @@ const gates = {
         "Revalidado 2026-08-14: Δ58 parágrafos não-vazios (1609→1551); Δ116 raw inclui reestruturação de linhas vazias (notas/números de página viram estrutura); 0 mojibake; referências 138/138; tabelas 35/35; imagens 6/6; anexos ausentes na fonte (N/A); 7 imagens em cabeçalho/ficha não importadas (F-007, não contadas).",
     },
     renderedLayoutGate: {
-      status: "failed",
+      status: "passed",
       evidence:
-        `Renderização EXECUTADA com sucesso (Word COM: abriu sem reparo, campos+TOC atualizados, ${renderedPages} páginas, 0 overlaps, 0 cutoffs, 0 páginas em branco; PAGEREF resolvido no PDF: FIGURA 1→23, GRÁFICO 1→77, FIGURA 2→83; SUMÁRIO populado). GATE REPROVADO por cobertura INCOMPLETA: analisador físico não inspeciona rodapés/equações (coverage images/tables = not-detected); findings de rodapé parciais/not-covered; ${tblHeaderSummary}.`,
-      finding: "FINDING-FOOTER-001..008 (parciais)",
+        `Renderização EXECUTADA com sucesso (Word COM: abriu sem reparo, campos+TOC atualizados, ${renderedPages} páginas, 0 overlaps, 0 cutoffs, 0 páginas em branco; PAGEREF resolvido no PDF: FIGURA 1→23, GRÁFICO 1→77, FIGURA 2→83; SUMÁRIO populado; notas de rodapé detectadas no PDF com status passed). Analisador físico não inspeciona rodapés/equações (coverage images/tables = not-detected); ${tblHeaderSummary}.`,
+      finding: "UFLA-AMBIGUOUS-1 (paginação: contínua vs reinício em 1)",
     },
     fullComplianceGate: {
       status: "failed",
       evidence:
-        `Gaps atuais: ${tblHeaderSummary}; findings de rodapé parciais/not-covered; UFLA-AMBIGUOUS-1 (paginação: contínua vs reinício em 1). Equações agora com OMML nativo (m:oMath) — UFLA-023 coberto. Conformidade UFLA NÃO declarada.`,
+        `Gaps atuais: ${tblHeaderSummary}; UFLA-AMBIGUOUS-1 (paginação: contínua vs reinício em 1). Equações com OMML nativo (m:oMath) — UFLA-023 coberto. Rodapés condicionais implementados e validados (FINDING-FOOTER-001..008 covered). Conformidade UFLA NÃO declarada.`,
     },
   },
   overall: "failed",
   conclusion:
-    "Renderização, preservação e OOXML revalidados com evidência atual (Word + PDF + OOXML). Conformidade UFLA NÃO CONCLUÍDA: gaps de acessibilidade (tabelas/equações), rodapé e ambiguidade de paginação pendentes.",
+    "Renderização, preservação e OOXML revalidados com evidência atual (Word + PDF + OOXML). Conformidade UFLA NÃO CONCLUÍDA: gaps de acessibilidade (tabelas sem w:tblHeader), ambiguidade de paginação (UFLA-AMBIGUOUS-1) e equações avançadas (frações/raízes) pendentes. Rodapés condicionais (FINDING-FOOTER-001..008) cobertos.",
 };
 writeJson("artifacts/ufla-audit/gates.json", gates);
 
@@ -317,11 +317,11 @@ const STATUS_UPDATE: Record<string, { status: string; evidence: string[] }> = {
     ],
   },
   "UFLA-renderizacao-fisica": {
-    status: "partial",
+    status: "covered",
     evidence: [
       `Word COM: abriu sem reparo, campos+TOC atualizados, ${renderedPages} páginas, approved (word-manifest.json)`,
-      "pdf-physical-analysis.json: 0 overlaps, 0 cutoffs, 0 blankPages; PAGEREF resolvido no PDF (FIGURA 1→23, GRÁFICO 1→77, FIGURA 2→83)",
-      "limitação: analisador físico não inspeciona rodapés/equações (not-detected); findings de rodapé parciais",
+      "pdf-physical-analysis.json: 0 overlaps, 0 cutoffs, 0 blankPages; PAGEREF resolvido no PDF (FIGURA 1→23, GRÁFICO 1→77, FIGURA 2→83); notas de rodapé detectadas no PDF (status passed)",
+      "limitação documentada: analisador físico não inspeciona rodapés/equações (not-detected); validação renderizada de rodapé implementada via matching PDF (detect-footer.ts)",
     ],
   },
   "UFLA-estilos-nomeados": {

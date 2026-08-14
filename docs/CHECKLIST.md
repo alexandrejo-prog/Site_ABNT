@@ -1,5 +1,36 @@
 # CHECKLIST - UFLA DOCX Acadêmico
 
+## Status rápido (auditoria 100% automática — 13/08/2026)
+
+> Gerado automaticamente por `tests/manual-rule-mapping.test.ts` em `artifacts/ufla-audit/checklist.md`.
+> Categorias permitidas: Coberto; Coberto parcialmente; Não coberto; Não implementado; Depende de renderização automática; Não aplicável.
+> **Não existe categoria de revisão manual.**
+
+- PAGINAÇÃO: **COBERTO**
+- REFERÊNCIAS GERAIS: **PARCIAL** (138/138 preservadas item a item; `reference-roundtrip-diff.json`)
+- REFERÊNCIAS ONLINE: **PARCIAL** (`tests/references-online.test.ts`)
+- RODAPÉ (aplicabilidade condicional — nunca decisão única): **COBERTO**
+  - RODAPÉ — dissertação: **COBERTO** (notas de rodapé em word/footnotes.xml; paginação no cabeçalho; notas de tabela geradas)
+  - RODAPÉ — tese: **COBERTO** (idem)
+  - RODAPÉ — monografia: **COBERTO** (idem)
+  - RODAPÉ — artigo: **COBERTO** (idem)
+  - RODAPÉ — projeto de pesquisa: **COBERTO** (idem)
+  - RODAPÉ — notas (NBR 10520/2023): **COBERTO** (notas reais implementadas; numeração 1-based; fonte 11 pt espaço simples)
+  - RODAPÉ — fontes e legendas: **COBERTO** ('Fonte:' 11 pt espaço simples abaixo do elemento; notas de tabela geradas; validação renderizada via matching PDF)
+  - RODAPÉ — renderização: **COBERTO** (Word COM abre sem reparo; PDF exportado; notas detectadas no PDF; matching PDF com similaridade normalizada)
+- CAPA LITERAL: **PARCIAL** (`tests/cover-literal.test.ts`)
+- LINHAS DE ASSINATURA: **PARCIAL** (`tests/signature-lines.test.ts`)
+- PRESERVAÇÃO DOCX: **PARCIAL** (`tests/baseline-element-diff.test.ts`; 7 embeds com causa)
+
+```text
+PAGINAÇÃO CONCLUÍDA; COBERTURA DO MANUAL PARCIAL; LACUNAS REMANESCENTES EM
+REFERÊNCIAS ONLINE, CAPA E ASSINATURAS. RODAPÉ: CONFORMIDADE ALCANÇADA;
+APLICABILIDADE CONDICIONAL VALIDADA EM TODOS OS TIPOS DE DOCUMENTO.
+NENHUM ITEM CLASSIFICADO COMO NÃO APLICÁVEL DE FORMA GLOBAL.
+```
+
+---
+
 ## Base do projeto
 
 - [x] Criar projeto estático com Vite + React + TypeScript

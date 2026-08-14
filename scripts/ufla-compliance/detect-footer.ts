@@ -47,6 +47,27 @@ async function extractFootnotesFromDocx(docxPath: string): Promise<string[]> {
     .filter(t => t && !t.match(/^\d+$/));
 }
 
+function normalizeForMatch(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function footnoteSimilarity(a: string, b: string): number {
+  const na = normalizeForMatch(a);
+  const nb = normalizeForMatch(b);
+  if (na === nb) return 1;
+  if (na.includes(nb) || nb.includes(na)) return 0.85;
+  const tokensA = na.split(" ").filter(Boolean);
+  const tokensB = nb.split(" ").filter(Boolean);
+  if (!tokensA.length || !tokensB.length) return 0;
+  const common = tokensA.filter(t => tokensB.includes(t)).length;
+  return common / Math.max(tokensA.length, tokensB.length);
+}
+
 async function analyzePdfFooter(pdfPath: string, footerThreshold: number = 0.85): Promise<Array<{
   page: number;
   text: string;
@@ -86,7 +107,6 @@ async function analyzePdfFooter(pdfPath: string, footerThreshold: number = 0.85)
       const y0 = ty;
       const y1 = ty + h;
       
-      // Check if element is in footer region (bottom 15% of page)
       if (y0 > pageHeight * footerThreshold) {
         footerElements.push({
           page: i,
@@ -108,16 +128,16 @@ function matchFootnotesToPdf(
   footerElements: Array<{ text: string; page: number; y0: number; y1: number }>
 ): Array<{ page: number; text: string; matchesFootnote: boolean; footnoteId: number | null }> {
   return footerElements.map(el => {
-    const normalizedPdf = el.text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     let matchesFootnote = false;
     let footnoteId: number | null = null;
+    let bestScore = 0;
     
     for (let i = 0; i < footnotesText.length; i++) {
-      const normalizedFootnote = footnotesText[i].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      if (normalizedPdf.includes(normalizedFootnote) || normalizedFootnote.includes(normalizedPdf)) {
+      const score = footnoteSimilarity(el.text, footnotesText[i]);
+      if (score > bestScore && score >= 0.6) {
+        bestScore = score;
         matchesFootnote = true;
         footnoteId = i + 1;
-        break;
       }
     }
     

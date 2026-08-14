@@ -86,9 +86,11 @@ export function buildOpenFindings() {
       category: item.category,
       cause: item.whatIsMissing,
       requiredAction:
-        item.category === "partial"
-          ? "completar a implementação (notas de tabela, renderização) e cobrir com teste negativo/renderizado"
-          : "implementar o caso condicional (notas/referências no rodapé) e cobrir com teste positivo e negativo",
+        item.category === "covered"
+          ? "fechado: implementação e validação renderizada concluídas"
+          : item.category === "partial"
+            ? "completar a implementação (notas de tabela, renderização) e cobrir com teste negativo/renderizado"
+            : "implementar o caso condicional (notas/referências no rodapé) e cobrir com teste positivo e negativo",
     })),
   };
 }
