@@ -112,10 +112,37 @@ describe("UFLA-023 renderizacao no DOCX gerado", () => {
     return zip;
   }
 
-  it("inclui espaco m:oMath na document.xml? nao necessario — texto de equacao e mantido como texto (nao silenciosamente perdido)", async () => {
+  it("emite m:oMath real para blocos [EQ] (equação nativa OMML, UFLA-023)", async () => {
     const zip = await builtDocument();
     const docXml = (await zip.file("word/document.xml")?.async("string")) ?? "";
+    expect(docXml).toContain("<m:oMath>");
+    expect(docXml).toContain("<m:t>x² + y² = z²</m:t>");
     expect(docXml).toContain("x² + y² = z²");
+  });
+
+  it("round-trip: equação OMML importada é reemitida como m:oMath no DOCX gerado", async () => {
+    const xml =
+      DOCUMENT_TAG +
+      oMathParagraph(
+        '<m:oMath><m:r><m:t>E = mc²</m:t></m:r></m:oMath>',
+      ) +
+      `</w:document>`;
+    const imported = await importDocumentFile(
+      new File([await (await minimalDocx(xml)).arrayBuffer()], "eq3.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }),
+    );
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "monografia" as const,
+      author: "SILVA, J.",
+      title: "Titulo",
+      resumo: "Resumo.",
+      palavrasChave: "palavras; chave",
+    };
+    const blob = await generateDocxBlob({ fields, editorText: imported.editorText });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const docXml = (await zip.file("word/document.xml")?.async("string")) ?? "";
+    expect(docXml).toContain("<m:oMath>");
+    expect(docXml).toContain("<m:t>E = mc²</m:t>");
   });
 
   it("texto do corpo sem equacao nao gera espaco OMML indevido", async () => {

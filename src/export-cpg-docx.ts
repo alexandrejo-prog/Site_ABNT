@@ -18,7 +18,7 @@ import {
 import type { IParagraphOptions } from "docx";
 import { BLACK as SHARED_BLACK } from "./docx-shared";
 import { DOCUMENT_STYLES } from "./docx-styles";
-import { cleanMojibakeText, equationParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, hasText, detectCaption, tabbedTableBlock } from "./docx-render-core";
+import { cleanMojibakeText, ommlEquationParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, hasText, detectCaption, tabbedTableBlock } from "./docx-render-core";
 import { parseEditorContent, importedTableParagraph, type DocxGenerationInput, type EditorBlock } from "./export-docx";
 import type { ImportedTable } from "./imported-tables";
 import { CPG_RULES, UFLA_RULES, cmToTwip } from "./ufla-rules";
@@ -274,7 +274,7 @@ function blockToParagraph(block: EditorBlock, firstParagraphInSection: boolean, 
   }
 
   if (block.type === "equation") {
-    return [equationParagraph(block.text)];
+    return [ommlEquationParagraph(block.text)];
   }
 
   const caption = isCaption(block.text);

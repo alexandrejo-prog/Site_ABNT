@@ -757,7 +757,7 @@ function buildImportResult(
   const mathMessages: string[] = [];
   if (mathBlocks > 0) {
     mathMessages.push(
-      `${mathBlocks} equação(ões)/fórmula(s) detectada(s) no DOCX original. O texto foi preservado no rascunho como "[EQ]", mas a equação nativa (OMML) não é recriada automaticamente; verifique a formatação centralizada com numeração à direita antes da versão final.`,
+      `${mathBlocks} equação(ões)/fórmula(s) detectada(s) no DOCX original e preservada(s) no rascunho como "[EQ]". A exportação regenera a equação nativa (OMML, m:oMath) centralizada com numeração à direita; revise a estrutura em equações com frações/raízes.`,
     );
   }
   const imageMessages = [

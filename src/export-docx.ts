@@ -31,7 +31,7 @@ import { getWorkTypeRequirements } from "./work-type-requirements";
 import { normalizeReferences, type NormalizedReference, type ReferenceRun } from "./references-normalizer";
 import { buildFlowingImpactText } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
-import { cleanMojibakeText, detectCaption, equationParagraph, sourceParagraph, tabbedTableBlock, tokenizeMarkup, type CaptionKind } from "./docx-render-core";
+import { cleanMojibakeText, detectCaption, ommlEquationParagraph, sourceParagraph, tabbedTableBlock, tokenizeMarkup, type CaptionKind } from "./docx-render-core";
 import { ImportedDocumentImage, IMPORTED_IMAGE_MARKER_PATTERN } from "./imported-images";
 import { ImportedTable, IMPORTED_TABLE_MARKER_PATTERN, buildStructuredTextFromTable } from "./imported-tables";
 
@@ -1245,7 +1245,7 @@ function blockToParagraph(
   }
 
   if (block.type === "equation") {
-    return [equationParagraph(block.text)];
+    return [ommlEquationParagraph(block.text)];
   }
 
   if (block.type === "longQuote") {

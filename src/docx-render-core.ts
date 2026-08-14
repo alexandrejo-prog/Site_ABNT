@@ -2,6 +2,8 @@ import {
   AlignmentType,
   BorderStyle,
   IParagraphOptions,
+  Math as DocxMath,
+  MathRun,
   Paragraph,
   TabStopType,
   Table,
@@ -458,6 +460,34 @@ export function equationParagraph(text: string): Paragraph {
   const size = UFLA_RULES.typography.bodyFontSizePt * 2;
   const children = [
     new TextRun({ text: body, font, size, color: "000000", italics: true }),
+  ];
+  if (number) {
+    children.push(new TextRun({ text: "\t", font, size, color: "000000" }));
+    children.push(new TextRun({ text: number, font, size, color: "000000" }));
+  }
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { line: 360, before: 120, after: 120 },
+    tabStops: [{ type: TabStopType.RIGHT, position: cmToTwip(16) }],
+    children,
+  });
+}
+
+/**
+ * Equação como OMML nativo (UFLA-023, Manual UFLA §3.2.8): emite `<m:oMath>`
+ * real no DOCX em vez de texto corrido, mantendo centralização e numeração
+ * à direita via tab stop. O corpo é montado como `m:r/m:t` — estrutura
+ * matemática avançada (frações, raízes) é achatada para texto nesta fase.
+ */
+export function ommlEquationParagraph(text: string): Paragraph {
+  const equationText = cleanMojibakeText(text);
+  const numberMatch = equationText.match(/\s*\((\d+(?:\.\d+)?)\)\s*$/);
+  const body = numberMatch ? equationText.slice(0, numberMatch.index).trim() : equationText;
+  const number = numberMatch ? `(${numberMatch[1]})` : "";
+  const font = UFLA_RULES.typography.fontFamily;
+  const size = UFLA_RULES.typography.bodyFontSizePt * 2;
+  const children: Array<TextRun | DocxMath> = [
+    new DocxMath({ children: [new MathRun(body)] }),
   ];
   if (number) {
     children.push(new TextRun({ text: "\t", font, size, color: "000000" }));
