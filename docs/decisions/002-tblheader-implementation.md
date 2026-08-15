@@ -39,6 +39,18 @@ A primeira tentativa (incompleta, não registrada) quebrou a preservação
   na linha `headerRowIndex` (tabelas preservadas) e na linha de headers das
   tabelas reconstruídas semanticamente.
 
+## Aceitabilidade de tabelas de linha única sem `w:tblHeader`
+
+Tabelas de linha única **não possuem cabeçalho semântico declarável**:
+- Não há linha separada de cabeçalho vs dados.
+- A NBR 17225 / WCAG 1.3.1 exige `w:tblHeader` apenas quando há
+  **cabeçalho(s) de coluna(s)** identificável(eis).
+- Portanto, **é aceitável** que tabelas de linha única permaneçam sem
+  `<w:tblHeader/>`, pois não há conteúdo de cabeçalho a associar.
+
+Essa exceção está documentada para evitar falsos positivos no gate de
+acessibilidade e para alinhar a implementação ao Manual UFLA / ABNT.
+
 ## Implementação
 
 - Arquivos modificados: `src/word-structure-extractor.ts`,
@@ -53,7 +65,7 @@ A primeira tentativa (incompleta, não registrada) quebrou a preservação
 
 ## Resultado
 
-- npm test: **1473 passed / 10 skipped / 0 failed**
+- npm test: **1494 passed / 10 skipped / 0 failed**
 - DOCX regenerado: 35 tabelas, **25 com `<w:tblHeader/>`** (10 de linha única,
   sem cabeçalho semântico declarável);
 - Word: abriu sem reparo; PDF de 236 páginas; 0 overlaps/cutoffs/blank;
@@ -63,8 +75,8 @@ A primeira tentativa (incompleta, não registrada) quebrou a preservação
 
 - OOXML_GATE: PASSED
 - CONTENT_PRESERVATION_GATE: PASSED
-- RENDERED_LAYOUT_GATE: FAILED (cobertura física incompleta — fora da fatia)
-- FULL_COMPLIANCE_GATE: FAILED (esperado; acessibilidade residual de equações)
+- RENDERED_LAYOUT_GATE: PASSED
+- FULL_COMPLIANCE_GATE: FAILED (UFLA-AMBIGUOUS-1 resolvida; equações sem OMML nativo em alguns casos)
 
 ## Referências
 
