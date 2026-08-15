@@ -1,6 +1,7 @@
 
 import { editorCommandAdapter } from "../editor-command-adapter";
-import { FontSelector, ToolButton, runEditorCommand } from "./ToolButton";
+import { FontSelector, ToolButton, insertEditorText, runEditorCommand } from "./ToolButton";
+import { isTiptapExperimentalEditor } from "../editor-feature-flags";
 import { EDITOR_DESCRIPTION_ID } from "../app-constants";
 import type { EditorMode } from "../hooks/useEditor";
 
@@ -22,6 +23,26 @@ function wrapSelection(style: string): void {
   span.className = `fmt-${style}`;
   try { range.surroundContents(span); } catch { document.execCommand("styleWithCSS", false); }
   sel.removeAllRanges();
+}
+
+/**
+ * Insere uma chamada `[^N]` na posição do cursor e anexa a definição `[^N]: `
+ * ao fim do corpo, com numeração sequencial automática (Manual UFLA §21).
+ */
+function insertFootnote(editorRef: React.RefObject<HTMLDivElement | null>, handleEditorInput: () => void): void {
+  if (isTiptapExperimentalEditor()) return;
+  const editor = editorRef.current;
+  if (!editor) return;
+  const text = editor.innerText || "";
+  const existing = [...text.matchAll(/\[\^(\d+)\]/g)].map((m) => parseInt(m[1], 10));
+  const next = (existing.length ? Math.max(...existing) : 0) + 1;
+  const marker = `[^${next}]`;
+  insertEditorText(marker);
+  const block = document.createElement("div");
+  block.textContent = `[^${next}]: `;
+  editor.appendChild(block);
+  block.scrollIntoView({ block: "nearest" });
+  setTimeout(() => requestAnimationFrame(handleEditorInput), 0);
 }
 
 export default function EditorToolbar({ editorMode, setEditorMode, isTiptapEditorEnabled, editorRef, handleEditorInput, runEditorAction, applyBlockStyle }: Props) {
@@ -46,6 +67,7 @@ export default function EditorToolbar({ editorMode, setEditorMode, isTiptapEdito
             <ToolButton title="Título 2" glyph="T2" onClick={() => runEditorAction("heading2", () => applyBlockStyle("## "))} />
             <ToolButton title="Citação" glyph="❝" onClick={() => runEditorAction("blockquote", () => applyBlockStyle("> "))} />
             <ToolButton title="Ref. ABNT" glyph="Ref" tooltip="Marca o parágrafo como referência bibliográfica para a seção REFERÊNCIAS do DOCX." onClick={() => runEditorAction("reference", () => applyBlockStyle("[REF] "))} />
+            <ToolButton title="Nota de rodapé" glyph="¹" tooltip="Insere chamada [^N] no cursor e a definição [^N]: ao fim do corpo (Manual UFLA §21)." onClick={() => runEditorAction("footnote", () => insertFootnote(editorRef, handleEditorInput))} />
           </div></div>
           <div className="tiptap-toolbar-group"><span className="tiptap-toolbar-label">Listas</span><div className="tiptap-toolbar-row">
             <ToolButton title="Marcadores" glyph="•" onClick={() => runEditorAction("bulletList", () => runEditorCommand("insertUnorderedList"))} />

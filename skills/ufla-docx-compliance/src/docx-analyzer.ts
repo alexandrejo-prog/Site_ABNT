@@ -281,6 +281,13 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
 
   // === IMAGES ===
   const imgCount = countMatches(documentXml, /<wp:inline|<wp:anchor|<w:drawing/g);
+  // Ilustração multipágina (§23.3): imagem cujo desenho excede a área útil da página
+  // (A4 11906×16838 twips menos margens 3/3/2/2 cm; 1 twip = 635 EMU).
+  const usableWidthEmu = (widthTwip - marginLeftTwip - marginRightTwip) * 635;
+  const usableHeightEmu = (heightTwip - marginTopTwip - marginBottomTwip) * 635;
+  const oversizedImageCount = [...documentXml.matchAll(/<wp:extent\s+cx="(\d+)"\s+cy="(\d+)"/g)]
+    .filter((m) => parseInt(m[1], 10) > usableWidthEmu || parseInt(m[2], 10) > usableHeightEmu)
+    .length;
 
   // === COVER ===
   const firstParas = normalized.slice(0, 20);
@@ -592,6 +599,7 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
     },
     images: {
       count: imgCount,
+      oversizedCount: oversizedImageCount,
     },
     cover: {
       exists: true,

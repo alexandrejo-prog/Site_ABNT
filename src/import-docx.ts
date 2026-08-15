@@ -184,6 +184,19 @@ function collectChangeWarnings(structure: DocxStructure): string[] {
   return warnings;
 }
 
+/**
+ * Remove pontuação final de título de seção (ABNT/UFLA: títulos não terminam
+ * com ponto, dois-pontos ou hífen). Preserva reticências ("...").
+ */
+function stripHeadingTerminalPunctuation(value: string): string {
+  const trimmed = value.trim();
+  if (/\.{3}\s*$/.test(trimmed)) return trimmed; // preserva reticências
+  return trimmed
+    .replace(/[.]\s*$/, "")
+    .replace(/[…;:\-–—]\s*$/, "")
+    .trim();
+}
+
 function blockText(block: ImportedBlock): string {
   if (block.type === "pageBreak" || block.type === "image") return "";
   if (block.type === "table") return block.rows.map((row) => row.join("\t")).join("\n");
@@ -715,7 +728,7 @@ function editorTextWithImageMarkers(
     }
 
     if (block.type === "heading") {
-      lines.push(`${block.level <= 1 || isEditorHeading(block) ? "#" : "##"} ${block.text}`);
+      lines.push(`${block.level <= 1 || isEditorHeading(block) ? "#" : "##"} ${stripHeadingTerminalPunctuation(block.text)}`);
       continue;
     }
 

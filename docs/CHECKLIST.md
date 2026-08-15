@@ -51,8 +51,11 @@ Resolvidas em 15/08:
 - Tipos de referência §25.14: normalizador cobre os 20 modelos (50 testes)
 
 Pendências declaradas (não bloqueiam conformidade do DOCX):
-- Lombada (§3.1) e ilustração multipágina (§23.3) — opcionais, elementos externos
-- Criação de notas por botão na UI (markup [^N] já funciona e é testado)
+- Lombada (§3.1) — fechada: Manual consolidado determina "Não gerar no MVP" (elemento físico de impressão)
+- Ilustração multipágina (§23.3) — item 25.9 no checker (alerta + marcas continua/continuação/conclusão)
+- Notas de rodapé — botão na UI com numeração sequencial automática
+- Preservação de alvos de referência cruzada (bookmarks/PAGEREF) — extração ✓, religação futura
+- Fidelidade do preview (header simulado, page-break ABSTRACT, axe) — não afeta o DOCX
 ```
 
 ## Validação Ampliada nesta Rodada (15/08)
@@ -65,13 +68,16 @@ Pendências declaradas (não bloqueiam conformidade do DOCX):
 - Ficha catalográfica: texto + imagem (Manual §6.1)
 - w:tblHeader na primeira linha de cada tabela (Manual §23.3)
 - Notas de rodapé: validação §21 no checker (24.1–24.3)
-- Branch estabilizada: build verde, tsc limpo, lint 0/0, 1529 testes
+- Botão de nota de rodapé na UI (numeração sequencial automática; Manual §21)
+- Headings mistos ABNT (1.1.A, A.1) na detecção de nível; strip de pontuação final de títulos no import
+- Lombada fechada (Manual: "Não gerar no MVP"); ilustração multipágina com item 25.9 no checker
+- Branch estabilizada: build verde, tsc limpo, lint 0/0, 1538 testes
 
 ## Próximos Passos
 
 1. Regenerar artefatos oficiais (regenerate-official-artifacts.ts) e alinhar gates.json × STATUS_ATUAL
-2. Commitar mudanças pendentes da branch feat/ufla-render-validation
-3. Avaliar botão de nota de rodapé na UI (conveniência; markup [^N] já cobre conformidade)
+2. Preservação de alvos de referência cruzada (bookmarks/PAGEREF) — melhoria futura
+3. Fidelidade do preview (header simulado, page-break ABSTRACT condicional, auditoria axe)
 
 ## Decisões Técnicas
 

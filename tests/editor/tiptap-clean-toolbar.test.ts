@@ -27,6 +27,13 @@ describe("Tiptap clean toolbar", () => {
     expect(source).toContain("runEditorAction(\"reference\"");
   });
 
+  it("contem botao de nota de rodape com numeracao sequencial (Manual UFLA §21)", () => {
+    expect(source).toContain("Nota de rodapé");
+    expect(source).toContain("runEditorAction(\"footnote\"");
+    expect(source).toContain("insertFootnote");
+    expect(source).toContain("Math.max(...existing)");
+  });
+
   it("contem botoes de listas", () => {
     expect(source).toContain("runEditorAction(\"bulletList\"");
     expect(source).toContain("runEditorAction(\"orderedList\"");

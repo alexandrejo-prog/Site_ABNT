@@ -482,12 +482,17 @@ function headingLevelFromStyle(styleId = "", styleName = ""): number | undefined
 
 function headingLevelFromText(text: string): number | undefined {
   const normalized = normalizeForDetection(text);
-  const numeric = normalized.match(/^(\d+(?:\.\d+)*)\s+\S+/);
+  // Indicativo numérico/misto ABNT: "1", "1.1", "1.1.A", "A.1", "1.A.2" —
+  // segmentos podem ser algarismos ou letras maiúsculas (numeração quinária).
+  // Letra inicial só conta com segmento posterior após ponto ("A.1"): evita
+  // tratar sentenças como "A Deus" ou "A pesquisa mostra" como título.
+  const prefixPattern = /^(?:(?:\d+(?:\.(?:\d+|[A-Z]))*)|(?:[A-Z]\.(?:\d+|[A-Z])(?:\.(?:\d+|[A-Z]))*))\s+\S+/;
+  const numeric = normalized.match(prefixPattern);
   if (numeric) {
-    return numeric[1].split(".").length;
+    return numeric[0].split(/\s+/)[0].split(".").length;
   }
 
-  const withoutNumber = normalized.replace(/^\d+(?:\.\d+)*\s*/, "");
+  const withoutNumber = normalized.replace(/^(?:\d+(?:\.(?:\d+|[A-Z]))*|[A-Z]\.(?:\d+|[A-Z])(?:\.(?:\d+|[A-Z]))*)\s*/, "");
   if (
     PRE_TEXTUAL_HEADINGS.has(withoutNumber) ||
     withoutNumber === "REFERENCIAS" ||

@@ -5,12 +5,12 @@
 
 ## Última Atualização
 - Data: 2026-08-15
-- Hora: 17:00 (OMML cru re-injetado + ficha com upload + w:tblHeader + validação de notas)
+- Hora: 17:10 (Commit c315292 + nota de rodapé na UI + lombada/ilustração fechadas + headings mistos)
 - Branch: `feat/ufla-render-validation`
 - Evidência: `npm run verify` 100% verde; tsc limpo; lint 0 erros/0 warnings
 
 ## Suíte de Testes
-- Passed: 1529
+- Passed: 1538
 - Failed: 0
 - Skipped: 10
 - Arquivos: 195
@@ -31,8 +31,11 @@
 5. [x] **Tipos de referência do §25.14** — normalizador ampliado (patente, jornal, periódico, audiovisual, sonoro, partitura, iconográfico, cartográfico, tridimensional, dados de pesquisa, correspondência); 50 testes
 
 ## Pendências Declaradas (não bloqueiam conformidade do DOCX)
-1. [ ] Lombada (§3.1, elemento externo de impressão) e ilustração multipágina "continua/conclusão" (§23.3)
-2. [ ] Criação de notas de rodapé por botão na UI (markup `[^N]`/`[^N]:` já funciona e é testado — conveniência, não conformidade)
+1. [x] **Lombada (§3.1)** — fechada: o Manual consolidado determina "Não gerar no MVP; manter como pendência futura para versão impressa". Elemento físico de impressão, fora do escopo do DOCX digital.
+2. [x] **Ilustração multipágina (§23.3)** — item 25.9 no checker: detecta imagem maior que a área útil e orienta as marcas (continua / continuação / conclusão); sem imagem excedente, item fica "não verificado".
+3. [x] **Criação de notas de rodapé na UI** — botão na faixa do editor insere `[^N]` no cursor e a definição `[^N]: ` ao fim, com numeração sequencial automática.
+4. [ ] **Preservação de alvos de referência cruzada** (bookmarks/PAGEREF no round-trip) — extração completa; religação dos alvos é melhoria futura.
+5. [ ] **Fidelidade do preview** (header simulado, page-break de ABSTRACT condicional, CSS data-font-size, auditoria axe) — não afeta o DOCX gerado.
 
 ## Resolução UFLA-AMBIGUOUS-1
 - **Decisão:** paginação contínua a partir da Introdução

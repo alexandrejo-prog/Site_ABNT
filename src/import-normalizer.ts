@@ -133,13 +133,23 @@ function textBlock(
   };
 }
 
+function stripHeadingTerminalPunctuation(value: string): string {
+  const trimmed = cleanText(value);
+  if (/\.{3}\s*$/.test(trimmed)) return trimmed; // preserva reticências
+  return trimmed
+    .replace(/[.]\s*$/, "")
+    .replace(/[…;:\-–—]\s*$/, "")
+    .trim();
+}
+
 function headingBlock(text: string, level: number, footnoteRefs?: string[], commentIds?: string[], moveIds?: string[], permissionIds?: string[]): ImportedBlock {
+  const clean = stripHeadingTerminalPunctuation(text);
   return {
     type: "heading",
     level,
-    text,
-    rawText: text,
-    runs: [{ text }],
+    text: clean,
+    rawText: clean,
+    runs: [{ text: clean }],
     ...(footnoteRefs?.length ? { footnoteRefs } : {}),
     ...(commentIds?.length ? { commentIds } : {}),
     ...(moveIds?.length ? { moveIds } : {}),

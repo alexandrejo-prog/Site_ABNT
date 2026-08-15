@@ -125,4 +125,22 @@ describe("importacao de DOCX convertido de PDF - resumo e abstract", () => {
     expect(resumoCount).toBe(1);
     expect(abstractCount).toBe(1);
   });
+
+  it("remove pontuacao final de titulo de secao importado (título não termina com ponto)", async () => {
+    const zip = new JSZip();
+    zip.file(
+      "word/document.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:p><w:pPr><w:pStyle w:val="ufla_titulo_sem_indicativo"/></w:pPr><w:r><w:t>ANEXO A.</w:t></w:r></w:p><w:p><w:r><w:t>Texto comum.</w:t></w:r></w:p></w:body></w:document>`,
+    );
+    zip.file("word/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`);
+    zip.file("word/_rels/document.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`);
+    const file = new File([await zip.generateAsync({ type: "arraybuffer" })], "titulo-ponto.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
+    const result = await importDocumentFile(file);
+
+    expect(result.editorText).toContain("# ANEXO A");
+    expect(result.editorText).not.toContain("ANEXO A.");
+  });
 });

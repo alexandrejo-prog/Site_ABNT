@@ -223,6 +223,10 @@ export function checkCompliance(
   add("25.6", "Exportacao", "Exportador gera anexos", analysis.summary.includesAnnexes, "medio", "anexos", "Incluir anexos", "code", "src/export-docx.ts:2004", 2004, "Adicionar secao de Anexos", !analysis.summary.includesAnnexes, noAnnexesReason);
   add("25.7", "Exportacao", "Exportador gera apendices", analysis.summary.includesAppendices, "medio", "apendices", "Incluir apendices", "code", "src/export-docx.ts:2000", 2000, "Adicionar secao de Apendices", !analysis.summary.includesAppendices, noAppendicesReason);
   add("25.8", "Exportacao", "Exportador insere numero de pagina com campo Word", analysis.pagination.usesWordField, "grave", "paginacao", "Usar PageNumber.CURRENT", "code", "src/export-docx.ts:2013", 2013, "Adicionar PageNumber.CURRENT ao header");
+  // Ilustração em mais de uma página (Manual UFLA §23.3): repetir título nas
+  // páginas seguintes com marcas (continua / continuação / conclusão).
+  const noOversizedImages = analysis.images.oversizedCount === 0;
+  add("25.9", "Exportacao", "Ilustracao maior que a pagina alerta para marcas continua/continuacao/conclusao", noOversizedImages, "baixo", "ilustracao", "Reduzir a imagem ou adicionar as marcas manualmente no Word", "manual", undefined, undefined, "Quando uma imagem excede a area util, repetir o titulo e usar as indicacoes (continua / continuacao / conclusao) nas paginas seguintes.", noOversizedImages, "Nenhuma ilustracao excede a area util da pagina.");
 
   return items;
 }

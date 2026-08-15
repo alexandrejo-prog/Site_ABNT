@@ -32,3 +32,27 @@ describe("extração estrutural DOCX", () => {
     expect(structure.paragraphs[0].containsPageBreak).toBe(false);
   });
 });
+
+describe("nível de heading com indicativo misto (numeração quinária)", () => {
+  const headingParagraph = (text: string) =>
+    `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`;
+
+  it.each([
+    ["1.1.A Fundamento teórico", 3],
+    ["A.1 Apresentação do anexo", 2],
+    ["1.A.2 Dimensão aplicada", 3],
+    ["1.1.1 Subseção numérica", 3],
+    ["A.1.1 Item do anexo", 3],
+  ])("detecta %s como nível %i", async (headingText, expectedLevel) => {
+    const docx = await makeDocx(headingParagraph(headingText));
+    const structure = await extractDocxStructure(docx);
+    const block = structure.blocks.find((b) => b.type === "heading") as { level?: number } | undefined;
+    expect(block?.level).toBe(expectedLevel);
+  });
+
+  it("não trata sentença comum iniciando com letra como heading", async () => {
+    const docx = await makeDocx(headingParagraph("A. Silva (2020) descreveu o método."));
+    const structure = await extractDocxStructure(docx);
+    expect(structure.blocks.some((b) => b.type === "heading")).toBe(false);
+  });
+});

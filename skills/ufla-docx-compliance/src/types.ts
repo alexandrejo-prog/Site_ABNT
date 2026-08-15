@@ -60,6 +60,8 @@ export interface DocxAnalysis {
   };
   images: {
     count: number;
+    /** Imagens cujo desenho excede a área útil da página (ilustração multipágina — §23.3). */
+    oversizedCount: number;
   };
   cover: {
     exists: boolean;

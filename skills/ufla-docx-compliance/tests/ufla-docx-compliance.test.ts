@@ -64,7 +64,7 @@ function makeMockAnalysis(overrides?: Partial<DocxAnalysis>): DocxAnalysis {
         { rows: 3, cols: 2, hasBorders: true },
       ],
     },
-    images: { count: 0 },
+    images: { count: 0, oversizedCount: 0 },
     cover: {
       exists: true,
       hasLogo: true,
@@ -465,6 +465,18 @@ describe("checklist-checker", () => {
       }),
     );
     expect(noNoteItems.find((i) => i.id === "24.1")?.status).toBe("unchecked");
+  });
+
+  it("should warn about oversized illustrations (25.9) and pass when none", () => {
+    const ok = checkCompliance(makeMockAnalysis());
+    expect(ok.find((i) => i.id === "25.9")?.status).toBe("unchecked");
+    expect(ok.find((i) => i.id === "25.9")?.suggestion).toContain("Nenhuma ilustracao excede");
+
+    const bad = checkCompliance(
+      makeMockAnalysis({ images: { count: 1, oversizedCount: 1 } }),
+    );
+    expect(bad.find((i) => i.id === "25.9")?.status).toBe("fail");
+    expect(bad.find((i) => i.id === "25.9")?.fixInstruction).toMatch(/continua\s*\/\s*continuacao/);
   });
 
   it("should fail TOC field chars when missing", () => {
