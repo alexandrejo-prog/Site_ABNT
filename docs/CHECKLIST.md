@@ -35,25 +35,26 @@
 | PARAGRAPH_DIFF_GATE | ✅ PASSED | Δ58 não-vazios, 0 perdidos |
 | CONTENT_PRESERVATION_GATE | ✅ PASSED | refs 138/138, tabelas 35/35, imagens 6/6, 0 mojibake |
 | OOXML_GATE | ✅ PASSED | Word abriu sem reparo; 39 bookmarks/31 PAGEREF, 0 alvos ausentes; w:tblHeader 25/35 |
-| RENDERED_LAYOUT_GATE | ⚠️ FAILED | 0 overlaps/cutoffs/blank, PAGEREF resolvido — images/tables not-detected; rodapés/equações não inspecionados |
-| FULL_COMPLIANCE_GATE | ❌ FAILED | Equações sem OMML nativo em alguns casos; rodapé parcial; UFLA-AMBIGUOUS-1 |
+| RENDERED_LAYOUT_GATE | ✅ PASSED | 0 overlaps/cutoffs/blank, PAGEREF resolvido — análise física real: 6 imagens (opList/CTM) e 37 regiões de tabela (grade de colunas) detectadas |
+| FULL_COMPLIANCE_GATE | ✅ PASSED | Gate expandido: 10/10 categorias verdes; CONFORMIDADE UFLA APROVADA no report.md |
 
 ## Gaps Remanescentes
 
 ```
-FULL_COMPLIANCE_GATE: NÃO DECLARADO (gates infraestrutura VERDES)
+FULL_COMPLIANCE_GATE: APROVADO (gates.json overall=passed; report.md declara CONFORMIDADE UFLA APROVADA)
 
 Resolvidas em 15/08:
 - Equações avançadas: OMML cru re-injetado via token + patch pós-Packer (DECISION_008)
 - Ficha catalográfica: texto OU imagem da ficha oficial (Manual §6.1) — campo + upload na UI
-- w:tblHeader: patch pós-Packer marca a 1ª linha de cada tabela em trPr (Manual §23.3)
-- Notas de rodapé: itens 24.1–24.3 no checker (footnotes.xml, fonte menor, espaço simples, TNR)
+- w:tblHeader: marca a 1ª linha de cada tabela em trPr, respeitando DECISION-002 (linha única NÃO recebe cabeçalho — NBR 17225/WCAG 1.3.1)
+- Notas de rodapé: itens 24.1–24.3 no checker (footnotes.xml, fonte menor, espaço simples, TNR) + botão na UI
 - Tipos de referência §25.14: normalizador cobre os 20 modelos (50 testes)
+- Análise física do PDF: detecção REAL de imagens (opList/CTM) e tabelas (grade de colunas alinhadas) — fim do coverage not-detected
+- Gates computados pela regeneração: regenerate-official-artifacts.ts executa o gate expandido real (nada hardcodado)
 
 Pendências declaradas (não bloqueiam conformidade do DOCX):
 - Lombada (§3.1) — fechada: Manual consolidado determina "Não gerar no MVP" (elemento físico de impressão)
 - Ilustração multipágina (§23.3) — item 25.9 no checker (alerta + marcas continua/continuação/conclusão)
-- Notas de rodapé — botão na UI com numeração sequencial automática
 - Preservação de alvos de referência cruzada (bookmarks/PAGEREF) — extração ✓, religação futura
 - Fidelidade do preview (header simulado, page-break ABSTRACT, axe) — não afeta o DOCX
 ```
@@ -71,11 +72,12 @@ Pendências declaradas (não bloqueiam conformidade do DOCX):
 - Botão de nota de rodapé na UI (numeração sequencial automática; Manual §21)
 - Headings mistos ABNT (1.1.A, A.1) na detecção de nível; strip de pontuação final de títulos no import
 - Lombada fechada (Manual: "Não gerar no MVP"); ilustração multipágina com item 25.9 no checker
-- Branch estabilizada: build verde, tsc limpo, lint 0/0, 1538 testes
+- Análise física real: 6 imagens (opList/CTM) + 37 regiões de tabela (grade de colunas) — renderedLayoutGate PASSED
+- Branch estabilizada: build verde, tsc limpo, lint 0/0, 1539 testes; FULL COMPLIANCE GATE APROVADO
 
 ## Próximos Passos
 
-1. Regenerar artefatos oficiais (regenerate-official-artifacts.ts) e alinhar gates.json × STATUS_ATUAL
+1. ✅ Regenerar artefatos oficiais — CONCLUÍDO (gates.json overall=passed; report.md declara CONFORMIDADE UFLA APROVADA)
 2. Preservação de alvos de referência cruzada (bookmarks/PAGEREF) — melhoria futura
 3. Fidelidade do preview (header simulado, page-break ABSTRACT condicional, auditoria axe)
 

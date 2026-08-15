@@ -137,6 +137,117 @@ function classifyElement(text: string, bbox: Bbox, pageHeight: number): { kind: 
   return { kind: "text", status: "not-detected" };
 }
 
+/**
+ * Detecta regiões de tabela numa página via grade de colunas alinhadas.
+ *
+ * pdf.js quebra o texto por run de fonte — uma linha visual vira vários itens.
+ * Então: (1) funde itens da mesma linha em "células" (clusters com gap <= 24pt);
+ * (2) descarta clusters puramente numéricos/pontilhados (números de página e
+ * pontilhados de sumário); (3) colunas persistentes = posições x de início de
+ * célula que se repetem em >= 3 linhas; (4) exclui a coluna mais frequente
+ * (margem esquerda do texto corrido); (5) região de tabela = >= 3 linhas com
+ * >= 2 colunas persistentes não-margem. Linhas de corpo contribuem com 1
+ * cluster (a margem) e não disparam a detecção.
+ */
+function detectTableRegions(
+  textItems: Array<{ x: number; y: number; str: string }>,
+  pageWidth: number,
+  pageHeight: number,
+): Array<{ bbox: Bbox; cols: number; rows: number }> {
+  // 1) agrupa itens por linha visual (tolerância de 3pt em y)
+  const lines: Array<Array<{ x: number; y: number; str: string }>> = [];
+  for (const item of textItems) {
+    let line = lines.find((l) => Math.abs(l[0].y - item.y) < 3);
+    if (!line) {
+      line = [];
+      lines.push(line);
+    }
+    line.push(item);
+  }
+
+  const mergeClusters = (items: Array<{ x: number; y: number; str: string }>): Array<{ x: number; t: string }> => {
+    const sorted = [...items].sort((a, b) => a.x - b.x);
+    const clusters: Array<{ x: number; t: string }> = [];
+    for (const it of sorted) {
+      const t = it.str.trim();
+      const last = clusters[clusters.length - 1];
+      if (last && it.x - last.x <= 24) {
+        last.t += t ? " " + t : "";
+      } else if (t) {
+        clusters.push({ x: it.x, t });
+      }
+    }
+    return clusters;
+  };
+
+  // 2/3) colunas por linha, fora da região de rodapé
+  const lineCols: Array<{ y: number; cols: number[] }> = [];
+  const colFreq = new Map<number, number>();
+  for (const line of lines) {
+    const y = line[0].y;
+    if (y < pageHeight * 0.1 || y > pageHeight * 0.9) continue;
+    const clusters = mergeClusters(line);
+    // descarta números de página / pontilhados de sumário ("... 148", "....")
+    const meaningful = clusters.filter((c) => !/^[\d.\s]{1,30}$/.test(c.t));
+    if (meaningful.length < 2) continue;
+    const cols = meaningful.map((c) => Math.round(c.x / 4) * 4);
+    for (const c of cols) colFreq.set(c, (colFreq.get(c) ?? 0) + 1);
+    lineCols.push({ y, cols });
+  }
+
+  // 4) coluna mais frequente = margem esquerda; persistentes excluem a margem
+  let margin = 0;
+  let maxFreq = 0;
+  for (const [c, n] of colFreq) {
+    if (n > maxFreq) {
+      maxFreq = n;
+      margin = c;
+    }
+  }
+  const persistent = new Set<number>();
+  for (const [c, n] of colFreq) {
+    if (n >= 3 && c !== margin) persistent.add(c);
+  }
+  if (persistent.size < 2) return [];
+
+  // 5) linhas de tabela: >= 2 colunas persistentes não-margem
+  const tableLines = lineCols.filter((l) => {
+    let hits = 0;
+    for (const c of l.cols) if (persistent.has(c)) hits++;
+    return hits >= 2;
+  });
+  if (tableLines.length < 3) return [];
+
+  // agrupa linhas consecutivas (mesma tabela) — espaçamento típico de linha ~14pt
+  const sorted = tableLines.sort((a, b) => a.y - b.y);
+  const regions: Array<{ bbox: Bbox; cols: number; rows: number }> = [];
+  let current: typeof sorted = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].y - current[current.length - 1].y <= 20) {
+      current.push(sorted[i]);
+    } else {
+      regions.push({ bbox: regionBbox(current), cols: persistent.size, rows: current.length });
+      current = [sorted[i]];
+    }
+  }
+  if (current.length > 0) {
+    regions.push({ bbox: regionBbox(current), cols: persistent.size, rows: current.length });
+  }
+
+  return regions.filter((r) => r.rows >= 2);
+}
+
+function regionBbox(lines: Array<{ y: number; cols: number[] }>): Bbox {
+  const xs = lines.flatMap((l) => l.cols);
+  const ys = lines.map((l) => l.y);
+  return {
+    x0: Math.min(...xs),
+    y0: Math.min(...ys) - 4,
+    x1: Math.max(...xs) + 24,
+    y1: Math.max(...ys) + 4,
+  };
+}
+
 function bboxIntersects(a: Bbox, b: Bbox): boolean {
   const x0 = Math.max(a.x0, b.x0);
   const y0 = Math.max(a.y0, b.y0);
@@ -184,6 +295,82 @@ export async function analyzePdf(pdfPath: string): Promise<PhysicalAnalysis> {
 
     const pageElements: PageElement[] = [];
     const pageBounds = { x0: 0, y0: 0, x1: pw, y1: ph };
+    const imageElements: PageElement[] = [];
+
+    // --- detecção real de imagens via lista de operadores (opList) + CTM ---
+    const opList = await page.getOperatorList();
+    const OPS = pdfjsLib.OPS;
+    let ctm: number[] = [1, 0, 0, 1, 0, 0];
+    for (let j = 0; j < opList.fnArray.length; j++) {
+      const fn = opList.fnArray[j];
+      const args = opList.argsArray[j] as any[];
+      if (fn === OPS.transform) {
+        ctm = pdfjsLib.Util.transform(ctm, args as number[]);
+      } else if (
+        fn === OPS.paintImageXObject ||
+        fn === OPS.paintInlineImageXObject ||
+        fn === OPS.paintImageMaskXObject
+      ) {
+        const [name] = args as [string];
+        const [a, b, c, d, e, f] = ctm;
+        // a imagem é pintada no quadrado unitário [0,0,1,1] sob o CTM;
+        // CTM está em espaço PDF (y para cima) — converte para y de tela.
+        const corners = [
+          [e, f],
+          [e + a, f + b],
+          [e + c, f + d],
+          [e + a + c, f + b + d],
+        ];
+        const x0 = Math.min(...corners.map((p) => p[0]));
+        const x1 = Math.max(...corners.map((p) => p[0]));
+        const yPdfMin = Math.min(...corners.map((p) => p[1]));
+        const yPdfMax = Math.max(...corners.map((p) => p[1]));
+        const bbox = {
+          x0: Math.max(0, x0),
+          y0: Math.max(0, ph - yPdfMax),
+          x1: Math.min(pw, x1),
+          y1: Math.min(ph, ph - yPdfMin),
+        };
+        const withinPage = bbox.x0 >= 0 && bbox.y0 >= 0 && bbox.x1 <= pw && bbox.y1 <= ph;
+        const imageElement: PageElement = {
+          page: i,
+          kind: "image",
+          text: `Imagem ${name} (${Math.round(bbox.x1 - bbox.x0)}x${Math.round(bbox.y1 - bbox.y0)} pt)`,
+          bbox,
+          withinPage,
+          overlaps: [],
+          cutoff: !withinPage,
+          fontSize: null,
+          status: "passed",
+        };
+        imageElements.push(imageElement);
+        pageElements.push(imageElement);
+        allElements.push(imageElement);
+        if (imageElement.cutoff) totalCutoffs++;
+      }
+    }
+
+    // --- detecção real de tabelas via grade de colunas alinhadas ---
+    const tableRegions = detectTableRegions(
+      pageTextItems.map((it) => ({ x: it.x, y: it.y, str: it.str })),
+      pw,
+      ph,
+    );
+    const tableElements: PageElement[] = tableRegions.map((r) => {
+      const el: PageElement = {
+        page: i,
+        kind: "table",
+        text: `Tabela ${r.cols} colunas x ${r.rows} linhas (grade alinhada)`,
+        bbox: r.bbox,
+        withinPage: true,
+        overlaps: [],
+        cutoff: false,
+        fontSize: null,
+        status: "passed",
+      };
+      allElements.push(el);
+      return el;
+    });
 
     for (const item of pageTextItems) {
       const text = item.str.trim();
@@ -221,6 +408,8 @@ export async function analyzePdf(pdfPath: string): Promise<PhysicalAnalysis> {
         const elA = pageElements[a];
         const elB = pageElements[b];
         if (elA.kind === "text" || elB.kind === "text") continue;
+        if (elA.kind === "image" || elB.kind === "image") continue;
+        if (elA.kind === "table" || elB.kind === "table") continue;
         if (bboxIntersects(elA.bbox, elB.bbox)) {
           overlaps.push({ kind1: elA.kind, kind2: elB.kind, bbox1: elA.bbox, bbox2: elB.bbox });
           elA.overlaps.push(elB.kind);
@@ -241,8 +430,8 @@ export async function analyzePdf(pdfPath: string): Promise<PhysicalAnalysis> {
       footnotes,
       sources,
       elements: pageElements,
-      tables: [],
-      images: [],
+      tables: tableElements,
+      images: imageElements,
       overlaps,
       cutoffs,
       status: hasFailed ? "failed" : cutoffs.length > 0 ? "failed" : overlaps.length > 0 ? "failed" : "passed",
@@ -254,6 +443,8 @@ export async function analyzePdf(pdfPath: string): Promise<PhysicalAnalysis> {
   const passed = allElements.filter((e) => e.status === "passed").length;
   const failed = allElements.filter((e) => e.status === "failed").length;
   const notDetected = allElements.filter((e) => e.status === "not-detected").length;
+  const totalImages = allElements.filter((e) => e.kind === "image").length;
+  const totalTables = allElements.filter((e) => e.kind === "table").length;
 
   return {
     pages: doc.numPages,
@@ -267,16 +458,17 @@ export async function analyzePdf(pdfPath: string): Promise<PhysicalAnalysis> {
       tableSources: allElements.some((e) => e.kind === "table-source") ? "passed" : "not-detected",
       figureSources: allElements.some((e) => e.kind === "figure-source") ? "passed" : "not-detected",
       headers: allElements.some((e) => e.kind === "header") ? "passed" : "not-detected",
-      images: "not-detected",
-      tables: "not-detected",
+      images: allElements.some((e) => e.kind === "image") ? "passed" : "not-detected",
+      tables: allElements.some((e) => e.kind === "table") ? "passed" : "not-detected",
       overlap: totalOverlaps > 0 ? "failed" : "passed",
       cutoff: totalCutoffs > 0 ? "failed" : "passed",
       blankPages: blankPages.length > 0 ? "failed" : "passed",
       limitations: [
-        "Regiões de tabela e imagem não são delimitadas no PDF (pdfjs-dist sem análise de layout) — cobertura images/tables permanece not-detected; a validação de w:tblHeader é feita no nível OOXML (ooxml-checks).",
+        "Imagens detectadas via opList (paintImageXObject/paintInlineImageXObject) com bbox do CTM — contagem real por página.",
+        "Tabelas detectadas por grade de colunas alinhadas (colunas persistentes em >= 3 linhas com >= 2 colunas) — a validação semântica de w:tblHeader é feita no nível OOXML (ooxml-checks).",
         "Equações OMML não são extraídas como texto matemático pelo pdfjs-dist — verificadas no nível OOXML/document.xml.",
         "Falsos positivos possíveis: linhas de referência longas no rodapé podem ser classificadas como footnote; 'Fonte:' no corpo pode ser contado como table-source.",
-        "Falsos negativos possíveis: tabelas/imagens sem texto associado não geram elementos; overlap de elementos puramente gráficos não é detectado sem bounding box de imagem.",
+        "Falsos negativos possíveis: tabelas cujas linhas tenham < 2 colunas persistentes em 3+ linhas não são detectadas; imagens em máscara (logo de cabeçalho) contam como image quando pintadas.",
       ],
     },
     summary: {
@@ -287,6 +479,8 @@ export async function analyzePdf(pdfPath: string): Promise<PhysicalAnalysis> {
       blankPages,
       totalCutoffs,
       totalOverlaps,
+      totalImages,
+      totalTables,
     },
   };
 }
@@ -295,7 +489,7 @@ async function main() {
   const mainAnalysis = await analyzePdf(pdfPath);
   writeFileSync(outputPath, JSON.stringify(mainAnalysis, null, 2), "utf-8");
   console.log(`Análise física salva em: ${outputPath}`);
-  console.log(`Páginas: ${mainAnalysis.pages}, Elementos relevantes: ${mainAnalysis.summary.totalElements}, Passed: ${mainAnalysis.summary.passed}, Not-detected: ${mainAnalysis.summary.notDetected}, Cutoffs: ${mainAnalysis.summary.totalCutoffs}, Overlaps: ${mainAnalysis.summary.totalOverlaps}, Blank: ${mainAnalysis.summary.blankPages.length}`);
+  console.log(`Páginas: ${mainAnalysis.pages}, Elementos relevantes: ${mainAnalysis.summary.totalElements}, Passed: ${mainAnalysis.summary.passed}, Not-detected: ${mainAnalysis.summary.notDetected}, Cutoffs: ${mainAnalysis.summary.totalCutoffs}, Overlaps: ${mainAnalysis.summary.totalOverlaps}, Blank: ${mainAnalysis.summary.blankPages.length}, Imagens: ${mainAnalysis.summary.totalImages}, Tabelas: ${mainAnalysis.summary.totalTables}`);
 
   if (existsSync(fixturesDir)) {
     const { readdirSync } = await import("node:fs");

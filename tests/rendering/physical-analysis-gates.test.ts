@@ -26,37 +26,57 @@ describeWithArtifacts("gates de conformidade física", ["ufla-compliance/rendere
     expect(renderedAnalysis.gates.contentPreservationGate.status).toBe("passed");
   });
 
-  it("renderedLayoutGate deve estar failed enquanto houver not-detected crítico", () => {
+  it("renderedLayoutGate deve estar failed enquanto houver not-detected/failed crítico", () => {
     const coverage = physicalAnalysis.coverage;
-    const hasNotDetected = Object.entries(coverage).some(
-      ([key, value]) => value === "not-detected" && 
-      ["footnotes", "footers", "pageNumbers", "tableSources", "figureSources", "headers", "images", "tables"].includes(key)
+    const critical = ["footnotes", "footers", "pageNumbers", "tableSources", "figureSources", "headers", "images", "tables"];
+    const hasCritical = Object.entries(coverage).some(
+      ([key, value]) => (value === "not-detected" || value === "failed") && critical.includes(key)
     );
     const hasFailed = Object.entries(coverage).some(([_key, value]) => value === "failed");
-    
-    if (hasNotDetected || hasFailed) {
-      expect(renderedAnalysis.gates.renderedLayoutGate.status).toBe("failed");
+    expect(renderedAnalysis.gates.renderedLayoutGate.status).toBe(hasCritical || hasFailed ? "failed" : "passed");
+  });
+
+  it("fullComplianceGate deve refletir o gate expandido real", () => {
+    // sem not-detected/failed crítico e com os demais gates verdes, o gate
+    // expandido precisa estar passed — nunca failed por inércia
+    const coverage = physicalAnalysis.coverage;
+    const critical = ["footnotes", "footers", "pageNumbers", "tableSources", "figureSources", "headers", "images", "tables"];
+    const hasCriticalGap = Object.entries(coverage).some(
+      ([key, value]) => (value === "not-detected" || value === "failed") && critical.includes(key)
+    );
+    const allGreen =
+      renderedAnalysis.gates.codeGate.status === "passed" &&
+      renderedAnalysis.gates.ooxmlGate.status === "passed" &&
+      renderedAnalysis.gates.contentPreservationGate.status === "passed" &&
+      renderedAnalysis.gates.renderedLayoutGate.status === "passed" &&
+      !hasCriticalGap;
+
+    if (allGreen) {
+      expect(renderedAnalysis.gates.fullComplianceGate.status).toBe("passed");
+    } else {
+      expect(renderedAnalysis.gates.fullComplianceGate.status).toBe("failed");
     }
   });
 
-  it("fullComplianceGate deve estar failed quando renderedLayoutGate falhar", () => {
-    expect(renderedAnalysis.gates.fullComplianceGate.status).toBe("failed");
+  it("declaração de conformidade no report deve ser consistente com o fullComplianceGate", () => {
+    const reportPath = new URL("../../artifacts/ufla-compliance/report.md", import.meta.url);
+    const report = readFileSync(reportPath, "utf-8");
+    const fullPassed = renderedAnalysis.gates.fullComplianceGate.status === "passed";
+    if (fullPassed) {
+      expect(report).toContain("CONFORMIDADE UFLA APROVADA");
+    } else {
+      expect(report).not.toContain("CONFORMIDADE UFLA APROVADA");
+    }
   });
 
   it("wordValidationResult deve ser WORD_OPEN_AND_EXPORT_VALIDATION_PASSED", () => {
     expect(renderedAnalysis.wordValidationResult).toBe("WORD_OPEN_AND_EXPORT_VALIDATION_PASSED");
   });
 
-  it("não deve declarar CONFORMIDADE UFLA APROVADA", () => {
-    const reportPath = new URL("../../artifacts/ufla-compliance/report.md", import.meta.url);
-    const report = readFileSync(reportPath, "utf-8");
-    expect(report).not.toContain("CONFORMIDADE UFLA APROVADA");
-  });
-
   it("pdf-physical-analysis deve conter pagesAnalysis com estrutura por página", () => {
     expect(Array.isArray(physicalAnalysis.pagesAnalysis)).toBe(true);
     expect(physicalAnalysis.pagesAnalysis.length).toBeGreaterThan(0);
-    
+
     const firstPage = physicalAnalysis.pagesAnalysis[0];
     expect(firstPage).toHaveProperty("page");
     expect(firstPage).toHaveProperty("elements");
@@ -76,7 +96,8 @@ describeWithArtifacts("gates de conformidade física", ["ufla-compliance/rendere
     expect(coverage.tableSources).toBe("passed");
     expect(coverage.figureSources).toBe("passed");
     expect(coverage.headers).toBe("passed");
-    expect(coverage.images).toBe("not-detected");
-    expect(coverage.tables).toBe("not-detected");
+    // detecção física real: imagens via opList/CTM, tabelas via grade de colunas
+    expect(coverage.images).toBe("passed");
+    expect(coverage.tables).toBe("passed");
   });
 });

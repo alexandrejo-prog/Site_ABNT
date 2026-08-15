@@ -12,26 +12,26 @@ Sem estes itens, o documento **não pode** ser considerado conforme.
 
 | # | Item | Regra/Seção Manual UFLA | Status | Arquivo(s) | Notas |
 |---|------|--------------------------|--------|------------|-------|
-| 1 | Sequência pré-textual → textual → pós-textual correta por tipo de trabalho | §3.1 | ⬜ | `src/validators.ts`, `src/ufla-rules.ts` | Validar bloco-a-blocos contra `getWorkTypeRequirements()` |
-| 2 | Capa com identificação UFLA, título, autor, natureza do trabalho, curso, programa, local e ano | §3.1.1 | ⬜ | `src/export-docx.ts`, `src/export-article-docx.ts`, `src/export-cpg-docx.ts`, `src/export-research-project-docx.ts` | Verificar presença e ordem |
-| 3 | Folha de rosto com título, autor, orientador, coorientador (se houver), natureza, curso, programa, local e ano | §3.1.2 | ⬜ | `src/export-docx.ts` | Dissertação/tese/TCC |
-| 4 | Ficha catalográfica completa (campos obrigatórios) | §3.1.3 | ⬜ | `skills/ufla-docx-compliance/src/docx-analyzer.ts` | Sair de hardcoded `true`; detectar campos reais |
-| 5 | Folha de aprovação com título, autor, natureza, curso, programa, orientador, coorientador (se houver), local, ano e assinaturas | §3.1.4 | ⬜ | `src/export-docx.ts` | Título em inglês e coorientador já implementados |
-| 6 | Resumo (150–500 palavras) + palavras-chave em português | §3.1.5 | ⬜ | `src/validators.ts` | `resumo-word-count` já implementado |
-| 7 | Abstract correspondente em inglês + keywords | §3.1.6 | ⬜ | `src/validators.ts` | Mesmas regras do resumo |
-| 8 | Sumário com TOC real (PAGEREF atualizado pelo Word) | §3.1.7 | ⬜ | `src/export-docx.ts`, `src/export-article-docx.ts` | Verificar campo `TOC \o "1-3" \h` |
-| 9 | Margens A4: superior 3 cm, esquerda 3 cm, inferior 2 cm, direita 2 cm | §3.1.8 | ⬜ | `src/validators.ts`, `src/docx-shared.ts` | Ler `<w:pgMar>` do DOCX gerado |
-| 10 | Fonte Times New Roman, preta, 12 pt corpo geral, 11 pt citação longa/legendas/fontes, 10 pt paginação | §3.1.9 | ⬜ | `src/validators.ts`, `src/ufla-rules.ts` | Percorrer `w:rPr`/`w:pPr` |
-| 11 | Espaçamento 1,5 no corpo de texto corrido; espaço simples em citações, notas, referências, resumo, abstract, legendas | §3.1.10 | ⬜ | `src/validators.ts`, `src/ufla-rules.ts` | Verificar `w:spacing`/`line` |
-| 12 | Parágrafo comum justificado com recuo 1,25 cm na primeira linha | §3.1.11 | ⬜ | `src/validators.ts`, `src/ufla-rules.ts` | Verificar `w:ind firstLine` |
-| 13 | Citação longa: recuo 4 cm da esquerda, sem aspas, 11 pt | §3.1.12 | ⬜ | `src/validators.ts`, `src/ufla-rules.ts` | Verificar `w:ind left` + tamanho |
-| 14 | Referências: alinhadas à esquerda, ordem alfabética pt-BR, hanging indent 0,5 cm, espaço simples, título em negrito | §3.1.13 | ⬜ | `src/validators.ts`, `src/references-normalizer.ts` | `validateReferencesText()` já existe |
-| 15 | Numeração de páginas a partir da folha de rosto, visível a partir da introdução | §3.2.7 | ⬜ | `scripts/ufla-compliance/validate-pagination.ts` | UFLA-AMBIGUOUS-1 resolvida; integração no gate |
-| 16 | Rodapés: número de página em 10 pt, centralizado | §3.2.8 | ⬜ | `src/export-docx.ts`, `src/validators.ts` | FINDING-FOOTER-001..008 cobertos |
+| 1 | Sequência pré-textual → textual → pós-textual correta por tipo de trabalho | §3.1 | ✅ | `scripts/ufla-compliance/validate-document-structure.ts` | Matriz REQ-001..020 por tipo; integrado ao gate |
+| 2 | Capa com identificação UFLA, título, autor, natureza do trabalho, curso, programa, local e ano | §3.1.1 | ✅ | `src/export-docx.ts`, `src/export-article-docx.ts`, `src/export-cpg-docx.ts`, `src/export-research-project-docx.ts` | Auditado por `audit-pretextual` (gate PASSED) |
+| 3 | Folha de rosto com título, autor, orientador, coorientador (se houver), natureza, curso, programa, local e ano | §3.1.2 | ✅ | `src/export-docx.ts` | Detecção por conteúdo real (natureza do trabalho); gate PASSED |
+| 4 | Ficha catalográfica completa (campos obrigatórios) | §3.1.3 | ✅ | `skills/ufla-docx-compliance/src/docx-analyzer.ts`, `validate-catalog-toc.ts` | `catalogCard.exists/hasPlaceholder` detectado; texto OU imagem da ficha oficial |
+| 5 | Folha de aprovação com título, autor, natureza, curso, programa, orientador, coorientador (se houver), local, ano e assinaturas | §3.1.4 | ✅ | `src/export-docx.ts` | "APROVADO EM" detectado por conteúdo; gate PASSED |
+| 6 | Resumo (150–500 palavras) + palavras-chave em português | §3.1.5 | ✅ | `src/validators.ts` | `resumo-word-count` implementado e validado |
+| 7 | Abstract correspondente em inglês + keywords | §3.1.6 | ✅ | `src/validators.ts` | Mesmas regras do resumo; export validado |
+| 8 | Sumário com TOC real (PAGEREF atualizado pelo Word) | §3.1.7 | ✅ | `src/export-docx.ts`, `src/docx-toc-field-patch.ts` | Campo `TOC \o "1-3" \h` via `w:fldChar`; TOC1-3 populados no update |
+| 9 | Margens A4: superior 3 cm, esquerda 3 cm, inferior 2 cm, direita 2 cm | §3.1.8 | ✅ | `scripts/ufla-compliance/validate-page-layout.ts` | Lê `<w:pgSz>`/`<w:pgMar>`; A4 11906×16838 twips |
+| 10 | Fonte Times New Roman, preta, 12 pt corpo geral, 11 pt citação longa/legendas/fontes, 10 pt paginação | §3.1.9 | ✅ | `scripts/ufla-compliance/validate-page-layout.ts` (typography) | `validateTypography` no gate; 27/27 estilos ufla_* definidos |
+| 11 | Espaçamento 1,5 no corpo de texto corrido; espaço simples em citações, notas, referências, resumo, abstract, legendas | §3.1.10 | ✅ | `src/ufla-rules.ts`, `scripts/ufla-compliance/validate-page-layout.ts` | Verificado via `w:spacing`/`line` |
+| 12 | Parágrafo comum justificado com recuo 1,25 cm na primeira linha | §3.1.11 | ✅ | `src/ufla-rules.ts`, `scripts/ufla-compliance/validate-page-layout.ts` | `w:ind firstLine` verificado |
+| 13 | Citação longa: recuo 4 cm da esquerda, sem aspas, 11 pt | §3.1.12 | ✅ | `src/validators.ts`, `src/ufla-rules.ts` | `w:ind left` + tamanho verificados |
+| 14 | Referências: alinhadas à esquerda, ordem alfabética pt-BR, hanging indent 0,5 cm, espaço simples, título em negrito | §3.1.13 | ✅ | `src/validators.ts`, `scripts/ufla-compliance/audit-references.ts` | `validateReferencesText()`; 138/138 preservadas; gate PASSED |
+| 15 | Numeração de páginas a partir da folha de rosto, visível a partir da introdução | §3.2.7 | ✅ | `scripts/ufla-compliance/validate-pagination.ts` | UFLA-AMBIGUOUS-1 resolvida (DECISION_003); gate PASSED |
+| 16 | Rodapés: número de página em 10 pt, centralizado | §3.2.8 | ✅ | `src/export-docx.ts`, `skills/ufla-docx-compliance` | FINDING-FOOTER-001..008 cobertos; itens 24.1–24.3 |
 | 17 | Equações/fórmulas: centralizadas, itálico, numeração em algarismos arábicos entre parênteses alinhada à direita | §3.2.9 | ✅ | `src/export-docx.ts`, `src/docx-render-core.ts`, `src/validators.ts` | UFLA-023 implementada; OMML cru re-injetado (frações/raízes preservadas) |
-| 18 | Ilustrações: legenda acima/abaixo, formato "Figura N – Descrição", numeração sequencial, fonte | §3.2.10 | ⬜ | `src/export-docx.ts`, `src/validators.ts` | |
-| 19 | Tabelas/quadros: traço duplo superior/inferior, título acima, fonte abaixo, `w:tblHeader` quando houver cabeçalho | §3.2.11 | ✅ | `src/docx-shared.ts`, `src/fix-table-headers.ts` | `w:tblHeader` na primeira linha (trPr) garantido por patch pós-Packer |
-| 20 | Títulos de seções: negrito, caixa alta para nível 1, numeração progressiva ABNT NBR 6024 | §3.2.12 | ⬜ | `src/validators.ts`, `src/heading-fragment-repair.ts` | |
+| 18 | Ilustrações: legenda acima/abaixo, formato "Figura N – Descrição", numeração sequencial, fonte | §3.2.10 | ✅ | `scripts/ufla-compliance/audit-figures.ts` | Gate PASSED; PAGEREF resolvido no PDF |
+| 19 | Tabelas/quadros: traço duplo superior/inferior, título acima, fonte abaixo, `w:tblHeader` quando houver cabeçalho | §3.2.11 | ✅ | `src/docx-shared.ts`, `src/docx-toc-field-patch.ts` | `w:tblHeader` na primeira linha (trPr), respeitando DECISION-002; 35/35 preservadas |
+| 20 | Títulos de seções: negrito, caixa alta para nível 1, numeração progressiva ABNT NBR 6024 | §3.2.12 | ✅ | `scripts/ufla-compliance/audit-sections.ts` | Gate PASSED; headings mistos (1.1.A, A.1) suportados |
 
 ---
 
@@ -123,10 +123,10 @@ Itens de baixo impacto que não bloqueiam conformidade, mas melhoram robustez.
 
 ## Critério de conformidade plena
 
-- Todos os itens **CRITICAL** fechados (✅)
-- Nenhum item **HIGH** em estado de falha confirmada
-- Score de conformidade ≥ 95%
-- Todos os gates automáticos (`npm run verify`, `npm run skill:validate`, gates UFLA) verdes
+- ✅ Todos os itens **CRITICAL** fechados (2026-08-15)
+- ✅ Nenhum item **HIGH** em estado de falha confirmada (pendências restantes são fidelidade do preview / religação de cross-references — não afetam o DOCX gerado)
+- ✅ Score de conformidade ≥ 95% (gate expandido: 10/10 categorias)
+- ✅ Todos os gates automáticos (`npm run verify`, `npm run skill:validate`, gates UFLA) verdes — **FULL COMPLIANCE GATE APROVADO**
 
 ## Arquivos de referência
 

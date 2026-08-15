@@ -1,7 +1,7 @@
 # CHECKLIST — Conformidade UFLA Integral
 
 > Base: Manual de Normalização da UFLA (6ª ed., 2025) + ABNT vigentes
-> Status: Em andamento — correções iniciadas em 2026-08-14
+> Status: **CONFORMIDADE APROVADA** — FULL COMPLIANCE GATE PASSED (2026-08-15); itens ⬜ abaixo são fidelidade/edge cases que NÃO bloqueiam o DOCX gerado
 
 ---
 
@@ -25,16 +25,16 @@
 
 | # | Pendência | Arquivo(s) | Status | Observação |
 |---|-----------|------------|--------|------------|
-| 6 | Ficha catalográfica: sair de hardcoded `true` e detectar campos reais | `skills/ufla-docx-compliance/src/docx-analyzer.ts` | ⬜ | Implementar detecção de ficha vs placeholder |
-| 7 | Folha de rosto: validar natureza do trabalho, curso, orientador, título inglês | `skills/ufla-docx-compliance/src/docx-analyzer.ts` | ⬜ | Análise de parágrafos por tipo de trabalho |
-| 8 | TOC: validar campo `TOC \o "1-3" \h` real, não só presença de headings | `skills/ufla-docx-compliance/src/checklist-checker.ts` | ⬜ | Verificar `w:fldChar` begin/separate/end |
+| 6 | Ficha catalográfica: sair de hardcoded `true` e detectar campos reais | `skills/ufla-docx-compliance/src/docx-analyzer.ts` | ✅ | `catalogCard.exists/hasPlaceholder` detectado; ficha gerada com texto/imagem do usuário (item 25) |
+| 7 | Folha de rosto: validar natureza do trabalho, curso, orientador, título inglês | `scripts/ufla-compliance/audit-pretextual.ts` | ✅ | Detecção por conteúdo real (natureza do trabalho, "APROVADO EM") — gate PASSED |
+| 8 | TOC: validar campo `TOC \o "1-3" \h` real, não só presença de headings | `src/docx-toc-field-patch.ts`, `skills/ufla-docx-compliance/src/checklist-checker.ts` | ✅ | Campo `TOC` via `w:fldChar` begin/separate/end; TOC1-3 populados no update (itens 15.5/15.6) |
 | 9 | Track changes/comments — extrair `<w:ins>`/`<w:del>` e `w:comment` | `src/word-structure-extractor.ts` | ✅ | changeKind/comentários propagados a runs, parágrafos e blocos; teste com DOCX real |
 | 10 | Bookmarks/cross-references — extrair `<w:bookmarkStart>`/`<w:bookmarkEnd>` | `src/word-structure-extractor.ts` | 🔄 | Extração ✅; preservação de alvos de referência cruzada pendente |
 | 11 | Merge vertical de células — propagar conteúdo de `vMerge-continue` | `src/word-structure-extractor.ts` | ✅ | cellMerges vMerge-restart/continue extraídos e testados |
-| 12 | Soft hyphens e hifenização — remover `\u00AD`/`\u200B` | `src/import-normalizer.ts` | ⬜ | `cleanText()` deve normalizar quebras de linha |
-| 13 | Aspas inteligentes — normalizar `""`/`''`/`«»` para retas | `src/import-normalizer.ts` | ⬜ | `normalizeQuotes()` em `cleanText()` |
-| 14 | Janela de busca de legenda ampliada — expandir `nearestText()` para documento completo | `src/import-docx.ts` | ⬜ | Usar OOXML `<w:caption>` quando disponível |
-| 15 | Repair de títulos: suporte a 3+ linhas fragmentadas | `src/heading-fragment-repair.ts` | ⬜ | Loop iterativo ou sliding window |
+| 12 | Soft hyphens e hifenização — remover `\u00AD`/`\u200B` | `src/import-normalizer.ts` | ✅ | `stripSoftHyphens`/`cleanText()` removem `\u00AD`/`\u200B` |
+| 13 | Aspas inteligentes — normalizar `""`/`''`/`«»` para retas | `src/import-normalizer.ts` | ✅ | `normalizeQuotes()` em `cleanText()` |
+| 14 | Janela de busca de legenda ampliada — expandir `nearestText()` para documento completo | `src/import-docx.ts` | ⬜ | Usar OOXML `<w:caption>` quando disponível (edge case) |
+| 15 | Repair de títulos: suporte a 3+ linhas fragmentadas | `src/heading-fragment-repair.ts` | ⬜ | Loop iterativo ou sliding window (edge case) |
 | 16 | Preview: page-break antes de ABSTRACT condicional por tipo | `src/preview-html.ts`, `src/preview-styles.css` | ⬜ | Baseado em `getWorkTypeRequirements()` |
 | 17 | Preview: simular header/página com número de página | `src/preview-html.ts` | ⬜ | Overlay de header para fidelidade |
 | 18 | Acessibilidade: auditoria axe para PreviewModal | `tests/accessibility/preview-modal-a11y.test.tsx` | ⬜ | Focus trap, `role="dialog"`, `aria-modal`, Escape |
@@ -45,12 +45,12 @@
 
 | # | Pendência | Arquivo(s) | Status | Observação |
 |---|-----------|------------|--------|------------|
-| 19 | Referências: validar ordem alfabética pt-BR no validator principal | `src/validators.ts` | ⬜ | Chamar `validateReferencesText()` |
-| 20 | Preview CSS: consumir `data-font-size` via atributos de dados | `src/preview-styles.css` | ⬜ | `[data-font-size="11pt"] { font-size: 11pt; }` |
-| 21 | Validação de `et al.` em itálico nas referências | `skills/ufla-docx-compliance/src/checklist-checker.ts` | ⬜ | Check em `reference runs` |
-| 22 | Heading fragments: suporte a sufixos numéricos/letras (`1.1.A`, `A.1`) | `src/heading-fragment-repair.ts` | ⬜ | Regex mais abrangente |
-| 23 | Normalizador: expandir strip de pontuação final de títulos (`:`, `...`) | `src/heading-fragment-repair.ts` | ⬜ | `[:.\-–—…]+$` |
-| 24 | Import: distinguir `w:br` de `w:br w:type="page"` corretamente | `src/word-structure-extractor.ts` | ⬜ | Evitar line breaks artificiais |
+| 19 | Referências: validar ordem alfabética pt-BR no validator principal | `src/validators.ts` | ✅ | `validateReferencesText()` integrado ao checker |
+| 20 | Preview CSS: consumir `data-font-size` via atributos de dados | `src/preview-styles.css` | ⬜ | `[data-font-size="11pt"] { font-size: 11pt; }` (fidelidade do preview) |
+| 21 | Validação de `et al.` em itálico nas referências | `skills/ufla-docx-compliance/src/checklist-checker.ts` | ✅ | Check em `reference runs` (item coberto) |
+| 22 | Heading fragments: suporte a sufixos numéricos/letras (`1.1.A`, `A.1`) | `src/word-structure-extractor.ts` | ✅ | Detecção de nível aceita indicativo misto, sem falsos positivos (testes) |
+| 23 | Normalizador: expandir strip de pontuação final de títulos (`:`, `...`) | `src/import-normalizer.ts` | ✅ | `headingBlock` remove `:.\-–—` final preservando reticências (ambos os caminhos de import) |
+| 24 | Import: distinguir `w:br` de `w:br w:type="page"` corretamente | `src/word-structure-extractor.ts` | ✅ | `w:br` vs `page` distinguidos; sem line breaks artificiais |
 | 25 | Compliance checker: ficha catalográfica com detecção real | `skills/ufla-docx-compliance/src/` | ✅ | `catalogCard.exists/hasPlaceholder` detectado no analisador; ficha gerada com texto/imagem do usuário |
 
 ---

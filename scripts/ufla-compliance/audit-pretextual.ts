@@ -78,11 +78,18 @@ export async function auditPretextual(docxPath: string): Promise<PretextualAudit
       : [],
   });
 
+  // A folha de rosto não é rotulada com o próprio nome no documento: é
+  // identificada pelo estilo ufla_folha_rosto_* / ufla_natureza ou pelo texto
+  // da natureza do trabalho ("apresentada à Universidade...").
   const titlePage = sectionResult({
-    passed: containsText(paragraphs, /folha de rosto|folha de rosto/i),
-    itemsFound: containsText(paragraphs, /folha de rosto/i) ? ["folha de rosto"] : [],
-    itemsMissing: !containsText(paragraphs, /folha de rosto/i) ? ["folha de rosto"] : [],
-    gaps: !containsText(paragraphs, /folha de rosto/i)
+    passed: containsText(paragraphs, /folha de rosto|ufla_folha_rosto|ufla_natureza|apresentad[oa]\s+(à|ao|aos|ao)\s+(Universidade|Programa)|Monografia apresentada/i),
+    itemsFound: containsText(paragraphs, /folha de rosto|ufla_folha_rosto|ufla_natureza|apresentad[oa]\s+(à|ao|aos|ao)\s+(Universidade|Programa)|Monografia apresentada/i)
+      ? ["folha de rosto"]
+      : [],
+    itemsMissing: !containsText(paragraphs, /folha de rosto|ufla_folha_rosto|ufla_natureza|apresentad[oa]\s+(à|ao|aos|ao)\s+(Universidade|Programa)|Monografia apresentada/i)
+      ? ["folha de rosto"]
+      : [],
+    gaps: !containsText(paragraphs, /folha de rosto|ufla_folha_rosto|ufla_natureza|apresentad[oa]\s+(à|ao|aos|ao)\s+(Universidade|Programa)|Monografia apresentada/i)
       ? [
           gap({
             section: "folha de rosto",
@@ -116,15 +123,17 @@ export async function auditPretextual(docxPath: string): Promise<PretextualAudit
       : [],
   });
 
+  // A folha de aprovação também não é rotulada pelo próprio nome: o gerador
+  // emite "APROVADO EM" + linha de assinatura "Prof.(a) Dr.(a)".
   const approvalPage = sectionResult({
-    passed: containsText(paragraphs, /folha de aprovação|folha de aprovacao/i),
-    itemsFound: containsText(paragraphs, /folha de aprovação|folha de aprovacao/i)
+    passed: containsText(paragraphs, /folha de aprovação|folha de aprovacao|APROVAD[OA]\s+EM|Aprovad[oa]\s+em|Prof\.\(a\)\s+Dr\.\(a\)|Instituição:\s+_+/i),
+    itemsFound: containsText(paragraphs, /folha de aprovação|folha de aprovacao|APROVAD[OA]\s+EM|Aprovad[oa]\s+em|Prof\.\(a\)\s+Dr\.\(a\)|Instituição:\s+_+/i)
       ? ["folha de aprovação"]
       : [],
-    itemsMissing: !containsText(paragraphs, /folha de aprovação|folha de aprovacao/i)
+    itemsMissing: !containsText(paragraphs, /folha de aprovação|folha de aprovacao|APROVAD[OA]\s+EM|Aprovad[oa]\s+em|Prof\.\(a\)\s+Dr\.\(a\)|Instituição:\s+_+/i)
       ? ["folha de aprovação"]
       : [],
-    gaps: !containsText(paragraphs, /folha de aprovação|folha de aprovacao/i)
+    gaps: !containsText(paragraphs, /folha de aprovação|folha de aprovacao|APROVAD[OA]\s+EM|Aprovad[oa]\s+em|Prof\.\(a\)\s+Dr\.\(a\)|Instituição:\s+_+/i)
       ? [
           gap({
             section: "folha de aprovação",
