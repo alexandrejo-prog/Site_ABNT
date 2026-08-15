@@ -15,7 +15,7 @@
  * Saída: artifacts/ufla-compliance/preview-docx-diff.json + preview-diff/*.png.
  * Gate (por template): similaridade ≥ 0.65 E |Δpáginas| ≤ 3 (sem Word: skipped, passed).
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -23,7 +23,6 @@ import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createCanvas } from "@napi-rs/canvas";
 import pixelmatch from "pixelmatch";
 import { buildPreviewHtml } from "../../src/preview-html.js";
-import { generateDocxBlob } from "../../src/export-docx.js";
 import { generateArticleDocxBlob } from "../../src/export-article-docx.js";
 import { generateCpgDocxBlob } from "../../src/export-cpg-docx.js";
 import { generateResearchProjectDocxBlob } from "../../src/export-research-project-docx.js";
@@ -48,7 +47,7 @@ interface TemplateCase {
 
 const GRADUATE = (input: DocxGenerationInput) => generateGraduateEditableDraftDocxBlob(input);
 
-const TEMPLATES: TemplateCase[] = [
+export const TEMPLATES: TemplateCase[] = [
   {
     id: "monografia",
     input: {
@@ -124,7 +123,7 @@ async function rasterizePdfPage(pdfPath: string, pageNumber: number): Promise<{ 
   const vp = page.getViewport({ scale: 1 });
   const canvas = createCanvas(Math.ceil(vp.width), Math.ceil(vp.height));
   const ctx = canvas.getContext("2d");
-  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  await page.render({ canvasContext: ctx as unknown as CanvasRenderingContext2D, viewport: vp }).promise;
   return { png: await canvas.encode("png"), width: canvas.width, height: canvas.height };
 }
 
@@ -183,7 +182,7 @@ export async function runPreviewDocxCompare(): Promise<{ passed: boolean; failur
         const isContentPage = (t: string): boolean => t.split(/\s+/).filter(Boolean).length >= 15;
         const pdfContentTokens = pdfTexts.filter(isContentPage).map(tokens);
         const previewContent = previewPages.filter(isContentPage);
-        const perPage: unknown[] = [];
+        const perPage: Array<{ page: number; pdfPage: number | null; bestMatchOverlap: number; sequentialOverlap: number }> = [];
         for (let i = 0; i < previewContent.length; i++) {
           const prevToks = tokens(previewContent[i]);
           let best = 0;

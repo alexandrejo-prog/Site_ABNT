@@ -111,7 +111,7 @@ function titlePageChildren(fields: DocxGenerationInput["fields"]): Paragraph[] {
       alignment: AlignmentType.BOTH,
       indent: { left: cmToTwip(8) },
       spacing: { line: ONE_AND_HALF_LINE, after: 180 },
-      children: [run(cleanMojibakeText(fields.workNature || "Projeto de pesquisa apresentado à Universidade Federal de Lavras."))],
+      children: [run(cleanMojibakeText(fields.workNature || "Projeto de pesquisa apresentado à Universidade Federal de Lavras como parte dos requisitos acadêmicos aplicáveis."))],
     }),
     ...(advisor && !isResearchProjectProvisionalText(advisor) ? [paragraph(`Orientador: ${advisor}`)] : []),
     centered(cleanMojibakeText((fields.location || "LAVRAS - MG").toUpperCase()), false, BODY_SIZE, 1800, 120),

@@ -1,0 +1,155 @@
+/**
+ * Snapshot de paginação da pré-visualização (regressões entre releases).
+ *
+ * A parte do preview NÃO depende do Word: para cada template, reconstrói o
+ * HTML (buildPreviewHtml) e extrai a paginação real — número de páginas,
+ * numeração visível por página (aria-label="Página N") e assinatura de texto
+ * por página (sha256 do texto normalizado).
+ *
+ * O snapshot commitado (scripts/ufla-compliance/snapshots/preview-docx-snapshot.json)
+ * é gerado/atualizado localmente pelo regenerate-official-artifacts (que roda o
+ * compare-preview-docx com Word). No CI (sem Word), este checker valida a parte
+ * do preview contra o snapshot: qualquer mudança de paginação ou de conteúdo por
+ * página entre releases falha o gate.
+ *
+ * Uso: npx tsx scripts/ufla-compliance/check-preview-snapshot.ts
+ */
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join, dirname, basename } from "node:path";
+import { fileURLToPath } from "node:url";
+import { buildPreviewHtml } from "../../src/preview-html.js";
+import { TEMPLATES } from "./compare-preview-docx.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SNAPSHOT_PATH = join(__dirname, "snapshots", "preview-docx-snapshot.json");
+
+function normalizeText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(parseInt(n, 10)))
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 16);
+}
+
+interface PageInfo {
+  number: number | null;
+  signature: string;
+}
+
+export interface PreviewSnapshotTemplate {
+  previewPages: number;
+  pageNumbers: Array<number | null>;
+  signatures: string[];
+  pdfPages: number | null;
+  similarity: number | null;
+  pageDelta: number | null;
+}
+
+export type PreviewSnapshot = Record<string, PreviewSnapshotTemplate>;
+
+/** Reconstrói o preview de cada template e extrai a paginação real (sem Word). */
+export function buildPreviewSnapshot(): PreviewSnapshot {
+  const snapshot: PreviewSnapshot = {};
+  for (const tpl of TEMPLATES) {
+    const html = buildPreviewHtml(tpl.input);
+    const pageRe = /<section class="preview-page[^"]*"[^>]*>([\s\S]*?)<\/section>/g;
+    const pages: PageInfo[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = pageRe.exec(html)) !== null) {
+      const numMatch = m[1].match(/aria-label="Página (\d+)"/);
+      pages.push({
+        number: numMatch ? parseInt(numMatch[1], 10) : null,
+        signature: sha256(normalizeText(m[1])),
+      });
+    }
+    snapshot[tpl.id] = {
+      previewPages: pages.length,
+      pageNumbers: pages.map((p) => p.number),
+      signatures: pages.map((p) => p.signature),
+      pdfPages: null,
+      similarity: null,
+      pageDelta: null,
+    };
+  }
+  return snapshot;
+}
+
+export function snapshotPath(): string {
+  return SNAPSHOT_PATH;
+}
+
+export function writePreviewSnapshot(snapshot: PreviewSnapshot, extra: Record<string, unknown> = {}): void {
+  mkdirSync(dirname(SNAPSHOT_PATH), { recursive: true });
+  writeFileSync(
+    SNAPSHOT_PATH,
+    JSON.stringify({ schema: "ufla-audit/preview-snapshot/v1", generatedAt: new Date().toISOString(), ...extra, templates: snapshot }, null, 2) + "\n",
+    "utf8",
+  );
+}
+
+/** Compara dois snapshots e retorna as divergências (regressões). */
+export function compareSnapshots(committed: PreviewSnapshot, current: PreviewSnapshot): string[] {
+  const failures: string[] = [];
+  const allIds = [...new Set([...Object.keys(committed), ...Object.keys(current)])];
+  for (const id of allIds) {
+    if (!committed[id]) {
+      failures.push(`template novo sem snapshot: ${id} — rode o regenerate local para atualizar o snapshot.`);
+      continue;
+    }
+    if (!current[id]) {
+      failures.push(`template removido do snapshot: ${id}.`);
+      continue;
+    }
+    const exp = committed[id];
+    const got = current[id];
+    if (exp.previewPages !== got.previewPages) {
+      failures.push(`REGRESSÃO DE PAGINAÇÃO ${id}: preview ${exp.previewPages} páginas → ${got.previewPages} (snapshot exige ${exp.previewPages}).`);
+      continue;
+    }
+    for (let i = 0; i < exp.previewPages; i++) {
+      if (exp.pageNumbers[i] !== got.pageNumbers[i]) {
+        failures.push(`REGRESSÃO DE NUMERAÇÃO ${id} página ${i + 1}: ${exp.pageNumbers[i] ?? "sem número"} → ${got.pageNumbers[i] ?? "sem número"}.`);
+      }
+      if (exp.signatures[i] !== got.signatures[i]) {
+        failures.push(`REGRESSÃO DE CONTEÚDO ${id} página ${i + 1}: texto da página mudou (assinatura ${exp.signatures[i]} → ${got.signatures[i]}).`);
+      }
+    }
+  }
+  return failures;
+}
+
+/** Valida o preview atual contra o snapshot commitado. Sem Word: só o lado preview. */
+export async function runPreviewSnapshotCheck(): Promise<{ passed: boolean; failures: string[] }> {
+  if (!existsSync(SNAPSHOT_PATH)) {
+    return { passed: false, failures: ["Snapshot de preview não encontrado (scripts/ufla-compliance/snapshots/preview-docx-snapshot.json) — rode o regenerate localmente para criá-lo."] };
+  }
+  const committed = JSON.parse(readFileSync(SNAPSHOT_PATH, "utf8")).templates as PreviewSnapshot;
+  const current = buildPreviewSnapshot();
+  const failures = compareSnapshots(committed, current);
+  return { passed: failures.length === 0, failures };
+}
+
+async function main(): Promise<void> {
+  const { passed, failures } = await runPreviewSnapshotCheck();
+  if (failures.length > 0) console.log("Snapshot de preview: FALHOU\n  - " + failures.join("\n  - "));
+  else console.log("Snapshot de preview: PASSED (paginação e conteúdo por página estáveis).");
+  process.exit(passed ? 0 : 1);
+}
+
+if (basename(process.argv[1] ?? "") === "check-preview-snapshot.ts") {
+  void main();
+}

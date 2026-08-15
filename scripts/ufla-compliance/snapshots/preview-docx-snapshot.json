@@ -1,0 +1,146 @@
+{
+  "schema": "ufla-audit/preview-snapshot/v1",
+  "generatedAt": "2026-08-15T23:32:48.342Z",
+  "templates": {
+    "monografia": {
+      "previewPages": 9,
+      "pageNumbers": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        8,
+        9
+      ],
+      "signatures": [
+        "7aa674e1430460a9",
+        "c51258c4f033b0ef",
+        "f54de725d2f0a174",
+        "a6138010c7496fd0",
+        "2ab9f50b6b481b8f",
+        "8358f5ac0c184de8",
+        "b0c439e77113481c",
+        "7c3c29b0560907b0",
+        "e4bf37a6a504162f"
+      ],
+      "pdfPages": 10,
+      "similarity": 0.963,
+      "pageDelta": 1
+    },
+    "dissertacao": {
+      "previewPages": 10,
+      "pageNumbers": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        9,
+        10
+      ],
+      "signatures": [
+        "7aa674e1430460a9",
+        "f4a817a6072cd616",
+        "8dbb50621b4c2fd3",
+        "a6138010c7496fd0",
+        "2ab9f50b6b481b8f",
+        "8358f5ac0c184de8",
+        "32ad7e18326045f7",
+        "d4940edcc46940b7",
+        "dd24dd602aad5b81",
+        "87a63636efc3feec"
+      ],
+      "pdfPages": 11,
+      "similarity": 0.968,
+      "pageDelta": 1
+    },
+    "tese": {
+      "previewPages": 10,
+      "pageNumbers": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        9,
+        10
+      ],
+      "signatures": [
+        "7aa674e1430460a9",
+        "72e3c6956ff77dbb",
+        "8dbb50621b4c2fd3",
+        "a6138010c7496fd0",
+        "2ab9f50b6b481b8f",
+        "8358f5ac0c184de8",
+        "32ad7e18326045f7",
+        "d4940edcc46940b7",
+        "dd24dd602aad5b81",
+        "87a63636efc3feec"
+      ],
+      "pdfPages": 11,
+      "similarity": 0.968,
+      "pageDelta": 1
+    },
+    "artigo": {
+      "previewPages": 2,
+      "pageNumbers": [
+        1,
+        2
+      ],
+      "signatures": [
+        "70576ebb794b4e49",
+        "54e94f7be60ffbbd"
+      ],
+      "pdfPages": 1,
+      "similarity": 1,
+      "pageDelta": 1
+    },
+    "resumo_expandido_cpg": {
+      "previewPages": 2,
+      "pageNumbers": [
+        1,
+        2
+      ],
+      "signatures": [
+        "da037b6fce314d70",
+        "54e94f7be60ffbbd"
+      ],
+      "pdfPages": 1,
+      "similarity": 1,
+      "pageDelta": 1
+    },
+    "projeto_pesquisa": {
+      "previewPages": 7,
+      "pageNumbers": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        1,
+        2
+      ],
+      "signatures": [
+        "7aa674e1430460a9",
+        "48dcadd6d0c2a01c",
+        "2ab9f50b6b481b8f",
+        "8358f5ac0c184de8",
+        "00487d50c9c4f93a",
+        "3fd65c3e9e669da5",
+        "09f16bcf28d69609"
+      ],
+      "pdfPages": 8,
+      "similarity": 0.967,
+      "pageDelta": 1
+    }
+  }
+}

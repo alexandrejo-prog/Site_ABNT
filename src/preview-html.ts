@@ -495,10 +495,17 @@ function summaryHtml(
   bodyStartPage = 1,
   importedImages: ImportedDocumentImage[] = [],
   importedTables: ImportedTable[] = [],
+  preTextual: Array<{ title: string; page: number }> = [],
 ): string {
-  const entries = collectPreviewSummaryEntries(bodyBlocks, references, apendices, anexos);
+  // Entradas pré-textuais (FICHA CATALOGRÁFICA, RESUMO, ABSTRACT, listas…): o
+  // TOC do Word lista esses títulos (fidelidade ao baseline UFLA) antes do corpo.
+  const entries: SummaryEntry[] = [
+    ...preTextual.map((p) => ({ text: p.title, level: 1 as const })),
+    ...collectPreviewSummaryEntries(bodyBlocks, references, apendices, anexos),
+  ];
   if (!entries.length) return "";
   const pageMap = calculateRealPages(bodyBlocks, references, apendices, anexos, importedImages, importedTables, bodyStartPage);
+  for (const p of preTextual) pageMap.set(normalizeForDetection(cleanMojibakeText(p.title)), p.page);
   const entriesHtml = entries
     .map((entry) => {
       const cls = entry.level === 1 ? "preview-summary-1" : entry.level === 2 ? "preview-summary-2" : "preview-summary-3";
@@ -724,37 +731,69 @@ function generalPreview(input: DocxGenerationInput): string {
   const presentTexts = bodyTextsInBody(bodyBlocks);
   const bodyHtml = bodyBlocks.map((block) => bodyBlockHtml(block, importedImages, importedTables, presentTexts)).filter(Boolean).join("");
 
+  // Montagem das páginas pré-textuais com contagem real (DECISION-010). O helper
+  // pushPre conta a página física de cada bloco e registra os títulos que entram
+  // no sumário (fidelidade ao TOC do Word/baseline UFLA). Títulos que a prática
+  // ABNT/UFLA não lista no sumário ficam de fora (folha de aprovação, dedicatória,
+  // epígrafe, errata).
+  const TOC_EXCLUDED = new Set(["FOLHA DE APROVAÇÃO", "DEDICATÓRIA", "EPÍGRAFE", "ERRATA"]);
   const preTextual: string[] = [];
-  preTextual.push(page(coverHtml(fields), "preview-cover"));
-  preTextual.push(page(titlePageHtml(fields), "preview-title-page"));
+  const tocPre: Array<{ title: string; page: number }> = [];
+  let prePageCount = 0;
+  const pushPre = (html: string): void => {
+    if (!html) return;
+    const titles = [...html.matchAll(/class="preview-unnumbered-title">([^<]+)<\/h2>/g)].map((m) => m[1]);
+    if (titles.length > 0) {
+      for (const t of titles) {
+        prePageCount += 1;
+        if (!TOC_EXCLUDED.has(t)) tocPre.push({ title: t, page: prePageCount });
+      }
+    } else {
+      prePageCount += 1; // capa/folha de rosto contam página sem entrada no sumário
+    }
+    preTextual.push(html);
+  };
+  pushPre(page(coverHtml(fields), "preview-cover"));
+  pushPre(page(titlePageHtml(fields), "preview-title-page"));
   if (requirements.requiresCatalogCard) {
-    preTextual.push(
+    const fichaText = cleanMojibakeText(fields.fichaCatalografica?.trim() || "");
+    pushPre(
       page(
         unnumberedTitle("Ficha catalográfica") +
-          simpleParagraph(
-            "Ficha catalográfica detectada no arquivo importado. Preserve ou substitua manualmente pela ficha oficial da Biblioteca Universitária da UFLA.",
-          ),
+          (fichaText
+            ? simpleParagraph(fichaText)
+            : simpleParagraph(
+                "Ficha catalográfica detectada no arquivo importado. Preserve ou substitua manualmente pela ficha oficial da Biblioteca Universitária da UFLA.",
+              )),
       ),
     );
   }
   if (fields.workType === "monografia" || fields.workType === "dissertacao" || fields.workType === "tese") {
-    preTextual.push(page(unnumberedTitle("Folha de aprovação") + simpleParagraph("Folha de aprovação com assinaturas da banca examinadora.")));
+    // Fidelidade à folha de aprovação do DOCX (export-docx): aprovado em, banca e instituição.
+    pushPre(
+      page(
+        unnumberedTitle("Folha de aprovação") +
+          simpleParagraph("APROVADO EM: ____ de ____________________ de ______.") +
+          simpleParagraph("Prof.(a) Dr.(a) ______________________________") +
+          simpleParagraph("Instituição: ________________________________"),
+      ),
+    );
   }
-  preTextual.push(optionalFrontPage("Dedicatória", fields.dedicatoria));
-  preTextual.push(optionalFrontPage("Agradecimentos", fields.agradecimentos));
-  preTextual.push(optionalFrontPage("Epígrafe", fields.epigrafe));
-  preTextual.push(optionalFrontPage("Errata", fields.errata));
+  pushPre(optionalFrontPage("Dedicatória", fields.dedicatoria));
+  pushPre(optionalFrontPage("Agradecimentos", fields.agradecimentos));
+  pushPre(optionalFrontPage("Epígrafe", fields.epigrafe));
+  pushPre(optionalFrontPage("Errata", fields.errata));
   const abstractBreakClass = ["monografia", "dissertacao", "tese"].includes(fields.workType) ? "preview-abstract-break" : "";
-  preTextual.push(resumoAbstractHtml(fields, abstractBreakClass));
-  preTextual.push(impactIndicatorsHtml(fields));
-  preTextual.push(autoListsHtml(bodyBlocks, importedImages, importedTables));
-  preTextual.push(optionalFrontPage("Lista de quadros", fields.listaQuadros));
-  preTextual.push(optionalFrontPage("Lista de gráficos", fields.listaGraficos));
-  preTextual.push(optionalFrontPage("Lista de tabelas", fields.listaTabelas));
-  preTextual.push(optionalFrontPage("Lista de siglas", fields.listaSiglas));
-  preTextual.push(optionalFrontPage("Lista de abreviaturas", fields.listaAbreviaturas));
-  preTextual.push(optionalFrontPage("Lista de símbolos", fields.listaSimbolos));
-  preTextual.push(optionalFrontPage("Glossário", fields.glossario));
+  pushPre(resumoAbstractHtml(fields, abstractBreakClass));
+  pushPre(impactIndicatorsHtml(fields));
+  pushPre(autoListsHtml(bodyBlocks, importedImages, importedTables));
+  pushPre(optionalFrontPage("Lista de quadros", fields.listaQuadros));
+  pushPre(optionalFrontPage("Lista de gráficos", fields.listaGraficos));
+  pushPre(optionalFrontPage("Lista de tabelas", fields.listaTabelas));
+  pushPre(optionalFrontPage("Lista de siglas", fields.listaSiglas));
+  pushPre(optionalFrontPage("Lista de abreviaturas", fields.listaAbreviaturas));
+  pushPre(optionalFrontPage("Lista de símbolos", fields.listaSimbolos));
+  pushPre(optionalFrontPage("Glossário", fields.glossario));
   // Contagem real de páginas pré-textuais (DECISION-010): entradas podem conter
   // 0 (optionalFrontPage vazio), 1 ou 2 páginas (resumo+abstract); contamos as
   // seções <section class="preview-page" de fato geradas.
@@ -762,8 +801,10 @@ function generalPreview(input: DocxGenerationInput): string {
   let realPreTextualPages = (preTextualHtml.match(/<section class="preview-page/g) ?? []).length;
   if (hasSummary) {
     // As entradas do sumário listam a página do corpo: pré-textuais (já
-    // incluindo a própria página do sumário) + 1.
-    preTextual.push(page(summaryHtml(bodyBlocks, references, fields.apendices, fields.anexos, realPreTextualPages + 2, importedImages, importedTables)));
+    // incluindo a própria página do sumário) + 1. O Word/baseline UFLA lista
+    // o próprio SUMÁRIO no TOC (estilo de título com outline level).
+    tocPre.push({ title: "SUMÁRIO", page: prePageCount + 1 });
+    preTextual.push(page(summaryHtml(bodyBlocks, references, fields.apendices, fields.anexos, realPreTextualPages + 2, importedImages, importedTables, tocPre)));
     realPreTextualPages += 1;
   }
 
@@ -890,8 +931,10 @@ function researchProjectPreview(input: DocxGenerationInput): string {
     ...splitParagraphs(fields.referencias),
     ...blocks.filter((block) => block.type === "reference").map((block) => block.text),
   ];
+  const importedImages = input.importedImages ?? [];
+  const importedTables = input.importedTables ?? [];
   const bodyHtml = bodyBlocks
-    .map((block) => bodyBlockHtml(block, input.importedImages ?? [], input.importedTables ?? [], bodyTextsInBody(bodyBlocks)))
+    .map((block) => bodyBlockHtml(block, importedImages, importedTables, bodyTextsInBody(bodyBlocks)))
     .filter(Boolean)
     .join("");
 
@@ -909,14 +952,39 @@ function researchProjectPreview(input: DocxGenerationInput): string {
         ? `<p class="preview-simple preview-indent-none"><strong>Keywords: </strong>${inlineMarkupToHtml(cleanMojibakeText(normalizeKeywordSentence(fields.keywords)))}</p>`
         : ""),
   );
-  const summary = page(
-    unnumberedTitle("Sumário") +
-      `<p class="preview-summary-note">O sumário do projeto de pesquisa é atualizável no Word/LibreOffice. As páginas serão preenchidas ao atualizar os campos.</p>`,
-  );
 
+  // Contagem física das páginas pré-textuais (capa=1, folha=2, resumo=3, abstract=4)
+  // para as entradas do sumário — fidelidade ao TOC do Word.
+  const tocPre: Array<{ title: string; page: number }> = [];
+  let prePageCount = 0;
+  const pushPre = (html: string): void => {
+    if (!html) return;
+    const titles = [...html.matchAll(/class="preview-unnumbered-title">([^<]+)<\/h2>/g)].map((m) => m[1]);
+    if (titles.length > 0) {
+      for (const t of titles) {
+        prePageCount += 1;
+        tocPre.push({ title: t, page: prePageCount });
+      }
+    } else {
+      prePageCount += 1;
+    }
+  };
+  pushPre(page(coverHtml(fields), "preview-cover"));
+  pushPre(page(titlePageHtml(fields), "preview-title-page"));
+  pushPre(resumo);
+  pushPre(abstract);
+
+  // Sumário real (entradas pré-textuais + corpo) — o corpo do projeto reinicia em 1.
+  tocPre.push({ title: "SUMÁRIO", page: prePageCount + 1 });
+  const summaryHtmlOut = summaryHtml(bodyBlocks, references, "", "", 1, importedImages, importedTables, tocPre);
+  const summary = summaryHtmlOut ? page(summaryHtmlOut) : "";
+
+  // Página das referências: última página do corpo + 1 (o Word quebra por seção).
+  const refsPage =
+    calculateRealPages(bodyBlocks, references, "", "", importedImages, importedTables, 1).get(normalizeForDetection("REFERÊNCIAS")) ?? 2;
   const referencesSection = referencesHtml(references);
   const referencesBlock = referencesSection
-    ? `<section class="preview-page preview-references">${pageNumberHeader(2)}<h2 class="preview-unnumbered-title">REFERÊNCIAS</h2>${referencesSection}</section>`
+    ? `<section class="preview-page preview-references">${pageNumberHeader(refsPage)}<h2 class="preview-unnumbered-title">REFERÊNCIAS</h2>${referencesSection}</section>`
     : "";
 
   return [

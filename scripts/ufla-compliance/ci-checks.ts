@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { auditFormatsCross } from "./audit-formats-cross";
 import { runPerTypeGates } from "./run-gate-per-type";
 import { runPerTypePhysical } from "./analyze-per-type-pdfs";
+import { runPreviewSnapshotCheck } from "./check-preview-snapshot";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -57,6 +58,11 @@ async function main(): Promise<void> {
     failures.push(`Física PDF por tipo: ${perTypePhysical.failures.join("; ")}`);
   }
 
+  // 4) Snapshot de paginação do preview — Word-free: qualquer mudança de
+  //    paginação/conteúdo por página entre releases falha o CI.
+  const previewSnapshot = await runPreviewSnapshotCheck();
+  if (!previewSnapshot.passed) failures.push(`Snapshot de preview: ${previewSnapshot.failures.join("; ")}`);
+
   const summary = {
     schema: "ufla-audit/ci-checks/v1",
     generatedAt: new Date().toISOString(),
@@ -70,6 +76,7 @@ async function main(): Promise<void> {
       rendered: Object.keys(perTypePhysical.rendered).length,
       passed: perTypePhysical.passed,
     },
+    previewSnapshot: { passed: previewSnapshot.passed },
     passed: failures.length === 0,
     failures,
   };

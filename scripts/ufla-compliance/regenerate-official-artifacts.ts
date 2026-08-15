@@ -24,6 +24,7 @@ import {
 import { auditFormatsCross } from "./audit-formats-cross.js";
 import { runPerTypePhysical } from "./analyze-per-type-pdfs.js";
 import { runPreviewDocxCompare } from "./compare-preview-docx.js";
+import { buildPreviewSnapshot, writePreviewSnapshot, snapshotPath } from "./check-preview-snapshot.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -183,11 +184,23 @@ const perTypePhysicalEvidence = perTypePhysical.wordAvailable
 const previewDiff = await runPreviewDocxCompare();
 writeJson("artifacts/ufla-compliance/preview-docx-diff.json", previewDiff.result);
 const previewDiffPassed = previewDiff.passed;
+// Snapshot de paginação (commitado): lado preview é Word-free e revalidado no CI
+// por check-preview-snapshot; o lado PDF (páginas reais do Word) entra como referência.
+{
+  const snap = buildPreviewSnapshot();
+  const cmp = previewDiff.result.templates as Record<string, { pdfPages?: number; similarity?: number; pageDelta?: number }>;
+  const merged: Record<string, unknown> = {};
+  for (const [id, entry] of Object.entries(snap)) {
+    merged[id] = { ...entry, pdfPages: cmp[id]?.pdfPages ?? null, similarity: cmp[id]?.similarity ?? null, pageDelta: cmp[id]?.pageDelta ?? null };
+  }
+  writePreviewSnapshot(merged as never);
+  console.log("OK:", snapshotPath());
+}
 const previewDiffEvidence = previewDiff.wordAvailable
   ? (() => {
       const tpl = previewDiff.result.templates as Record<string, { passed: boolean; similarity: number; pageDelta: number }>;
       const perTemplate = Object.entries(tpl).map(([id, e]) => `${id} ${e.similarity}`).join("; ");
-      return `Fidelidade preview↔DOCX por template (Word COM + pdfjs + Playwright): 6/6 templates — monografia, dissertação, tese, artigo, resumo expandido CPG, projeto de pesquisa — com similaridade ≥ 0.65 e Δpáginas ≤ 3 (${perTemplate}); screenshots lado a lado por página com diffRatio (evidência visual em preview-diff/*.png).`;
+      return `Fidelidade preview↔DOCX por template (Word COM + pdfjs + Playwright): 6/6 templates — monografia, dissertação, tese, artigo, resumo expandido CPG, projeto de pesquisa — com similaridade ≥ 0.65 e Δpáginas ≤ 3 (${perTemplate}); screenshots lado a lado por página com diffRatio (evidência visual em preview-diff/*.png); snapshot de paginação commitado (check-preview-snapshot no CI).`;
     })()
   : `Fidelidade preview↔DOCX: Word INDISPONÍVEL — comparação saltada (skipped-no-word), gate considerado passed.`;
 const overallStatus =

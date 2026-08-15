@@ -10,10 +10,10 @@
 - Evidência: `npm run ufla:audit` completo — lint + verify + regenerate (Word COM + PDF físico + 8 gates) all passed; resumoStatus 48/48 covered, 0 partial, 0 not-covered; `npm run e2e` (Playwright, fluxo real do app) passed; `npm run ufla:lh` (Lighthouse: a11y 100, performance 86, best-practices 92)
 
 ## Suíte de Testes
-- Passed: 1579
+- Passed: 1589
 - Failed: 0
 - Skipped: 10
-- Arquivos: 200
+- Arquivos: 202
 - Build: OK (tsc + vite)
 - tsc --noEmit: 0 erros (inclui scripts/ufla-compliance via alias @scripts)
 - lint: 0 erros, 0 warnings
@@ -56,7 +56,9 @@
 18. [x] **Lighthouse (governance-roadmap)** — `npm run ufla:lh`: auditoria no Chromium do app de produção (a11y, performance, best-practices) com relatório `artifacts/lighthouse/lighthouse.json`; **orçamentos de governança** em `lighthouse-budgets.json` (a11y ≥ 90, performance ≥ 70, best-practices ≥ 80, SEO ≥ 80) com `artifacts/lighthouse/budgets.json`; resultados atuais: a11y 100, performance 85, best-practices 92 — todos dentro do orçamento.
 19. [x] **CI automatizado (GitHub Actions)** — `verify.yml` ganhou a etapa de conformidade UFLA sem Word (`ci-checks.ts`: 18 formatos × 15 tipos, com física PDF skipped-no-word); `e2e.yml` roda Playwright + Lighthouse em todo push/PR; axe já roda no `npm test` (jsdom).
 20. [x] **e2e parametrizado por tipo de trabalho** — `tests/e2e/app-workflow.spec.ts` agora é data-driven: artigo da Coleção, **monografia com ficha catalográfica** (abre `#sec-pretextuais` recolhida), resumo expandido CPG e projeto de pesquisa (problema/objetivo/justificativa/metodologia/cronograma) — 4/4 no Chromium, cada um com download verificado pelo slug do tipo e preview sem erros de console.
-21. [x] **Fidelidade do preview vs DOCX renderizado (diff visual)** — `compare-preview-docx.ts` data-driven: **6 templates** (monografia, dissertação, tese, artigo, resumo expandido CPG, projeto de pesquisa) gerados com o exportador correspondente, renderizados via Word COM e comparados ao HTML do preview — **6/6 PASSED** (similaridade: artigo 1.000, CPG 1.000, dissertação 0.902, tese 0.892, monografia 0.833, projeto 0.731 — todas ≥ 0.65; Δpáginas 1 ≤ 3); gate `previewDiffGate` (9/9 no total); evidência visual lado a lado (docx × preview × diff via pdfjs+@napi-rs/canvas+pixelmatch e Playwright) em `artifacts/ufla-compliance/preview-diff/*.png`; artefato `preview-docx-diff.json`; sem Word o gate passa de forma graciosa.
+21. [x] **Fidelidade do preview vs DOCX renderizado (diff visual)** — `compare-preview-docx.ts` data-driven: **6 templates** (monografia, dissertação, tese, artigo, resumo expandido CPG, projeto de pesquisa) gerados com o exportador correspondente, renderizados via Word COM e comparados ao HTML do preview — **6/6 PASSED** com **similaridade ≥ 0.963 em TODOS** (monografia 0.963, dissertação/tese 0.968, projeto 0.967, artigo/CPG 1.000 — antes: projeto 0.731, monografia 0.841); gate `previewDiffGate` (9/9 no total); evidência visual lado a lado em `artifacts/ufla-compliance/preview-diff/*.png`; sem Word o gate passa de forma graciosa.
+22. [x] **Fidelidade refinada do preview (gaps reais fechados)** — (a) **sumário real no projeto** (antes era placeholder "atualizável no Word"); (b) **entradas pré-textuais no TOC** (FICHA, AGRADECIMENTOS, RESUMO, ABSTRACT, INDICADORES, LISTAS, SUMÁRIO) espelhando o TOC do Word/baseline UFLA, com as páginas contadas; (c) **ficha catalográfica** com o texto real de `fichaCatalografica` (não só placeholder); (d) **folha de aprovação** com APROVADO EM/Prof. Dr./Instituição (fidelidade ao export-docx); (e) **natureza do projeto** alinhada ao builder (`como parte dos requisitos acadêmicos aplicáveis`); (f) **página de referências do projeto** numerada 3 (corpo dividido em 2 páginas no Word).
+23. [x] **Snapshot de paginação para CI (regressões entre releases)** — `check-preview-snapshot.ts` reconstrói o preview de cada template SEM Word e valida paginação (nº de páginas), numeração visível por página (aria-label="Página N") e assinatura de texto por página (sha256) contra o snapshot commitado (`scripts/ufla-compliance/snapshots/preview-docx-snapshot.json`, atualizado pelo regenerate com os dados do Word: pdfPages/similarity); rodado no `ci-checks.ts` (CI sem Word) e no workflow `verify.yml`; testes de determinismo e detecção de regressão (página a mais, numeração alterada, conteúdo alterado).
 
 ## Resolução UFLA-AMBIGUOUS-1
 - **Decisão (DECISION-010, complementa DECISION_003):** contagem contínua a partir da folha de rosto (folha de rosto = 1); pré-textuais contadas sem número visível; numeração visível inicia na Introdução com o **valor contado** (pré-textuais + 1) — **nunca reinício em 1**; "(1, 2, 3, ...)" do Manual = sistema de numeração arábico, não reinício
