@@ -6,7 +6,7 @@ export async function fixTableHeaders(docxBuffer: ArrayBuffer): Promise<ArrayBuf
   
   const tblRegex = /<w:tbl[^>]*>([\s\S]*?)<\/w:tbl>/g;
   
-  let fixedXml = documentXml.replace(tblRegex, (match) => {
+  const fixedXml = documentXml.replace(tblRegex, (match) => {
     if (/<w:tblHeader/.test(match)) {
       return match;
     }
