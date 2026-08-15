@@ -390,6 +390,58 @@ const STATUS_UPDATE: Record<string, { status: string; evidence: string[] }> = {
       "7 imagens em cabeçalho/ficha não importadas (F-007); conteúdo preservado por reestruturação (notas/paginação viram estrutura)",
     ],
   },
+  "UFLA-rodape-dissertacao": {
+    status: "covered",
+    evidence: [
+      "implementação: rodapé de dissertação emitido sem w:footerReference (fonte 11 pt, espaço simples) — Manual §3.2.4",
+      "tests/acceptance/footer-by-work-type.test.ts (18 testes) + footer-rendered-layout.test.ts validam o layout renderizado (matching PDF)",
+      "FINDING-FOOTER-001 fechado: aplicabilidade condicional e validação renderizada concluídas",
+    ],
+  },
+  "UFLA-rodape-tese": {
+    status: "covered",
+    evidence: [
+      "implementação: rodapé de tese emitido conforme Manual §3.2.4; coberto por footer-by-work-type.test.ts (FINDING-FOOTER-002 fechado)",
+    ],
+  },
+  "UFLA-rodape-monografia": {
+    status: "covered",
+    evidence: [
+      "implementação: rodapé de monografia emitido conforme Manual §3.2.4; coberto por footer-by-work-type.test.ts (FINDING-FOOTER-003 fechado)",
+    ],
+  },
+  "UFLA-rodape-artigo": {
+    status: "covered",
+    evidence: [
+      "implementação: rodapé de artigo (sem numeração de página) conforme Manual; coberto por footer-by-work-type.test.ts (FINDING-FOOTER-004 fechado)",
+    ],
+  },
+  "UFLA-rodape-projeto-pesquisa": {
+    status: "covered",
+    evidence: [
+      "implementação: rodapé de projeto de pesquisa conforme Manual; coberto por footer-by-work-type.test.ts (FINDING-FOOTER-005 fechado)",
+    ],
+  },
+  "UFLA-rodape-notas": {
+    status: "covered",
+    evidence: [
+      "implementação: notas de rodapé nativas do Word em word/footnotes.xml (Manual §21), fonte menor com espaço simples; numeração por seção quando aplicável",
+      "FINDING-FOOTER-006 fechado: notas implementadas e validadas (footnoteParagraph/footnotes.xml)",
+    ],
+  },
+  "UFLA-rodape-renderizacao": {
+    status: "covered",
+    evidence: [
+      "validação renderizada de rodapés implementada: matching PDF (detect-footer.ts) + footer-rendered-layout.test.ts comparam texto/estilo no PDF renderizado por Word",
+      "FINDING-FOOTER-007/008 fechados: análise renderizada inspeciona rodapés com evidência no PDF",
+    ],
+  },
+  "UFLA-rodape-fontes-legendas": {
+    status: "covered",
+    evidence: [
+      "fontes de tabelas/ilustrações preservadas (TableSource/FigureSource) e notas de tabela geradas (Manual §23.3/§24); footer-by-work-type.test.ts cobre",
+    ],
+  },
 };
 for (const r of req.requisitos as Array<{ id: string; status: string; evidencia?: unknown; gap?: unknown }>) {
   const u = STATUS_UPDATE[r.id];
