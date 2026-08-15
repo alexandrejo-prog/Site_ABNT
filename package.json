@@ -16,6 +16,9 @@
     "acceptance:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run-docx-acceptance.ps1",
     "skill:validate": "npx tsx skills/ufla-docx-compliance/src/index.ts",
     "ufla:audit": "npx tsx scripts/ufla-compliance/run-ufla-audit.ts",
+    "ufla:lh": "node scripts/audit-lighthouse.mjs",
+    "e2e": "playwright test",
+    "e2e:install": "playwright install chromium",
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" --fix",
     "format": "prettier --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,tsx}\"",
@@ -37,6 +40,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -51,6 +55,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "jest-axe": "^10.0.0",
     "jsdom": "^29.1.1",
+    "lighthouse": "^13.4.1",
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^4.0.379",
     "prettier": "^3.9.6",

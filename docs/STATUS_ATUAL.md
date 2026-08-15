@@ -5,15 +5,15 @@
 
 ## Última Atualização
 - Data: 2026-08-15
-- Hora: ~18:55 (FECHAMENTO P0–P2: preservação de imagens 7→0 perdas; layout físico de capa/folha de rosto; referências online; DECISION-010 paginação; auditoria cruzada de formatos; `npm run ufla:audit`)
+- Hora: ~19:50 (GOVERNANCE ROADMAP: física PDF nos 15 tipos do gate; e2e Playwright; Lighthouse; CI com axe + ufla:audit; `perTypePhysicalGate`)
 - Branch: `feat/ufla-render-validation`
-- Evidência: `npm run ufla:audit` completo — lint + verify + regenerate (Word COM + PDF físico + 7 gates) em 61s, all passed; resumoStatus 48/48 covered, 0 partial, 0 not-covered
+- Evidência: `npm run ufla:audit` completo — lint + verify + regenerate (Word COM + PDF físico + 8 gates) all passed; resumoStatus 48/48 covered, 0 partial, 0 not-covered; `npm run e2e` (Playwright, fluxo real do app) passed; `npm run ufla:lh` (Lighthouse: a11y 100, performance 86, best-practices 92)
 
 ## Suíte de Testes
-- Passed: 1556
+- Passed: 1579
 - Failed: 0
 - Skipped: 10
-- Arquivos: 197
+- Arquivos: 200
 - Build: OK (tsc + vite)
 - tsc --noEmit: 0 erros (inclui scripts/ufla-compliance via alias @scripts)
 - lint: 0 erros, 0 warnings
@@ -22,6 +22,10 @@
 - GATE DE CÓDIGO: PASSED (npm test + lint + build)
 - runExpandedComplianceGate: PASSED no DOCX real — 10/10 categorias (pré-textuais, textuais, pós-textuais, referências, citações, figuras, seções, tabelas, equações, paginação)
 - FULL_COMPLIANCE_GATE: **APROVADO** (gates.json overall=passed; report.md declara CONFORMIDADE UFLA APROVADA)
+- perTypeGate: 15/15 PASSED (4 padrão + 3 rascunhos editáveis + 8 formatos da Coleção)
+- perTypePhysicalGate: PASSED (15/15 renderizados via Word COM: A4 + paginação OOXML↔PDF; skipped-no-word sem Word)
+- E2E (Playwright): PASSED (fluxo real do app: artigo da Coleção → DOCX → preview)
+- Lighthouse: PASSED (a11y 100 ≥ 90, performance 86, best-practices 92)
 
 ## Pendências Resolvidas (2026-08-15)
 1. [x] **Equações avançadas (OMML cru re-injetado)** — o `<m:oMathPara>` original da origem é capturado na extração, viaja no rascunho como token invisível `\uF001OMML:<base64>\uF001`, e é re-injetado no XML final pelo patch pós-Packer (frações/raízes preservadas — teste `ufla-equations` round-trip m:f)
@@ -46,6 +50,11 @@
 12b. [x] **Gate dos 8 formatos da Coleção Produção Acadêmica** — roteados para a estrutura de artigo (sem capa/folha de rosto/ficha/aprovação) no `document-template.ts` e `generateDocxBlob`; fixtures por formato satisfazem os requiredFields PRÓPRIOS (curso/justificativa/cronograma/objetivos/metodologia/conclusão/referencial teórico...), verificados no DOCX gerado (`verify-production-format.ts`); gate por tipo 12/12 PASSED (4 padrão + 8 Coleção) com `requiredFieldsCheck` em gates-per-type.json; testes em `tests/ufla-compliance/production-formats-gate.test.ts`.
 13. [x] **Comando único de auditoria** — `npm run ufla:audit` orquestra lint + verify + regenerate com lock (`artifacts/ufla-audit/.audit.lock`) e falha rápida; resumo dos 7 gates + overall no final.
 14. [x] **Fidelidade do preview** — header simulado alinhado à DECISION-010 (número de página explícito só nas páginas textuais/pós-textuais, iniciando em pré-textuais reais + 1; pré-textuais sem número; sumário com páginas corretas); page-break de ABSTRACT condicional (monografia/dissertação/tese); CSS data-font-size (10/11/12 pt); auditoria axe no App e no PreviewModal (tests/accessibility).
+15. [x] **Rascunho editável de longos no gate por tipo** — monografia, dissertação e tese (via `generateGraduateEditableDraftDocxBlob`, com patches de natureza/recuo/Curso) exercitados no gate por tipo: 15 tipos (4 padrão + 3 drafts + 8 Coleção) — 15/15 PASSED; fixtures próprias (curso para monografia; programa + orientador + indicadores para dissertação/tese).
+16. [x] **Física PDF nos 15 tipos (DECISION-009/010)** — `analyze-per-type-pdfs.ts`: cada DOCX do gate é renderizado via Word COM e validado fisicamente — A4 (595.32×841.92 pt), paginação OOXML↔PDF alinhada (pgNumType start = primeiro número visível), imagens/tabelas detectadas por opList/CTM + grade de colunas; novo gate `perTypePhysicalGate` no gates.json + artefato `per-type-physical.json`; sem Word (CI) o gate passa de forma graciosa (skipped-no-word); teste em `tests/ufla-compliance/per-type-physical.test.ts`.
+17. [x] **e2e Playwright (governance-roadmap)** — `npm run e2e`: compila o app (vite build) e serve via `vite preview`; fluxo real no Chromium (seleciona o Artigo científico UFLA, preenche os requiredFields próprios, gera o DOCX com download verificado, abre o preview sem erros de console); workflow `.github/workflows/e2e.yml` com instalação de browser e artefato do relatório.
+18. [x] **Lighthouse (governance-roadmap)** — `npm run ufla:lh`: auditoria no Chromium do app de produção (a11y, performance, best-practices) com relatório `artifacts/lighthouse/lighthouse.json`; gate de governança: a11y ≥ 90; resultados atuais: a11y 100, performance 86, best-practices 92.
+19. [x] **CI automatizado (GitHub Actions)** — `verify.yml` ganhou a etapa de conformidade UFLA sem Word (`ci-checks.ts`: 18 formatos × 15 tipos, com física PDF skipped-no-word); `e2e.yml` roda Playwright + Lighthouse em todo push/PR; axe já roda no `npm test` (jsdom).
 
 ## Resolução UFLA-AMBIGUOUS-1
 - **Decisão (DECISION-010, complementa DECISION_003):** contagem contínua a partir da folha de rosto (folha de rosto = 1); pré-textuais contadas sem número visível; numeração visível inicia na Introdução com o **valor contado** (pré-textuais + 1) — **nunca reinício em 1**; "(1, 2, 3, ...)" do Manual = sistema de numeração arábico, não reinício

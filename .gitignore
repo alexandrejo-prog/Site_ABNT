@@ -48,4 +48,6 @@ colecao_producao_academica_ufla_modelo.md
 .kilo/
 .freebuff/
 artifacts/
+test-results/
+playwright-report/
 backup-*.tar.gz

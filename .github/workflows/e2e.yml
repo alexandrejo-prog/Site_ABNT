@@ -1,0 +1,28 @@
+name: E2E e Lighthouse
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Instalar Chromium (Playwright)
+        run: npx playwright install --with-deps chromium
+      - name: E2E (fluxo real do app no navegador)
+        run: npm run e2e
+      - name: Lighthouse (acessibilidade/performance/best-practices)
+        run: npm run ufla:lh
+      - name: Registrar artefatos de auditoria web
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report
+          path: artifacts/lighthouse/lighthouse.json
+          if-no-files-found: warn

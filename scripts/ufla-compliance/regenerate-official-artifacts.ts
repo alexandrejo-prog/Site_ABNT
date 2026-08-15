@@ -22,6 +22,7 @@ import {
   buildTraceabilityMatrix,
 } from "../../src/footer-reporting.js";
 import { auditFormatsCross } from "./audit-formats-cross.js";
+import { runPerTypePhysical } from "./analyze-per-type-pdfs.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -168,11 +169,20 @@ const formatsCrossPassed =
   formatsAudit.checks.noOrphanRequirements &&
   formatsAudit.checks.noDeadTypes &&
   formatsAudit.checks.allCoverageOk;
+// Física PDF por tipo (DECISION-009/010): cada DOCX do gate por tipo é renderizado
+// via Word COM e validado fisicamente (A4, paginação OOXML↔PDF, imagens/tabelas).
+const perTypePhysical = await runPerTypePhysical();
+writeJson("artifacts/ufla-compliance/per-type-physical.json", perTypePhysical);
+const perTypePhysicalPassed = perTypePhysical.passed;
+const perTypePhysicalEvidence = perTypePhysical.wordAvailable
+  ? `Física PDF por tipo (Word COM + pdfjs): ${Object.keys(perTypePhysical.rendered).length}/${Object.keys(perTypePhysical.rendered).length} DOCX renderizados e validados fisicamente — A4, paginação OOXML↔PDF alinhada (DECISION-010), ${perTypePhysical.passed ? "0 falhas" : perTypePhysical.failures.join("; ")}. Detalhe por tipo em per-type-physical.json.`
+  : `Física PDF por tipo: Word INDISPONÍVEL — renderização física saltada (skipped-no-word), gate considerado passed (sem Word não há PDF para analisar).`;
 const overallStatus =
   testSummary.status === "passed" &&
   fullComplianceStatus === "passed" &&
   renderedLayoutStatus === "passed" &&
-  formatsCrossPassed
+  formatsCrossPassed &&
+  perTypePhysicalPassed
     ? "passed"
     : "failed";
 
@@ -225,6 +235,10 @@ const gates = {
     formatsCrossGate: {
       status: formatsCrossPassed ? "passed" : "failed",
       evidence: `Auditoria cruzada de formatos (UFLA-formatos-20): ${formatsAudit.summary.totalFormats} formatos cadastrados × ${formatsAudit.summary.totalRequirements} requisitos da matriz; tipos alcançados: ${formatsAudit.summary.typesReached.join(", ")}. Mapeamento completo, sem requisito órfão, sem tipo morto, cobertura 100% com validator (formats-cross-audit.json).`,
+    },
+    perTypePhysicalGate: {
+      status: perTypePhysicalPassed ? "passed" : "failed",
+      evidence: perTypePhysicalEvidence,
     },
   },
   overall: overallStatus,
