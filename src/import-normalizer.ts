@@ -88,8 +88,24 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function stripSoftHyphens(value: string): string {
+  return value.replace(/[\u00AD\u200B]/g, "");
+}
+
+function normalizeQuotes(value: string): string {
+  const map: Record<string, string> = {
+    "\u201C": '"',
+    "\u201D": '"',
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u00AB": '"',
+    "\u00BB": '"',
+  };
+  return value.replace(/[\u201C\u201D\u2018\u2019\u00AB\u00BB]/g, (ch) => map[ch] ?? ch);
+}
+
 function cleanText(value: string): string {
-  return value
+  return normalizeQuotes(stripSoftHyphens(value))
     .replace(/\uFFFE|\uFEFF/g, "")
     .replace(/\[Imagem detectada:\s*[^\]]+\]/gi, "")
     .replace(/\[Imagem:\s*[^\]]+\]/gi, "")

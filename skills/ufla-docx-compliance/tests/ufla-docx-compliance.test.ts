@@ -81,9 +81,27 @@ function makeMockAnalysis(overrides?: Partial<DocxAnalysis>): DocxAnalysis {
       yearBold: true,
       pageNumberVisible: false,
     },
+    catalogCard: {
+      exists: true,
+      hasPlaceholder: false,
+    },
+    titlePage: {
+      exists: true,
+      hasNature: true,
+      natureText: "Tese apresentada ao Programa...",
+      hasCourse: true,
+      hasProgram: true,
+      hasAdvisor: true,
+      hasCoadvisor: false,
+      hasEnglishTitle: true,
+      englishTitleText: "English Title Test for Dissertation",
+    },
     toc: {
       exists: true,
       hasFieldCode: true,
+      hasFieldChars: true,
+      hasCorrectRange: true,
+      hasHyperlinkFlag: true,
       headingStyleRange: "1-3",
       hyperlink: true,
     },
@@ -113,6 +131,10 @@ function makeMockAnalysis(overrides?: Partial<DocxAnalysis>): DocxAnalysis {
       hasBlueInReferences: false,
       hasBlueInResumo: false,
       hasBlueInAbstract: false,
+    },
+    equations: {
+      count: 0,
+      hasCenteredWithRightNumber: true,
     },
     paragraphCount: 97,
     totalCharacters: 5000,
@@ -188,8 +210,9 @@ describe("checklist-checker", () => {
       references: { headingCount: 0, headingBold: false, headingCentered: false, entryCount: 0, entriesAlignedLeft: false, entriesSingleSpaced: false, entriesHangingIndent: false, entriesBoldTitle: false, sortedCorrectly: false, entries: [], duplicateHeadings: false, duplicateEntries: false, duplicateClusters: [] },
       tables: { count: 0, hasBorders: false, hasAboveTitle: false, hasBelowSource: false, tableDetails: [] },
       summary: { exists: false, headingCentered: false, headingUppercase: false, headingBold: false, includesReferences: false, includesAppendices: false, includesAnnexes: false, excludesCover: true, excludesPreTextual: true },
-      toc: { exists: false, hasFieldCode: false, headingStyleRange: "", hyperlink: false },
+      toc: { exists: false, hasFieldCode: false, hasFieldChars: false, hasCorrectRange: false, hasHyperlinkFlag: false, headingStyleRange: "", hyperlink: false },
       pagination: { visibleStartsAtIntroduction: false, usesArabicNumerals: false, usesWordField: false, coverNotCounted: false, preTextualNotVisible: false },
+      equations: { count: 0, hasCenteredWithRightNumber: false },
     });
     const items = checkCompliance(analysis);
     const failItems = items.filter((i) => i.status === "fail");
@@ -302,6 +325,20 @@ describe("checklist-checker", () => {
     expect(item?.status).toBe("fail");
   });
 
+  it("should pass equation check when equations are centered with right tab", () => {
+    const analysis = makeMockAnalysis({ equations: { count: 2, hasCenteredWithRightNumber: true } });
+    const items = checkCompliance(analysis);
+    const item = items.find((i) => i.id === "23.1");
+    expect(item?.status).toBe("ok");
+  });
+
+  it("should fail equation check when equations lack centered/right-tab formatting", () => {
+    const analysis = makeMockAnalysis({ equations: { count: 1, hasCenteredWithRightNumber: false } });
+    const items = checkCompliance(analysis);
+    const item = items.find((i) => i.id === "23.1");
+    expect(item?.status).toBe("fail");
+  });
+
   it("should not count unchecked items as grave failures", () => {
     const analysis = makeMockAnalysis({
       page: { widthTwip: 0, heightTwip: 0, marginTopCm: 0, marginBottomCm: 0, marginLeftCm: 0, marginRightCm: 0 },
@@ -309,6 +346,77 @@ describe("checklist-checker", () => {
     const items = checkCompliance(analysis, "artigo");
     const failItems = items.filter((i) => i.status === "fail");
     expect(failItems.length).toBeGreaterThan(0);
+  });
+
+  it("should validate catalog card detection (5.1)", () => {
+    const analysis = makeMockAnalysis({
+      catalogCard: { exists: true, hasPlaceholder: false },
+    });
+    const items = checkCompliance(analysis);
+    expect(items.find((i) => i.id === "5.1")?.status).toBe("ok");
+  });
+
+  it("should fail catalog card when not detected", () => {
+    const analysis = makeMockAnalysis({
+      catalogCard: { exists: false, hasPlaceholder: false },
+    });
+    const items = checkCompliance(analysis);
+    expect(items.find((i) => i.id === "5.1")?.status).toBe("fail");
+  });
+
+  it("should validate title page structure (4.1-4.4)", () => {
+    const analysis = makeMockAnalysis({
+      titlePage: {
+        exists: true,
+        hasNature: true,
+        natureText: "Tese apresentada...",
+        hasCourse: true,
+        hasProgram: true,
+        hasAdvisor: true,
+        hasCoadvisor: true,
+        hasEnglishTitle: true,
+        englishTitleText: "English Title",
+      },
+    });
+    const items = checkCompliance(analysis);
+    expect(items.find((i) => i.id === "4.1")?.status).toBe("ok");
+    expect(items.find((i) => i.id === "4.2")?.status).toBe("ok");
+    expect(items.find((i) => i.id === "4.3")?.status).toBe("ok");
+    expect(items.find((i) => i.id === "4.4")?.status).toBe("ok");
+  });
+
+  it("should validate TOC field chars (15.5) and flags (15.6)", () => {
+    const analysis = makeMockAnalysis({
+      toc: {
+        exists: true,
+        hasFieldCode: true,
+        hasFieldChars: true,
+        hasCorrectRange: true,
+        hasHyperlinkFlag: true,
+        headingStyleRange: "1-3",
+        hyperlink: true,
+      },
+    });
+    const items = checkCompliance(analysis);
+    expect(items.find((i) => i.id === "15.5")?.status).toBe("ok");
+    expect(items.find((i) => i.id === "15.6")?.status).toBe("ok");
+  });
+
+  it("should fail TOC field chars when missing", () => {
+    const analysis = makeMockAnalysis({
+      toc: {
+        exists: true,
+        hasFieldCode: true,
+        hasFieldChars: false,
+        hasCorrectRange: false,
+        hasHyperlinkFlag: false,
+        headingStyleRange: "",
+        hyperlink: false,
+      },
+    });
+    const items = checkCompliance(analysis);
+    expect(items.find((i) => i.id === "15.5")?.status).toBe("fail");
+    expect(items.find((i) => i.id === "15.6")?.status).toBe("fail");
   });
 });
 

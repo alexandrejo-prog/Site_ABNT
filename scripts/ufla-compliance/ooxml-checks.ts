@@ -312,15 +312,12 @@ export function runOoxmlChecks(parts: DocxParts): ComplianceIssue[] {
   // ---------------------------------------------------------------------
   // UFLA-023 §3.2.8 — equações/fórmulas: centralizadas, numeração à direita
   // ---------------------------------------------------------------------
-  const mathCount = (documentXml.match(/<m:oMath(?:\s[^>]*)?>|<\/m:oMath>/g) || []).length;
-  const centerEquations = paras.filter(
-    (p) => p.includes("w:val=\"center\"") && (p.includes("<m:oMath") || (p.includes("w:tab") && p.includes('w:val="right"'))),
+  const mathParas = paras.filter((p) => p.includes("<m:oMath"));
+  const malformedEquations = mathParas.filter(
+    (p) => !p.includes('w:val="center"') || !p.includes('<w:tab w:val="right"'),
   );
-  if (mathCount === 0 && centerEquations.length === 0) {
-    // Sem equações no documento: regra satisfeita por ausência (documento não
-    // contém fórmula que precise de formatação). Não emite falha.
-  } else if (mathCount > 0 && centerEquations.length === 0) {
-    issues.push(issue("equation-format", "Equações/fórmulas presentes sem parágrafo centralizado com numeração à direita (tab stop direito).", "error", "Manual UFLA 3.2.8", "equações"));
+  if (mathParas.length > 0 && malformedEquations.length > 0) {
+    issues.push(issue("equation-format", "Equacoes/formulas presentes sem paragrafo centralizado com numeracao a direita (tab stop direito).", "error", "Manual UFLA 3.2.8", "equacoes"));
   }
 
   void tableCount;

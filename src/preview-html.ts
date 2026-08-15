@@ -241,6 +241,16 @@ function longQuoteHtml(text: string): string {
   return `<blockquote class="preview-long-quote" data-font-size="${LONG_QUOTE_SIZE_PT}pt">${inlineMarkupToHtml(cleanMojibakeText(text || " "))}</blockquote>`;
 }
 
+function equationHtml(text: string): string {
+  const cleaned = cleanMojibakeText(text || " ").trim();
+  const numberMatch = cleaned.match(/\s*\((\d+(?:\.\d+)?)\)\s*$/);
+  const body = numberMatch ? cleaned.slice(0, numberMatch.index).trim() : cleaned;
+  const number = numberMatch ? `(${numberMatch[1]})` : "";
+  const bodyHtml = `<span class="preview-equation-body">${inlineMarkupToHtml(body || " ")}</span>`;
+  const numberHtml = number ? `<span class="preview-equation-number">${escapeHtml(number)}</span>` : "";
+  return `<p class="preview-equation">${bodyHtml}${numberHtml}</p>`;
+}
+
 function sourceHtml(text: string): string {
   return `<p class="preview-source" data-font-size="${SOURCE_SIZE_PT}pt">${inlineMarkupToHtml(cleanMojibakeText(text || " "))}</p>`;
 }
@@ -417,6 +427,8 @@ function bodyBlockHtml(
       return headingHtml(3, block.text);
     case "longQuote":
       return longQuoteHtml(block.text);
+    case "equation":
+      return equationHtml(block.text);
     case "scheduleTable":
     case "plainScheduleTable":
     case "markdownTable":
@@ -566,7 +578,7 @@ function titlePageSupplementalLinesHtml(fields: DocxGenerationInput["fields"]): 
   ].filter(Boolean);
 }
 
-function resumoAbstractHtml(fields: DocxGenerationInput["fields"]): string {
+function resumoAbstractHtml(fields: DocxGenerationInput["fields"], abstractPageClassName = ""): string {
   const resumo = [
     unnumberedTitle("Resumo"),
     simpleParagraph(fields.resumo || " "),
@@ -585,7 +597,7 @@ function resumoAbstractHtml(fields: DocxGenerationInput["fields"]): string {
   ]
     .filter(Boolean)
     .join("");
-  return page(resumo) + page(abstract);
+  return page(resumo) + page(abstract, abstractPageClassName);
 }
 
 function ensureTrailingPeriod(value: string): string {
@@ -723,7 +735,8 @@ function generalPreview(input: DocxGenerationInput): string {
   preTextual.push(optionalFrontPage("Agradecimentos", fields.agradecimentos));
   preTextual.push(optionalFrontPage("Epígrafe", fields.epigrafe));
   preTextual.push(optionalFrontPage("Errata", fields.errata));
-  preTextual.push(resumoAbstractHtml(fields));
+  const abstractBreakClass = ["monografia", "dissertacao", "tese"].includes(fields.workType) ? "preview-abstract-break" : "";
+  preTextual.push(resumoAbstractHtml(fields, abstractBreakClass));
   preTextual.push(impactIndicatorsHtml(fields));
   preTextual.push(autoListsHtml(bodyBlocks, importedImages, importedTables));
   preTextual.push(optionalFrontPage("Lista de quadros", fields.listaQuadros));
@@ -752,7 +765,7 @@ function generalPreview(input: DocxGenerationInput): string {
   }
 
   return [
-    `<div class="preview-document" data-template="general" data-first-line-cm="${FIRST_LINE_CM}" data-long-quote-cm="${LONG_QUOTE_INDENT_CM}">`,
+    `<div class="preview-document" data-template="general" data-work-type="${fields.workType}" data-first-line-cm="${FIRST_LINE_CM}" data-long-quote-cm="${LONG_QUOTE_INDENT_CM}">`,
     ...preTextual,
     page(bodyHtml, "preview-body-flow"),
     ...postTextual,
@@ -798,7 +811,7 @@ function articlePreview(input: DocxGenerationInput): string {
     : "";
 
   return [
-    `<div class="preview-document" data-template="article" data-first-line-cm="${FIRST_LINE_CM}" data-long-quote-cm="${LONG_QUOTE_INDENT_CM}">`,
+    `<div class="preview-document" data-template="article" data-work-type="${fields.workType}" data-first-line-cm="${FIRST_LINE_CM}" data-long-quote-cm="${LONG_QUOTE_INDENT_CM}">`,
     page(header + bodyHtml, "preview-article-flow"),
     referencesBlock,
     `</div>`,
@@ -842,7 +855,7 @@ function cpgPreview(input: DocxGenerationInput): string {
     : "";
 
   return [
-    `<div class="preview-document" data-template="cpg" data-first-line-cm="${CPG_RULES.typography.paragraphFirstLineCm}">`,
+    `<div class="preview-document" data-template="cpg" data-work-type="${fields.workType}" data-first-line-cm="${CPG_RULES.typography.paragraphFirstLineCm}">`,
     page(header + bodyHtml, "preview-cpg-flow"),
     referencesBlock,
     `</div>`,
@@ -887,7 +900,7 @@ function researchProjectPreview(input: DocxGenerationInput): string {
     : "";
 
   return [
-    `<div class="preview-document" data-template="research-project" data-first-line-cm="${FIRST_LINE_CM}" data-long-quote-cm="${LONG_QUOTE_INDENT_CM}">`,
+    `<div class="preview-document" data-template="research-project" data-work-type="${fields.workType}" data-first-line-cm="${FIRST_LINE_CM}" data-long-quote-cm="${LONG_QUOTE_INDENT_CM}">`,
     page(coverHtml(fields), "preview-cover"),
     page(titlePageHtml(fields), "preview-title-page"),
     resumo,

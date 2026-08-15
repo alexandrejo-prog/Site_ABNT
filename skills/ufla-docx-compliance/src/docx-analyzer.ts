@@ -320,9 +320,80 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
   const hasLogo = /ufla|logo|image|drawing/i.test(documentXml + header1Xml);
 
   // === TOC ===
-  const tocField = documentXml.includes('w:instrText') && documentXml.includes('TOC');
+  const tocInstrTexts = documentXml.match(/<w:instrText[^>]*>([\s\S]*?)<\/w:instrText>/g) || [];
+  const tocField = tocInstrTexts.some((m) => /TOC/i.test(m));
   const tocHyperlink = documentXml.includes('\\h');
   const tocRange = extractFirstMatch(documentXml, /TOC \\o &quot;(\d+-\d+)&quot;/) || "";
+  const hasTocBegin = documentXml.includes('<w:fldChar w:fldCharType="begin"');
+  const hasTocSeparate = documentXml.includes('<w:fldChar w:fldCharType="separate"');
+  const hasTocEnd = documentXml.includes('<w:fldChar w:fldCharType="end"');
+  const tocHasFieldChars = hasTocBegin && hasTocSeparate && hasTocEnd;
+  const tocHasCorrectRange = tocRange === "1-3";
+  const tocHasHyperlinkFlag = tocHyperlink;
+
+  // === CATALOG CARD ===
+  const fichaKeywords = ["FICHA CATALOGRAFICA", "FICHA CATOGRÁFICA"];
+  const fichaIdx = normalized.findIndex((t, i) => i < 80 && fichaKeywords.some((k) => t.includes(k)));
+  const hasCatalogCard = fichaIdx >= 0;
+  const hasCatalogPlaceholder =
+    hasCatalogCard &&
+    (normalized[fichaIdx + 1]?.includes("DETECTADA") || normalized[fichaIdx + 1]?.includes("PRESERVE"));
+
+  // === TITLE PAGE / PRE-TEXTUAL STRUCTURE ===
+  const natureKeywords = [
+    "APRESENTADA",
+    "APRESENTADO",
+    "PROJETO DE PESQUISA",
+    "TRABALHO ACADÊMICO",
+    "MONOGRAFIA",
+    "DISSERTAÇÃO",
+    "TESE",
+  ];
+  const natureParaIdx = bodyParas.findIndex((p, i) => {
+    if (i >= 60) return false;
+    const ppr = p[0].match(/<w:pPr[\s\S]*?<\/w:pPr>/)?.[0] || "";
+    const hasIndent = ppr.includes("w:ind") && (ppr.includes("w:left=") || ppr.includes("w:firstLine="));
+    const isJustified = ppr.includes('w:val="both"') || ppr.includes('w:val="justify"');
+    const text = normalized[i] || "";
+    return hasIndent && isJustified && natureKeywords.some((k) => text.includes(k));
+  });
+  const hasNature = natureParaIdx >= 0;
+  const natureText = hasNature ? paras[natureParaIdx] : "";
+
+  const supplementalStart = hasNature ? natureParaIdx + 1 : 0;
+  const supplementalEnd = hasNature ? Math.min(natureParaIdx + 10, paras.length) : 0;
+  const suppTexts = paras.slice(supplementalStart, supplementalEnd);
+  const hasCourse = suppTexts.some((t) => /^CURSO:/.test(t.trim()));
+  const hasProgram = suppTexts.some((t) => /^PROGRAMA:/.test(t.trim()));
+  const hasAdvisor = suppTexts.some((t) => /^ORIENTADOR\(A\):/.test(t.trim()));
+  const hasCoadvisor = suppTexts.some((t) => /^COORIENTADOR\(A\):/.test(t.trim()));
+
+  let englishTitleText = "";
+  let hasEnglishTitle = false;
+  if (hasCatalogCard && fichaIdx >= 0) {
+    const approvalStart = fichaIdx + 5;
+    for (let i = approvalStart; i < Math.min(approvalStart + 20, paras.length); i++) {
+      const xml = bodyParas[i]?.[0] || "";
+      const text = normalized[i] || "";
+      if (natureKeywords.some((k) => text.includes(k)) && (xml.includes('w:val="both"') || xml.includes('w:val="justify"'))) {
+        break;
+      }
+      if (
+        xml.includes('w:val="center"') &&
+        text.length > 5 &&
+        !/^TESTE AUTOR$|^AUTOR$/i.test(text) &&
+        !/^TÍTULO/.test(text) &&
+        !/^SUBTÍTULO/.test(text) &&
+        !/ORIENTADOR/.test(text) &&
+        !/COORIENTADOR/.test(text) &&
+        !/APROVADO/.test(text)
+      ) {
+        hasEnglishTitle = true;
+        englishTitleText = paras[i];
+        break;
+      }
+    }
+  }
 
   // === PAGINATION ===
   const hasPageNumberField = /w:instrText[^>]*>\s*PAGE\s*<\/w:instrText>/i.test(documentXml + header1Xml) || documentXml.includes("PageNumber") || header1Xml.includes("PageNumber");
@@ -340,6 +411,12 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
   const resumoIdx = normalized.findIndex((t) => /^resumo$/i.test(t));
   const resumoXml = resumoIdx >= 0 ? bodyParas[resumoIdx]?.[0] || "" : "";
   const resumoTitleCentered = resumoXml.includes('w:val="center"');
+
+  // === EQUAÇÕES (UFLA-023 §3.2.8) ===
+  const mathCount = (documentXml.match(/<m:oMath(?:\s[^>]*)?>/g) || []).length;
+  const equationParas = paras.filter(
+    (p) => p.includes('w:val="center"') && (p.includes("<m:oMath") || (p.includes("w:tab") && p.includes('w:val="right"'))),
+  );
 
   // === COLORS ===
   const blueInBody = documentXml.includes('w:color w:val="0000FF"') || documentXml.includes('w:color w:val="0563C1"');
@@ -419,9 +496,27 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
       yearBold,
       pageNumberVisible: false,
     },
+    catalogCard: {
+      exists: hasCatalogCard,
+      hasPlaceholder: hasCatalogPlaceholder,
+    },
+    titlePage: {
+      exists: hasNature,
+      hasNature,
+      natureText,
+      hasCourse,
+      hasProgram,
+      hasAdvisor,
+      hasCoadvisor,
+      hasEnglishTitle,
+      englishTitleText,
+    },
     toc: {
       exists: tocField,
       hasFieldCode: tocField,
+      hasFieldChars: tocHasFieldChars,
+      hasCorrectRange: tocHasCorrectRange,
+      hasHyperlinkFlag: tocHasHyperlinkFlag,
       headingStyleRange: tocRange,
       hyperlink: tocHyperlink,
     },
@@ -445,6 +540,10 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
     },
     resumo: {
       titleCentered: resumoTitleCentered,
+    },
+    equations: {
+      count: mathCount,
+      hasCenteredWithRightNumber: mathCount === 0 || equationParas.length > 0,
     },
     colors: {
       hasBlueInBody: blueInBody,

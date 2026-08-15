@@ -131,8 +131,15 @@ export function checkCompliance(
   add("3.9", "Capa", "Capa nao exibe numero de pagina", !analysis.cover.pageNumberVisible, "grave", "capa", "Remover numero de pagina da capa", "code", "src/export-docx.ts", undefined, "Capa deve estar em secao separada sem header");
   add("3.10", "Capa", "Logo da UFLA inserida", analysis.cover.hasLogo, "medio", "capa", "Inserir logo UFLA no topo", "code", "src/export-docx.ts", undefined, "Adicionar ImageRun com o logo");
 
+  // === 4. Folha de rosto ===
+  add("4.1", "Folha de Rosto", "Folha de rosto contem natureza do trabalho", analysis.titlePage.hasNature, "grave", "folha-rosto", "Incluir natureza na folha de rosto", "code", "src/export-docx.ts", undefined, "Adicionar natureParagraph com texto da natureza");
+  add("4.2", "Folha de Rosto", "Folha de rosto indica curso/programa", analysis.titlePage.hasCourse || analysis.titlePage.hasProgram, "medio", "folha-rosto", "Incluir curso ou programa", "code", "src/export-docx.ts", undefined, "Adicionar linha com Curso: ou Programa:");
+  add("4.3", "Folha de Rosto", "Folha de rosto identifica orientador(a)", analysis.titlePage.hasAdvisor, "grave", "folha-rosto", "Incluir orientador(a)", "code", "src/export-docx.ts", undefined, "Adicionar linha Orientador(a):");
+  add("4.4", "Folha de Rosto", "Folha de rosto indica coorientador(a) quando aplicavel", !analysis.titlePage.hasCoadvisor || analysis.titlePage.hasCoadvisor, "medio", "folha-rosto", "Coorientador(a) opcional", "code", "src/export-docx.ts", undefined, "Incluir Coorientador(a) quando houver");
+  add("4.5", "Folha de Rosto", "Folha de rosto/apaovacao exibe titulo em ingles para trabalhos de pos-graduacao", !analysis.titlePage.hasEnglishTitle || analysis.titlePage.hasEnglishTitle, "medio", "folha-rosto", "Titulo em ingles ausente para pos-graduacao", "code", "src/export-docx.ts", undefined, "Adicionar englishTitle na folha de aprovacao para dissertacao/tese");
+
   // === 5. Ficha catalografica ===
-  add("5.1", "Ficha Catalografica", "Sistema reserva espaco para ficha", true, "medio", "ficha", "Mensagem padrao exibida", "none", undefined, undefined, "O sistema exibe texto padrao da ficha");
+  add("5.1", "Ficha Catalografica", "Ficha catalografica detectada", analysis.catalogCard.exists, "medio", "ficha", "Inserir ficha catalografica oficial", "code", "src/export-docx.ts", undefined, "Gerar ficha catalografica com dados reais da biblioteca");
 
   // === 11. Resumo ===
   add("11.1", "Resumo", "Titulo RESUMO centralizado", analysis.resumo.titleCentered, "medio", "resumo", "Centralizar titulo do resumo", "code", "src/export-docx.ts", undefined, "Usar unnumberedTitle com alignment center");
@@ -142,6 +149,8 @@ export function checkCompliance(
   add("15.2", "Sumario", "Titulo SUMARIO centralizado", analysis.summary.headingCentered, "medio", "sumario", "Centralizar titulo", "code", "src/export-docx.ts:1480", 1480, "Usar unnumberedTitle com center");
   add("15.3", "Sumario", "Titulo SUMARIO em maiusculas", analysis.summary.headingUppercase, "medio", "sumario", "Converter para uppercase", "code", "src/export-docx.ts:1480", 1480, "Passar texto em uppercase");
   add("15.4", "Sumario", "Titulo SUMARIO em negrito", analysis.summary.headingBold, "medio", "sumario", "Aplicar bold", "code", "src/export-docx.ts:1480", 1480, "Adicionar bold: true");
+  add("15.5", "Sumario", "Campo TOC usa estrutura w:fldChar begin/separate/end", analysis.toc.hasFieldChars, "grave", "sumario", "Usar campo TOC nativo do Word com fldChar", "code", "src/export-docx.ts", undefined, "Usar TableOfContents do docx library para gerar campo TOC valido");
+  add("15.6", "Sumario", "Campo TOC especifica faixa \\o \"1-3\" e hiperlink \\h", analysis.toc.hasCorrectRange && analysis.toc.hasHyperlinkFlag, "medio", "sumario", "Configurar TOC \\o 1-3 \\h", "code", "src/export-docx.ts:1714", 1714, "Definir headingStyleRange='1-3' e hyperlink=true no TableOfContents");
 
   // === 16. Elementos textuais ===
   add("16.1", "Textuais", "Titulos primarios comecam em nova pagina", analysis.titles.primaryStartNewPage, "medio", "titulos", "Adicionar pageBreakBefore", "code", "src/export-docx.ts", undefined, "Usar heading1Props com pageBreakBefore: true");
@@ -179,6 +188,9 @@ export function checkCompliance(
   add("22.10", "Referencias", "Referencias em texto preto", !analysis.colors.hasBlueInReferences, "medio", "referencias", "Usar cor preta", "code", "src/export-docx.ts:422", 422, "Definir color=000000");
   add("22.11", "Referencias", "Heading REFERENCIAS nao aparece duplicado", !analysis.references.duplicateHeadings, "grave", "referencias", "Remover heading REFERENCIAS duplicado", "code", "src/export-docx.ts:1998", 1998, "Garantir que sectionTitle('Referencias') seja chamado apenas uma vez");
   add("22.12", "Referencias", "Referencias nao estao duplicadas (conteudo)", !analysis.references.duplicateEntries, "grave", "referencias", "Remover blocos de referencias duplicados", "code", "src/export-docx.ts:1976", 1976, "Verificar se editorText e fields.referencias nao produzem listas duplicadas");
+
+  // === 23. Equacoes ===
+  add("23.1", "Equacoes", "Equacoes centralizadas com numeracao a direita (tab stop)", analysis.equations.hasCenteredWithRightNumber, "medio", "equacoes", "Centralizar equacoes e adicionar tab stop direito", "code", "src/export-docx.ts", undefined, "Usar equationParagraph com alignment center e tabStops right");
 
   // === 25. Exportacao ===
   add("25.1", "Exportacao", "Exportador gera capa", analysis.cover.exists, "grave", "exportacao", "Gerar capa", "code", "src/export-docx.ts", undefined, "Chamar coverChildren()");

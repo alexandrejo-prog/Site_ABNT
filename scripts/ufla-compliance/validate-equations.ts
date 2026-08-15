@@ -61,11 +61,3 @@ export async function validateEquations(docxPath: string): Promise<EquationValid
   return result;
 }
 
-if (require.main === module) {
-  const p = process.argv[2] || 'artifacts/ufla-compliance/normalized-dissertacao.docx';
-  validateEquations(path.resolve(p)).then(r => {
-    console.log(`[equations] Básicas: ${r.basicEquations}, Avançadas: ${r.advancedEquations}`);
-    console.log(`[equations] OMML cru: ${r.ommlCruInjected ? 'SIM' : 'Não'}`);
-    process.exit(r.isValid ? 0 : 1);
-  });
-}

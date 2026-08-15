@@ -46,7 +46,7 @@ describe("integração tela única + preview (R8)", () => {
 
     await user.click(getButtonByText(/Visualizar/));
 
-    const dialog = await screen.findByRole("dialog", { name: /Pré-visualização do documento/i });
+    const dialog = await screen.findByRole("dialog", { name: /Pré-visualização/i });
     expect(dialog).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: /Fechar pré-visualização/i }));
@@ -62,7 +62,7 @@ describe("integração tela única + preview (R8)", () => {
     await user.type(screen.getByLabelText("Autor"), "Maria Silva");
 
     await user.click(getButtonByText(/Visualizar/));
-    const dialog = await screen.findByRole("dialog", { name: /Pré-visualização do documento/i });
+    const dialog = await screen.findByRole("dialog", { name: /Pré-visualização/i });
 
     const generateButton = within(dialog).getByRole("button", { name: /Gerar DOCX$/ });
     await user.click(generateButton);
@@ -80,7 +80,7 @@ describe("integração tela única + preview (R8)", () => {
     await user.type(screen.getByLabelText("Autor"), "Maria Silva");
 
     await user.click(getButtonByText(/Visualizar/));
-    const dialog = await screen.findByRole("dialog", { name: /Pré-visualização do documento/i });
+    const dialog = await screen.findByRole("dialog", { name: /Pré-visualização/i });
 
     await user.click(within(dialog).getByRole("button", { name: /Editar/ }));
 

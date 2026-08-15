@@ -163,6 +163,26 @@ function sanitizeConfidence(
   };
 }
 
+function collectChangeWarnings(structure: DocxStructure): string[] {
+  let insertions = 0;
+  let deletions = 0;
+  for (const block of structure.blocks) {
+    if (!("runs" in block)) continue;
+    for (const run of block.runs) {
+      if (run.changeKind === "insertion") insertions += 1;
+      if (run.changeKind === "deletion") deletions += 1;
+    }
+  }
+  const warnings: string[] = [];
+  if (insertions > 0) {
+    warnings.push(`Documento contém ${insertions} marcação(ões) de inserção (revisão do Word).`);
+  }
+  if (deletions > 0) {
+    warnings.push(`Documento contém ${deletions} marcação(ões) de exclusão (revisão do Word).`);
+  }
+  return warnings;
+}
+
 function blockText(block: ImportedBlock): string {
   if (block.type === "pageBreak" || block.type === "image") return "";
   if (block.type === "table") return block.rows.map((row) => row.join("\t")).join("\n");
@@ -846,6 +866,7 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
 
     try {
       const structure = await extractDocxStructure(arrayBuffer, { includeMediaData: true });
+      const changeWarnings = collectChangeWarnings(structure);
       const normalized = normalizeImportedStructure({
         ...structure,
         text: structure.text || mammothText,
@@ -854,6 +875,7 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
 
       return buildImportResult(normalized, detected, [
         ...messages,
+        ...changeWarnings,
         ...normalized.messages,
         ...detected.messages,
       ]);

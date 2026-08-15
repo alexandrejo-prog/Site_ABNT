@@ -9,6 +9,7 @@ export interface ImportedTextRun {
   underline?: boolean;
   style?: string;
   inheritedStyle?: string;
+  changeKind?: "insertion" | "deletion";
 }
 
 export type ImportedBlock =
@@ -22,6 +23,7 @@ export type ImportedBlock =
       section?: ImportedSectionKind;
       footnoteRefs?: string[];
       hasMath?: boolean;
+      bookmarks?: Array<{ id: string; start: boolean }>;
     }
   | {
       type: "heading";
@@ -34,6 +36,7 @@ export type ImportedBlock =
       section?: ImportedSectionKind;
       footnoteRefs?: string[];
       hasMath?: boolean;
+      bookmarks?: Array<{ id: string; start: boolean }>;
     }
   | {
       type: "longQuote";
@@ -45,6 +48,7 @@ export type ImportedBlock =
       section?: ImportedSectionKind;
       footnoteRefs?: string[];
       hasMath?: boolean;
+      bookmarks?: Array<{ id: string; start: boolean }>;
     }
   | {
       type: "table";
@@ -90,6 +94,7 @@ export interface ImportedParagraph {
   appearsPostTextual: boolean;
   imageRelationshipIds: string[];
   footnoteRefs: string[];
+  bookmarks?: Array<{ id: string; start: boolean }>;
   runs: ImportedTextRun[];
   section: ImportedSectionKind;
   hasMath?: boolean;
@@ -235,13 +240,49 @@ function hasUnderline(runXml: string): boolean {
   return !/\bw:val="(?:none|false|0)"/i.test(match[1]);
 }
 
+function extractBookmarks(paragraphXml: string): Array<{ id: string; start: boolean }> {
+  const bookmarks: Array<{ id: string; start: boolean }> = [];
+  const startPattern = /<w:bookmarkStart\b[^>]*w:id="([^"]+)"[^>]*>/g;
+  let match: RegExpExecArray | null;
+  while ((match = startPattern.exec(paragraphXml)) !== null) {
+    bookmarks.push({ id: match[1], start: true });
+  }
+  const endPattern = /<w:bookmarkEnd\b[^>]*w:id="([^"]+)"[^>]*>/g;
+  while ((match = endPattern.exec(paragraphXml)) !== null) {
+    bookmarks.push({ id: match[1], start: false });
+  }
+  return bookmarks;
+}
+
+function extractRunSourcesFromParagraphXml(
+  paragraphXml: string,
+): Array<{ xml: string; changeKind?: "insertion" | "deletion" }> {
+  const sources: Array<{ xml: string; changeKind?: "insertion" | "deletion" }> = [];
+  const ranges: Array<{ start: number; end: number; changeKind: "insertion" | "deletion" }> = [];
+  const insDelPattern = /<w:ins\b[\s\S]*?<\/w:ins>|<w:del\b[\s\S]*?<\/w:del>/g;
+  let match: RegExpExecArray | null;
+  while ((match = insDelPattern.exec(paragraphXml)) !== null) {
+    const changeKind = match[0].startsWith("<w:ins") ? "insertion" : "deletion";
+    ranges.push({ start: match.index, end: match.index + match[0].length, changeKind });
+  }
+  const runPattern = /<w:r\b[\s\S]*?<\/w:r>/g;
+  while ((match = runPattern.exec(paragraphXml)) !== null) {
+    const runStart = match.index;
+    const runEnd = match.index + match[0].length;
+    const changeKind = ranges.find((r) => runStart >= r.start && runEnd <= r.end)?.changeKind;
+    sources.push({ xml: match[0], changeKind });
+  }
+  return sources;
+}
+
 function extractRunsFromParagraphXml(
   paragraphXml: string,
   inheritedStyle?: string,
 ): ImportedTextRun[] {
-  const runs = [...paragraphXml.matchAll(/<w:r\b[\s\S]*?<\/w:r>/g)]
-    .map((match): ImportedTextRun | undefined => {
-      const runXml = match[0];
+  const sources = extractRunSourcesFromParagraphXml(paragraphXml);
+  const runs = sources
+    .map((source): ImportedTextRun | undefined => {
+      const runXml = source.xml;
       const { rawText, text } = extractTextFromXml(runXml);
       const style = runXml.match(/<w:rStyle\b[^>]*w:val="([^"]+)"/)?.[1];
       const runText = rawText || text;
@@ -257,6 +298,7 @@ function extractRunsFromParagraphXml(
         underline: hasUnderline(runXml) || undefined,
         style,
         inheritedStyle,
+        changeKind: source.changeKind,
       };
     })
     .filter((run): run is ImportedTextRun => Boolean(run));
@@ -434,6 +476,7 @@ function paragraphBlockFromMetadata(paragraph: ImportedParagraph): ImportedBlock
       style: paragraph.styleId,
       styleName: paragraph.styleName,
       section: paragraph.section,
+      ...(paragraph.bookmarks?.length ? { bookmarks: paragraph.bookmarks } : {}),
       ...mathProp,
     };
   }
@@ -447,6 +490,7 @@ function paragraphBlockFromMetadata(paragraph: ImportedParagraph): ImportedBlock
       style: paragraph.styleId,
       styleName: paragraph.styleName,
       section: paragraph.section,
+      ...(paragraph.bookmarks?.length ? { bookmarks: paragraph.bookmarks } : {}),
       ...mathProp,
     };
   }
@@ -459,6 +503,7 @@ function paragraphBlockFromMetadata(paragraph: ImportedParagraph): ImportedBlock
     style: paragraph.styleId,
     styleName: paragraph.styleName,
     section: paragraph.section,
+    ...(paragraph.bookmarks?.length ? { bookmarks: paragraph.bookmarks } : {}),
     ...mathProp,
   };
 }
@@ -722,6 +767,7 @@ export async function extractDocxStructure(
       const imageRelationshipIds = extractImageRelationshipIds(segment.xml, relationships);
       const isLongQuote = !isHeading && isLongQuoteParagraph(xml, styleId, styleName);
       const runs = extractRunsFromParagraphXml(segment.xml, styleId);
+      const bookmarks = extractBookmarks(segment.xml);
       const footnoteRefs: string[] = [];
       let footnoteRefMatch: RegExpExecArray | null;
       FOOTNOTE_REFERENCE_PATTERN.lastIndex = 0;
@@ -748,6 +794,7 @@ export async function extractDocxStructure(
           appearsPostTextual: currentSection === "post-textual",
           imageRelationshipIds,
           footnoteRefs,
+          bookmarks,
           section: currentSection,
           ...(hasMath ? { hasMath: true } : {}),
         };

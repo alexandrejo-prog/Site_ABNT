@@ -77,9 +77,27 @@ export interface DocxAnalysis {
     yearBold: boolean;
     pageNumberVisible: boolean;
   };
+  catalogCard: {
+    exists: boolean;
+    hasPlaceholder: boolean;
+  };
+  titlePage: {
+    exists: boolean;
+    hasNature: boolean;
+    natureText: string;
+    hasCourse: boolean;
+    hasProgram: boolean;
+    hasAdvisor: boolean;
+    hasCoadvisor: boolean;
+    hasEnglishTitle: boolean;
+    englishTitleText: string;
+  };
   toc: {
     exists: boolean;
     hasFieldCode: boolean;
+    hasFieldChars: boolean;
+    hasCorrectRange: boolean;
+    hasHyperlinkFlag: boolean;
     headingStyleRange: string;
     hyperlink: boolean;
   };
@@ -103,6 +121,10 @@ export interface DocxAnalysis {
   };
   resumo: {
     titleCentered: boolean;
+  };
+  equations: {
+    count: number;
+    hasCenteredWithRightNumber: boolean;
   };
   colors: {
     hasBlueInBody: boolean;

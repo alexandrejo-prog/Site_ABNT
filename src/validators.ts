@@ -403,6 +403,7 @@ function referenceIssueMessage(code: string, message: string): string {
   if (code === "reference-academic-pages-missing") return `${message} Informe o total de páginas se a fonte bibliográfica trouxer essa informação.`;
   if (code === "reference-legal-publisher-missing" || code === "reference-institutional-publisher-missing") return `${message} Confira órgão/editor responsável, publicação oficial e local.`;
   if (code === "reference-access-missing" || code === "reference-highlight-missing") return `${message} Revise antes da versão final.`;
+  if (code === "reference-order") return `${message} O DOCX reordena as referências alfabeticamente ao gerar, mas confira a sequência final no arquivo.`;
   return message;
 }
 
@@ -480,6 +481,73 @@ function addUflaCollectionIssues(fields: AcademicFields, issues: ValidationIssue
   }
 }
 
+function addDocumentStructureIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
+  const requirements = getWorkTypeRequirements(fields.workType);
+  const hasHeadings = /^\s*#{1,3}\s+/m.test(editorText);
+  const headingLabels = editorText.split(/\n+/).map((line) => line.trim()).filter((line) => /^#{1,3}\s+/.test(line));
+
+  if (requirements.requiresTableOfContents && !hasHeadings) {
+    issues.push({
+      severity: "warning",
+      code: "document-structure-missing-headings",
+      fieldKey: FIELD_TARGET_EDITOR,
+      message: "O sumário será gerado, mas não há títulos de seção no texto principal.",
+      what: "O documento não contém cabeçalhos de nível 1-3 no editor.",
+      why: "O sumário automático do Word depende de estilos de título no corpo do texto para listar as seções.",
+      action: "Insira títulos de seção no editor (ex.: '# 1 Introdução', '## 1.1 Objetivos').",
+    });
+  }
+
+  if (fields.workType === "projeto_pesquisa") {
+    const missingSections: string[] = [];
+    if (!hasSectionHeading(editorText, ["PROBLEMA DE PESQUISA", "PROBLEMA"])) missingSections.push("Problema de pesquisa");
+    if (!hasSectionHeading(editorText, ["OBJETIVO GERAL"])) missingSections.push("Objetivo geral");
+    if (!hasSectionHeading(editorText, ["JUSTIFICATIVA"])) missingSections.push("Justificativa");
+    if (!hasSectionHeading(editorText, ["METODOLOGIA", "PROCEDIMENTOS METODOLÓGICOS", "PROCEDIMENTOS METODOLOGICOS"])) missingSections.push("Metodologia");
+    if (!hasSectionHeading(editorText, ["CRONOGRAMA"])) missingSections.push("Cronograma");
+    if (missingSections.length > 0) {
+      issues.push({
+        severity: "warning",
+        code: "document-structure-research-project-sections",
+        fieldKey: FIELD_TARGET_EDITOR,
+        message: `Seções obrigatórias do projeto de pesquisa não detectadas: ${missingSections.join(", ")}.`,
+        what: "O projeto de pesquisa não apresenta todas as seções estruturais esperadas.",
+        why: "A NBR 15287:2025 exige problema, objetivo, justificativa, metodologia e cronograma.",
+        action: `Adicione as seções ausentes no editor: ${missingSections.join(", ")}.`,
+      });
+    }
+  }
+
+  const normalizedHeadings = headingLabels.map((line) => stripHeadingSyntax(line));
+  const refHeadingIndex = normalizedHeadings.findIndex((line) => /^REFERENCIAS|BIBLIOGRAFICAS/.test(line));
+  if (refHeadingIndex >= 0 && refHeadingIndex < normalizedHeadings.length - 1) {
+    const afterRefs = normalizedHeadings.slice(refHeadingIndex + 1);
+    if (afterRefs.some((line) => line.length > 0 && !/^APENDICE|ANEXO|GLOSSARIO|INDICE/.test(line))) {
+      issues.push({
+        severity: "warning",
+        code: "document-structure-content-after-references",
+        fieldKey: FIELD_TARGET_EDITOR,
+        message: "Há conteúdo textual após a seção de referências.",
+        what: "O editor contém seções depois de REFERÊNCIAS.",
+        why: "As referências devem ser a última seção pós-textual antes de apêndices/anexos.",
+        action: "Mova conteúdo eventual para apêndices/anexos ou remova seções após REFERÊNCIAS.",
+      });
+    }
+  }
+
+  if (requirements.requiresCoverAndFrontMatter && !hasValue(fields.title)) {
+    issues.push({
+      severity: "error",
+      code: "document-structure-title-missing",
+      fieldKey: "title",
+      message: "Título obrigatório ausente para a estrutura pré-textual.",
+      what: "O trabalho não possui título informado.",
+      why: "Capa e folha de rosto dependem do título para compor a estrutura pré-textual.",
+      action: "Preencha o campo Título antes de gerar o DOCX.",
+    });
+  }
+}
+
 function addProgramCompatibilityIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
   if (!getWorkTypeRequirements(fields.workType).requiresProgramMetadata) return;
 
@@ -550,6 +618,7 @@ function applyProgramDegreeChecks(program: UflaPpgProgram, fields: AcademicField
 
 export function validateWork(fields: AcademicFields, editorText = ""): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
+  addDocumentStructureIssues(fields, editorText, issues);
   const requirements = getWorkTypeRequirements(fields.workType);
   const simpleArticle = fields.workType === "artigo";
 
