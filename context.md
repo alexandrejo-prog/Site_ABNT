@@ -243,6 +243,25 @@ Implementação da regra UFLA-023: equações/fórmulas destacadas no texto, num
 
 ---
 
+## 6j. ESTABILIZAÇÃO DA BRANCH + VALIDAÇÃO AMPLIADA (15/08/2026)
+Sequência executada para deixar `npm run verify` 100% verde e ampliar a cobertura do validador contra o Manual UFLA. **195 arquivos, 1515 testes (10 skipped), build OK, tsc limpo.**
+
+1. **Correções do trabalho em andamento (`feat/ufla-render-validation`)** — o alias `@scripts` no tsconfig puxou `scripts/ufla-compliance/` para o programa de tipos e expôs ~30 erros latentes, quebrando o build:
+   - `gate.ts` reescrito com tipagem correta: `checkTables` inteligente (linha única aceita — DECISION_002) usado no gate, gaps dos validadores mapeados com `section`, `technical` com os campos novos (omml, citationsValidator, referencesValidator, sectionsValidator, figuresValidator, tablesValidator); `runFullComplianceGate` preservado.
+   - `audit-all.ts`, `audit-references.ts`, `audit-citations.ts`, `audit-figures.ts`, `audit-pretextual.ts`, `audit-sections.ts`, `report.ts`, `document-type-matrix.ts`, `validate-document-structure.ts` (agora aceita `explicitType`), `validate-page-layout.ts` (usa `UFLA_RULES.page.widthTwip/heightTwip` e o recuo real), `validate-equations.ts`, `validate-pagination.ts` — tipos e imports limpos.
+   - `report.ts` refatorado para aceitar `ExpandedAuditResult` OU `UnifiedAuditResult` de forma defensiva (não lança com resultado vazio) e criar o diretório do relatório.
+2. **Track changes/comentários/bookmarks/vMerge completados** — `src/word-structure-extractor.ts` calculava `commentId`/`moveId`/`permissionId` mas não os propagava: agora `extractRunsFromParagraphXml` copia para os runs, o parágrafo agrega `commentIds`/`moveIds`/`permissionIds` e `paragraphBlockFromMetadata` os propaga aos blocos; corrigida a lógica de intervalo (fim do comentário vem depois do run — antes exigia `end <= runEnd`).
+3. **Testes novos corrigidos** — `tests/import/import-track-changes.test.ts` reescrito com DOCX mínimo real (JSZip) testando `w:ins`, comentário, bookmarks e vMerge; `tests/ufla-compliance/validate-omml.test.ts` gera DOCX real sem matemática para o caso de sucesso; `tests/ufla-compliance/report.test.ts` passa com o report defensivo.
+4. **Validador da skill ampliado (`skills/ufla-docx-compliance`)** — novos itens no `checklist-checker.ts`:
+   - **3.11–3.14 Capa**: autor 14 pt, título 16 pt, local/ano 14 pt e logo 7 × 2,85 cm (dimensões lidas de `wp:extent` no bloco da capa). Detecção corrigida: autor = primeiro parágrafo com texto que NÃO seja a linha institucional; título = primeiro negrito/centralizado/longo APÓS o autor (exclui instituição e autor); local = `LAVRAS – MG`.
+   - **15.7–15.10 Sumário semântico**: entradas TOC (estilos `TOC1-3`/`ufla_sumario_*`) não incluem pré-textuais, incluem referências, apêndices e anexos quando existem; com TOC ainda não atualizado pelo Word → `unchecked` (não falso-positivo).
+   - **18.2 Numeração quinária**: profundidade máxima de 5 níveis (ABNT NBR 6024 / Manual §18).
+   - 4 testes novos (40 no total do arquivo da skill).
+5. **Gate de scripts**: `validateSections` agora também verifica o limite quinário (máx. 5 níveis).
+6. **Validação ao vivo** no DOCX gerado: 65/75 itens OK; as falhas restantes são do artefato de auditoria (baseline sem orientador/curso/refs ordenadas e sem imagem de logo — não são bugs do gerador).
+
+---
+
 ## 7. COMANDOS ÚTEIS
 ```bash
 npm run dev              # Inicia o servidor de desenvolvimento SPA

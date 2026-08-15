@@ -500,3 +500,75 @@ export function ommlEquationParagraph(text: string): Paragraph {
     children,
   });
 }
+
+/**
+ * Equação importada com estrutura matemática avançada (frações, raízes,
+ * somatórios). O OMML cru da origem é registrado e re-injetado no XML final
+ * pelo patch pós-Packer; enquanto isso, o parágrafo emite um marcador único
+ * que será substituído pelo `<m:oMathPara>` original. Sem OMML cru, cai no
+ * OMML achatado (m:r/m:t).
+ */
+export interface ImportedEquation {
+  text: string;
+  ommlXml: string;
+}
+
+const RAW_OMML_MARKER = "\uF000UFLAOMML";
+const rawOmmlRegistry = new Map<string, { ommlXml: string; number: string }>();
+let rawOmmlSeq = 0;
+
+export function clearRawOmmlRegistry(): void {
+  rawOmmlRegistry.clear();
+  rawOmmlSeq = 0;
+}
+
+export function rawOmmlRegistrySize(): number {
+  return rawOmmlRegistry.size;
+}
+
+export function rawOmmlMarkerParagraph(
+  text: string,
+  ommlXml: string | undefined,
+): Paragraph {
+  if (!ommlXml) {
+    return ommlEquationParagraph(text);
+  }
+  const equationText = cleanMojibakeText(text);
+  const numberMatch = equationText.match(/\s*\((\d+(?:\.\d+)?)\)\s*$/);
+  const number = numberMatch ? `(${numberMatch[1]})` : "";
+  const markerId = String(++rawOmmlSeq);
+  rawOmmlRegistry.set(markerId, { ommlXml, number });
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { line: 360, before: 120, after: 120 },
+    tabStops: [{ type: TabStopType.RIGHT, position: cmToTwip(16) }],
+    children: [new TextRun({ text: `${RAW_OMML_MARKER}_${markerId}\uF000` })],
+  });
+}
+
+/** Localiza o OMML cru registrado pelo marcador (usado pelo patch pós-Packer). */
+export function rawOmmlForMarker(markerId: string): { ommlXml: string; number: string } | undefined {
+  return rawOmmlRegistry.get(markerId);
+}
+
+/**
+ * Codifica o OMML cru num token ASCII seguro para viajar dentro do texto do
+ * editor (rascunho). O token é `\uF001OMML:<base64>\uF001`, invisível para o
+ * usuário e preservado por `cleanText`/`parseEditorContent`.
+ */
+export function ommlContentToken(ommlXml: string): string {
+  const bytes = new TextEncoder().encode(ommlXml);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return `\uF001OMML:${btoa(binary)}\uF001`;
+}
+
+/** Decodifica um token `ommlContentToken` de volta para o XML OMML cru. */
+export function ommlContentTokenDecode(token: string): string {
+  const binary = atob(token);
+  const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+/** Padrão que localiza o token OMML no final de uma linha `[EQ]` do rascunho. */
+export const OMML_CONTENT_TOKEN_PATTERN = /\uF001OMML:([A-Za-z0-9+/=]+)\uF001$/;

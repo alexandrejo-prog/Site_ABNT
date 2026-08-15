@@ -26,6 +26,7 @@ export type ImportedBlock =
       section?: ImportedSectionKind;
       footnoteRefs?: string[];
       hasMath?: boolean;
+      ommlXml?: string;
       bookmarks?: Array<{ id: string; start: boolean }>;
       commentIds?: string[];
       moveIds?: string[];
@@ -90,6 +91,7 @@ export type ImportedBlock =
       source?: string;
       section?: ImportedSectionKind;
       isDecorative?: boolean;
+      ommlXml?: string;
       commentIds?: string[];
       moveIds?: string[];
       permissionIds?: string[];
@@ -119,6 +121,7 @@ export interface ImportedParagraph {
   runs: ImportedTextRun[];
   section: ImportedSectionKind;
   hasMath?: boolean;
+  ommlXml?: string;
 }
 
 export interface ImportedImageAsset {
@@ -342,7 +345,7 @@ function extractRunSourcesFromParagraphXml(
     let commentId: string | undefined;
     for (const [start, id] of commentStarts) {
       if (runStart >= start) {
-        const endMatch = [...commentEnds].find((end) => end >= runStart && end <= runEnd);
+        const endMatch = [...commentEnds].find((end) => end >= runEnd);
         if (endMatch) commentId = id;
       }
     }
@@ -358,7 +361,7 @@ function extractRunSourcesFromParagraphXml(
     let permissionId: string | undefined;
     for (const [start, id] of permStarts) {
       if (runStart >= start) {
-        const endMatch = [...permEnds].find((end) => end >= runStart && end <= runEnd);
+        const endMatch = [...permEnds].find((end) => end >= runEnd);
         if (endMatch) permissionId = id;
       }
     }
@@ -392,6 +395,9 @@ function extractRunsFromParagraphXml(
         style,
         inheritedStyle,
         changeKind: source.changeKind,
+        ...(source.commentId ? { commentId: source.commentId } : {}),
+        ...(source.moveId ? { moveId: source.moveId } : {}),
+        ...(source.permissionId ? { permissionId: source.permissionId } : {}),
       };
     })
     .filter((run): run is ImportedTextRun => Boolean(run));
@@ -558,6 +564,10 @@ function paragraphBlockFromMetadata(paragraph: ImportedParagraph): ImportedBlock
   }
 
   const mathProp = paragraph.hasMath ? { hasMath: true } : {};
+  const ommlProp = paragraph.ommlXml ? { ommlXml: paragraph.ommlXml } : {};
+  const commentProp = paragraph.commentIds?.length ? { commentIds: paragraph.commentIds } : {};
+  const moveProp = paragraph.moveIds?.length ? { moveIds: paragraph.moveIds } : {};
+  const permissionProp = paragraph.permissionIds?.length ? { permissionIds: paragraph.permissionIds } : {};
 
   if (paragraph.isHeading) {
     return {
@@ -570,7 +580,11 @@ function paragraphBlockFromMetadata(paragraph: ImportedParagraph): ImportedBlock
       styleName: paragraph.styleName,
       section: paragraph.section,
       ...(paragraph.bookmarks?.length ? { bookmarks: paragraph.bookmarks } : {}),
+      ...commentProp,
+      ...moveProp,
+      ...permissionProp,
       ...mathProp,
+      ...ommlProp,
     };
   }
 
@@ -584,7 +598,11 @@ function paragraphBlockFromMetadata(paragraph: ImportedParagraph): ImportedBlock
       styleName: paragraph.styleName,
       section: paragraph.section,
       ...(paragraph.bookmarks?.length ? { bookmarks: paragraph.bookmarks } : {}),
+      ...commentProp,
+      ...moveProp,
+      ...permissionProp,
       ...mathProp,
+      ...ommlProp,
     };
   }
 
@@ -597,7 +615,11 @@ function paragraphBlockFromMetadata(paragraph: ImportedParagraph): ImportedBlock
     styleName: paragraph.styleName,
     section: paragraph.section,
     ...(paragraph.bookmarks?.length ? { bookmarks: paragraph.bookmarks } : {}),
+    ...commentProp,
+    ...moveProp,
+    ...permissionProp,
     ...mathProp,
+    ...ommlProp,
   };
 }
 
@@ -870,6 +892,11 @@ export async function extractDocxStructure(
 
       if (text || imageRelationshipIds.length) {
         const hasMath = /<m:oMath(?:\s[^>]*)?>[\s\S]*<\/m:oMath>|<m:oMathPara\b/.test(segment.xml);
+        const ommlXml =
+          /<m:oMathPara\b[\s\S]*?<\/m:oMathPara>|<m:oMath\b[\s\S]*?<\/m:oMath>/.exec(segment.xml)?.[0];
+        const commentIds = [...new Set(runs.map((r) => r.commentId).filter((id): id is string => Boolean(id)))];
+        const moveIds = [...new Set(runs.map((r) => r.moveId).filter((id): id is string => Boolean(id)))];
+        const permissionIds = [...new Set(runs.map((r) => r.permissionId).filter((id): id is string => Boolean(id)))];
         const paragraph: ImportedParagraph = {
           index: paragraphIndex,
           text,
@@ -889,7 +916,11 @@ export async function extractDocxStructure(
           footnoteRefs,
           bookmarks,
           section: currentSection,
+          ...(commentIds.length ? { commentIds } : {}),
+          ...(moveIds.length ? { moveIds } : {}),
+          ...(permissionIds.length ? { permissionIds } : {}),
           ...(hasMath ? { hasMath: true } : {}),
+          ...(ommlXml ? { ommlXml } : {}),
         };
 
         paragraphs.push(paragraph);

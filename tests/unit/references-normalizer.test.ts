@@ -278,4 +278,63 @@ describe("references normalizer", () => {
       "SIMPÓSIO NACIONAL DE TECNOLOGIA EDUCACIONAL",
     );
   });
+
+  // === Tipos do Manual UFLA §25.14 (modelos mínimos) ===
+
+  it("detecta patente (BR + número)", () => {
+    const normalized = normalizeReference(
+      "SILVA, João. Dispositivo para medição de umidade do solo. BR 10 2020 012345-6 A2, 22 set. 2020.",
+    );
+    expect(normalized.detectedType).toBe("patente");
+    expect(normalized.detectedHighlight).toBeTruthy();
+  });
+
+  it("detecta matéria de jornal (data dia + mês por extenso)", () => {
+    const normalized = normalizeReference(
+      "OLIVEIRA, M. Lavras recebe novo campus da UFLA. Folha de Lavras, Lavras, 15 maio 2025.",
+    );
+    expect(normalized.detectedType).toBe("jornal");
+  });
+
+  it("detecta publicação periódica no todo (ISSN ou intervalo)", () => {
+    const normalized = normalizeReference(
+      "REVISTA BRASILEIRA DE EDUCAÇÃO. Rio de Janeiro: ANPEd, 1990-. ISSN 1413-2478.",
+    );
+    expect(normalized.detectedType).toBe("periodico");
+  });
+
+  it("detecta dados de pesquisa e conjunto de dados", () => {
+    const normalized = normalizeReference(
+      "SILVA, J. Dados de pesquisa do projeto X. Lavras: UFLA, 2025. Disponível em: https://repositorio.ufla.br. Acesso em: 10 mar. 2026.",
+    );
+    expect(normalized.detectedType).toBe("dados-pesquisa");
+  });
+
+  it("detecta documento audiovisual (filme/documentário)", () => {
+    const normalized = normalizeReference(
+      "COSTA, A. A história do café no Brasil [documentário]. Direção de A. Costa. Lavras: UFLA, 2024. 1 vídeo (58 min).",
+    );
+    expect(normalized.detectedType).toBe("audiovisual");
+  });
+
+  it("detecta documento sonoro (disco/áudio)", () => {
+    const normalized = normalizeReference(
+      "VIOLA, J. Canções de Minas [gravação sonora]. Lavras: Estúdio X, 2023. 1 CD (42 min).",
+    );
+    expect(normalized.detectedType).toBe("sonoro");
+  });
+
+  it("detecta correspondência", () => {
+    const normalized = normalizeReference(
+      "SILVA, J. Correspondência ao reitor da UFLA. Lavras, 2022.",
+    );
+    expect(normalized.detectedType).toBe("correspondencia");
+  });
+
+  it("detecta documento cartográfico (mapa/planta)", () => {
+    const normalized = normalizeReference(
+      "IBGE. Mapa político do estado de Minas Gerais. Rio de Janeiro: IBGE, 2020.",
+    );
+    expect(normalized.detectedType).toBe("cartografico");
+  });
 });

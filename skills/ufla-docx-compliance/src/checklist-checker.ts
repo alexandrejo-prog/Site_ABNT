@@ -130,6 +130,10 @@ export function checkCompliance(
   add("3.8", "Capa", "Ano em negrito", analysis.cover.yearBold, "baixo", "capa", "Aplicar bold no ano", "code", "src/export-docx.ts", undefined, "Adicionar bold: true ao ano");
   add("3.9", "Capa", "Capa nao exibe numero de pagina", !analysis.cover.pageNumberVisible, "grave", "capa", "Remover numero de pagina da capa", "code", "src/export-docx.ts", undefined, "Capa deve estar em secao separada sem header");
   add("3.10", "Capa", "Logo da UFLA inserida", analysis.cover.hasLogo, "medio", "capa", "Inserir logo UFLA no topo", "code", "src/export-docx.ts", undefined, "Adicionar ImageRun com o logo");
+  add("3.11", "Capa", "Autor da capa em tamanho 14 pt", analysis.cover.authorSize === 14, "medio", "capa", "Ajustar tamanho do autor para 14 pt", "code", "src/docx-shared.ts", undefined, "Usar UFLA_RULES.typography.coverAuthorFontSizePt (14 pt)");
+  add("3.12", "Capa", "Titulo da capa em tamanho 16 pt", analysis.cover.titleSize === 16, "medio", "capa", "Ajustar tamanho do titulo para 16 pt", "code", "src/docx-shared.ts", undefined, "Usar UFLA_RULES.typography.coverTitleFontSizePt (16 pt)");
+  add("3.13", "Capa", "Local e ano da capa em tamanho 14 pt", (analysis.cover.locationSize === 0 || analysis.cover.locationSize === 14) && (analysis.cover.yearSize === 0 || analysis.cover.yearSize === 14), "baixo", "capa", "Ajustar local e ano para 14 pt", "code", "src/docx-shared.ts", undefined, "Usar tamanho 14 pt para local e ano");
+  add("3.14", "Capa", "Logo da UFLA com dimensoes 7 cm x 2,85 cm", analysis.cover.hasLogo && analysis.cover.logoSizeValid, "baixo", "capa", "Dimensionar logo para 7 cm x 2,85 cm", "code", "src/docx-shared.ts", undefined, "Definir transformation com width/height correspondentes a 7 x 2,85 cm");
 
   // === 4. Folha de rosto ===
   add("4.1", "Folha de Rosto", "Folha de rosto contem natureza do trabalho", analysis.titlePage.hasNature, "grave", "folha-rosto", "Incluir natureza na folha de rosto", "code", "src/export-docx.ts", undefined, "Adicionar natureParagraph com texto da natureza");
@@ -151,6 +155,11 @@ export function checkCompliance(
   add("15.4", "Sumario", "Titulo SUMARIO em negrito", analysis.summary.headingBold, "medio", "sumario", "Aplicar bold", "code", "src/export-docx.ts:1480", 1480, "Adicionar bold: true");
   add("15.5", "Sumario", "Campo TOC usa estrutura w:fldChar begin/separate/end", analysis.toc.hasFieldChars, "grave", "sumario", "Usar campo TOC nativo do Word com fldChar", "code", "src/export-docx.ts", undefined, "Usar TableOfContents do docx library para gerar campo TOC valido");
   add("15.6", "Sumario", "Campo TOC especifica faixa \\o \"1-3\" e hiperlink \\h", analysis.toc.hasCorrectRange && analysis.toc.hasHyperlinkFlag, "medio", "sumario", "Configurar TOC \\o 1-3 \\h", "code", "src/export-docx.ts:1714", 1714, "Definir headingStyleRange='1-3' e hyperlink=true no TableOfContents");
+  const tocNotUpdatedReason = "Sumario sem entradas preenchidas (campo TOC ainda nao atualizado pelo Word); verificacao semantica adiada.";
+  add("15.7", "Sumario", "Sumario nao inclui elementos pre-textuais (resumo, abstract, listas, agradecimentos etc.)", analysis.summary.excludesPreTextual, "grave", "sumario", "Remover elementos pre-textuais do sumario", "code", "src/export-docx.ts", undefined, "Garantir que apenas secoes textuais, referencias, apendices e anexos aparecam no TOC", !analysis.summary.hasTocEntries, tocNotUpdatedReason);
+  add("15.8", "Sumario", "Sumario inclui referencias", analysis.summary.includesReferences, "medio", "sumario", "Incluir REFERENCIAS no sumario", "code", "src/export-docx.ts", undefined, "Garantir que a secao REFERENCIAS apareca no TOC", !analysis.summary.hasTocEntries, tocNotUpdatedReason);
+  add("15.9", "Sumario", "Sumario inclui apendices quando existem", analysis.summary.tocIncludesAppendices, "medio", "sumario", "Incluir apendices no sumario", "code", "src/export-docx.ts", undefined, "Garantir que APENDICE A - TITULO apareca no TOC", !analysis.summary.includesAppendices || !analysis.summary.hasTocEntries, "Sem apendices ou sumario nao atualizado: nao verificado.");
+  add("15.10", "Sumario", "Sumario inclui anexos quando existem", analysis.summary.tocIncludesAnnexes, "medio", "sumario", "Incluir anexos no sumario", "code", "src/export-docx.ts", undefined, "Garantir que ANEXO A - TITULO apareca no TOC", !analysis.summary.includesAnnexes || !analysis.summary.hasTocEntries, "Sem anexos ou sumario nao atualizado: nao verificado.");
 
   // === 16. Elementos textuais ===
   add("16.1", "Textuais", "Titulos primarios comecam em nova pagina", analysis.titles.primaryStartNewPage, "medio", "titulos", "Adicionar pageBreakBefore", "code", "src/export-docx.ts", undefined, "Usar heading1Props com pageBreakBefore: true");
@@ -163,6 +172,7 @@ export function checkCompliance(
 
   // === 18. Numeracao progressiva ===
   add("18.1", "Numeracao", "Titulo primario formato '1 TITULO'", analysis.titles.primaryFormat === "1 TÍTULO", "medio", "titulos", "Formatar heading1 como numero + espaco + TITULO", "code", "src/export-docx.ts", undefined, "Incluir numero no texto do heading1");
+  add("18.2", "Numeracao", "Numeracao progressiva nao ultrapassa 5 niveis (secao quinaria)", analysis.titles.maxDepth <= 5, "medio", "titulos", "Reduzir profundidade da numeracao", "code", "src/export-docx.ts", undefined, "Limitar subdivisao a 5 niveis conforme ABNT NBR 6024");
 
   // === 21. Tabelas ===
   // Itens 21.x tratam da formatacao de tabelas QUANDO o documento as contem.
@@ -191,6 +201,13 @@ export function checkCompliance(
 
   // === 23. Equacoes ===
   add("23.1", "Equacoes", "Equacoes centralizadas com numeracao a direita (tab stop)", analysis.equations.hasCenteredWithRightNumber, "medio", "equacoes", "Centralizar equacoes e adicionar tab stop direito", "code", "src/export-docx.ts", undefined, "Usar equationParagraph com alignment center e tabStops right");
+
+  // === 24. Notas de rodape (Manual UFLA §21) ===
+  const noFootnotesReason = "Documento sem notas de rodape (nao verificado).";
+  const noFootnotes = analysis.footnotes.count === 0;
+  add("24.1", "Notas de rodape", "Notas de rodape exportadas como notas reais do Word (footnotes.xml)", analysis.footnotes.hasDefinitions, "medio", "notas", "Criar notas reais em word/footnotes.xml", "code", "src/export-docx.ts:445", 445, "Usar FootnoteReferenceRun + definicoes em FootnoteType.NORMAL", noFootnotes, noFootnotesReason);
+  add("24.2", "Notas de rodape", "Fonte das notas menor que a do texto (espaco simples)", analysis.footnotes.smallerThanBody && analysis.footnotes.singleSpaced, "medio", "notas", "Reduzir fonte e aplicar espaco simples", "code", "src/export-docx.ts", undefined, "Definir size menor que BODY_SIZE e spacing.line=240 nas notas", noFootnotes, noFootnotesReason);
+  add("24.3", "Notas de rodape", "Fonte das notas e Times New Roman", analysis.footnotes.timesNewRoman, "medio", "notas", "Usar Times New Roman nas notas", "code", "src/export-docx.ts", undefined, "Aplicar UFLA_RULES.typography.fontFamily nas notas", noFootnotes, noFootnotesReason);
 
   // === 25. Exportacao ===
   add("25.1", "Exportacao", "Exportador gera capa", analysis.cover.exists, "grave", "exportacao", "Gerar capa", "code", "src/export-docx.ts", undefined, "Chamar coverChildren()");

@@ -2,7 +2,7 @@ export type DocumentType = "dissertacao" | "tese" | "artigo" | "tcc" | "monograf
 
 export type DocumentSection = "pre-textual" | "textual" | "post-textual" | "technical";
 
-export type Severity = "critical" | "major" | "minor" | "info";
+export type Severity = "critical" | "major" | "minor" | "info" | "not-applicable";
 
 export type RequirementStatus = "passed" | "failed" | "manual-required" | "not-applicable" | "blocked";
 

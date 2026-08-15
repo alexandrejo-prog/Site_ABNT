@@ -27,6 +27,7 @@ export const UFLA_STYLE_IDS = [
   "ufla_citacao_curta",
   "ufla_citacao_longa",
   "ufla_resumo",
+  "ufla_ficha_catalografica",
   "ufla_palavras_chave",
   "ufla_abstract",
   "ufla_keywords",
@@ -186,6 +187,15 @@ export const UFLA_STYLE_DEFINITIONS: IParagraphStyleOptions[] = [
     alignment: AlignmentType.BOTH,
     spacing: { line: ONE_AND_HALF, after: NO_SPACE },
     indent: { firstLine: UFLA_RULES.typography.paragraphFirstLineTwip },
+  }),
+  // Ficha catalográfica (§6.1 do Manual) — espaço simples, sem recuo de parágrafo
+  uflaStyle("ufla_ficha_catalografica", {
+    name: "Ficha catalográfica (UFLA)",
+    basedOn: "Normal",
+    size: BODY,
+    alignment: AlignmentType.BOTH,
+    spacing: { line: SINGLE, after: NO_SPACE },
+    indent: { firstLine: 0 },
   }),
   // Citações (§20 do Manual)
   uflaStyle("ufla_citacao_curta", {

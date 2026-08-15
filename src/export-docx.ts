@@ -31,7 +31,7 @@ import { getWorkTypeRequirements } from "./work-type-requirements";
 import { normalizeReferences, type NormalizedReference, type ReferenceRun } from "./references-normalizer";
 import { buildFlowingImpactText } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
-import { cleanMojibakeText, detectCaption, ommlEquationParagraph, sourceParagraph, tabbedTableBlock, tokenizeMarkup, type CaptionKind } from "./docx-render-core";
+import { cleanMojibakeText, clearRawOmmlRegistry, detectCaption, OMML_CONTENT_TOKEN_PATTERN, ommlContentTokenDecode, rawOmmlMarkerParagraph, sourceParagraph, tabbedTableBlock, tokenizeMarkup, type CaptionKind } from "./docx-render-core";
 import { ImportedDocumentImage, IMPORTED_IMAGE_MARKER_PATTERN } from "./imported-images";
 import { ImportedTable, IMPORTED_TABLE_MARKER_PATTERN, buildStructuredTextFromTable } from "./imported-tables";
 
@@ -55,6 +55,8 @@ export type EditorBlockType =
 export interface EditorBlock {
   type: EditorBlockType;
   text: string;
+  /** OMML cru de uma equação importada de DOCX (token `\uF001OMML:...` no rascunho). */
+  ommlXml?: string;
 }
 
 export interface DocxLogoAsset {
@@ -67,6 +69,8 @@ export interface DocxGenerationInput {
   fields: AcademicFields;
   editorText: string;
   logo?: DocxLogoAsset;
+  /** Imagem (foto/scan) da ficha catalográfica oficial — Manual UFLA §6.1. */
+  fichaCatalograficaImage?: DocxLogoAsset;
   importedImages?: ImportedDocumentImage[];
   importedTables?: ImportedTable[];
 }
@@ -305,7 +309,17 @@ export function parseEditorContent(editorText: string): EditorBlock[] {
     }
 
     if (/^\[EQ\]\s+/i.test(trimmed)) {
-      blocks.push({ type: "equation", text: trimmed.replace(/^\[EQ\]\s+/i, "") });
+      const equationBody = trimmed.replace(/^\[EQ\]\s+/i, "");
+      const ommlMatch = equationBody.match(OMML_CONTENT_TOKEN_PATTERN);
+      if (ommlMatch) {
+        blocks.push({
+          type: "equation",
+          text: equationBody.slice(0, ommlMatch.index).trim(),
+          ommlXml: ommlContentTokenDecode(ommlMatch[1]),
+        });
+      } else {
+        blocks.push({ type: "equation", text: equationBody });
+      }
       continue;
     }
 
@@ -1313,7 +1327,7 @@ function blockToParagraph(
   }
 
   if (block.type === "equation") {
-    return [ommlEquationParagraph(block.text)];
+    return [rawOmmlMarkerParagraph(block.text, block.ommlXml)];
   }
 
   if (block.type === "longQuote") {
@@ -2323,6 +2337,7 @@ function preTextualChildren(
   bodyBlocks: EditorBlock[] = [],
   importedImages: ImportedDocumentImage[] = [],
   importedTables: ImportedTable[] = [],
+  fichaCatalograficaImage?: DocxLogoAsset,
 ): Paragraph[] {
   const requirements = getWorkTypeRequirements(fields.workType);
   const consolidated = buildFlowingImpactText(fields);
@@ -2332,15 +2347,47 @@ function preTextualChildren(
   const children: Paragraph[] = [];
 
   if (requirements.requiresCatalogCard) {
-    children.push(
-      pageBreak(),
-      unnumberedTitle("Ficha catalográfica"),
-      simpleParagraph(
-        cleanMojibakeText(
-          "Ficha catalográfica detectada no arquivo importado. Preserve ou substitua manualmente pela ficha oficial da Biblioteca Universitária da UFLA.",
+    children.push(pageBreak(), unnumberedTitle("Ficha catalográfica"));
+    const fichaText = cleanMojibakeText(fields.fichaCatalografica?.trim() || "");
+    if (fichaCatalograficaImage?.data?.byteLength) {
+      children.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 360, after: 360, line: SINGLE_LINE },
+          children: [
+            new ImageRun({
+              data: fichaCatalograficaImage.data,
+              transformation: {
+                width: fichaCatalograficaImage.width ?? 460,
+                height: fichaCatalograficaImage.height ?? 300,
+              },
+              altText: {
+                title: "Ficha catalográfica",
+                description: "Ficha catalográfica oficial da Biblioteca Universitária da UFLA",
+                name: "ficha-catalografica",
+              },
+            }),
+          ],
+        }),
+      );
+    } else if (fichaText) {
+      children.push(
+        new Paragraph({
+          style: "ufla_ficha_catalografica",
+          alignment: AlignmentType.BOTH,
+          spacing: { line: SINGLE_LINE, after: 0 },
+          children: textRunsFromMarkup(fichaText),
+        }),
+      );
+    } else {
+      children.push(
+        simpleParagraph(
+          cleanMojibakeText(
+            "Ficha catalográfica detectada no arquivo importado. Preserve ou substitua manualmente pela ficha oficial da Biblioteca Universitária da UFLA.",
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   children.push(
@@ -2518,7 +2565,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
     ...coverChildren(fields, input.logo),
     pageBreak(),
     ...titlePageChildren(fields),
-    ...preTextualChildren(fields, bodyBlocksWithoutReferences, input.importedImages ?? [], input.importedTables ?? []),
+    ...preTextualChildren(fields, bodyBlocksWithoutReferences, input.importedImages ?? [], input.importedTables ?? [], input.fichaCatalograficaImage),
     ...summaryChildren,
   ];
 
@@ -2637,6 +2684,7 @@ export async function loadDefaultLogoAsset(): Promise<DocxLogoAsset | undefined>
 }
 
 export async function generateDocxBlob(input: DocxGenerationInput): Promise<Blob> {
+  clearRawOmmlRegistry();
   if (input.fields.workType === "artigo" || input.fields.workType === "artigo_cientifico_ufla") {
     const { generateArticleDocxBlob } = await import("./export-article-docx");
     return generateArticleDocxBlob(input);

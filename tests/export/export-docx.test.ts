@@ -361,6 +361,42 @@ describe("DOCX export", () => {
     expectCpgMargins(documentXml);
   });
 
+  it("exports ficha catalografica text (Manual UFLA §6.1: colar texto)", async () => {
+    const fichaText =
+      "Ficha catalografica elaborada pela Biblioteca Universitaria da UFLA.\nDados Internacionais de Catalogacao na Publicacao (CIP).";
+    const documentXml = await generatedXml("# 1 Introducao\nTexto comum.", {
+      ...fields,
+      workType: "dissertacao",
+      fichaCatalografica: fichaText,
+    });
+
+    expect(documentXml).toContain("FICHA CATALOGR");
+    expect(documentXml).toContain("Ficha catalografica elaborada pela Biblioteca Universitaria da UFLA.");
+    expect(documentXml).toContain("ufla_ficha_catalografica");
+  });
+
+  it("exports ficha catalografica image (Manual UFLA §6.1: inserir imagem)", async () => {
+    const pngBytes = Uint8Array.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+      0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+      0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
+      0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ]);
+    const blob = await generateDocxBlob({
+      fields: { ...fields, workType: "dissertacao" },
+      editorText: "# 1 Introducao\nTexto comum.",
+      fichaCatalograficaImage: { data: pngBytes, width: 100, height: 60 },
+    });
+    const buffer = Buffer.from(await blob.arrayBuffer());
+    const documentXml = extractFileFromZip(buffer, "word/document.xml");
+
+    expect(documentXml).toContain("FICHA CATALOGR");
+    expect(documentXml).toContain("<w:drawing");
+    expect(documentXml).toContain("Ficha catalográfica");
+  });
+
   it("keeps dissertation and thesis complete UFLA structure", async () => {
     for (const workType of ["dissertacao", "tese"] as const) {
       const workNature =
@@ -645,6 +681,20 @@ Fonte: elaborado pelo autor (2026).`;
     expect(documentXml).not.toContain("Dimensao\tAndrade (2025)\tPresente pesquisa");
     expect(documentXml.indexOf("Fonte: elaborado pelo autor (2026)."))
       .toBeGreaterThan(documentXml.indexOf("</w:tbl>"));
+  });
+
+  it("marca a primeira linha de cada tabela como cabecalho repetido (w:tblHeader, Manual UFLA §23.3)", async () => {
+    const editorText = `Quadro 1 - Cabecalho repetido
+Dimensao\tDescricao
+Recorte\tEscopo
+Fonte: elaborado pelo autor (2026).`;
+    const documentXml = await generatedXml(editorText, {
+      ...fields,
+      workType: "monografia",
+    });
+
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toMatch(/<w:trPr><w:tblHeader\/>/);
   });
 
   it("converte Quadro 2 tabulado com 2 colunas", async () => {

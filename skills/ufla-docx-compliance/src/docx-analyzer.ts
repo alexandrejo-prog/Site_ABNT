@@ -157,6 +157,15 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
   const heading2Paras = headingParas.filter((h) => h.level === 2);
   const heading1Count = heading1Paras.length;
   const heading2Count = heading2Paras.length;
+  const numberedHeadingDepths = headingParas
+    .map((h) => {
+      const match = h.text.match(/^(\d+(?:\.\d+)*)/);
+      return match ? match[1].split(".").length : 0;
+    })
+    .filter((d) => d > 0);
+  const maxHeadingDepth = numberedHeadingDepths.length
+    ? Math.max(...numberedHeadingDepths)
+    : 0;
   const heading1Bold = heading1Paras.some(
     (h) => paragraphHasBold(h.paragraphXml) || styleChainHasBold(stylesXml, h.styleId),
   );
@@ -275,23 +284,40 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
 
   // === COVER ===
   const firstParas = normalized.slice(0, 20);
+  const INSTITUTION_LINE = /^UNIVERSIDADE FEDERAL DE LAVRAS/;
   // O primeiro parágrafo do documento costuma ser o parágrafo da imagem da logo
-  // (sem texto) ou um espaçador. O autor é o primeiro parágrafo com texto da capa.
-  const coverAuthorIdx = normalized.findIndex((t, i) => i < 20 && t.length > 0);
+  // (sem texto), a linha institucional (logo em texto) ou um espaçador.
+  // O autor é o primeiro parágrafo com texto da capa que NÃO seja a instituição.
+  const coverAuthorIdx = normalized.findIndex(
+    (t, i) => i < 20 && t.length > 0 && !INSTITUTION_LINE.test(t),
+  );
   const coverAuthorText = coverAuthorIdx >= 0 ? normalized[coverAuthorIdx] : "";
   const coverAuthorParaXml = coverAuthorIdx >= 0 ? bodyParas[coverAuthorIdx]?.[0] || "" : "";
   const coverAuthorUpper = coverAuthorText === coverAuthorText.toUpperCase();
   const coverAuthorBold = coverAuthorParaXml.includes("<w:b/>") || coverAuthorParaXml.includes('w:b w:val="true"');
   const coverAuthorCentered = coverAuthorParaXml.includes('w:val="center"');
 
-  // Find cover title: first paragraph in first 20 that is long (>20 chars) and bold and centered
-  const coverTitleParaIdx = normalized.findIndex(
-    (t, i) =>
-      t.length > 20 &&
-      (bodyParas[i]?.[0]?.includes("<w:b/>") || bodyParas[i]?.[0]?.includes('w:b w:val="true"')) &&
-      bodyParas[i]?.[0]?.includes('w:val="center"') &&
-      i <= 20,
-  );
+  // Find cover title: primeiro parágrafo longo (>20 chars), negrito e centralizado
+  // APÓS o autor, excluindo a linha da instituição (UNIVERSIDADE FEDERAL DE LAVRAS).
+  const coverTitleParaIdx = (() => {
+    const startAt = Math.max(coverAuthorIdx + 1, 0);
+    for (let i = startAt; i < Math.min(startAt + 20, normalized.length); i++) {
+      const t = normalized[i];
+      const paraXml = bodyParas[i]?.[0] ?? "";
+      const bold =
+        paraXml.includes("<w:b/>") || paraXml.includes('w:b w:val="true"');
+      if (
+        t.length > 20 &&
+        bold &&
+        paraXml.includes('w:val="center"') &&
+        !INSTITUTION_LINE.test(t) &&
+        t !== coverAuthorText
+      ) {
+        return i;
+      }
+    }
+    return -1;
+  })();
   const coverTitleText = coverTitleParaIdx >= 0 ? normalized[coverTitleParaIdx] : "";
   const coverTitleUpper = coverTitleText === coverTitleText.toUpperCase();
   const coverTitleXml = coverTitleParaIdx >= 0 && coverTitleParaIdx < bodyParas.length ? bodyParas[coverTitleParaIdx]?.[0] || "" : "";
@@ -304,7 +330,16 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
   );
   const coverAuthorSize = halfPointsToPt(authorRunHp);
 
-  const locationMatch = firstParas.find((t) => t.includes("LAVRAS") || t.includes("MG"));
+  const titleRunHp = parseInt(
+    extractFirstMatch(coverTitleXml, /<w:sz[\s\S]*?w:val="(\d+)"/) || "0",
+    10,
+  );
+  const coverTitleSize = titleRunHp > 0 ? halfPointsToPt(titleRunHp) : 16;
+
+  // Local da capa: cidade + UF (ex.: "LAVRAS - MG"), ignorando a linha institucional.
+  const locationMatch = firstParas.find(
+    (t) => /LAVRAS\s*[-–—]\s*MG/.test(t) || (t.includes("MG") && !INSTITUTION_LINE.test(t)),
+  );
   const locationUpper = locationMatch === locationMatch?.toUpperCase();
   const locationIdx = locationMatch ? firstParas.indexOf(locationMatch) : -1;
   const locationBold =
@@ -317,9 +352,64 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
     : "";
   const yearBold = yearXml.includes("<w:b/>") || yearXml.includes('w:b w:val="true"');
 
+  const locationIdxOf = locationMatch ? firstParas.indexOf(locationMatch) : -1;
+  const locationXml = locationIdxOf >= 0 ? bodyParas[locationIdxOf]?.[0] || "" : "";
+  const locationSizeHp = parseInt(
+    extractFirstMatch(locationXml, /<w:sz[\s\S]*?w:val="(\d+)"/) || "0",
+    10,
+  );
+  const coverLocationSize = locationSizeHp > 0 ? halfPointsToPt(locationSizeHp) : 0;
+
+  const yearSizeHp = parseInt(
+    extractFirstMatch(yearXml, /<w:sz[\s\S]*?w:val="(\d+)"/) || "0",
+    10,
+  );
+  const coverYearSize = yearSizeHp > 0 ? halfPointsToPt(yearSizeHp) : 0;
+
   const hasLogo = /ufla|logo|image|drawing/i.test(documentXml + header1Xml);
 
+  // Dimensões do logo (Manual UFLA §4.2: 7 cm largura × 2,85 cm altura).
+  // O logo fica no topo da capa (antes do autor) ou no cabeçalho — NÃO a
+  // primeira imagem do corpo (que pode ser uma figura/tabela).
+  const coverBlockXml =
+    bodyParas.slice(0, Math.max(coverAuthorIdx, 2)).map((p) => p[0]).join("") + header1Xml;
+  const logoExtentMatch = coverBlockXml.match(/<wp:extent\b[^>]*cx="(\d+)"[^>]*cy="(\d+)"/);
+  const logoWidthEmu = logoExtentMatch ? parseInt(logoExtentMatch[1], 10) : 0;
+  const logoHeightEmu = logoExtentMatch ? parseInt(logoExtentMatch[2], 10) : 0;
+  const logoWidthCm = logoWidthEmu > 0 ? Math.round((logoWidthEmu / 360000) * 100) / 100 : 0;
+  const logoHeightCm = logoHeightEmu > 0 ? Math.round((logoHeightEmu / 360000) * 100) / 100 : 0;
+  const logoSizeValid =
+    logoWidthEmu > 0 &&
+    Math.abs(logoWidthCm - 7) <= 0.15 &&
+    Math.abs(logoHeightCm - 2.85) <= 0.15;
+
   // === TOC ===
+  const tocEntryParas = bodyParas.filter((p) => {
+    const styleId = p[0].match(/<w:pStyle\b[^>]*w:val="([^"]+)"/)?.[1] ?? "";
+    return /^TOC[1-3]$/i.test(styleId) || /^ufla_sumario/i.test(styleId);
+  });
+  const tocEntryTexts = tocEntryParas
+    .map((p) => paragraphRunsText(p[0]))
+    .map((t) =>
+      t
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toUpperCase()
+        .replace(/[\s.]+$/, "")
+        .trim(),
+    )
+    .filter((t) => t.length > 0);
+  const PRE_TEXTUAL_TOC_ENTRY =
+    /^(RESUMO|ABSTRACT|AGRADECIMENTOS|DEDICATORIA|EPIGRAFE|SUMARIO|FICHA|LISTA DE|INDICADORES|IMPACT INDICATORS|FOLHA DE|CAPA|ERRATA)/;
+  const tocExcludesPreTextual =
+    tocEntryTexts.length > 0 && tocEntryTexts.every((t) => !PRE_TEXTUAL_TOC_ENTRY.test(t));
+  const tocIncludesReferences =
+    tocEntryTexts.length > 0 && tocEntryTexts.some((t) => /^REFERENCIA/.test(t));
+  const tocIncludesAppendices =
+    tocEntryTexts.length > 0 && tocEntryTexts.some((t) => /^APENDICE/.test(t));
+  const tocIncludesAnnexes =
+    tocEntryTexts.length > 0 && tocEntryTexts.some((t) => /^ANEXO/.test(t));
+
   const tocInstrTexts = documentXml.match(/<w:instrText[^>]*>([\s\S]*?)<\/w:instrText>/g) || [];
   const tocField = tocInstrTexts.some((m) => /TOC/i.test(m));
   const tocHyperlink = documentXml.includes('\\h');
@@ -418,6 +508,29 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
     (p) => p.includes('w:val="center"') && (p.includes("<m:oMath") || (p.includes("w:tab") && p.includes('w:val="right"'))),
   );
 
+  // === NOTAS DE RODAPÉ (§21 do Manual: fonte menor, espaço simples, TNR) ===
+  const footnotesXml = (await zip.file("word/footnotes.xml")?.async("string")) || "";
+  const footnoteEntries = [...footnotesXml.matchAll(/<w:footnote\b[^>]*w:id="(\d+)"[^>]*>([\s\S]*?)<\/w:footnote>/g)]
+    .filter(([, id]) => parseInt(id, 10) >= 1);
+  const footnoteParas = footnoteEntries.flatMap(([, , body]) =>
+    [...body.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)].map((m) => m[0]),
+  );
+  const footnoteSizesHp = footnoteParas
+    .flatMap((p) => [...p.matchAll(/<w:sz[\s\S]*?w:val="(\d+)"/g)].map((m) => parseInt(m[1], 10)))
+    .filter((v) => v > 0 && v <= 60);
+  const footnoteLineCount = footnoteParas.filter((p) => {
+    const ppr = p.match(/<w:pPr[\s\S]*?<\/w:pPr>/)?.[0] || "";
+    return /w:line="240"/.test(ppr) || !/w:line=/.test(ppr);
+  }).length;
+  const footnoteFonts = new Set(
+    footnoteParas.flatMap((p) =>
+      [...p.matchAll(/w:ascii="([^"]+)"/g)].map((m) => m[1]),
+    ),
+  );
+  const footnoteFontSizePt = footnoteSizesHp.length
+    ? halfPointsToPt(Math.max(...footnoteSizesHp))
+    : 0;
+
   // === COLORS ===
   const blueInBody = documentXml.includes('w:color w:val="0000FF"') || documentXml.includes('w:color w:val="0563C1"');
 
@@ -453,6 +566,7 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
       primaryBold: heading1Bold,
       primaryStartNewPage: heading1PageBreak || heading1Count > 1,
       primaryFormat: "1 TÍTULO",
+      maxDepth: maxHeadingDepth,
     },
     references: {
       headingCount: refHeadingIdxs.length,
@@ -489,11 +603,16 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
       titleCentered: coverTitleCentered,
       titleUppercase: coverTitleUpper,
       titleBold: coverTitleBold,
-      titleSize: 16,
+      titleSize: coverTitleSize,
       location: locationMatch || "",
       locationUppercase: locationUpper,
       locationBold,
+      locationSize: coverLocationSize,
       yearBold,
+      yearSize: coverYearSize,
+      logoWidthCm,
+      logoHeightCm,
+      logoSizeValid,
       pageNumberVisible: false,
     },
     catalogCard: {
@@ -532,11 +651,14 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
       headingCentered: sumCentered,
       headingUppercase: sumIdx >= 0 && normalized[sumIdx] === "SUMARIO",
       headingBold: sumBold,
-      includesReferences: refIdx >= 0,
+      hasTocEntries: tocEntryTexts.length > 0,
+      includesReferences: tocIncludesReferences,
       includesAppendices: apendIdx >= 0,
       includesAnnexes: anexoIdx >= 0,
+      tocIncludesAppendices,
+      tocIncludesAnnexes,
       excludesCover: true,
-      excludesPreTextual: true,
+      excludesPreTextual: tocExcludesPreTextual,
     },
     resumo: {
       titleCentered: resumoTitleCentered,
@@ -544,6 +666,14 @@ export async function analyzeDocx(filePath: string): Promise<DocxAnalysis> {
     equations: {
       count: mathCount,
       hasCenteredWithRightNumber: mathCount === 0 || equationParas.length > 0,
+    },
+    footnotes: {
+      count: footnoteEntries.length,
+      fontSizePt: footnoteFontSizePt,
+      smallerThanBody: footnoteFontSizePt > 0 && footnoteFontSizePt < defaultSize,
+      singleSpaced: footnoteParas.length === 0 || footnoteLineCount === footnoteParas.length,
+      timesNewRoman: footnoteFonts.size === 0 || ([...footnoteFonts].every((f) => f.toLowerCase().includes("times"))),
+      hasDefinitions: footnoteEntries.length > 0,
     },
     colors: {
       hasBlueInBody: blueInBody,

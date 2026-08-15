@@ -30,6 +30,7 @@ export interface DocxAnalysis {
     primaryBold: boolean;
     primaryStartNewPage: boolean;
     primaryFormat: string;
+    maxDepth: number;
   };
   references: {
     headingCount: number;
@@ -74,7 +75,12 @@ export interface DocxAnalysis {
     location: string;
     locationUppercase: boolean;
     locationBold: boolean;
+    locationSize: number;
     yearBold: boolean;
+    yearSize: number;
+    logoWidthCm: number;
+    logoHeightCm: number;
+    logoSizeValid: boolean;
     pageNumberVisible: boolean;
   };
   catalogCard: {
@@ -113,9 +119,12 @@ export interface DocxAnalysis {
     headingCentered: boolean;
     headingUppercase: boolean;
     headingBold: boolean;
+    hasTocEntries: boolean;
     includesReferences: boolean;
     includesAppendices: boolean;
     includesAnnexes: boolean;
+    tocIncludesAppendices: boolean;
+    tocIncludesAnnexes: boolean;
     excludesCover: boolean;
     excludesPreTextual: boolean;
   };
@@ -125,6 +134,14 @@ export interface DocxAnalysis {
   equations: {
     count: number;
     hasCenteredWithRightNumber: boolean;
+  };
+  footnotes: {
+    count: number;
+    fontSizePt: number;
+    smallerThanBody: boolean;
+    singleSpaced: boolean;
+    timesNewRoman: boolean;
+    hasDefinitions: boolean;
   };
   colors: {
     hasBlueInBody: boolean;

@@ -1,11 +1,16 @@
 import JSZip from "jszip";
 import { Packer } from "docx";
+import { rawOmmlForMarker } from "./docx-render-core";
+import { patchTableHeaderRows } from "./fix-table-headers";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const TOC_FIELD_PATTERN = /<w:instrText[^>]*>\s*TOC\b|<w:fldSimple[^>]*w:instr="\s*TOC\b/i;
 const TOC_FIELD_CONTAINER_PATTERN = /<w:sdt\b(?:(?!<\/w:sdt>)[\s\S])*?(?:<w:instrText[^>]*>\s*TOC\b|<w:fldSimple[^>]*w:instr="\s*TOC\b)(?:(?!<\/w:sdt>)[\s\S])*?<\/w:sdt>|<w:p\b(?:(?!<\/w:p>)[\s\S])*?(?:<w:instrText[^>]*>\s*TOC\b|<w:fldSimple[^>]*w:instr="\s*TOC\b)(?:(?!<\/w:p>)[\s\S])*?<\/w:p>/g;
 const SUMMARY_TITLE_PATTERN = /<w:t[^>]*>\s*SUM[ÁA]RIO\s*<\/w:t>/i;
 const STATIC_TOC_PARAGRAPH_PATTERN = /<w:p\b(?:(?!<\/w:p>)[\s\S])*?<w:pStyle\s+w:val="(?:TOC[123]|ufla_sumario_item)"(?:(?!<\/w:p>)[\s\S])*?<\/w:p>/g;
+
+// Marcador de equação OMML cru: um run cujo w:t contém "\uF000UFLAOMML_<id>\uF000".
+const RAW_OMML_RUN_PATTERN = /<w:r\b(?:(?!<\/w:r>)[\s\S])*?<w:t[^>]*>\uF000UFLAOMML_(\d+)\uF000<\/w:t>(?:(?!<\/w:r>)[\s\S])*?<\/w:r>/g;
 
 function dynamicTocFieldXml(_options: { encodedQuotes: boolean }): string {
   const range = '&quot;1-3&quot;';
@@ -45,6 +50,25 @@ function patchDynamicTocField(xml: string): { xml: string; changed: boolean } {
   return { xml: patchedXml, changed: inserted && patchedXml !== xml };
 }
 
+/**
+ * Substitui os marcadores de equação OMML cru pelo XML `<m:oMathPara>` original
+ * do DOCX importado (UFLA-023, DECISION_008). Sem OMML cru registrado, o
+ * marcador nunca é emitido — equações digitadas caem no OMML achatado normal.
+ */
+function patchRawOmml(xml: string): { xml: string; changed: boolean } {
+  let changed = false;
+  const patchedXml = xml.replace(RAW_OMML_RUN_PATTERN, (fullRun, markerId) => {
+    const entry = rawOmmlForMarker(markerId);
+    if (!entry) return fullRun;
+    changed = true;
+    const numberRun = entry.number
+      ? `<w:r><w:tab/><w:t xml:space="preserve">${entry.number}</w:t></w:r>`
+      : "";
+    return `${entry.ommlXml}${numberRun}`;
+  });
+  return { xml: patchedXml, changed };
+}
+
 async function ensureUpdateFieldsSetting(zip: JSZip): Promise<boolean> {
   const settingsFile = zip.file("word/settings.xml");
   if (!settingsFile) return false;
@@ -73,13 +97,19 @@ export async function ensureDynamicTocField(blob: Blob): Promise<Blob> {
 
   const xml = await documentFile.async("string");
   const tocPatch = patchDynamicTocField(xml);
+  const ommlPatch = patchRawOmml(xml);
+  const tableHeaderPatch = patchTableHeaderRows(xml);
   const updateFieldsChanged = await ensureUpdateFieldsSetting(zip);
 
   if (tocPatch.changed) {
     zip.file("word/document.xml", tocPatch.xml);
+  } else if (ommlPatch.changed) {
+    zip.file("word/document.xml", ommlPatch.xml);
+  } else if (tableHeaderPatch.changed) {
+    zip.file("word/document.xml", tableHeaderPatch.xml);
   }
 
-  if (!tocPatch.changed && !updateFieldsChanged) return blob;
+  if (!tocPatch.changed && !ommlPatch.changed && !tableHeaderPatch.changed && !updateFieldsChanged) return blob;
   return zip.generateAsync({ type: "blob", mimeType: DOCX_MIME });
 }
 

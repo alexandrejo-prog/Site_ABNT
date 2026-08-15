@@ -28,9 +28,9 @@ Sem estes itens, o documento **não pode** ser considerado conforme.
 | 14 | Referências: alinhadas à esquerda, ordem alfabética pt-BR, hanging indent 0,5 cm, espaço simples, título em negrito | §3.1.13 | ⬜ | `src/validators.ts`, `src/references-normalizer.ts` | `validateReferencesText()` já existe |
 | 15 | Numeração de páginas a partir da folha de rosto, visível a partir da introdução | §3.2.7 | ⬜ | `scripts/ufla-compliance/validate-pagination.ts` | UFLA-AMBIGUOUS-1 resolvida; integração no gate |
 | 16 | Rodapés: número de página em 10 pt, centralizado | §3.2.8 | ⬜ | `src/export-docx.ts`, `src/validators.ts` | FINDING-FOOTER-001..008 cobertos |
-| 17 | Equações/fórmulas: centralizadas, itálico, numeração em algarismos arábicos entre parênteses alinhada à direita | §3.2.9 | ⬜ | `src/export-docx.ts`, `src/docx-render-core.ts`, `src/validators.ts` | UFLA-023 implementada; OMML nativo pendente |
+| 17 | Equações/fórmulas: centralizadas, itálico, numeração em algarismos arábicos entre parênteses alinhada à direita | §3.2.9 | ✅ | `src/export-docx.ts`, `src/docx-render-core.ts`, `src/validators.ts` | UFLA-023 implementada; OMML cru re-injetado (frações/raízes preservadas) |
 | 18 | Ilustrações: legenda acima/abaixo, formato "Figura N – Descrição", numeração sequencial, fonte | §3.2.10 | ⬜ | `src/export-docx.ts`, `src/validators.ts` | |
-| 19 | Tabelas/quadros: traço duplo superior/inferior, título acima, fonte abaixo, `w:tblHeader` quando houver cabeçalho | §3.2.11 | ⬜ | `src/docx-shared.ts`, `src/validators.ts` | DECISION-002 documentada |
+| 19 | Tabelas/quadros: traço duplo superior/inferior, título acima, fonte abaixo, `w:tblHeader` quando houver cabeçalho | §3.2.11 | ✅ | `src/docx-shared.ts`, `src/fix-table-headers.ts` | `w:tblHeader` na primeira linha (trPr) garantido por patch pós-Packer |
 | 20 | Títulos de seções: negrito, caixa alta para nível 1, numeração progressiva ABNT NBR 6024 | §3.2.12 | ⬜ | `src/validators.ts`, `src/heading-fragment-repair.ts` | |
 
 ---
@@ -41,17 +41,17 @@ Itens que afetam preservação de conteúdo, acessibilidade ou fidelidade ao DOC
 
 | # | Item | Regra/Seção Manual UFLA | Status | Arquivo(s) | Notas |
 |---|------|--------------------------|--------|------------|-------|
-| 21 | `validateDocumentStructure()` — validação automática da sequência pré-textual → textual → pós-textual | §3.1 | ⬜ | `src/validators.ts`, `src/ufla-rules.ts` | Comparar contra `getWorkTypeRequirements()` |
-| 22 | `validatePageLayout()` — margens 3/3/2/2 cm + A4 11906×16838 twips | §3.1.8 | ⬜ | `src/validators.ts` | Ler `<w:pgSz>` e `<w:pgMar>` |
-| 23 | `validateTypography()` — Times New Roman, 12/11/10 pt, espaçamento, recuo 1,25 cm | §3.1.9 | ⬜ | `src/validators.ts` | Percorrer `w:rPr`/`w:pPr` |
+| 21 | `validateDocumentStructure()` — validação automática da sequência pré-textual → textual → pós-textual | §3.1 | ✅ | `scripts/ufla-compliance/validate-document-structure.ts` | Matriz REQ-001..020 por tipo; integrado ao gate (15/08) |
+| 22 | `validatePageLayout()` — margens 3/3/2/2 cm + A4 11906×16838 twips | §3.1.8 | ✅ | `scripts/ufla-compliance/validate-page-layout.ts` | Lê `<w:pgSz>`/`<w:pgMar>`; usa `UFLA_RULES.page.widthTwip` |
+| 23 | `validateTypography()` — Times New Roman, 12/11/10 pt, espaçamento, recuo 1,25 cm | §3.1.9 | ✅ | `scripts/ufla-compliance/validate-page-layout.ts` | Fonte, 12 pt, recuo 1,25 cm (567 twips via constantes) |
 | 24 | Preview de equações UFLA-023 — `[EQ]` centralizado, itálico, tab stop direito | §3.2.9 | ⬜ | `src/preview-html.ts`, `src/preview-styles.css` | Adicionar `case "equation"` e `.preview-equation` |
 | 25 | Validador UFLA-023 no compliance checker — OMML, centralização, tab stop | §3.2.9 | ⬜ | `skills/ufla-docx-compliance/src/checklist-checker.ts` | Item `3.2.8` em `checkCompliance()` |
 | 26 | Ficha catalográfica: detecção real de campos (não hardcoded) | §3.1.3 | ⬜ | `skills/ufla-docx-compliance/src/docx-analyzer.ts` | Implementar detecção de ficha vs placeholder |
 | 27 | Folha de rosto: validar natureza do trabalho, curso, orientador, título inglês | §3.1.2 | ⬜ | `skills/ufla-docx-compliance/src/docx-analyzer.ts` | Análise de parágrafos por tipo de trabalho |
 | 28 | TOC: validar campo `TOC \o "1-3" \h` real, não só presença de headings | §3.1.7 | ⬜ | `skills/ufla-docx-compliance/src/checklist-checker.ts` | Verificar `w:fldChar` begin/separate/end |
-| 29 | Track changes/comments — extrair `<w:ins>`/`<w:del>` e `w:comment` | Import | ⬜ | `src/word-structure-extractor.ts` | Surface como warnings no import |
-| 30 | Bookmarks/cross-references — extrair `<w:bookmarkStart>`/`<w:bookmarkEnd>` | Import | ⬜ | `src/word-structure-extractor.ts` | Preservar alvos de referências cruzadas |
-| 31 | Merge vertical de células — propagar conteúdo de `vMerge-continue` | Import | ⬜ | `src/word-structure-extractor.ts` | Herdar texto da célula `vMerge-restart` acima |
+| 29 | Track changes/comments — extrair `<w:ins>`/`<w:del>` e `w:comment` | Import | ✅ | `src/word-structure-extractor.ts` | changeKind/comentários propagados a runs, parágrafos e blocos; teste com DOCX real |
+| 30 | Bookmarks/cross-references — extrair `<w:bookmarkStart>`/`<w:bookmarkEnd>` | Import | 🔄 | `src/word-structure-extractor.ts` | Extração ✅; preservação de alvos de referência cruzada pendente |
+| 31 | Merge vertical de células — propagar conteúdo de `vMerge-continue` | Import | ✅ | `src/word-structure-extractor.ts` | cellMerges vMerge-restart/continue extraídos e testados |
 | 32 | Soft hyphens e hifenização — remover `\u00AD`/`\u200B` | Import | ⬜ | `src/import-normalizer.ts` | `cleanText()` deve normalizar quebras de linha |
 | 33 | Aspas inteligentes — normalizar `""`/`''`/`«»` para retas | Import | ⬜ | `src/import-normalizer.ts` | `normalizeQuotes()` em `cleanText()` |
 | 34 | Janela de busca de legenda ampliada — expandir `nearestText()` para documento completo | Import | ⬜ | `src/import-docx.ts` | Usar OOXML `<w:caption>` quando disponível |
@@ -72,14 +72,14 @@ Itens que melhoram a confiabilidade do validador e a experiência do usuário.
 | 40 | Validação de citações em texto (autor-data-página, ABNT NBR 10520) | §4 | ⬜ | `src/validators.ts`, `skills/ufla-docx-compliance/src/checklist-checker.ts` | Verificar correspondência com referências |
 | 41 | Validação de numeração progressiva (ABNT NBR 6024) | §3.2.12 | ⬜ | `src/validators.ts`, `src/heading-fragment-repair.ts` | Máximo 5 níveis |
 | 42 | Validação de figuras e legendas (formato, numeração, fonte) | §3.2.10 | ⬜ | `src/validators.ts`, `src/import-docx.ts` | |
-| 43 | Auditoria automática pré-textual (todos os elementos obrigatórios por tipo) | §3.1 | ⬜ | `scripts/ufla-compliance/audit-pretextual.ts` | Implementado em 2026-08-15 |
-| 44 | Auditoria automática textual (introdução, desenvolvimento, conclusão) | §3.1 | ⬜ | `scripts/ufla-compliance/audit-textual.ts` | Implementado em 2026-08-15 |
-| 45 | Auditoria automática pós-textual (referências, glossário, apêndices, anexos) | §3.1 | ⬜ | `scripts/ufla-compliance/audit-posttextual.ts` | Implementado em 2026-08-15 |
-| 46 | Auditoria automática de referências (ABNT NBR 6023) | §3.1.13 | ⬜ | `scripts/ufla-compliance/audit-references.ts` | Implementado em 2026-08-15 |
-| 47 | Auditoria automática de citações (ABNT NBR 10520) | §4 | ⬜ | `scripts/ufla-compliance/audit-citations.ts` | Implementado em 2026-08-15 |
-| 48 | Auditoria automática de figuras e tabelas | §3.2.10, §3.2.11 | ⬜ | `scripts/ufla-compliance/audit-figures.ts` | Implementado em 2026-08-15 |
-| 49 | Auditoria automática de seções (numeração progressiva) | §3.2.12 | ⬜ | `scripts/ufla-compliance/audit-sections.ts` | Implementado em 2026-08-15 |
-| 50 | Relatório HTML unificado de auditoria | — | ⬜ | `scripts/ufla-compliance/report.ts` | Implementado em 2026-08-15 |
+| 43 | Auditoria automática pré-textual (todos os elementos obrigatórios por tipo) | §3.1 | ✅ | `scripts/ufla-compliance/audit-pretextual.ts` | Implementado em 2026-08-15; tipos limpos em 15/08 |
+| 44 | Auditoria automática textual (introdução, desenvolvimento, conclusão) | §3.1 | ✅ | `scripts/ufla-compliance/audit-textual.ts` | Implementado em 2026-08-15; tipos limpos em 15/08 |
+| 45 | Auditoria automática pós-textual (referências, glossário, apêndices, anexos) | §3.1 | ✅ | `scripts/ufla-compliance/audit-posttextual.ts` | Implementado em 2026-08-15; tipos limpos em 15/08 |
+| 46 | Auditoria automática de referências (ABNT NBR 6023) | §3.1.13 | ✅ | `scripts/ufla-compliance/audit-references.ts` | Implementado em 2026-08-15; tipos limpos em 15/08 |
+| 47 | Auditoria automática de citações (ABNT NBR 10520) | §4 | ✅ | `scripts/ufla-compliance/audit-citations.ts` | Implementado em 2026-08-15; tipos limpos em 15/08 |
+| 48 | Auditoria automática de figuras e tabelas | §3.2.10, §3.2.11 | ✅ | `scripts/ufla-compliance/audit-figures.ts` | Implementado em 2026-08-15; tipos limpos em 15/08 |
+| 49 | Auditoria automática de seções (numeração progressiva) | §3.2.12 | ✅ | `scripts/ufla-compliance/audit-sections.ts` | Inclui limite quinário (máx. 5 níveis) desde 15/08 |
+| 50 | Relatório HTML unificado de auditoria | — | ✅ | `scripts/ufla-compliance/report.ts` | Refatorado 15/08: aceita Expanded/Unified sem lançar; cria diretório |
 | 51 | Preview CSS: consumir `data-font-size` via atributos de dados | Preview | ⬜ | `src/preview-styles.css` | `[data-font-size="11pt"] { font-size: 11pt; }` |
 | 52 | Validação de `et al.` em itálico nas referências | §3.1.13 | ⬜ | `skills/ufla-docx-compliance/src/checklist-checker.ts` | Check em `reference runs` |
 | 53 | Heading fragments: suporte a sufixos numéricos/letras (`1.1.A`, `A.1`) | Import | ⬜ | `src/heading-fragment-repair.ts` | Regex mais abrangente |
@@ -97,7 +97,7 @@ Itens de baixo impacto que não bloqueiam conformidade, mas melhoram robustez.
 |---|------|--------------------------|--------|------------|-------|
 | 57 | Referências: validar DOI/URL em referências eletrônicas | §3.1.13 | ⬜ | `src/validators.ts`, `scripts/ufla-compliance/audit-references.ts` | |
 | 58 | Citações: validar até 3 autores explícitos; `et al.` para 4+ | §4 | ⬜ | `src/validators.ts`, `scripts/ufla-compliance/audit-citations.ts` | |
-| 59 | Equações: alertar quando OMML nativo não puder ser recriado | §3.2.9 | ⬜ | `src/export-docx.ts`, `src/import-docx.ts` | UFLA-023; texto preservado como `[EQ]` |
+| 59 | Equações: alertar quando OMML nativo não puder ser recriado | §3.2.9 | ✅ | `src/export-docx.ts`, `src/import-docx.ts` | UFLA-023; OMML cru avançado re-injetado via token + patch pós-Packer (DECISION_008 implementada) |
 | 60 | Tabelas de linha única: aceitar ausência de `w:tblHeader` sem falhar | §3.2.11 | ⬜ | `src/validators.ts`, `scripts/ufla-compliance/gate.ts` | DECISION-002 documentada |
 | 61 | Apêndices/Anexos: validar separador explícito e numeração contínua | §3.1.14 | ⬜ | `src/validators.ts`, `src/export-docx.ts` | |
 | 62 | Glossário: validar presença e formatação quando declarado | §3.1.15 | ⬜ | `src/validators.ts`, `src/export-docx.ts` | |

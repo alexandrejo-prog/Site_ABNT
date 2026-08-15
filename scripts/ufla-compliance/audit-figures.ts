@@ -15,17 +15,6 @@ async function extractParagraphs(docxPath: string): Promise<string[]> {
   return [...xml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)].map((m) => m[0]);
 }
 
-function sectionResult(overrides: Partial<SectionAuditResult> = {}): SectionAuditResult {
-  return {
-    passed: true,
-    score: 100,
-    itemsFound: [],
-    itemsMissing: [],
-    gaps: [],
-    ...overrides,
-  };
-}
-
 function gap(overrides: Partial<AuditGap>): AuditGap {
   return {
     section: "figuras",
@@ -93,12 +82,5 @@ export async function auditFigures(docxPath: string): Promise<SectionAuditResult
     itemsFound: validated.map((v) => `${v.type} ${v.number}`),
     itemsMissing: [],
     gaps: issues,
-    figures: sectionResult({
-      passed,
-      score,
-      itemsFound: validated.map((v) => `${v.type} ${v.number}`),
-      itemsMissing: [],
-      gaps: issues,
-    }),
   };
 }

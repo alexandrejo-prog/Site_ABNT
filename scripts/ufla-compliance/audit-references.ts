@@ -15,17 +15,6 @@ async function extractParagraphs(docxPath: string): Promise<string[]> {
   return [...xml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)].map((m) => m[0]);
 }
 
-function sectionResult(overrides: Partial<SectionAuditResult> = {}): SectionAuditResult {
-  return {
-    passed: true,
-    score: 100,
-    itemsFound: [],
-    itemsMissing: [],
-    gaps: [],
-    ...overrides,
-  };
-}
-
 function gap(overrides: Partial<AuditGap>): AuditGap {
   return {
     section: "referências",
@@ -120,21 +109,5 @@ export async function auditReferences(docxPath: string): Promise<SectionAuditRes
     itemsFound: referenceParagraphs.map((t) => t.substring(0, 60)),
     itemsMissing: [],
     gaps: issues,
-    references: sectionResult({
-      passed,
-      score,
-      itemsFound: referenceParagraphs.map((t) => t.substring(0, 60)),
-      itemsMissing: [],
-      gaps: issues,
-    }),
   };
-}
-
-export function validateReferences(docxPath: string): ReferenceValidationResult[] {
-  const paragraphs = extractParagraphs(docxPath).then((ps) => ps);
-  const referenceParagraphs = paragraphs.then((ps) =>
-    ps.map(extractText).filter((t) => looksLikeReferenceEntry(t)),
-  );
-
-  return [] as ReferenceValidationResult[];
 }

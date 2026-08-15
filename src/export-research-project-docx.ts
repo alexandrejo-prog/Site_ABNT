@@ -18,7 +18,7 @@ import { isResearchProjectProvisionalText, normalizeKeywordSentence, normalizeRe
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { UFLA_RULES, cmToTwip } from "./ufla-rules";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
-import { cleanMojibakeText, equationParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, tabbedTableBlock, textRunsFromMarkup } from "./docx-render-core";
+import { cleanMojibakeText, clearRawOmmlRegistry, rawOmmlMarkerParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, tabbedTableBlock, textRunsFromMarkup } from "./docx-render-core";
 
 function hasValue(value: string): boolean {
   return value.trim().length > 0;
@@ -318,7 +318,7 @@ function blockToParagraph(block: EditorBlock, first: boolean, importedTables: Im
     return [sourceParagraph(block.text)];
   }
   if (block.type === "equation") {
-    return [equationParagraph(block.text)];
+    return [rawOmmlMarkerParagraph(block.text, block.ommlXml)];
   }
   return [markupParagraph(block.text)];
 }
@@ -440,6 +440,7 @@ function createProjectDocument(input: DocxGenerationInput): Document {
 }
 
 export async function generateResearchProjectDocxBlob(input: DocxGenerationInput): Promise<Blob> {
+  clearRawOmmlRegistry();
   const fields = normalizeFieldsForSelectedModel(input.fields);
   const logo = input.logo ?? (await loadDefaultLogoAsset());
   return Packer.toBlob(createProjectDocument({ ...input, fields, logo }));

@@ -3,8 +3,15 @@ import { CONFIDENCE_LABELS, isCpgWork, isResearchProject, isUflaCollectionWork }
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "../academic-production-types";
 import { UFLA_PPG_PROGRAMS } from "../ufla-ppg-programs";
 import { draftWorkTypeSupportsIndicators } from "../draft-builder";
-import { FileCheck2 } from "lucide-react";
+import { FileCheck2, ImagePlus, Trash2, Upload } from "lucide-react";
 import { FIELD_LABELS, ASSISTED_FIELD_KEYS, LONG_FIELDS, IMPACT_KEYS, rowsForField, visibleField, courseFieldLabel } from "../app-constants";
+
+export interface FichaCatalograficaImageAsset {
+  data: ArrayBuffer | Uint8Array;
+  fileName?: string;
+  width?: number;
+  height?: number;
+}
 
 interface Props {
   fields: AcademicFields;
@@ -15,6 +22,9 @@ interface Props {
   handleBuildDraft: () => void;
   confirmReplaceDraft: boolean;
   setConfirmReplaceDraft: (v: boolean) => void;
+  fichaCatalograficaImage?: FichaCatalograficaImageAsset | null;
+  onFichaCatalograficaImageChange?: (asset: FichaCatalograficaImageAsset) => void;
+  onFichaCatalograficaImageRemove?: () => void;
 }
 
 interface FieldSection {
@@ -55,7 +65,7 @@ const FIELD_SECTIONS: FieldSection[] = [
   {
     id: "sec-pretextuais",
     title: "Elementos pré-textuais (opcionais)",
-    keys: ["dedicatoria", "agradecimentos", "epigrafe", "errata"],
+    keys: ["dedicatoria", "agradecimentos", "epigrafe", "errata", "fichaCatalografica"],
     defaultOpen: false,
   },
   {
@@ -88,7 +98,7 @@ const FIELD_SECTIONS: FieldSection[] = [
   },
 ];
 
-export default function MetadataFields({ fields, confidence, updateField, assistedMode, setAssistedMode, handleBuildDraft, confirmReplaceDraft, setConfirmReplaceDraft }: Props) {
+export default function MetadataFields({ fields, confidence, updateField, assistedMode, setAssistedMode, handleBuildDraft, confirmReplaceDraft, setConfirmReplaceDraft, fichaCatalograficaImage, onFichaCatalograficaImageChange, onFichaCatalograficaImageRemove }: Props) {
   const renderField = (key: AcademicFieldKey) => {
     const conf = (confidence as any)[key] as Confidence | undefined;
     const showConfidence = conf === "alta" || conf === "media" || conf === "baixa";
@@ -113,6 +123,44 @@ export default function MetadataFields({ fields, confidence, updateField, assist
       </div>
     );
   };
+
+  const handleFichaImageUpload = async (file: File) => {
+    if (!onFichaCatalograficaImageChange) return;
+    const data = await file.arrayBuffer();
+    let width: number | undefined;
+    let height: number | undefined;
+    if (file.type.startsWith("image/")) {
+      try {
+        const bitmap = await createImageBitmap(new Blob([data], { type: file.type }));
+        width = bitmap.width;
+        height = bitmap.height;
+        bitmap.close();
+      } catch {
+        // PNG/JPEG tipicamente ok; sem dimensoes, o export usa o padrao.
+      }
+    }
+    onFichaCatalograficaImageChange({ data, fileName: file.name, width, height });
+  };
+
+  const renderFichaCatalograficaUpload = () => (
+    <div className="field-group" key="fichaCatalograficaImage">
+      <div className="label-row"><label htmlFor="fichaCatalograficaImage">Ficha catalográfica (imagem)</label></div>
+      <div className="ficha-upload-row">
+        {fichaCatalograficaImage ? (
+          <>
+            <span className="ficha-upload-name"><ImagePlus size={14} aria-hidden="true" /> {fichaCatalograficaImage.fileName || "Imagem anexada"}</span>
+            <button className="secondary-action" type="button" onClick={() => onFichaCatalograficaImageRemove?.()} title="Remover imagem da ficha"><Trash2 size={14} aria-hidden="true" /> Remover</button>
+          </>
+        ) : (
+          <label className="ficha-upload-label">
+            <Upload size={14} aria-hidden="true" /> Escolher imagem (foto/scan da ficha oficial)
+            <input id="fichaCatalograficaImage" type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFichaImageUpload(f); e.target.value = ""; }} />
+          </label>
+        )}
+      </div>
+      <div className="field-note"><p>O Manual UFLA (§6.1) aceita texto <em>ou</em> imagem da ficha oficial da Biblioteca Universitária. O texto colado acima prevalece sobre a imagem na exportação.</p></div>
+    </div>
+  );
 
   const renderImpactKeys = () => (
     <>
@@ -165,6 +213,7 @@ export default function MetadataFields({ fields, confidence, updateField, assist
             </summary>
             <div className="field-section-body">
               {keys.map((key) => renderField(key))}
+              {section.id === "sec-pretextuais" && (fields.workType === "monografia" || fields.workType === "dissertacao" || fields.workType === "tese") && renderFichaCatalograficaUpload()}
               {section.id === "sec-impacto" && draftWorkTypeSupportsIndicators(fields.workType) && renderImpactKeys()}
             </div>
           </details>

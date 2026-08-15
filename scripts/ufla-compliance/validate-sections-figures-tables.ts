@@ -56,6 +56,21 @@ export async function validateSections(docxPath: string): Promise<Array<{
     return results;
   }
 
+  // ABNT NBR 6024 / Manual UFLA §18: não ultrapassar seção quinária (5 níveis).
+  const maxDepth = headings.reduce((max, h) => {
+    const m = h.trim().match(/^(\d+(?:\.\d+)*)/);
+    return m ? Math.max(max, m[1].split(".").length) : max;
+  }, 0);
+  if (maxDepth > 5) {
+    results.push({
+      status: "failed",
+      severity: "major",
+      message: `Numeração progressiva com ${maxDepth} níveis (máximo permitido: 5 - seção quinária).`,
+      location: "word/document.xml",
+      suggestion: "Reduzir a subdivisão para no máximo 5 níveis conforme ABNT NBR 6024.",
+    });
+  }
+
   const withoutNumbering = headings.filter((h) => !numberingRegex.test(h.trim()));
   if (withoutNumbering.length > 0) {
     results.push({

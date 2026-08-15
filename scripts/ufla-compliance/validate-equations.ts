@@ -3,12 +3,7 @@
  */
 
 import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import JSZip from "jszip";
-
-const __dirname = fileURLToPath(new URL(".", import.meta.url));
-const root = join(__dirname, "..", "..");
 
 export interface EquationValidation {
   basicEquations: number;

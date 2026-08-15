@@ -19,6 +19,7 @@ import {
 import { repairHeadingFragments, repairRecordHeadingFragments } from "./heading-fragment-repair";
 import { sanitizeImportedTitle } from "./title-sanitizer";
 import { ImportedDocumentImage, importedImageMarker, looksLikeAcademicImageLabel, looksLikeAcademicImageCaption, looksLikeImageSource } from "./imported-images";
+import { ommlContentToken } from "./docx-render-core";
 import { ImportedTable, importedTableMarker, normalizePhantomColumns, isTableUnreadable, buildStructuredTextFromTable, removeTrailingEmptyColumn, detectGroupColumn, normalizeGroupColumn } from "./imported-tables";
 import { reconstructAcademicTable } from "./academic-table-reconstructor";
 
@@ -727,13 +728,15 @@ function editorTextWithImageMarkers(
     if (text && !preservedTableTexts.has(text)) {
       const footnoteRefs = (block as { footnoteRefs?: string[] }).footnoteRefs ?? [];
       const hasMath = (block as { hasMath?: boolean }).hasMath === true;
+      const ommlXml = (block as { ommlXml?: string }).ommlXml;
       const prefix = hasMath ? "[EQ] " : "";
+      const ommlToken = hasMath && ommlXml ? ommlContentToken(ommlXml) : "";
       if (footnoteRefs.length) {
         const markers = footnoteRefs.map((id) => `[^${id}]`).join("");
         footnoteRefs.forEach((id) => usedFootnoteIds.add(id));
-        lines.push(`${prefix}${text}${markers}`);
+        lines.push(`${prefix}${text}${markers}${ommlToken}`);
       } else {
-        lines.push(`${prefix}${text}`);
+        lines.push(`${prefix}${text}${ommlToken}`);
       }
     }
   }

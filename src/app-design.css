@@ -814,6 +814,39 @@ label,
   font-size: 0.82rem;
 }
 
+.ficha-upload-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.ficha-upload-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px dashed var(--v3-border-strong, var(--v3-border));
+  border-radius: 10px;
+  background: var(--app-surface-subtle);
+  font-size: 0.82rem;
+  color: var(--ink-700);
+  cursor: pointer;
+}
+
+.ficha-upload-label input[type="file"] {
+  display: none;
+}
+
+.ficha-upload-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--ink-700);
+}
+
 .mode-panels-details {
   margin-bottom: 14px;
   border: 1px solid var(--v3-border);

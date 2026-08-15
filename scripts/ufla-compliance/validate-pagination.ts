@@ -2,7 +2,6 @@
  * ValidaÃ§Ã£o automÃ¡tica de paginaÃ§Ã£o (UFLA-AMBIGUOUS-1)
  */
 import * as fs from 'fs';
-import * as path from 'path';
 
 interface PaginationValidation {
   isValid: boolean;

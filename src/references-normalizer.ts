@@ -25,6 +25,17 @@ export interface NormalizedReference {
     | "documento-institucional"
     | "legislacao"
     | "site"
+    | "patente"
+    | "jornal"
+    | "periodico"
+    | "correspondencia"
+    | "audiovisual"
+    | "sonoro"
+    | "partitura"
+    | "iconografico"
+    | "cartografico"
+    | "tridimensional"
+    | "dados-pesquisa"
     | "desconhecido";
 }
 
@@ -386,11 +397,82 @@ function eventHighlight(remainder: string): string | undefined {
   return m ? m[1].trim() : undefined;
 }
 
+// === Tipos adicionais do Manual UFLA §25.14 (modelos mínimos de referência) ===
+
+function patentMatch(value: string): boolean {
+  const text = fold(value);
+  return /\bpatente\b/.test(text) || /\bbr\s*\d{2}\s*\d{4,}/.test(text);
+}
+
+function newspaperMatch(value: string): boolean {
+  // Data de jornal: dia + mês por extenso + ano (ex.: "15 maio 2025").
+  const text = fold(value);
+  return /\b\d{1,2}\s+(?:jan(?:eiro)?|fev(?:ereiro)?|mar(?:co)?|abr(?:il)?|mai(?:o)?|jun(?:ho)?|jul(?:ho)?|ago(?:sto)?|set(?:embro)?|out(?:ubro)?|nov(?:embro)?|dez(?:embro)?)\s+\d{4}\b/.test(text);
+}
+
+function periodicalMatch(value: string): boolean {
+  const text = fold(value);
+  return /\bissn\b/.test(text) || /,\s*(?:19|20)\d{2}\s*[-–]\s*\.?\s*$/.test(text);
+}
+
+function correspondenceMatch(value: string): boolean {
+  const text = fold(value);
+  return /\b(correspondencia|carta\b|oficio\b|memorando\b)\b/.test(text);
+}
+
+function audiovisualMatch(value: string): boolean {
+  const text = fold(value);
+  return /\b(filme\b|documentario\b|documentário\b|video\b|vídeo\b|dvd\b|blu-?ray|serie\b|série\b|episodio\b|episódio\b|podcast\b)\b/.test(text);
+}
+
+function sonoroMatch(value: string): boolean {
+  const text = fold(value);
+  return /\b(disco sonoro|\bcd\b|album\b|álbum\b|musica\b|música\b|faixa\b|gravacao sonora|gravação sonora)\b/.test(text);
+}
+
+function sheetMusicMatch(value: string): boolean {
+  return /\bpartitura\b/iu.test(value);
+}
+
+function iconographicMatch(value: string): boolean {
+  const text = fold(value);
+  return /\b(fotografia\b|gravura\b|pintura\b|desenho\b|cartaz\b|icone\b|ícone\b|imagem\b|ilustracao\b|ilustração\b)\b/.test(text);
+}
+
+function cartographicMatch(value: string): boolean {
+  const text = fold(value);
+  return /\b(planta\b|mapa\b|carta geografica|carta geográfica|carta topografica|carta topográfica|atlas\b)\b/.test(text);
+}
+
+function tridimensionalMatch(value: string): boolean {
+  const text = fold(value);
+  return /\b(mapa em relevo|maquete\b|escultura\b|objeto tridimensional|modelo 3d)\b/.test(text);
+}
+
+function researchDataMatch(value: string): boolean {
+  const text = fold(value);
+  return /\b(dados de pesquisa|conjunto de dados|dataset\b|repositorio de dados|repositório de dados)\b/.test(text);
+}
+
+function genericTitle(remainder: string): string | undefined {
+  return bookTitle(remainder) ?? remainder.split(/\.\s+/u).map((p) => p.trim()).find((p) => p.length > 3);
+}
+
 function detect(value: string): { highlight?: string; confidence: ReferenceConfidence; detectedType: NormalizedReference["detectedType"] } {
   if (isLegislation(value)) return { highlight: legislationTitle(value), confidence: "media", detectedType: "legislacao" };
   const parsed = splitAuthor(value);
   if (!parsed) {
     if (/\bhttps?:\/\//iu.test(value)) return { confidence: "baixa", detectedType: "site" };
+    if (researchDataMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "dados-pesquisa" };
+    if (patentMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "patente" };
+    if (periodicalMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "periodico" };
+    if (correspondenceMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "correspondencia" };
+    if (audiovisualMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "audiovisual" };
+    if (sonoroMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "sonoro" };
+    if (sheetMusicMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "partitura" };
+    if (cartographicMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "cartografico" };
+    if (iconographicMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "iconografico" };
+    if (tridimensionalMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "tridimensional" };
     if (isInstitutional(value)) {
       const highlight = institutionalTitle(value);
       return { highlight, confidence: highlight ? "media" : "baixa", detectedType: "documento-institucional" };
@@ -404,6 +486,17 @@ function detect(value: string): { highlight?: string; confidence: ReferenceConfi
   if (article) return { highlight: article, confidence: "media", detectedType: "artigo" };
   const academic = academicTitle(parsed.remainder);
   if (academic || /\b(dissertacao|tese|monografia)\b/u.test(fold(value))) return { highlight: academic, confidence: academic ? "media" : "baixa", detectedType: "tese-dissertacao" };
+  if (researchDataMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "dados-pesquisa" };
+  if (patentMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "patente" };
+  if (newspaperMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "jornal" };
+  if (periodicalMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "periodico" };
+  if (correspondenceMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "correspondencia" };
+  if (audiovisualMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "audiovisual" };
+  if (sonoroMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "sonoro" };
+  if (sheetMusicMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "partitura" };
+  if (cartographicMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "cartografico" };
+  if (iconographicMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "iconografico" };
+  if (tridimensionalMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "tridimensional" };
   if (isInstitutional(value)) return { highlight: bookTitle(parsed.remainder) ?? institutionalTitle(value), confidence: "baixa", detectedType: "documento-institucional" };
   const book = bookTitle(parsed.remainder);
   if (book) return { highlight: book, confidence: "media", detectedType: "livro" };

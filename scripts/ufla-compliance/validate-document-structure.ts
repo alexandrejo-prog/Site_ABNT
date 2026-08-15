@@ -4,14 +4,12 @@ import JSZip from "jszip";
 import type { DocumentContext, DocumentRequirement, DocumentType, RequirementStatus, Severity } from "./document-type-matrix.js";
 import { DOCUMENT_TYPE_MATRIX } from "./document-type-matrix.js";
 
-function extractParagraphs(docxPath: string): string[] {
+async function extractParagraphs(docxPath: string): Promise<string[]> {
   if (!existsSync(docxPath)) return [];
   const buffer = readFileSync(docxPath);
-  return JSZip.loadAsync(buffer).then((zip) =>
-    zip.file("word/document.xml")?.async("string") ?? "",
-  ).then((xml) =>
-    [...xml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)].map((m) => m[0]),
-  );
+  const zip = await JSZip.loadAsync(buffer);
+  const xml = (await zip.file("word/document.xml")?.async("string")) ?? "";
+  return [...xml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)].map((m) => m[0]);
 }
 
 function extractText(paragraphXml: string): string {
@@ -61,7 +59,7 @@ export async function buildDocumentContext(docxPath: string): Promise<DocumentCo
   };
 }
 
-export async function validateDocumentStructure(docxPath: string): Promise<Array<{
+export async function validateDocumentStructure(docxPath: string, explicitType?: DocumentType): Promise<Array<{
   requirement: DocumentRequirement;
   status: RequirementStatus;
   severity: Severity;
@@ -70,6 +68,9 @@ export async function validateDocumentStructure(docxPath: string): Promise<Array
   suggestion?: string;
 }>> {
   const context = await buildDocumentContext(docxPath);
+  if (explicitType) {
+    context.documentType = explicitType;
+  }
   const results: Array<{
     requirement: DocumentRequirement;
     status: RequirementStatus;

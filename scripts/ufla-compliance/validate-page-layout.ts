@@ -60,7 +60,7 @@ export async function validatePageLayout(docxPath: string): Promise<Array<{
     const heightTwip = parseInt(pageMatch[2], 10);
     const widthCm = Math.round((widthTwip / 567) * 100) / 100;
     const heightCm = Math.round((heightTwip / 567) * 100) / 100;
-    const isA4 = widthTwip === UFLA_RULES.page.formatWidthTwip && heightTwip === UFLA_RULES.page.formatHeightTwip;
+    const isA4 = widthTwip === UFLA_RULES.page.widthTwip && heightTwip === UFLA_RULES.page.heightTwip;
 
     results.push({
       status: isA4 ? "passed" : "failed",
@@ -162,7 +162,7 @@ export async function validateTypography(docxPath: string): Promise<Array<{
   });
 
   const firstLineTwip = UFLA_RULES.typography.paragraphFirstLineTwip;
-  const hasFirstLine = /<w:firstLine\s+w:val="\s*567\s*"\/>/i.test(xml) || /<w:firstLine\s+w:val="\s*1417\s*"\/>/i.test(xml);
+  const hasFirstLine = new RegExp(`<w:firstLine\\s+w:val=\"\\s*${firstLineTwip}\\s*\\"\\/>`, "i").test(xml);
   results.push({
     status: hasFirstLine ? "passed" : "failed",
     severity: "major",

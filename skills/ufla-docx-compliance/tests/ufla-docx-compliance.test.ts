@@ -37,6 +37,7 @@ function makeMockAnalysis(overrides?: Partial<DocxAnalysis>): DocxAnalysis {
       primaryBold: true,
       primaryStartNewPage: false,
       primaryFormat: "1 TÍTULO",
+      maxDepth: 3,
     },
     references: {
       headingCount: 1,
@@ -78,7 +79,12 @@ function makeMockAnalysis(overrides?: Partial<DocxAnalysis>): DocxAnalysis {
       location: "LAVRAS - MG",
       locationUppercase: true,
       locationBold: true,
+      locationSize: 14,
       yearBold: true,
+      yearSize: 14,
+      logoWidthCm: 7.01,
+      logoHeightCm: 2.86,
+      logoSizeValid: true,
       pageNumberVisible: false,
     },
     catalogCard: {
@@ -117,9 +123,12 @@ function makeMockAnalysis(overrides?: Partial<DocxAnalysis>): DocxAnalysis {
       headingCentered: true,
       headingUppercase: true,
       headingBold: true,
+      hasTocEntries: true,
       includesReferences: true,
       includesAppendices: false,
       includesAnnexes: false,
+      tocIncludesAppendices: false,
+      tocIncludesAnnexes: false,
       excludesCover: true,
       excludesPreTextual: true,
     },
@@ -135,6 +144,14 @@ function makeMockAnalysis(overrides?: Partial<DocxAnalysis>): DocxAnalysis {
     equations: {
       count: 0,
       hasCenteredWithRightNumber: true,
+    },
+    footnotes: {
+      count: 0,
+      fontSizePt: 0,
+      smallerThanBody: false,
+      singleSpaced: true,
+      timesNewRoman: true,
+      hasDefinitions: false,
     },
     paragraphCount: 97,
     totalCharacters: 5000,
@@ -402,6 +419,54 @@ describe("checklist-checker", () => {
     expect(items.find((i) => i.id === "15.6")?.status).toBe("ok");
   });
 
+  it("should validate footnote items (24.1-24.3) when notes exist", () => {
+    const analysis = makeMockAnalysis({
+      footnotes: {
+        count: 3,
+        fontSizePt: 11,
+        smallerThanBody: true,
+        singleSpaced: true,
+        timesNewRoman: true,
+        hasDefinitions: true,
+      },
+    });
+    const items = checkCompliance(analysis);
+    expect(items.find((i) => i.id === "24.1")?.status).toBe("ok");
+    expect(items.find((i) => i.id === "24.2")?.status).toBe("ok");
+    expect(items.find((i) => i.id === "24.3")?.status).toBe("ok");
+  });
+
+  it("should fail footnote items when format is wrong and mark unchecked when absent", () => {
+    const badItems = checkCompliance(
+      makeMockAnalysis({
+        footnotes: {
+          count: 2,
+          fontSizePt: 12,
+          smallerThanBody: false,
+          singleSpaced: false,
+          timesNewRoman: false,
+          hasDefinitions: true,
+        },
+      }),
+    );
+    expect(badItems.find((i) => i.id === "24.2")?.status).toBe("fail");
+    expect(badItems.find((i) => i.id === "24.3")?.status).toBe("fail");
+
+    const noNoteItems = checkCompliance(
+      makeMockAnalysis({
+        footnotes: {
+          count: 0,
+          fontSizePt: 0,
+          smallerThanBody: false,
+          singleSpaced: true,
+          timesNewRoman: true,
+          hasDefinitions: false,
+        },
+      }),
+    );
+    expect(noNoteItems.find((i) => i.id === "24.1")?.status).toBe("unchecked");
+  });
+
   it("should fail TOC field chars when missing", () => {
     const analysis = makeMockAnalysis({
       toc: {
@@ -417,6 +482,53 @@ describe("checklist-checker", () => {
     const items = checkCompliance(analysis);
     expect(items.find((i) => i.id === "15.5")?.status).toBe("fail");
     expect(items.find((i) => i.id === "15.6")?.status).toBe("fail");
+  });
+
+  it("should validate cover typographic sizes (3.11-3.13) and logo dimensions (3.14)", () => {
+    const items = checkCompliance(makeMockAnalysis());
+    expect(items.find((i) => i.id === "3.11")?.status).toBe("ok");
+    expect(items.find((i) => i.id === "3.12")?.status).toBe("ok");
+    expect(items.find((i) => i.id === "3.13")?.status).toBe("ok");
+    expect(items.find((i) => i.id === "3.14")?.status).toBe("ok");
+
+    const badSizes = checkCompliance(
+      makeMockAnalysis({
+        cover: { ...makeMockAnalysis().cover, authorSize: 12, titleSize: 14, locationSize: 12, yearSize: 12, logoWidthCm: 10, logoHeightCm: 4, logoSizeValid: false },
+      }),
+    );
+    expect(badSizes.find((i) => i.id === "3.11")?.status).toBe("fail");
+    expect(badSizes.find((i) => i.id === "3.12")?.status).toBe("fail");
+    expect(badSizes.find((i) => i.id === "3.13")?.status).toBe("fail");
+    expect(badSizes.find((i) => i.id === "3.14")?.status).toBe("fail");
+  });
+
+  it("should validate TOC semantic contents (15.7-15.10)", () => {
+    const items = checkCompliance(makeMockAnalysis());
+    expect(items.find((i) => i.id === "15.7")?.status).toBe("ok");
+    expect(items.find((i) => i.id === "15.8")?.status).toBe("ok");
+    expect(items.find((i) => i.id === "15.9")?.status).toBe("unchecked");
+    expect(items.find((i) => i.id === "15.10")?.status).toBe("unchecked");
+
+    const bad = checkCompliance(
+      makeMockAnalysis({ summary: { ...makeMockAnalysis().summary, excludesPreTextual: false, includesReferences: false } }),
+    );
+    expect(bad.find((i) => i.id === "15.7")?.status).toBe("fail");
+    expect(bad.find((i) => i.id === "15.8")?.status).toBe("fail");
+  });
+
+  it("should mark TOC semantic items unchecked when TOC has no entries yet", () => {
+    const analysis = makeMockAnalysis({ summary: { ...makeMockAnalysis().summary, hasTocEntries: false, excludesPreTextual: false } });
+    const items = checkCompliance(analysis);
+    expect(items.find((i) => i.id === "15.7")?.status).toBe("unchecked");
+    expect(items.find((i) => i.id === "15.8")?.status).toBe("unchecked");
+  });
+
+  it("should validate quinaria numbering limit (18.2)", () => {
+    const items = checkCompliance(makeMockAnalysis());
+    expect(items.find((i) => i.id === "18.2")?.status).toBe("ok");
+
+    const tooDeep = checkCompliance(makeMockAnalysis({ titles: { ...makeMockAnalysis().titles, maxDepth: 6 } }));
+    expect(tooDeep.find((i) => i.id === "18.2")?.status).toBe("fail");
   });
 });
 

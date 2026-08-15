@@ -90,15 +90,16 @@ export function PreviewModal({
     );
   };
 
-  const focusFirstElement = (): void => {
-    const focusable = getFocusableElements();
+  useEffect(() => {
+    // Foco inicial inline para evitar dependência instável (ref é estável).
+    const container = dialogRef.current;
+    if (!container) return;
+    const focusable = container.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
     if (focusable.length > 0) {
       (focusable[0] as HTMLElement).focus();
     }
-  };
-
-  useEffect(() => {
-    focusFirstElement();
   }, []);
 
   useEffect(() => {

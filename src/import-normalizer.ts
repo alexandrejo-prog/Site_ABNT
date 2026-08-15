@@ -250,6 +250,7 @@ function splitInlineAcademicText(
   originalType: "paragraph" | "heading" | "longQuote",
   footnoteRefs: string[] = [],
   hasMath = false,
+  ommlXml?: string,
   commentIds: string[] = [],
   moveIds: string[] = [],
   permissionIds: string[] = [],
@@ -282,8 +283,11 @@ function splitInlineAcademicText(
     }
     return block;
   };
-  const withMath = (block: ImportedBlock): ImportedBlock =>
-    hasMath && block.type !== "pageBreak" ? ({ ...block, hasMath: true } as ImportedBlock) : block;
+  const withMath = (block: ImportedBlock): ImportedBlock => {
+    if (block.type === "pageBreak") return block;
+    const withOmml = ommlXml && block.type === "paragraph" ? { ...block, ommlXml } : block;
+    return hasMath ? ({ ...withOmml, hasMath: true } as ImportedBlock) : withOmml;
+  };
 
   while (remaining) {
     const marker = findNextMarker(remaining);
@@ -328,19 +332,20 @@ function splitInlineAcademicText(
 function normalizeBlock(block: ImportedBlock): ImportedBlock[] {
   const footnoteRefs = (block as { footnoteRefs?: string[] }).footnoteRefs ?? [];
   const hasMath = (block as { hasMath?: boolean }).hasMath === true;
+  const ommlXml = (block as { ommlXml?: string }).ommlXml;
   const commentIds = (block as { commentIds?: string[] }).commentIds ?? [];
   const moveIds = (block as { moveIds?: string[] }).moveIds ?? [];
   const permissionIds = (block as { permissionIds?: string[] }).permissionIds ?? [];
   if (block.type === "paragraph" || block.type === "longQuote") {
     const text = cleanText(block.text);
     if (!text) return [];
-    return splitInlineAcademicText(text, block.type, footnoteRefs, hasMath, commentIds, moveIds, permissionIds);
+    return splitInlineAcademicText(text, block.type, footnoteRefs, hasMath, ommlXml, commentIds, moveIds, permissionIds);
   }
 
   if (block.type === "heading") {
     const text = cleanText(block.text);
     if (!text) return [];
-    const split = splitInlineAcademicText(text, "heading", footnoteRefs, hasMath, commentIds, moveIds, permissionIds);
+    const split = splitInlineAcademicText(text, "heading", footnoteRefs, hasMath, ommlXml, commentIds, moveIds, permissionIds);
     if (split.length === 1 && split[0]?.type === "paragraph") {
       return [headingBlock(split[0].text, block.level, footnoteRefs, commentIds, moveIds, permissionIds)];
     }

@@ -25,7 +25,7 @@ describe("contrato do Tiptap experimental", () => {
     expect(appSource).toContain("templateForWorkType");
     expect(appSource).toContain("handleGenerateDocx");
     expect(appSource).toContain("editorText");
-    expect(appSource).toContain("generate({ fields: generationFields, editorText, importedImages, importedTables });");
+    expect(appSource).toContain("generate({ fields: generationFields, editorText, importedImages, importedTables, fichaCatalograficaImage: fichaCatalograficaImage ?? undefined });");
   });
 
   it("mantem patch de sumario reconhecivel e separado", () => {

@@ -102,6 +102,7 @@ export const ACADEMIC_FIELD_KEYS = [
   "impactoTecnologico",
   "publicoBeneficiado",
   "aderenciaOds",
+  "fichaCatalografica",
 ] as const;
 
 export type AcademicFieldKey = (typeof ACADEMIC_FIELD_KEYS)[number];
@@ -169,6 +170,8 @@ export interface AcademicFields {
   listaSimbolos: string;
   glossario: string;
   referencesPlacement: "bibliography" | "footnote";
+  /** Texto da ficha catalográfica oficial (Manual UFLA §6.1: colar texto ou inserir imagem/PDF). */
+  fichaCatalografica: string;
 }
 
 const TWIPS_PER_CM = 567;
@@ -433,6 +436,7 @@ export function emptyAcademicFields(): AcademicFields {
     listaSimbolos: "",
     glossario: "",
     referencesPlacement: "bibliography",
+    fichaCatalografica: "",
   };
 }
 

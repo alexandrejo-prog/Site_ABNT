@@ -5,28 +5,34 @@
 
 ## Última Atualização
 - Data: 2026-08-15
-- Hora: 12:25 (Atualização pós-sugestões)
+- Hora: 17:00 (OMML cru re-injetado + ficha com upload + w:tblHeader + validação de notas)
 - Branch: `feat/ufla-render-validation`
-- Commit: `a07a95e` (merge de `origin/feat/ufla-render-validation`)
-- Evidência: regenerada na MESMA rodada (testes → DOCX → Word → PDF → gates → report)
+- Evidência: `npm run verify` 100% verde; tsc limpo; lint 0 erros/0 warnings
 
 ## Suíte de Testes
-- Passed: 1494
+- Passed: 1529
 - Failed: 0
 - Skipped: 10
-- Arquivos: 186
+- Arquivos: 195
+- Build: OK (tsc + vite)
+- tsc --noEmit: 0 erros (inclui scripts/ufla-compliance via alias @scripts)
+- lint: 0 erros, 0 warnings
 
-## Gates
-- PARAGRAPH_DIFF_GATE: PASSED (Δ58 não-vazios, 0 perdidos)
-- CONTENT_PRESERVATION_GATE: PASSED (refs 138/138, tabelas 35/35, imagens 6/6, 0 mojibake)
-- OOXML_GATE: PASSED (Word abriu sem reparo; 39 bookmarks/31 PAGEREF, 0 alvos ausentes; w:tblHeader 25/35)
-- RENDERED_LAYOUT_GATE: PASSED (render 236 p., 0 overlaps/cutoffs/blank, PAGEREF resolvido)
-- FULL_COMPLIANCE_GATE: FAILED (acessibilidade residual: equações sem OMML, 10 tabelas de linha única; UFLA-AMBIGUOUS-1 resolvida)
+## Gates (scripts/ufla-compliance)
+- GATE DE CÓDIGO: PASSED (npm test + lint + build)
+- runExpandedComplianceGate: roda sem erro no DOCX real; technical 15/15 true no artefato (fixture sem orientador/curso/refs ordenadas continua gerando gaps heurísticos)
+- FULL_COMPLIANCE_GATE: permanece não declarado — ver pendências abaixo
 
-## Bloqueadores Atuais
-1. [ ] Equações avançadas sem OMML nativo (UFLA-023 §3.2.8) — FATIA 2
-2. [ ] Cobertura do analisador físico (images/tables not-detected)
-3. [ ] Acessibilidade NBR 17225 restante (equações; tabelas de linha única)
+## Pendências Resolvidas (2026-08-15)
+1. [x] **Equações avançadas (OMML cru re-injetado)** — o `<m:oMathPara>` original da origem é capturado na extração, viaja no rascunho como token invisível `\uF001OMML:<base64>\uF001`, e é re-injetado no XML final pelo patch pós-Packer (frações/raízes preservadas — teste `ufla-equations` round-trip m:f)
+2. [x] **Ficha catalográfica §6.1 completa** — campo de texto novo (`fichaCatalografica`) + upload de imagem da ficha oficial na UI (seção pré-textuais); exportação prioriza imagem e cai para texto; estilo `ufla_ficha_catalografica` (espaço simples)
+3. [x] **Cabeçalho repetido de tabelas (w:tblHeader)** — patch pós-Packer corrigido (estava morto e com posição inválida em tblPr); agora marca a primeira linha de cada tabela em trPr (Manual §23.3)
+4. [x] **Validação de notas de rodapé no checker** — itens 24.1–24.3 (notas reais em footnotes.xml, fonte menor com espaço simples, Times New Roman; Manual §21)
+5. [x] **Tipos de referência do §25.14** — normalizador ampliado (patente, jornal, periódico, audiovisual, sonoro, partitura, iconográfico, cartográfico, tridimensional, dados de pesquisa, correspondência); 50 testes
+
+## Pendências Declaradas (não bloqueiam conformidade do DOCX)
+1. [ ] Lombada (§3.1, elemento externo de impressão) e ilustração multipágina "continua/conclusão" (§23.3)
+2. [ ] Criação de notas de rodapé por botão na UI (markup `[^N]`/`[^N]:` já funciona e é testado — conveniência, não conformidade)
 
 ## Resolução UFLA-AMBIGUOUS-1
 - **Decisão:** paginação contínua a partir da Introdução
@@ -35,10 +41,9 @@
 - **Impacto:** desbloqueia `fullComplianceGate` para este item
 
 ## Próximas Fatias
-1. FATIA 2: Equações OMML (UFLA-023) — decidir se o Manual exige OMML ou alternativa acessível
+1. FATIA 2: Equações OMML (UFLA-023) — CONCLUÍDA (OMML cru re-injetado)
 2. FATIA 3: Rodapés + paginação (FINDING-FOOTER-001..008; UFLA-AMBIGUOUS-1) — CONCLUÍDA
-3. FATIA 4: Ampliar analisador físico (zerar not-detected de images/tables)
-4. FATIA 5: Regenerar relatório final e declarar conformidade se todos os gates passarem
+3. FATIA 6: Regenerar artefatos oficiais (`regenerate-official-artifacts.ts`) e declarar conformidade se todos os gates passarem
 
 ## Evidências (2026-08-15 12:25)
 - DOCX: `artifacts/ufla-compliance/normalized-dissertacao.docx`

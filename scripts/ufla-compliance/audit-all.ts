@@ -1,6 +1,3 @@
-import { readFileSync, existsSync } from "node:fs";
-import JSZip from "jszip";
-
 import { auditPretextual } from "./audit-pretextual";
 import { auditTextual } from "./audit-textual";
 import { auditPosttextual } from "./audit-posttextual";
@@ -14,9 +11,11 @@ import { validateCatalogCard } from "./validate-catalog-toc";
 import { validateToc } from "./validate-catalog-toc";
 import { validateOMML } from "./validate-omml";
 import { validateCitations, validateReferences } from "./validate-citations-references";
-import { validateSections, validateFigures, validateTables } from "./validate-sections-figures-tables";
+import { validateTables } from "./validate-sections-figures-tables";
 import { validateDocumentStructure } from "./validate-document-structure";
 import { writeHtmlReport } from "./report";
+
+import type { DocumentType } from "./document-type-matrix";
 
 export interface UnifiedAuditResult {
   documentType: string;
@@ -55,7 +54,7 @@ function toGaps(items: Array<{ status: string; severity: string; message: string
     }));
 }
 
-export async function runUnifiedAudit(docxPath: string, documentType = "dissertacao"): Promise<UnifiedAuditResult> {
+export async function runUnifiedAudit(docxPath: string, documentType: DocumentType = "dissertacao"): Promise<UnifiedAuditResult> {
   const [pretextual, textual, posttextual, referencesResult, citationsResult, figuresResult, sectionsResult, layoutResult, typographyResult, catalogCardResult, tocResult, ommlResult, documentStructureResult, tablesResult] = await Promise.all([
     auditPretextual(docxPath),
     auditTextual(docxPath),
@@ -90,7 +89,7 @@ export async function runUnifiedAudit(docxPath: string, documentType = "disserta
   };
 
   const technical = {
-    pages: { passed: true, gaps: [] },
+    pages: { passed: true, gaps: [] as Array<{ rule: string; severity: string; description: string; suggestion?: string }> },
     tables: { passed: tablesResult.every((r) => r.status === "passed"), gaps: toGaps(tablesResult) },
   };
 

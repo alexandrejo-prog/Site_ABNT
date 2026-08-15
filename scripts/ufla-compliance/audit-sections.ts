@@ -11,17 +11,6 @@ async function extractParagraphs(docxPath: string): Promise<string[]> {
   return [...xml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)].map((m) => m[0]);
 }
 
-function sectionResult(overrides: Partial<SectionAuditResult> = {}): SectionAuditResult {
-  return {
-    passed: true,
-    score: 100,
-    itemsFound: [],
-    itemsMissing: [],
-    gaps: [],
-    ...overrides,
-  };
-}
-
 function gap(overrides: Partial<AuditGap>): AuditGap {
   return {
     section: "seções",

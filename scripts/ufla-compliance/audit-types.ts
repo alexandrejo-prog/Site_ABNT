@@ -88,6 +88,12 @@ export interface ExpandedAuditResult {
     citations: boolean;
     figures: boolean;
     sections: boolean;
+    omml: boolean;
+    citationsValidator: boolean;
+    referencesValidator: boolean;
+    sectionsValidator: boolean;
+    figuresValidator: boolean;
+    tablesValidator: boolean;
   };
   gaps: AuditGap[];
   score: number;

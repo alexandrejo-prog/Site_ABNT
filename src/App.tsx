@@ -108,6 +108,7 @@ export default function App() {
   const [importedFileName, setImportedFileName] = useState<string | null>(null);
   const [importedImages, setImportedImages] = useState<ImportedDocumentImage[]>([]);
   const [importedTables, setImportedTables] = useState<ImportedTable[]>([]);
+  const [fichaCatalograficaImage, setFichaCatalograficaImage] = useState<{ data: ArrayBuffer | Uint8Array; fileName?: string; width?: number; height?: number } | null>(null);
   const [adherenceExpanded, setAdherenceExpanded] = useState(false);
   const [assistedMode, setAssistedMode] = useState(false);
   const [confirmReplaceDraft, setConfirmReplaceDraft] = useState(false);
@@ -210,6 +211,7 @@ export default function App() {
     setImportedFileName(null);
     setImportedImages([]);
     setImportedTables([]);
+    setFichaCatalograficaImage(null);
     setEditorMode("body");
     resetValidation();
     setGenerateAnyway(false);
@@ -221,9 +223,9 @@ export default function App() {
   }, [replaceFields, resetValidation, setGenerateAnyway, setEditorText, setEditorMode, editorRef, lastAppliedEditorTextRef, editorContentVersionRef]);
 
   const handleRemoveImport = useCallback(() => {    resetFields(); resetEditor(); resetValidation(); setGenerateAnyway(false);
-    setImportedFileName(null); setImportedImages([]); setImportedTables([]);
+    setImportedFileName(null); setImportedImages([]); setImportedTables([]); setFichaCatalograficaImage(null);
     setStatus("Importação removida. Escolha outro arquivo ou preencha manualmente.");
-  }, [resetFields, resetEditor, resetValidation, setGenerateAnyway, setImportedFileName, setImportedImages, setImportedTables]);
+  }, [resetFields, resetEditor, resetValidation, setGenerateAnyway, setImportedFileName, setImportedImages, setImportedTables, setFichaCatalograficaImage]);
 
   const triggerValidation = useCallback(() => { const { issues: r, hasBlocking } = runValidation(fields, editorText, editorMode); setStatus(hasBlocking ? `Validação concluída: ${r.filter(i => i.severity === "error").length} erro(s), ${r.filter(i => i.severity === "warning" || i.severity === "info").length} alerta(s). Há erros essenciais antes da geração.` : `Validação concluída: ${r.filter(i => i.severity === "error").length} erro(s), ${r.filter(i => i.severity === "warning" || i.severity === "info").length} alerta(s). Pode gerar o DOCX como rascunho editável.`); }, [runValidation, fields, editorText, editorMode]);
 
@@ -234,14 +236,14 @@ export default function App() {
     try {
       setIsGenerating(true); setStatus("Gerando DOCX...");
       traceEvent("docx-generate:start");
-      const blob = await templateForWorkType(generationFields.workType).generate({ fields: generationFields, editorText, importedImages, importedTables });
+      const blob = await templateForWorkType(generationFields.workType).generate({ fields: generationFields, editorText, importedImages, importedTables, fichaCatalograficaImage: fichaCatalograficaImage ?? undefined });
       traceEvent("docx-generate:complete");
       saveAs(blob, buildDownloadFileName({ workType: generationFields.workType, title: generationFields.title, importedFileName }));
       const pending = finalVersionPendingReport(generationFields, activeEditorText);
       setStatus(generateAnyway || pending.hasPendingItems ? "Rascunho gerado. Abra no Word/LibreOffice, atualize o sumário e substitua campos provisórios antes da submissão." : "DOCX gerado. Se o sumário aparecer vazio, atualize os campos no Word/LibreOffice. Isso é esperado.");
     } catch (err) { traceEvent("docx-generate:error"); reportTechnicalError("geração de DOCX", err); setStatus(friendlyGenerationError(err)); }
     finally { setIsGenerating(false); }
-  }, [fields, editorText, importedImages, importedTables, generateAnyway, editorMode, importedFileName, activeEditorText, runValidation]);
+  }, [fields, editorText, importedImages, importedTables, fichaCatalograficaImage, generateAnyway, editorMode, importedFileName, activeEditorText, runValidation]);
 
   const handleOpenPreview = useCallback(() => {
     traceEvent("preview:open");
@@ -542,7 +544,7 @@ export default function App() {
         <section className="metadata-pane" aria-label="Campos acadêmicos">
           <ImportBlock ref={importBlockRef} onImport={handleImport} onRemove={handleRemoveImport} onNewDocument={handleNewDocument} importedFileName={importedFileName} workType={fields.workType} />
           <div className="work-type-section"><WorkTypeSelector value={fields.workType} onChange={updateWorkType} /></div>
-          <MetadataFields fields={fields} confidence={confidence} updateField={updateField} assistedMode={assistedMode} setAssistedMode={setAssistedMode} handleBuildDraft={handleBuildDraft} confirmReplaceDraft={confirmReplaceDraft} setConfirmReplaceDraft={setConfirmReplaceDraft} />
+          <MetadataFields fields={fields} confidence={confidence} updateField={updateField} assistedMode={assistedMode} setAssistedMode={setAssistedMode} handleBuildDraft={handleBuildDraft} confirmReplaceDraft={confirmReplaceDraft} setConfirmReplaceDraft={setConfirmReplaceDraft} fichaCatalograficaImage={fichaCatalograficaImage} onFichaCatalograficaImageChange={setFichaCatalograficaImage} onFichaCatalograficaImageRemove={() => setFichaCatalograficaImage(null)} />
         </section>
         <EditorSection editorMode={editorMode} setEditorMode={setEditorMode} isTiptapEditorEnabled={isTiptapEditorEnabled} editorRef={editorRef} handleEditorInput={handleEditorInput} runEditorAction={runEditorAction as (cmd: string, fn: () => void) => void} applyBlockStyle={applyBlockStyle} activeEditorText={activeEditorText} updateField={updateField} setEditorText={setEditorText} tiptapCommandSignal={tiptapCommandSignal} adherenceExpanded={adherenceExpanded} setAdherenceExpanded={setAdherenceExpanded} showWelcome={showWelcome} onWelcomeAction={handleWelcomeAction} />
         <ValidationSidebar status={status} outputType={outputType} generateAnyway={generateAnyway} onToggleGenerateAnyway={setGenerateAnyway} onNavigateToField={handleNavigateToField} fields={fields} editorText={editorText} errors={errors} warnings={warnings} finalPending={finalPending} />
@@ -550,7 +552,7 @@ export default function App() {
       {isPreviewOpen && (
         <Suspense fallback={<div className="preview-loading" role="status">Carregando pré-visualização...</div>}>
           <PreviewModal
-            input={{ fields, editorText: activeEditorText, importedImages, importedTables }}
+            input={{ fields, editorText: activeEditorText, importedImages, importedTables, fichaCatalograficaImage: fichaCatalograficaImage ?? undefined }}
             onClose={handleClosePreview}
             onCommitEditorText={handleCommitPreviewEditorText}
             onUpdateField={updateField}

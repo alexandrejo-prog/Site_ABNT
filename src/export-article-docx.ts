@@ -17,7 +17,7 @@ import { DOCUMENT_STYLES } from "./docx-styles";
 import type { ImportedDocumentImage } from "./imported-images";
 import { UFLA_RULES, cmToTwip } from "./ufla-rules";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
-import { cleanMojibakeText, equationParagraph, longQuoteParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, tabbedTableBlock } from "./docx-render-core";
+import { cleanMojibakeText, clearRawOmmlRegistry, longQuoteParagraph, rawOmmlMarkerParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, tabbedTableBlock } from "./docx-render-core";
 
 const BLACK = "000000";
 const BODY_SIZE = UFLA_RULES.typography.bodyFontSizePt * 2;
@@ -180,7 +180,7 @@ function blockToParagraph(
     return [sourceParagraph(block.text)];
   }
   if (block.type === "equation") {
-    return [equationParagraph(block.text)];
+    return [rawOmmlMarkerParagraph(block.text, block.ommlXml)];
   }
   if (block.type === "reference" || normalizeComparable(block.text) === "REFERENCIAS") return [];
   const runs = textRunsWithFootnotes(block.text, footnoteIdMap, BODY_SIZE);
@@ -356,5 +356,6 @@ function createArticleDocument(input: DocxGenerationInput): Document {
 }
 
 export async function generateArticleDocxBlob(input: DocxGenerationInput): Promise<Blob> {
+  clearRawOmmlRegistry();
   return Packer.toBlob(createArticleDocument(input));
 }

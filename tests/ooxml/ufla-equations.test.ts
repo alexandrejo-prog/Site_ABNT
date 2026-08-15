@@ -145,6 +145,37 @@ describe("UFLA-023 renderizacao no DOCX gerado", () => {
     expect(docXml).toContain("<m:t>E = mc²</m:t>");
   });
 
+  it("round-trip: estrutura matematica avancada (fracao m:f) do OMML cru e preservada", async () => {
+    const xml =
+      DOCUMENT_TAG +
+      oMathParagraph(
+        '<m:oMath><m:f><m:num><m:r><m:t>x+1</m:t></m:r></m:num><m:den><m:r><m:t>y-2</m:t></m:r></m:den></m:f></m:oMath>',
+      ) +
+      `</w:document>`;
+    const imported = await importDocumentFile(
+      new File([await (await minimalDocx(xml)).arrayBuffer()], "eq-frac.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }),
+    );
+    expect(imported.editorText).toContain("[EQ]");
+
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "monografia" as const,
+      author: "SILVA, J.",
+      title: "Titulo",
+      resumo: "Resumo.",
+      palavrasChave: "palavras; chave",
+    };
+    const blob = await generateDocxBlob({ fields, editorText: imported.editorText });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const docXml = (await zip.file("word/document.xml")?.async("string")) ?? "";
+    expect(docXml).toContain("<m:oMath>");
+    expect(docXml).toContain("<m:f>");
+    expect(docXml).toContain("<m:num>");
+    expect(docXml).toContain("<m:den>");
+    expect(docXml).toContain("<m:t>x+1</m:t>");
+    expect(docXml).toContain("<m:t>y-2</m:t>");
+  });
+
   it("texto do corpo sem equacao nao gera espaco OMML indevido", async () => {
     const fields = {
       ...emptyAcademicFields(),

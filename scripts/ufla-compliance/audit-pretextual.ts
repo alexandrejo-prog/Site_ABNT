@@ -1,6 +1,4 @@
 import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import JSZip from "jszip";
 
 import type {
@@ -9,9 +7,6 @@ import type {
   SectionAuditResult,
   WorkType,
 } from "./audit-types.js";
-
-const __dirname = fileURLToPath(new URL(".", import.meta.url));
-const root = join(__dirname, "..", "..");
 
 async function extractParagraphs(docxPath: string): Promise<string[]> {
   if (!existsSync(docxPath)) return [];
@@ -64,7 +59,7 @@ function gap(overrides: Partial<AuditGap>): AuditGap {
 
 export async function auditPretextual(docxPath: string): Promise<PretextualAuditResult> {
   const paragraphs = await extractParagraphs(docxPath).then((ps) => ps);
-  const workType = normalizeWorkType(docxPath);
+  void normalizeWorkType(docxPath);
 
   const cover = sectionResult({
     passed: containsText(paragraphs, /Universidade Federal de Lavras|UFLA/i),

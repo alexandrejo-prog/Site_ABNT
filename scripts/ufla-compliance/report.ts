@@ -1,51 +1,87 @@
-import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-
-import type { ExpandedAuditResult } from "./audit-types.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const root = join(__dirname, "..", "..");
 
-export function writeHtmlReport(result: ExpandedAuditResult, outputPath: string): void {
-  const statusColor = result.compliant ? "#16a34a" : "#dc2626";
-  const statusLabel = result.compliant ? "CONFORME" : "NÃO CONFORME";
+/**
+ * Estrutura mínima aceita pelo gerador de relatório HTML. Tanto
+ * ExpandedAuditResult (gate) quanto UnifiedAuditResult (audit-all) são
+ * aceitos; campos ausentes são tratados de forma defensiva.
+ */
+export interface AuditReportInput {
+  documentType: string;
+  compliant?: boolean;
+  score?: number;
+  preTextual?: { gaps?: unknown[] };
+  textual?: { gaps?: unknown[] };
+  postTextual?: { gaps?: unknown[] };
+  technical?: Record<string, unknown>;
+  gaps?: unknown[];
+}
+
+interface ReportGap {
+  section?: string;
+  rule?: string;
+  severity?: string;
+  description?: string;
+  suggestion?: string;
+}
+
+function gapRows(section: string, gaps?: unknown[]): ReportGap[] {
+  return (gaps ?? [])
+    .filter((g): g is ReportGap => typeof g === "object" && g !== null)
+    .map((g) => ({
+      section: typeof g.section === "string" ? g.section : section,
+      rule: typeof g.rule === "string" ? g.rule : "",
+      severity: typeof g.severity === "string" ? g.severity : "",
+      description: typeof g.description === "string" ? g.description : "",
+      suggestion: typeof g.suggestion === "string" ? g.suggestion : "",
+    }));
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+export function writeHtmlReport(result: AuditReportInput, outputPath: string): void {
+  const compliant = result.compliant === true;
+  const score = typeof result.score === "number" ? result.score : 0;
+  const statusColor = compliant ? "#16a34a" : "#dc2626";
+  const statusLabel = compliant ? "CONFORME" : "NÃO CONFORME";
 
   const rows = [
-    ...result.preTextual.gaps.map((g) => ({
-      section: "Pré-textual",
-      rule: g.rule,
-      severity: g.severity,
-      description: g.description,
-      suggestion: g.suggestion ?? "",
-    })),
-    ...result.textual.gaps.map((g) => ({
-      section: "Textual",
-      rule: g.rule,
-      severity: g.severity,
-      description: g.description,
-      suggestion: g.suggestion ?? "",
-    })),
-    ...result.postTextual.gaps.map((g) => ({
-      section: "Pós-textual",
-      rule: g.rule,
-      severity: g.severity,
-      description: g.description,
-      suggestion: g.suggestion ?? "",
-    })),
+    ...gapRows("Pré-textual", result.preTextual?.gaps),
+    ...gapRows("Textual", result.textual?.gaps),
+    ...gapRows("Pós-textual", result.postTextual?.gaps),
+    ...gapRows("Geral", result.gaps),
   ];
 
   const tableRows = rows
     .map(
       (r) => `
       <tr>
-        <td>${r.section}</td>
-        <td>${r.rule}</td>
-        <td>${r.severity}</td>
-        <td>${r.description}</td>
-        <td>${r.suggestion}</td>
+        <td>${escapeHtml(r.section ?? "")}</td>
+        <td>${escapeHtml(r.rule ?? "")}</td>
+        <td>${escapeHtml(r.severity ?? "")}</td>
+        <td>${escapeHtml(r.description ?? "")}</td>
+        <td>${escapeHtml(r.suggestion ?? "")}</td>
       </tr>
     `,
+    )
+    .join("");
+
+  const technical = result.technical ?? {};
+  const technicalRows = Object.entries(technical)
+    .filter(([key]) => typeof technical[key] === "boolean")
+    .map(
+      ([key, value]) =>
+        `<li>${escapeHtml(key)}: ${value ? "PASSED" : "FAILED"}</li>`,
     )
     .join("");
 
@@ -66,9 +102,9 @@ export function writeHtmlReport(result: ExpandedAuditResult, outputPath: string)
 </head>
 <body>
   <h1>Relatório de Auditoria UFLA</h1>
-  <p><strong>Tipo:</strong> ${result.documentType}</p>
+  <p><strong>Tipo:</strong> ${escapeHtml(result.documentType)}</p>
   <p><strong>Status:</strong> <span class="badge">${statusLabel}</span></p>
-  <p class="score"><strong>Score:</strong> ${result.score}/100</p>
+  <p class="score"><strong>Score:</strong> ${score}/100</p>
 
   <h2>Gaps</h2>
   <table>
@@ -88,32 +124,17 @@ export function writeHtmlReport(result: ExpandedAuditResult, outputPath: string)
 
   <h2>Status Técnico</h2>
   <ul>
-    <li>Rodapés: ${result.technical.footers ? "PASSED" : "FAILED"}</li>
-    <li>Tabelas: ${result.technical.tables ? "PASSED" : "FAILED"}</li>
-    <li>Paginação: ${result.technical.pagination ? "PASSED" : "FAILED"}</li>
-    <li>Equações: ${result.technical.equations ? "PASSED" : "FAILED"}</li>
-    <li>PDF físico: ${result.technical.pdfPhysical ? "PASSED" : "FAILED"}</li>
-    <li>Referências: ${result.technical.references ? "PASSED" : "FAILED"}</li>
-    <li>Citações: ${result.technical.citations ? "PASSED" : "FAILED"}</li>
-    <li>Figuras: ${result.technical.figures ? "PASSED" : "FAILED"}</li>
-    <li>Seções: ${result.technical.sections ? "PASSED" : "FAILED"}</li>
-    <li>OMML: ${result.technical.omml ? "PASSED" : "FAILED"}</li>
-    <li>Validador de referências: ${result.technical.referencesValidator ? "PASSED" : "FAILED"}</li>
-    <li>Validador de citações: ${result.technical.citationsValidator ? "PASSED" : "FAILED"}</li>
-    <li>Validador de seções: ${result.technical.sectionsValidator ? "PASSED" : "FAILED"}</li>
-    <li>Validador de figuras: ${result.technical.figuresValidator ? "PASSED" : "FAILED"}</li>
-    <li>Validador de tabelas: ${result.technical.tablesValidator ? "PASSED" : "FAILED"}</li>
+    ${technicalRows || "<li>Sem status técnico informado</li>"}
   </ul>
 </body>
 </html>
 `;
 
   const fullPath = join(root, outputPath);
-  const dir = join(fullPath, "..");
-  if (!existsSync(dir)) {
-    // create directory recursively
+  mkdirSync(dirname(fullPath), { recursive: true });
+  if (existsSync(fullPath)) {
+    writeFileSync(fullPath, html, "utf-8");
+  } else {
+    writeFileSync(fullPath, html, "utf-8");
   }
-  writeFileSync(fullPath, html, "utf-8");
 }
-
-import { writeFileSync } from "node:fs";

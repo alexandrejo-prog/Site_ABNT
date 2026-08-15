@@ -24,13 +24,14 @@ export const FIELD_LABELS: Record<string, string> = {
   areaConcentracao: "Área de concentração",
   aprovalDate: "Data de aprovação",
   approvalMembers: "Membros da banca",
+  fichaCatalografica: "Ficha catalográfica (texto)",
 };
 
 export const RESEARCH_PROJECT_FIELD_KEYS: string[] = ["tema", "delimitacaoTema", "problemaPesquisa", "hipotese", "objetivoGeral", "objetivosEspecificos", "justificativa", "referencialTeorico", "metodologia", "cronograma", "recursosOrcamento", "resultadosEsperados"];
 
 export const ASSISTED_FIELD_KEYS: string[] = ["tema", "problemaPesquisa", "objetivoGeral", "objetivosEspecificos", "justificativa", "referencialTeorico", "corpusDados", "contextoInstitucional", "metodologia", "resultadosEsperados", "conclusaoProvisoria", "contribuicoesImpactos"];
 
-export const LONG_FIELDS = new Set([...RESEARCH_PROJECT_FIELD_KEYS, "workNature", "resumo", "abstractText", "introducao", "conclusao", "referencias", "anexos", "apendices", "dedicatoria", "agradecimentos", "epigrafe", "indicadoresImpacto", "impactIndicators", "imageWarnings", "approvalMembers"]);
+export const LONG_FIELDS = new Set([...RESEARCH_PROJECT_FIELD_KEYS, "workNature", "resumo", "abstractText", "introducao", "conclusao", "referencias", "anexos", "apendices", "dedicatoria", "agradecimentos", "epigrafe", "indicadoresImpacto", "impactIndicators", "imageWarnings", "approvalMembers", "fichaCatalografica"]);
 
 export const EDITOR_DESCRIPTION_ID = "editor-mode-note";
 
@@ -45,6 +46,7 @@ export function rowsForField(key: string): number {
 const HIDDEN_PRETEXTUAL = ["dedicatoria", "agradecimentos", "epigrafe", "errata", "listaSiglas", "listaQuadros", "listaGraficos", "listaTabelas", "listaAbreviaturas", "listaSimbolos", "glossario", "indicadoresImpacto", "impactIndicators"];
 
 export function visibleField(key: string, workType: string): boolean {
+  if (key === "fichaCatalografica") return workType === "monografia" || workType === "dissertacao" || workType === "tese";
   if (RESEARCH_PROJECT_FIELD_KEYS.includes(key)) return isResearchProject(workType as any);
   if (IMPACT_KEYS.includes(key)) return false;
   if (key === "englishTitle") return workType === "dissertacao" || workType === "tese";
