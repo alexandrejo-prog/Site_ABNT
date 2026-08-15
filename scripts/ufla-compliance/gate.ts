@@ -5,6 +5,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { validatePagination } from './validate-pagination';
 import { validateEquations } from './validate-equations';
+import { validateOMML } from './validate-omml';
+import { validateCitations, validateReferences } from './validate-citations-references';
+import { validateSections, validateFigures, validateTables } from './validate-sections-figures-tables';
 import { auditPretextual } from './audit-pretextual';
 import { auditTextual } from './audit-textual';
 import { auditPosttextual } from './audit-posttextual';
@@ -154,6 +157,43 @@ async function checkEquations(docxPath: string): Promise<GateResult> {
   };
 }
 
+async function checkOMML(docxPath: string): Promise<GateResult> {
+  const results = await validateOMML(docxPath);
+  const errors = results.filter((r) => r.status === 'failed' && r.severity === 'critical').map((r) => r.message);
+  const warnings = results.filter((r) => r.status === 'failed' && r.severity !== 'critical').map((r) => r.message);
+  return { name: 'OMML', passed: errors.length === 0, errors, warnings };
+}
+
+async function checkCitations(docxPath: string): Promise<GateResult> {
+  const results = await validateCitations(docxPath);
+  const errors = results.filter((r) => r.status === 'failed').map((r) => r.message);
+  return { name: 'Citações (validador)', passed: errors.length === 0, errors, warnings: [] };
+}
+
+async function checkReferences(docxPath: string): Promise<GateResult> {
+  const results = await validateReferences(docxPath);
+  const errors = results.filter((r) => r.status === 'failed').map((r) => r.message);
+  return { name: 'Referências (validador)', passed: errors.length === 0, errors, warnings: [] };
+}
+
+async function checkSections(docxPath: string): Promise<GateResult> {
+  const results = await validateSections(docxPath);
+  const errors = results.filter((r) => r.status === 'failed').map((r) => r.message);
+  return { name: 'Seções', passed: errors.length === 0, errors, warnings: [] };
+}
+
+async function checkFigures(docxPath: string): Promise<GateResult> {
+  const results = await validateFigures(docxPath);
+  const errors = results.filter((r) => r.status === 'failed').map((r) => r.message);
+  return { name: 'Figuras', passed: errors.length === 0, errors, warnings: [] };
+}
+
+async function checkTables(docxPath: string): Promise<GateResult> {
+  const results = await validateTables(docxPath);
+  const errors = results.filter((r) => r.status === 'failed').map((r) => r.message);
+  return { name: 'Tabelas', passed: errors.length === 0, errors, warnings: [] };
+}
+
 function checkPdfPhysical(pdfPath: string): GateResult {
   if (!fs.existsSync(pdfPath)) {
     return { name: 'Físico PDF', passed: false, errors: [`PDF não encontrado: ${pdfPath}`], warnings: [] };
@@ -162,7 +202,7 @@ function checkPdfPhysical(pdfPath: string): GateResult {
 }
 
 export async function runExpandedComplianceGate(docxPath: string, pdfPath?: string): Promise<ExpandedAuditResult> {
-  const [pretextual, textual, posttextual, referencesResult, citationsResult, figuresResult, sectionsResult] = await Promise.all([
+  const [pretextual, textual, posttextual, referencesResult, citationsResult, figuresResult, sectionsResult, ommlResult, citationsValidatorResult, referencesValidatorResult, sectionsValidatorResult, figuresValidatorResult, tablesValidatorResult] = await Promise.all([
     auditPretextual(docxPath),
     auditTextual(docxPath),
     auditPosttextual(docxPath),
@@ -170,6 +210,12 @@ export async function runExpandedComplianceGate(docxPath: string, pdfPath?: stri
     auditCitations(docxPath),
     auditFigures(docxPath),
     auditSections(docxPath),
+    checkOMML(docxPath),
+    checkCitations(docxPath),
+    checkReferences(docxPath),
+    checkSections(docxPath),
+    checkFigures(docxPath),
+    checkTables(docxPath),
   ]);
 
   const footersResult = checkFooters();
@@ -198,6 +244,12 @@ export async function runExpandedComplianceGate(docxPath: string, pdfPath?: stri
     citations: citationsResult.passed,
     figures: figuresResult.passed,
     sections: sectionsResult.passed,
+    omml: ommlResult.passed,
+    citationsValidator: citationsValidatorResult.passed,
+    referencesValidator: referencesValidatorResult.passed,
+    sectionsValidator: sectionsValidatorResult.passed,
+    figuresValidator: figuresValidatorResult.passed,
+    tablesValidator: tablesValidatorResult.passed,
   };
 
   const criticalGaps = allGaps.filter((g) => g.severity === 'critical').length;
