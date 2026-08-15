@@ -202,7 +202,7 @@ function checkPdfPhysical(pdfPath: string): GateResult {
 }
 
 export async function runExpandedComplianceGate(docxPath: string, pdfPath?: string): Promise<ExpandedAuditResult> {
-  const [pretextual, textual, posttextual, referencesResult, citationsResult, figuresResult, sectionsResult, ommlResult, citationsValidatorResult, referencesValidatorResult, sectionsValidatorResult, figuresValidatorResult, tablesValidatorResult] = await Promise.all([
+  const [pretextual, textual, posttextual, referencesResult, citationsResult, figuresResult, sectionsResult, layoutResult, typographyResult, catalogCardResult, tocResult, ommlResult, documentStructureResult, tablesResult] = await Promise.all([
     auditPretextual(docxPath),
     auditTextual(docxPath),
     auditPosttextual(docxPath),
@@ -210,16 +210,16 @@ export async function runExpandedComplianceGate(docxPath: string, pdfPath?: stri
     auditCitations(docxPath),
     auditFigures(docxPath),
     auditSections(docxPath),
-    checkOMML(docxPath),
-    checkCitations(docxPath),
-    checkReferences(docxPath),
-    checkSections(docxPath),
-    checkFigures(docxPath),
-    checkTables(docxPath),
+    validatePageLayout(docxPath),
+    validateTypography(docxPath),
+    validateCatalogCard(docxPath),
+    validateToc(docxPath),
+    validateOMML(docxPath),
+    validateDocumentStructure(docxPath, 'dissertacao'),
+    validateTables(docxPath),
   ]);
 
   const footersResult = checkFooters();
-  const tablesResult = await checkTables(docxPath);
   const paginationResult = checkPaginationGate(docxPath);
   const equationsResult = await checkEquations(docxPath);
   const pdfPhysicalResult = pdfPath ? checkPdfPhysical(pdfPath) : { name: 'Físico PDF', passed: true, errors: [], warnings: [] };
@@ -232,6 +232,13 @@ export async function runExpandedComplianceGate(docxPath: string, pdfPath?: stri
     ...citationsResult.gaps,
     ...figuresResult.gaps,
     ...sectionsResult.gaps,
+    ...layoutResult.filter((r) => r.status === 'failed').map((r) => ({ rule: r.message, severity: r.severity, description: r.message, suggestion: r.suggestion })),
+    ...typographyResult.filter((r) => r.status === 'failed').map((r) => ({ rule: r.message, severity: r.severity, description: r.message, suggestion: r.suggestion })),
+    ...catalogCardResult.filter((r) => r.status === 'failed').map((r) => ({ rule: r.message, severity: r.severity, description: r.message, suggestion: r.suggestion })),
+    ...tocResult.filter((r) => r.status === 'failed').map((r) => ({ rule: r.message, severity: r.severity, description: r.message, suggestion: r.suggestion })),
+    ...ommlResult.filter((r) => r.status === 'failed').map((r) => ({ rule: r.message, severity: r.severity, description: r.message, suggestion: r.suggestion })),
+    ...documentStructureResult.filter((r) => r.status === 'failed').map((r) => ({ rule: r.message, severity: r.severity, description: r.message, suggestion: r.suggestion })),
+    ...tablesResult.filter((r) => r.status === 'failed').map((r) => ({ rule: r.message, severity: r.severity, description: r.message, suggestion: r.suggestion })),
   ];
 
   const technical = {
@@ -245,11 +252,11 @@ export async function runExpandedComplianceGate(docxPath: string, pdfPath?: stri
     figures: figuresResult.passed,
     sections: sectionsResult.passed,
     omml: ommlResult.passed,
-    citationsValidator: citationsValidatorResult.passed,
-    referencesValidator: referencesValidatorResult.passed,
-    sectionsValidator: sectionsValidatorResult.passed,
-    figuresValidator: figuresValidatorResult.passed,
-    tablesValidator: tablesValidatorResult.passed,
+    citationsValidator: citationsResult.passed,
+    referencesValidator: referencesResult.passed,
+    sectionsValidator: sectionsResult.passed,
+    figuresValidator: figuresResult.passed,
+    tablesValidator: tablesResult.passed,
   };
 
   const criticalGaps = allGaps.filter((g) => g.severity === 'critical').length;

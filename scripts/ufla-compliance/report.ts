@@ -97,6 +97,12 @@ export function writeHtmlReport(result: ExpandedAuditResult, outputPath: string)
     <li>Citações: ${result.technical.citations ? "PASSED" : "FAILED"}</li>
     <li>Figuras: ${result.technical.figures ? "PASSED" : "FAILED"}</li>
     <li>Seções: ${result.technical.sections ? "PASSED" : "FAILED"}</li>
+    <li>OMML: ${result.technical.omml ? "PASSED" : "FAILED"}</li>
+    <li>Validador de referências: ${result.technical.referencesValidator ? "PASSED" : "FAILED"}</li>
+    <li>Validador de citações: ${result.technical.citationsValidator ? "PASSED" : "FAILED"}</li>
+    <li>Validador de seções: ${result.technical.sectionsValidator ? "PASSED" : "FAILED"}</li>
+    <li>Validador de figuras: ${result.technical.figuresValidator ? "PASSED" : "FAILED"}</li>
+    <li>Validador de tabelas: ${result.technical.tablesValidator ? "PASSED" : "FAILED"}</li>
   </ul>
 </body>
 </html>

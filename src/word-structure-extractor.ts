@@ -10,6 +10,9 @@ export interface ImportedTextRun {
   style?: string;
   inheritedStyle?: string;
   changeKind?: "insertion" | "deletion";
+  commentId?: string;
+  moveId?: string;
+  permissionId?: string;
 }
 
 export type ImportedBlock =
@@ -24,6 +27,9 @@ export type ImportedBlock =
       footnoteRefs?: string[];
       hasMath?: boolean;
       bookmarks?: Array<{ id: string; start: boolean }>;
+      commentIds?: string[];
+      moveIds?: string[];
+      permissionIds?: string[];
     }
   | {
       type: "heading";
@@ -37,6 +43,9 @@ export type ImportedBlock =
       footnoteRefs?: string[];
       hasMath?: boolean;
       bookmarks?: Array<{ id: string; start: boolean }>;
+      commentIds?: string[];
+      moveIds?: string[];
+      permissionIds?: string[];
     }
   | {
       type: "longQuote";
@@ -49,6 +58,9 @@ export type ImportedBlock =
       footnoteRefs?: string[];
       hasMath?: boolean;
       bookmarks?: Array<{ id: string; start: boolean }>;
+      commentIds?: string[];
+      moveIds?: string[];
+      permissionIds?: string[];
     }
   | {
       type: "table";
@@ -63,6 +75,9 @@ export type ImportedBlock =
       cellWidths?: number[][];
       cellMerges?: Array<{ row: number; col: number; type: "vMerge-restart" | "vMerge-continue" | "gridSpan" }>;
       headerRowIndices?: number[];
+      commentIds?: string[];
+      moveIds?: string[];
+      permissionIds?: string[];
     }
   | {
       type: "image";
@@ -75,8 +90,11 @@ export type ImportedBlock =
       source?: string;
       section?: ImportedSectionKind;
       isDecorative?: boolean;
+      commentIds?: string[];
+      moveIds?: string[];
+      permissionIds?: string[];
     }
-  | { type: "pageBreak" };
+  | { type: "pageBreak"; commentIds?: string[]; moveIds?: string[]; permissionIds?: string[] };
 
 export interface ImportedParagraph {
   index: number;
@@ -95,6 +113,9 @@ export interface ImportedParagraph {
   imageRelationshipIds: string[];
   footnoteRefs: string[];
   bookmarks?: Array<{ id: string; start: boolean }>;
+  commentIds?: string[];
+  moveIds?: string[];
+  permissionIds?: string[];
   runs: ImportedTextRun[];
   section: ImportedSectionKind;
   hasMath?: boolean;
@@ -256,21 +277,93 @@ function extractBookmarks(paragraphXml: string): Array<{ id: string; start: bool
 
 function extractRunSourcesFromParagraphXml(
   paragraphXml: string,
-): Array<{ xml: string; changeKind?: "insertion" | "deletion" }> {
-  const sources: Array<{ xml: string; changeKind?: "insertion" | "deletion" }> = [];
-  const ranges: Array<{ start: number; end: number; changeKind: "insertion" | "deletion" }> = [];
+): Array<{ xml: string; changeKind?: "insertion" | "deletion"; commentId?: string; moveId?: string; permissionId?: string }> {
+  const sources: Array<{ xml: string; changeKind?: "insertion" | "deletion"; commentId?: string; moveId?: string; permissionId?: string }> = [];
+  const ranges: Array<{ start: number; end: number; changeKind?: "insertion" | "deletion"; commentId?: string; moveId?: string; permissionId?: string }> = [];
+
+  const commentStartPattern = /<w:commentRangeStart\b[^>]*w:id="([^"]+)"[^>]*>/g;
+  const commentEndPattern = /<w:commentRangeEnd\b[^>]*w:id="([^"]+)"[^>]*>/g;
+  const moveRangePattern = /<w:moveRange\b[^>]*w:id="([^"]+)"[^>]*>/g;
+  const moveFromPattern = /<w:moveFrom\b[\s\S]*?<\/w:moveFrom>/g;
+  const moveToPattern = /<w:moveTo\b[\s\S]*?<\/w:moveTo>/g;
+  const permStartPattern = /<w:permStart\b[^>]*w:id="([^"]+)"[^>]*>/g;
+  const permEndPattern = /<w:permEnd\b[^>]*w:id="([^"]+)"[^>]*>/g;
   const insDelPattern = /<w:ins\b[\s\S]*?<\/w:ins>|<w:del\b[\s\S]*?<\/w:del>/g;
+
+  const commentStarts = new Map<number, string>();
+  const commentEnds = new Set<number>();
+  const moveFromRanges: Array<{ start: number; end: number; moveId?: string }> = [];
+  const moveToRanges: Array<{ start: number; end: number; moveId?: string }> = [];
+  const permStarts = new Map<number, string>();
+  const permEnds = new Set<number>();
+
   let match: RegExpExecArray | null;
+  commentStartPattern.lastIndex = 0;
+  while ((match = commentStartPattern.exec(paragraphXml)) !== null) {
+    commentStarts.set(match.index, match[1]);
+  }
+  commentEndPattern.lastIndex = 0;
+  while ((match = commentEndPattern.exec(paragraphXml)) !== null) {
+    commentEnds.add(match.index);
+  }
+  moveRangePattern.lastIndex = 0;
+  while ((match = moveRangePattern.exec(paragraphXml)) !== null) {
+    moveToRanges.push({ start: match.index, end: match.index + match[0].length, moveId: match[1] });
+  }
+  moveFromPattern.lastIndex = 0;
+  while ((match = moveFromPattern.exec(paragraphXml)) !== null) {
+    moveFromRanges.push({ start: match.index, end: match.index + match[0].length });
+  }
+  moveToPattern.lastIndex = 0;
+  while ((match = moveToPattern.exec(paragraphXml)) !== null) {
+    moveToRanges.push({ start: match.index, end: match.index + match[0].length });
+  }
+  permStartPattern.lastIndex = 0;
+  while ((match = permStartPattern.exec(paragraphXml)) !== null) {
+    permStarts.set(match.index, match[1]);
+  }
+  permEndPattern.lastIndex = 0;
+  while ((match = permEndPattern.exec(paragraphXml)) !== null) {
+    permEnds.add(match.index);
+  }
+
+  insDelPattern.lastIndex = 0;
   while ((match = insDelPattern.exec(paragraphXml)) !== null) {
     const changeKind = match[0].startsWith("<w:ins") ? "insertion" : "deletion";
     ranges.push({ start: match.index, end: match.index + match[0].length, changeKind });
   }
+
   const runPattern = /<w:r\b[\s\S]*?<\/w:r>/g;
   while ((match = runPattern.exec(paragraphXml)) !== null) {
     const runStart = match.index;
     const runEnd = match.index + match[0].length;
     const changeKind = ranges.find((r) => runStart >= r.start && runEnd <= r.end)?.changeKind;
-    sources.push({ xml: match[0], changeKind });
+
+    let commentId: string | undefined;
+    for (const [start, id] of commentStarts) {
+      if (runStart >= start) {
+        const endMatch = [...commentEnds].find((end) => end >= runStart && end <= runEnd);
+        if (endMatch) commentId = id;
+      }
+    }
+
+    let moveId: string | undefined;
+    for (const range of moveFromRanges) {
+      if (runStart >= range.start && runEnd <= range.end) moveId = range.moveId;
+    }
+    for (const range of moveToRanges) {
+      if (runStart >= range.start && runEnd <= range.end) moveId = range.moveId;
+    }
+
+    let permissionId: string | undefined;
+    for (const [start, id] of permStarts) {
+      if (runStart >= start) {
+        const endMatch = [...permEnds].find((end) => end >= runStart && end <= runEnd);
+        if (endMatch) permissionId = id;
+      }
+    }
+
+    sources.push({ xml: match[0], changeKind, commentId, moveId, permissionId });
   }
   return sources;
 }

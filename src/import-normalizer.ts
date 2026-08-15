@@ -117,6 +117,9 @@ function textBlock(
   text: string,
   type: "paragraph" | "longQuote" = "paragraph",
   footnoteRefs?: string[],
+  commentIds?: string[],
+  moveIds?: string[],
+  permissionIds?: string[],
 ): ImportedBlock {
   return {
     type,
@@ -124,10 +127,13 @@ function textBlock(
     rawText: text,
     runs: [{ text }],
     ...(footnoteRefs?.length ? { footnoteRefs } : {}),
+    ...(commentIds?.length ? { commentIds } : {}),
+    ...(moveIds?.length ? { moveIds } : {}),
+    ...(permissionIds?.length ? { permissionIds } : {}),
   };
 }
 
-function headingBlock(text: string, level: number, footnoteRefs?: string[]): ImportedBlock {
+function headingBlock(text: string, level: number, footnoteRefs?: string[], commentIds?: string[], moveIds?: string[], permissionIds?: string[]): ImportedBlock {
   return {
     type: "heading",
     level,
@@ -135,6 +141,9 @@ function headingBlock(text: string, level: number, footnoteRefs?: string[]): Imp
     rawText: text,
     runs: [{ text }],
     ...(footnoteRefs?.length ? { footnoteRefs } : {}),
+    ...(commentIds?.length ? { commentIds } : {}),
+    ...(moveIds?.length ? { moveIds } : {}),
+    ...(permissionIds?.length ? { permissionIds } : {}),
   };
 }
 
@@ -241,17 +250,35 @@ function splitInlineAcademicText(
   originalType: "paragraph" | "heading" | "longQuote",
   footnoteRefs: string[] = [],
   hasMath = false,
+  commentIds: string[] = [],
+  moveIds: string[] = [],
+  permissionIds: string[] = [],
 ): ImportedBlock[] {
   let remaining = cleanText(value);
   const output: ImportedBlock[] = [];
   let refsPlaced = false;
-  // Anexa as chamadas de nota da entrada ao primeiro bloco textual resultante
-  // da segmentação (evita duplicar o marcador em blocos derivados do mesmo
-  // parágrafo).
+  const placeIds = (block: ImportedBlock): ImportedBlock => {
+    if (!refsPlaced) {
+      refsPlaced = true;
+      return {
+        ...block,
+        ...(commentIds.length ? { commentIds } : {}),
+        ...(moveIds.length ? { moveIds } : {}),
+        ...(permissionIds.length ? { permissionIds } : {}),
+      } as ImportedBlock;
+    }
+    return block;
+  };
   const placeRefs = (block: ImportedBlock): ImportedBlock => {
     if (footnoteRefs.length && !refsPlaced && block.type !== "pageBreak") {
       refsPlaced = true;
-      return { ...block, footnoteRefs } as ImportedBlock;
+      return {
+        ...block,
+        footnoteRefs,
+        ...(commentIds.length ? { commentIds } : {}),
+        ...(moveIds.length ? { moveIds } : {}),
+        ...(permissionIds.length ? { permissionIds } : {}),
+      } as ImportedBlock;
     }
     return block;
   };
@@ -265,7 +292,9 @@ function splitInlineAcademicText(
       output.push(
         withMath(
           placeRefs(
-            originalType === "longQuote" ? textBlock(remaining, "longQuote") : textBlock(remaining),
+            placeIds(
+              originalType === "longQuote" ? textBlock(remaining, "longQuote", footnoteRefs, commentIds, moveIds, permissionIds) : textBlock(remaining, "paragraph", footnoteRefs, commentIds, moveIds, permissionIds)
+            )
           ),
         ),
       );
@@ -277,7 +306,9 @@ function splitInlineAcademicText(
       output.push(
         withMath(
           placeRefs(
-            originalType === "longQuote" ? textBlock(before, "longQuote") : textBlock(before),
+            placeIds(
+              originalType === "longQuote" ? textBlock(before, "longQuote", footnoteRefs, commentIds, moveIds, permissionIds) : textBlock(before, "paragraph", footnoteRefs, commentIds, moveIds, permissionIds)
+            )
           ),
         ),
       );
@@ -287,7 +318,7 @@ function splitInlineAcademicText(
       output.push(pageBreakBlock());
     }
 
-    output.push(withMath(placeRefs(headingBlock(marker.heading, marker.level))));
+    output.push(withMath(placeRefs(placeIds(headingBlock(marker.heading, marker.level, footnoteRefs, commentIds, moveIds, permissionIds)))));
     remaining = cleanText(remaining.slice(marker.index + marker.length));
   }
 
@@ -297,18 +328,21 @@ function splitInlineAcademicText(
 function normalizeBlock(block: ImportedBlock): ImportedBlock[] {
   const footnoteRefs = (block as { footnoteRefs?: string[] }).footnoteRefs ?? [];
   const hasMath = (block as { hasMath?: boolean }).hasMath === true;
+  const commentIds = (block as { commentIds?: string[] }).commentIds ?? [];
+  const moveIds = (block as { moveIds?: string[] }).moveIds ?? [];
+  const permissionIds = (block as { permissionIds?: string[] }).permissionIds ?? [];
   if (block.type === "paragraph" || block.type === "longQuote") {
     const text = cleanText(block.text);
     if (!text) return [];
-    return splitInlineAcademicText(text, block.type, footnoteRefs, hasMath);
+    return splitInlineAcademicText(text, block.type, footnoteRefs, hasMath, commentIds, moveIds, permissionIds);
   }
 
   if (block.type === "heading") {
     const text = cleanText(block.text);
     if (!text) return [];
-    const split = splitInlineAcademicText(text, "heading", footnoteRefs, hasMath);
+    const split = splitInlineAcademicText(text, "heading", footnoteRefs, hasMath, commentIds, moveIds, permissionIds);
     if (split.length === 1 && split[0]?.type === "paragraph") {
-      return [headingBlock(split[0].text, block.level, footnoteRefs)];
+      return [headingBlock(split[0].text, block.level, footnoteRefs, commentIds, moveIds, permissionIds)];
     }
     return split;
   }
