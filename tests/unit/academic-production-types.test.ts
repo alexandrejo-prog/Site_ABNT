@@ -57,4 +57,50 @@ describe("Colecao Producao Academica UFLA", () => {
       expect(issues.some((issue) => issue.code === "author-required")).toBe(true);
     }
   });
+
+  it("requiredFields de secao sao satisfeitos por heading no editor (mesmo criterio do gate por tipo)", () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "estudo_caso_ufla" as const,
+      author: "Maria Silva",
+      title: "Estudo de caso",
+      resumo: "Resumo.",
+      referencias: "SILVA, M. Estudo. Lavras: UFLA, 2024.",
+    };
+    // introducao e metodologia sem valor de campo, mas com secoes no editor.
+    const editorText = "# 1 Introducao\nTexto.\n# 4 Metodologia\nMetodo.";
+    const issues = validateWork(fields, editorText);
+    expect(issues.some((i) => i.code === "ufla-collection-introducao-required")).toBe(false);
+    expect(issues.some((i) => i.code === "ufla-collection-metodologia-required")).toBe(false);
+  });
+
+  it("requiredFields de secao sem campo e sem heading geram erro (mesmo criterio do gate)", () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "estudo_caso_ufla" as const,
+      author: "Maria Silva",
+      title: "Estudo de caso",
+      resumo: "Resumo.",
+      referencias: "SILVA, M. Estudo. Lavras: UFLA, 2024.",
+    };
+    const issues = validateWork(fields, "# 1 Introducao\nTexto.");
+    expect(issues.some((i) => i.code === "ufla-collection-metodologia-required")).toBe(true);
+    expect(issues.some((i) => i.code === "ufla-collection-introducao-required")).toBe(false);
+  });
+
+  it("campo de conteudo obrigatorio vazio gera erro mesmo com outras secoes presentes", () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "revisao_sistematica_ufla" as const,
+      author: "Maria Silva",
+      title: "Revisao sistematica",
+      resumo: "Resumo.",
+      referencias: "SILVA, M. Revisao. Lavras: UFLA, 2024.",
+      palavrasChave: "cafe; qualidade",
+    };
+    const editorText = "# 1 Introducao\nTexto.\n# 4 Metodologia\nMetodo.";
+    const issues = validateWork(fields, editorText);
+    // objetivoGeral e obrigatorio para revisao_sistematica e nao ha secao/campo.
+    expect(issues.some((i) => i.code === "ufla-collection-objetivoGeral-required")).toBe(true);
+  });
 });

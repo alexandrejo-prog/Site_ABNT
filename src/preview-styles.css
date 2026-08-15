@@ -140,20 +140,16 @@
   position: relative;
 }
 
-.preview-page::before {
-  counter-increment: page;
-  content: counter(page);
+/* Número de página explícito (DECISION-010): só nas páginas textuais/pós-
+ * textuais, no canto superior direito, 10 pt — pré-textuais não exibem número. */
+.preview-page-number {
   position: absolute;
-  top: -2cm;
+  top: 1cm;
   right: 0;
   font-size: 10pt;
   font-family: "Times New Roman", Times, serif;
   color: #000000;
-}
-
-.preview-page.preview-cover::before,
-.preview-page.preview-title-page::before {
-  content: none;
+  line-height: 1;
 }
 
 .preview-body {

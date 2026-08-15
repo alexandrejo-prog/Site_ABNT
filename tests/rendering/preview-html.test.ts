@@ -145,6 +145,33 @@ describe("buildPreviewHtml - fidelidade estrutural", () => {
     expect(resultados - intro).toBeGreaterThan(1);
   });
 
+  it("Header simulado fiel à DECISION-010: pré-textuais sem número; corpo inicia em pré-textuais + 1", () => {
+    const html = previewFor();
+    const sections = [...html.matchAll(/<section class="preview-page([^"]*)">([\s\S]*?)<\/section>/g)].map((m) => ({
+      cls: m[1],
+      content: m[2],
+    }));
+    const bodyIndex = sections.findIndex((s) => s.cls.includes("preview-body-flow"));
+    expect(bodyIndex).toBeGreaterThan(3);
+
+    sections.forEach((s, i) => {
+      if (i < bodyIndex) {
+        expect(s.content, `página pré-textual ${i}`).not.toContain("preview-page-number");
+      } else if (i === bodyIndex) {
+        // Primeira página textual: número = pré-textuais contadas + 1.
+        expect(s.content).toContain(`aria-label="Página ${bodyIndex + 1}"`);
+      } else {
+        // Pós-textuais continuam a numeração (referências = corpo + 1).
+        expect(s.content).toContain(`aria-label="Página ${i + 1}"`);
+      }
+    });
+  });
+
+  it("Header simulado: artigo inicia a numeração em 1 (sem pré-textuais)", () => {
+    const html = previewFor(baseFields({ workType: "artigo" }), "# 1 Introducao\nTexto.");
+    expect(html).toContain('aria-label="Página 1"');
+  });
+
   it("Paginação real por altura: cada seção inicia em página própria após texto denso", () => {
     const longPara = Array.from({ length: 90 }, (_, i) => `Paragrafo ${i + 1} com conteudo longo o bastante para ocupar varias linhas em Times 12pt com espacamento 1,5.`).join("\n");
     const html = previewFor(

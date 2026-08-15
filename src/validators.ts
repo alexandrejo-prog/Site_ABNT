@@ -450,7 +450,15 @@ function addResearchProjectIssues(fields: AcademicFields, editorText: string, is
   issues.push({ severity: "info", code: "research-toc-update", message: "Após gerar o DOCX, abra no Word ou LibreOffice e atualize o sumário para preencher a paginação real.", what: "O sumário do Projeto de pesquisa é atualizável.", why: "O campo TOC precisa ser atualizado no editor de texto para refletir a paginação final.", action: "No Word: Ctrl+A e F9, depois 'Atualizar o índice inteiro'. No LibreOffice: Ferramentas > Atualizar > Atualizar tudo." });
 }
 
-function addUflaCollectionIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
+/** Rótulos de seção que satisfazem um requiredField da Coleção (mesmo critério do gate por tipo). */
+const PRODUCTION_SECTION_LABELS: Record<string, string[]> = {
+  introducao: ["INTRODUCAO"],
+  metodologia: ["METODOLOGIA", "MATERIAL E METODOS", "MATERIAIS E METODOS"],
+  conclusao: ["CONCLUSAO", "CONSIDERACOES FINAIS"],
+  referencialTeorico: ["REFERENCIAL TEORICO", "REVISAO DE LITERATURA", "REVISAO BIBLIOGRAFICA"],
+};
+
+function addUflaCollectionIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
   if (!isUflaCollectionWork(fields.workType)) return;
   const productionType = academicProductionTypeById(fields.workType);
   if (!productionType) return;
@@ -464,18 +472,28 @@ function addUflaCollectionIssues(fields: AcademicFields, issues: ValidationIssue
     action: "Confira estrutura, campos, sumário e paginação no DOCX final antes de exportar o PDF pelo Word ou LibreOffice.",
   });
 
+  const headingLines = editorText
+    .split(/\n+/)
+    .map(stripHeadingSyntax)
+    .map(normalizeForValidation);
+
   for (const fieldKey of productionType.requiredFields) {
     const fieldValue = fields[fieldKey];
     const valueString = Array.isArray(fieldValue) ? fieldValue.join(" ") : fieldValue;
-    if (!hasValue(valueString)) {
+    const sectionLabels = PRODUCTION_SECTION_LABELS[fieldKey];
+    const satisfiedByHeading = sectionLabels?.some((label) =>
+      headingLines.some((line) => line.includes(label)),
+    );
+    if (!hasValue(valueString) && !satisfiedByHeading) {
+      const viaSection = sectionLabels ? " ou insira a secao correspondente no editor" : "";
       issues.push({
         severity: "error",
         code: `ufla-collection-${fieldKey}-required`,
         fieldKey,
-        message: `Preencha o campo obrigatorio para ${productionType.label}: ${fieldKey}.`,
-        what: "Um campo minimo do formato selecionado esta vazio.",
+        message: `Preencha o campo obrigatorio para ${productionType.label}: ${fieldKey}${viaSection}.`,
+        what: "Um campo minimo do formato selecionado esta vazio (sem secao correspondente no editor).",
         why: "A Colecao Producao Academica UFLA exige revisao da estrutura e dos metadados antes da submissao.",
-        action: "Preencha o campo indicado ou confirme manualmente se o guia especifico dispensa esse item.",
+        action: "Preencha o campo indicado, insira a secao no editor ou confirme manualmente se o guia especifico dispensa esse item.",
       });
     }
   }
@@ -668,7 +686,7 @@ if (!hasValue(fields.introducao) && !isCpgWork(fields.workType) && !simpleArticl
 
   addCpgWarnings(fields, editorText, issues);
   addResearchProjectIssues(fields, editorText, issues);
-  addUflaCollectionIssues(fields, issues);
+  addUflaCollectionIssues(fields, editorText, issues);
   addRequiredFieldIssues(fields, issues);
   addPlaceholderIssues(fields, editorText, issues);
   addNaturalPlaceholderIssues(fields, editorText, issues);

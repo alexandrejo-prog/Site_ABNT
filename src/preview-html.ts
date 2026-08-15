@@ -220,6 +220,15 @@ function page(children: string, className = ""): string {
   return `<section class="${cls}">${children}</section>`;
 }
 
+/**
+ * Header simulado (número de página no canto superior direito, 10 pt).
+ * Fiel ao DOCX (DECISION-010): pré-textuais NÃO exibem número; a numeração
+ * visível inicia na primeira página textual com o valor contado.
+ */
+function pageNumberHeader(pageNumber: number): string {
+  return `<div class="preview-page-number" data-font-size="10pt" aria-label="Página ${pageNumber}">${pageNumber}</div>`;
+}
+
 function unnumberedTitle(text: string): string {
   return `<h2 class="preview-unnumbered-title">${escapeHtml(cleanMojibakeText(text).toUpperCase())}</h2>`;
 }
@@ -746,28 +755,39 @@ function generalPreview(input: DocxGenerationInput): string {
   preTextual.push(optionalFrontPage("Lista de abreviaturas", fields.listaAbreviaturas));
   preTextual.push(optionalFrontPage("Lista de símbolos", fields.listaSimbolos));
   preTextual.push(optionalFrontPage("Glossário", fields.glossario));
+  // Contagem real de páginas pré-textuais (DECISION-010): entradas podem conter
+  // 0 (optionalFrontPage vazio), 1 ou 2 páginas (resumo+abstract); contamos as
+  // seções <section class="preview-page" de fato geradas.
+  const preTextualHtml = preTextual.filter(Boolean).join("");
+  let realPreTextualPages = (preTextualHtml.match(/<section class="preview-page/g) ?? []).length;
   if (hasSummary) {
-    preTextual.push(page(summaryHtml(bodyBlocks, references, fields.apendices, fields.anexos, preTextual.length + 2, importedImages, importedTables)));
+    // As entradas do sumário listam a página do corpo: pré-textuais (já
+    // incluindo a própria página do sumário) + 1.
+    preTextual.push(page(summaryHtml(bodyBlocks, references, fields.apendices, fields.anexos, realPreTextualPages + 2, importedImages, importedTables)));
+    realPreTextualPages += 1;
   }
 
+  // Numeração visível inicia na primeira página textual com o valor contado.
+  const bodyStartPage = realPreTextualPages + 1;
   const postTextual: string[] = [];
   postTextual.push(
     page(
-      unnumberedTitle("Referências") + referencesHtml(references),
+      pageNumberHeader(bodyStartPage + 1) + unnumberedTitle("Referências") + referencesHtml(references),
       "preview-references",
     ),
   );
+  let appendixPage = bodyStartPage + 2;
   if (hasText(fields.apendices)) {
-    postTextual.push(page(unnumberedTitle("Apêndice A") + simpleParagraph(fields.apendices)));
+    postTextual.push(page(pageNumberHeader(appendixPage++) + unnumberedTitle("Apêndice A") + simpleParagraph(fields.apendices)));
   }
   if (hasText(fields.anexos)) {
-    postTextual.push(page(unnumberedTitle("Anexos") + simpleParagraph(fields.anexos)));
+    postTextual.push(page(pageNumberHeader(appendixPage++) + unnumberedTitle("Anexos") + simpleParagraph(fields.anexos)));
   }
 
   return [
     `<div class="preview-document" data-template="general" data-work-type="${fields.workType}" data-first-line-cm="${FIRST_LINE_CM}" data-long-quote-cm="${LONG_QUOTE_INDENT_CM}">`,
     ...preTextual,
-    page(bodyHtml, "preview-body-flow"),
+    page(pageNumberHeader(bodyStartPage) + bodyHtml, "preview-body-flow"),
     ...postTextual,
     `</div>`,
   ].join("\n");
@@ -807,12 +827,12 @@ function articlePreview(input: DocxGenerationInput): string {
 
   const referencesSection = referencesHtml(effectiveReferences);
   const referencesBlock = referencesSection
-    ? `<section class="preview-page preview-references"><h2 class="preview-unnumbered-title">REFERÊNCIAS</h2>${referencesSection}</section>`
+    ? `<section class="preview-page preview-references">${pageNumberHeader(2)}<h2 class="preview-unnumbered-title">REFERÊNCIAS</h2>${referencesSection}</section>`
     : "";
 
   return [
     `<div class="preview-document" data-template="article" data-work-type="${fields.workType}" data-first-line-cm="${FIRST_LINE_CM}" data-long-quote-cm="${LONG_QUOTE_INDENT_CM}">`,
-    page(header + bodyHtml, "preview-article-flow"),
+    page(pageNumberHeader(1) + header + bodyHtml, "preview-article-flow"),
     referencesBlock,
     `</div>`,
   ].join("\n");
@@ -851,12 +871,12 @@ function cpgPreview(input: DocxGenerationInput): string {
 
   const referencesSection = referencesHtml(references);
   const referencesBlock = referencesSection
-    ? `<section class="preview-page preview-references"><h2 class="preview-unnumbered-title">REFERÊNCIAS</h2>${referencesSection}</section>`
+    ? `<section class="preview-page preview-references">${pageNumberHeader(2)}<h2 class="preview-unnumbered-title">REFERÊNCIAS</h2>${referencesSection}</section>`
     : "";
 
   return [
     `<div class="preview-document" data-template="cpg" data-work-type="${fields.workType}" data-first-line-cm="${CPG_RULES.typography.paragraphFirstLineCm}">`,
-    page(header + bodyHtml, "preview-cpg-flow"),
+    page(pageNumberHeader(1) + header + bodyHtml, "preview-cpg-flow"),
     referencesBlock,
     `</div>`,
   ].join("\n");
@@ -896,7 +916,7 @@ function researchProjectPreview(input: DocxGenerationInput): string {
 
   const referencesSection = referencesHtml(references);
   const referencesBlock = referencesSection
-    ? `<section class="preview-page preview-references"><h2 class="preview-unnumbered-title">REFERÊNCIAS</h2>${referencesSection}</section>`
+    ? `<section class="preview-page preview-references">${pageNumberHeader(2)}<h2 class="preview-unnumbered-title">REFERÊNCIAS</h2>${referencesSection}</section>`
     : "";
 
   return [
@@ -906,7 +926,7 @@ function researchProjectPreview(input: DocxGenerationInput): string {
     resumo,
     abstract,
     summary,
-    page(bodyHtml, "preview-body-flow"),
+    page(pageNumberHeader(1) + bodyHtml, "preview-body-flow"),
     referencesBlock,
     `</div>`,
   ].join("\n");

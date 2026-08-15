@@ -14,6 +14,7 @@ import { generateArticleDocxBlob } from "../../src/export-article-docx";
 import { generateCpgDocxBlob } from "../../src/export-cpg-docx";
 import { generateDocxBlob } from "../../src/export-docx";
 import { generateResearchProjectDocxBlob } from "../../src/export-research-project-docx";
+import { generateGraduateEditableDraftDocxBlob } from "../../src/export-graduate-editable-draft-docx";
 import { runFullComplianceGate } from "./gate";
 import type { DocumentType } from "./document-type-matrix";
 import { PER_TYPE_EDITOR_TEXT, PER_TYPE_FIELDS } from "./per-type-fixtures";
@@ -65,6 +66,29 @@ export const PER_TYPE_SPECS: TypeSpec[] = [
     label: "Projeto de pesquisa",
     filename: "projeto-pesquisa.docx",
     generate: () => generateResearchProjectDocxBlob({ fields: PER_TYPE_FIELDS.projeto_pesquisa, editorText: PER_TYPE_EDITOR_TEXT }),
+  },
+  // Rascunho editável de trabalhos longos (monografia/dissertação/tese): mesmo
+  // conteúdo do template padrão com patches de natureza/recuo/Curso.
+  {
+    formatId: "monografia_draft",
+    type: "monografia",
+    label: "Monografia (rascunho editavel)",
+    filename: "monografia-draft.docx",
+    generate: () => generateGraduateEditableDraftDocxBlob({ fields: PER_TYPE_FIELDS.monografia_draft, editorText: PER_TYPE_EDITOR_TEXT }),
+  },
+  {
+    formatId: "dissertacao_draft",
+    type: "dissertacao",
+    label: "Dissertacao (rascunho editavel)",
+    filename: "dissertacao-draft.docx",
+    generate: () => generateGraduateEditableDraftDocxBlob({ fields: PER_TYPE_FIELDS.dissertacao_draft, editorText: PER_TYPE_EDITOR_TEXT }),
+  },
+  {
+    formatId: "tese_draft",
+    type: "tese",
+    label: "Tese (rascunho editavel)",
+    filename: "tese-draft.docx",
+    generate: () => generateGraduateEditableDraftDocxBlob({ fields: PER_TYPE_FIELDS.tese_draft, editorText: PER_TYPE_EDITOR_TEXT }),
   },
   // Coleção Produção Acadêmica UFLA: 8 formatos estruturados como artigo
   // (sem capa/folha de rosto/ficha/aprovação), cada um com requiredFields

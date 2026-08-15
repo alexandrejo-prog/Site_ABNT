@@ -32,6 +32,26 @@ export const PER_TYPE_FIELDS: Record<string, AcademicFields> = {
       "Monografia apresentada a Universidade Federal de Lavras, como parte das exigencias do Bacharelado em Biologia, para obtencao do titulo de Bacharel em Biologia.",
     advisor: "Prof. Dr. Joao Silva",
   },
+  monografia_draft: {
+    ...baseFields,
+    workType: "monografia",
+    course: "Bacharelado em Biologia",
+    advisor: "Prof. Dr. Joao Silva",
+  },
+  dissertacao_draft: {
+    ...baseFields,
+    workType: "dissertacao",
+    program: "Educacao Cientifica e Ambiental",
+    advisor: "Prof. Dr. Joao Silva",
+    indicadoresImpacto: "Impacto social: informado.",
+  },
+  tese_draft: {
+    ...baseFields,
+    workType: "tese",
+    program: "Educacao Cientifica e Ambiental",
+    advisor: "Prof. Dr. Joao Silva",
+    indicadoresImpacto: "Impacto social: informado.",
+  },
   resumo_expandido_cpg: {
     ...baseFields,
     workType: "resumo_expandido_cpg",
