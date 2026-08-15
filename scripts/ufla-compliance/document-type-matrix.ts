@@ -81,7 +81,7 @@ export const DOCUMENT_TYPE_MATRIX: DocumentRequirement[] = [
   },
   {
     id: "REQ-005",
-    documentTypes: ["dissertacao", "tese", "monografia", "tcc", "projeto_pesquisa", "outro"],
+    documentTypes: ["dissertacao", "tese", "monografia", "tcc", "projeto_pesquisa", "artigo", "resumo_cpg", "resumo_expandido_cpg", "artigo_completo_cpg", "outro"],
     section: "pre-textual",
     required: true,
     validator: "validateResumo",
@@ -91,7 +91,7 @@ export const DOCUMENT_TYPE_MATRIX: DocumentRequirement[] = [
   },
   {
     id: "REQ-006",
-    documentTypes: ["dissertacao", "tese", "monografia", "tcc", "projeto_pesquisa", "outro"],
+    documentTypes: ["dissertacao", "tese", "monografia", "tcc", "projeto_pesquisa", "artigo", "resumo_cpg", "resumo_expandido_cpg", "artigo_completo_cpg", "outro"],
     section: "pre-textual",
     required: true,
     validator: "validateAbstract",
@@ -141,7 +141,7 @@ export const DOCUMENT_TYPE_MATRIX: DocumentRequirement[] = [
   },
   {
     id: "REQ-011",
-    documentTypes: ["dissertacao", "tese", "monografia", "tcc", "projeto_pesquisa", "outro"],
+    documentTypes: ["dissertacao", "tese", "monografia", "tcc", "projeto_pesquisa", "artigo", "resumo_cpg", "resumo_expandido_cpg", "artigo_completo_cpg", "outro"],
     section: "textual",
     required: true,
     validator: "validateIntroduction",
@@ -151,7 +151,7 @@ export const DOCUMENT_TYPE_MATRIX: DocumentRequirement[] = [
   },
   {
     id: "REQ-012",
-    documentTypes: ["dissertacao", "tese", "monografia", "tcc", "projeto_pesquisa", "outro"],
+    documentTypes: ["dissertacao", "tese", "monografia", "tcc", "projeto_pesquisa", "artigo", "resumo_cpg", "resumo_expandido_cpg", "artigo_completo_cpg", "outro"],
     section: "textual",
     required: true,
     validator: "validateDevelopment",
@@ -171,7 +171,7 @@ export const DOCUMENT_TYPE_MATRIX: DocumentRequirement[] = [
   },
   {
     id: "REQ-014",
-    documentTypes: ["dissertacao", "tese", "monografia", "tcc", "projeto_pesquisa", "outro"],
+    documentTypes: ["dissertacao", "tese", "monografia", "tcc", "projeto_pesquisa", "artigo", "resumo_cpg", "resumo_expandido_cpg", "artigo_completo_cpg", "outro"],
     section: "post-textual",
     required: true,
     validator: "validateReferences",
@@ -211,7 +211,7 @@ export const DOCUMENT_TYPE_MATRIX: DocumentRequirement[] = [
   },
   {
     id: "REQ-018",
-    documentTypes: ["dissertacao", "tese", "monografia", "tcc", "projeto_pesquisa", "outro"],
+    documentTypes: ["dissertacao", "tese", "monografia", "tcc", "projeto_pesquisa", "artigo", "resumo_cpg", "resumo_expandido_cpg", "artigo_completo_cpg", "outro"],
     section: "technical",
     required: true,
     validator: "validatePageLayout",
@@ -221,7 +221,7 @@ export const DOCUMENT_TYPE_MATRIX: DocumentRequirement[] = [
   },
   {
     id: "REQ-019",
-    documentTypes: ["dissertacao", "tese", "monografia", "tcc", "projeto_pesquisa", "outro"],
+    documentTypes: ["dissertacao", "tese", "monografia", "tcc", "projeto_pesquisa", "artigo", "resumo_cpg", "resumo_expandido_cpg", "artigo_completo_cpg", "outro"],
     section: "technical",
     required: true,
     validator: "validateTypography",
@@ -231,7 +231,7 @@ export const DOCUMENT_TYPE_MATRIX: DocumentRequirement[] = [
   },
   {
     id: "REQ-020",
-    documentTypes: ["dissertacao", "tese", "monografia", "tcc", "projeto_pesquisa", "outro"],
+    documentTypes: ["dissertacao", "tese", "monografia", "tcc", "projeto_pesquisa", "artigo", "resumo_cpg", "resumo_expandido_cpg", "artigo_completo_cpg", "outro"],
     section: "technical",
     required: true,
     validator: "validateSpacing",

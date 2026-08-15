@@ -968,6 +968,73 @@ export function importedImageParagraph(image: ImportedDocumentImage | undefined)
   return result;
 }
 
+/**
+ * Padrões de linha-título que precedem a linha de rótulos (header) em tabelas
+ * convertidas de PDF (ex.: "Tema: ...", "Cronograma de ações...").
+ */
+const TABLE_TITLE_ROW_PATTERNS = [
+  /^Tema\s*[:\\-–]/i,
+  /^Tema\s+geral\s*[:\\-–]/i,
+  /^Cronograma\s+de\s+ações/i,
+  /^Cronograma\s+de\s+acoes/i,
+  /^Avaliação\s+dos\s+repositórios/i,
+  /^Avaliacao\s+dos\s+repositorios/i,
+  /^Política\s+Institucional\s+de\s+Informação/i,
+  /^Politica\s+Institucional\s+de\s+Informacao/i,
+  /^Objetivos?\s+do\s+RI/i,
+  /^Planejamento\s+para\s+a\s+implementação/i,
+  /^Planejamento\s+para\s+a\s+implementacao/i,
+  /^Quadro\s*\d+\s*[:\\-–]/i,
+  /^Tabela\s*\d+\s*[:\\-–]/i,
+];
+
+function rowTextOf(cells: Array<{ text?: string } | string | undefined>): string {
+  return cells
+    .map((c) => (typeof c === "string" ? c : c?.text ?? ""))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function looksLikeTableTitleRow(cells: Array<{ text?: string } | string | undefined>): boolean {
+  const text = rowTextOf(cells);
+  return TABLE_TITLE_ROW_PATTERNS.some((p) => p.test(text));
+}
+
+function looksLikeTableHeaderRow(cells: Array<{ text?: string } | string | undefined>): boolean {
+  const text = rowTextOf(cells);
+  if (!text) return false;
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length < 2) return false;
+  // rótulos curtos/uppercase — distingue de conteúdo de dados (frases longas)
+  const shortCells = cells.filter((c) => (typeof c === "string" ? c.trim() : (c?.text ?? "").trim())).length;
+  const avgLen = words.join("").length / words.length;
+  return shortCells >= 2 && avgLen <= 14;
+}
+
+/**
+ * Infere a linha de cabeçalho de tabela importada quando a origem não declara
+ * w:tblHeader (baseline convertido de PDF): título na 1ª linha + rótulos na 2ª
+ * → header na 2ª; rótulos na 1ª → header na 1ª; 1 linha → sem header
+ * (WCAG 1.3.1 / DECISION-002: linha única não tem cabeçalho).
+ */
+export function inferTableHeaderRow(
+  rows: ImportedTable["rows"],
+  declaredIndex: number | undefined,
+): number | undefined {
+  if (declaredIndex !== undefined) return declaredIndex;
+  if (rows.length < 2) return undefined;
+  const first = rows[0];
+  const second = rows[1];
+  if (looksLikeTableTitleRow(first) && looksLikeTableHeaderRow(second)) {
+    return 1;
+  }
+  if (looksLikeTableHeaderRow(first)) {
+    return 0;
+  }
+  return undefined;
+}
+
 function normalizeConsecutiveRestarts(
   merges: ImportedTable["cellMerges"],
 ): ImportedTable["cellMerges"] {
@@ -1192,10 +1259,19 @@ export function importedTableParagraph(table: ImportedTable | undefined): Array<
 
   const normalizedMerges = normalizeConsecutiveRestarts(table.cellMerges);
 
+  // Linha de cabeçalho semântica: usa o headerRowIndex da origem quando
+  // presente; senão INFERE pela estrutura (tabelas importadas de DOCX sem
+  // w:tblHeader explícito, como o baseline convertido de PDF):
+  //  - 1ª linha = título ("Tema:...", "Cronograma...") + 2ª linha = rótulos →
+  //    header na 2ª linha;
+  //  - 1ª linha = rótulos → header na 1ª linha;
+  //  - 1 linha única → sem header (WCAG 1.3.1 / DECISION-002).
+  const inferredHeaderRowIndex = inferTableHeaderRow(table.rows, table.headerRowIndex);
+
   const tableRows = table.rows.map((cells, rowIndex) => {
     const padded = Array.from({ length: columnCount }, (_, i) => (cells[i]?.text ?? "").trim());
     return new TableRow({
-      ...(table.headerRowIndex !== undefined && rowIndex === table.headerRowIndex ? { tableHeader: true } : {}),
+      ...(inferredHeaderRowIndex !== undefined && rowIndex === inferredHeaderRowIndex ? { tableHeader: true } : {}),
       children: padded.map((cellText, columnIndex) => {
         const originalMerge = normalizedMerges?.find(
           (m) => m.row === rowIndex && m.col === columnIndex,
@@ -2075,7 +2151,10 @@ function coverChildren(fields: AcademicFields, logo?: DocxLogoAsset): Paragraph[
           }, "ufla_capa_subtitulo"),
         ]
       : []),
-    new Paragraph({ spacing: { before: 2200 } }),
+    // Local + ano na parte inferior da capa (terço inferior da página): o
+    // espaçamento antes do bloco garante a posição física exigida pelo Manual
+    // UFLA §3.1.1 (verificado por validate-cover-layout.ts no PDF renderizado).
+    new Paragraph({ spacing: { before: 3600 } }),
     centeredParagraph(cleanMojibakeText((fields.location || "LAVRAS - MG").toUpperCase()), true, COVER_AUTHOR_SIZE, {
       after: 120,
       line: SINGLE_LINE,
@@ -2197,7 +2276,10 @@ function titlePageChildren(fields: AcademicFields): Paragraph[] {
           }, "ufla_folha_rosto_titulo"),
         ]
       : []),
-    new Paragraph({ spacing: { before: 900 } }),
+    // Natureza do trabalho na metade inferior da folha de rosto (Manual UFLA
+    // §3.1.2); o espaçamento garante a posição física verificada por
+    // validate-cover-layout.ts no PDF renderizado.
+    new Paragraph({ spacing: { before: 3200 } }),
     natureParagraph(cleanMojibakeText(nature)),
     ...supplementalLines.map((line) =>
       centeredParagraph(cleanMojibakeText(line), false, BODY_SIZE, { after: 0, line: SINGLE_LINE }),

@@ -302,11 +302,15 @@ export function runOoxmlChecks(parts: DocxParts): ComplianceIssue[] {
   }
 
   // ---------------------------------------------------------------------
-  // campos de página na numeração estrutural (inicia na seção textual)
+  // Paginação contínua (DECISION-010): contagem a partir da folha de rosto;
+  // numeração visível na seção textual com o valor CONTADO (N ≥ 2), nunca reinício em 1.
   // ---------------------------------------------------------------------
-  const pgNumStarts = sectPrs.map((s) => s.match(/w:pgNumType w:start="(\d+)"/)?.[1]);
-  if (!pgNumStarts.includes("1")) {
-    issues.push(issue("pagination-start", "Nenhuma seção reinicia a numeração em 1 (w:pgNumType w:start=\"1\").", "error", "Manual UFLA 4.5", "paginação"));
+  const textualSections = sectPrs.filter((s) => s.includes("w:headerReference"));
+  const textualStart = textualSections.map((s) => s.match(/w:pgNumType[^>]*w:start="(\d+)"/)?.[1]).find((v) => v !== undefined);
+  if (sectPrs.length >= 2 && textualSections.length > 0 && textualStart === "1") {
+    issues.push(issue("pagination-restart-at-1", "A seção textual reinicia a numeração em 1 (w:pgNumType w:start=\"1\"); com parte pré-textual a contagem deve continuar a partir da folha de rosto — a Introdução deve exibir o valor contado (pré-textuais + 1), nunca 1 (DECISION-010).", "error", "Manual UFLA 4.5", "paginação"));
+  } else if (sectPrs.length >= 2 && textualSections.length > 0 && !textualStart) {
+    issues.push(issue("pagination-continuation-required", "A seção textual não define w:pgNumType w:start=\"N\" com a continuação explícita da contagem (DECISION-010); o Word pode reiniciar a numeração por conta própria.", "warning", "Manual UFLA 4.5", "paginação"));
   }
 
   // ---------------------------------------------------------------------

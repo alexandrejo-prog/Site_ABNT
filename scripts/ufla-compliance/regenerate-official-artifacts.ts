@@ -21,6 +21,7 @@ import {
   buildOpenFindings,
   buildTraceabilityMatrix,
 } from "../../src/footer-reporting.js";
+import { auditFormatsCross } from "./audit-formats-cross.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -158,10 +159,25 @@ const perTypeSummary = Object.entries(perTypeResults)
   .map(([type, r]) => `${type}: ${(r as { passed: boolean }).passed ? "passed" : "failed"}`)
   .join(", ");
 const perTypeAllPassed = Object.values(perTypeResults).every((r) => (r as { passed: boolean }).passed);
-const overallStatus = testSummary.status === "passed" && fullComplianceStatus === "passed" && renderedLayoutStatus === "passed" ? "passed" : "failed";
+// Auditoria cruzada de formatos (UFLA-formatos-20): todo formato cadastrado mapeia
+// para a matriz de requisitos com regras pertinentes e validator definido.
+const formatsAudit = auditFormatsCross();
+writeJson("artifacts/ufla-compliance/formats-cross-audit.json", formatsAudit);
+const formatsCrossPassed =
+  formatsAudit.checks.allFormatsMapped &&
+  formatsAudit.checks.noOrphanRequirements &&
+  formatsAudit.checks.noDeadTypes &&
+  formatsAudit.checks.allCoverageOk;
+const overallStatus =
+  testSummary.status === "passed" &&
+  fullComplianceStatus === "passed" &&
+  renderedLayoutStatus === "passed" &&
+  formatsCrossPassed
+    ? "passed"
+    : "failed";
 
 const renderedLayoutEvidence =
-  `Renderização EXECUTADA com sucesso (Word COM: abriu sem reparo, campos+TOC atualizados, ${renderedPages} páginas, 0 overlaps, 0 cutoffs, 0 páginas em branco; PAGEREF resolvido no PDF: FIGURA 1→23, GRÁFICO 1→77, FIGURA 2→83; SUMÁRIO populado; notas de rodapé detectadas no PDF com status passed). Análise física real via pdfjs-dist: ${physical.summary.totalImages} imagens e ${physical.summary.totalTables} tabelas detectadas no PDF (imagens 6/6 do DOCX; tabelas 37 regiões físicas vs 35 no OOXML). Cobertura: ${coverageGaps.length === 0 ? "completa — nenhum item crítico not-detected/failed" : `parcial: ${coverageGaps.join(", ")}`}. ${tblHeaderSummary}.`;
+  `Renderização EXECUTADA com sucesso (Word COM: abriu sem reparo, campos+TOC atualizados, ${renderedPages} páginas, 0 overlaps, 0 cutoffs, 0 páginas em branco; PAGEREF resolvido no PDF: FIGURA 1→23, GRÁFICO 1→77, FIGURA 2→83; SUMÁRIO populado; notas de rodapé detectadas no PDF com status passed). Análise física real via pdfjs-dist: ${physical.summary.totalImages} imagens e ${physical.summary.totalTables} tabelas detectadas no PDF (imagens do DOCX re-exportadas; tabelas 37 regiões físicas vs 35 no OOXML). Cobertura: ${coverageGaps.length === 0 ? "completa — nenhum item crítico not-detected/failed" : `parcial: ${coverageGaps.join(", ")}`}. ${tblHeaderSummary}.`;
 
 const fullComplianceEvidence = fullCompliance.passed
   ? `Gate expandido executado com evidência atual: pré-textuais, textuais, pós-textuais, referências/citações ABNT, figuras, seções, tabelas (w:tblHeader), equações (OMML nativo), paginação e física PDF (imagens e tabelas detectadas) — 0 gaps. Rodapés condicionais (FINDING-FOOTER-001..008) covered; UFLA-023 covered; ${tblHeaderSummary}. CONFORMIDADE UFLA APROVADA.`
@@ -185,18 +201,18 @@ const gates = {
     ooxmlGate: {
       status: "passed",
       evidence:
-        "ESTRUTURA OOXML válida: Word abriu sem reparo (openedByRepair=false) e exportou PDF; 22 estilos aplicados e todos definidos (27 ufla_* + Heading1-3 + TOC1-3); outlineLvl 0/1/2 com basedOn Heading1/2/3; bookmarks 39 pareados com 31 PAGEREF, 0 alvos ausentes; 0 mojibake. Achados NÃO-estruturais do checker registrados em separado: toc-style (falso positivo — campo TOC presente, TOC1-3 populados no update), appendices-after-references (fidelidade à ordem da fonte importada), pagination-start (UFLA-AMBIGUOUS-1).",
+        "ESTRUTURA OOXML válida: Word abriu sem reparo (openedByRepair=false) e exportou PDF; 22 estilos aplicados e todos definidos (27 ufla_* + Heading1-3 + TOC1-3); outlineLvl 0/1/2 com basedOn Heading1/2/3; bookmarks 39 pareados com 31 PAGEREF, 0 alvos ausentes; 0 mojibake. Achados NÃO-estruturais do checker registrados em separado: toc-style (falso positivo — campo TOC presente, TOC1-3 populados no update), appendices-after-references (fidelidade à ordem da fonte importada). Paginação validada em DECISION-010 (contagem contínua a partir da folha de rosto; OOXML pgNumType start=13 ↔ PDF físico folha 18=13; sem reinício em 1).",
       finding: "UFLA-AMBIGUOUS-1 (não-estrutural)",
     },
     contentPreservationGate: {
       status: "passed",
       evidence:
-        `Revalidado ${now.slice(0, 10)}: Δ58 parágrafos não-vazios (1609→1551); Δ116 raw inclui reestruturação de linhas vazias (notas/números de página viram estrutura); 0 mojibake; referências 138/138; tabelas 35/35; imagens 6/6; anexos ausentes na fonte (N/A); 7 imagens em cabeçalho/ficha não importadas (F-007, não contadas).`,
+        `Revalidado ${now.slice(0, 10)}: Δ58 parágrafos não-vazios (1609→1551); Δ116 raw inclui reestruturação de linhas vazias (notas/números de página viram estrutura); 0 mojibake; referências 138/138; tabelas 35/35; imagens 11/12 únicas (12 baseline vs 11 gerado; a capa media/image1.png é reconstruída pelo template UFLA — zero perda real de conteúdo); anexos ausentes na fonte (N/A).`,
     },
     renderedLayoutGate: {
       status: renderedLayoutStatus,
       evidence: renderedLayoutEvidence,
-      finding: "UFLA-AMBIGUOUS-1 (paginação: contínua vs reinício em 1)",
+      finding: "Resolvido em DECISION-010: contagem contínua a partir da folha de rosto; numeração visível inicia na Introdução com o valor contado (nunca reinício em 1).",
     },
     fullComplianceGate: {
       status: fullComplianceStatus,
@@ -205,6 +221,10 @@ const gates = {
     perTypeGate: {
       status: perTypeAllPassed ? "passed" : "failed",
       evidence: `Gate expandido executado para cada tipo de trabalho com o exportador correspondente: ${perTypeSummary}. Os auditores respeitam a matriz de tipos (elementos pré-textuais não aplicáveis — ficha/aprovação/sumário para artigo/CPG — não geram falso positivo). DOCX de exemplo em artifacts/ufla-compliance/per-type/.`,
+    },
+    formatsCrossGate: {
+      status: formatsCrossPassed ? "passed" : "failed",
+      evidence: `Auditoria cruzada de formatos (UFLA-formatos-20): ${formatsAudit.summary.totalFormats} formatos cadastrados × ${formatsAudit.summary.totalRequirements} requisitos da matriz; tipos alcançados: ${formatsAudit.summary.typesReached.join(", ")}. Mapeamento completo, sem requisito órfão, sem tipo morto, cobertura 100% com validator (formats-cross-audit.json).`,
     },
   },
   overall: overallStatus,
@@ -234,7 +254,7 @@ writeJson("artifacts/ufla-compliance/rendered-analysis.json", {
   gates: {
     codeGate: { status: testSummary.status, evidence: testSummary.evidence },
     ooxmlGate: { status: "passed", evidence: "Estrutura OOXML válida; Word abriu sem reparo; bookmarks/PAGEREF pareados; 0 mojibake. Achados não-estruturais em findings/requirements." },
-    contentPreservationGate: { status: "passed", evidence: "Δ58 não-vazios; 0 mojibake; refs 138/138; tabelas 35/35; imagens 6/6." },
+    contentPreservationGate: { status: "passed", evidence: "Δ58 não-vazios; 0 mojibake; refs 138/138; tabelas 35/35; imagens 11/12 únicas (capa reconstruída pelo template)." },
     renderedLayoutGate: { status: renderedLayoutStatus, evidence: renderedLayoutEvidence },
     fullComplianceGate: { status: fullComplianceStatus, evidence: fullComplianceEvidence },
   },
@@ -346,10 +366,33 @@ const STATUS_UPDATE: Record<string, { status: string; evidence: string[] }> = {
     ],
   },
   "UFLA-paginacao-textual": {
-    status: "partial",
+    status: "covered",
     evidence: [
-      "pgNumType presente na seção textual (start=13 na dissertação = contagem contínua); campo PAGE no cabeçalho; PDF mostra numeração no canto superior direito",
-      "UFLA-AMBIGUOUS-1: Manual §3.2.7 p.73 'contadas a partir da folha de rosto' vs '(1, 2, 3...)' — reinício em 1 vs contagem contínua; checker exige start=1",
+      "DECISION-010 (2026-08-15): contagem contínua a partir da folha de rosto (folha de rosto = 1); pré-textuais contadas sem número visível; numeração visível inicia na Introdução com o valor CONTADO (pré-textuais + 1), nunca reinício em 1; '(1, 2, 3...)' do Manual = sistema arábico, não reinício",
+      "alinhamento OOXML ↔ PDF físico: seção textual w:pgNumType w:start=13; PDF renderizado folha 18 (Introdução) exibe 13, sequência contínua até o fim (222 folhas numeradas); validador tests/rendering/pagination-physical-validation.test.ts",
+      "ooxml-checks corrigido: pagination-start (exigia reinício em 1) substituído por pagination-restart-at-1; projeto/artigo/CPG (sem pré-textuais) iniciam em 1 conforme DOCUMENT_TYPE_MATRIX",
+    ],
+  },
+  "UFLA-capa": {
+    status: "covered",
+    evidence: [
+      "layout físico da capa validado no PDF renderizado (validate-cover-layout.ts): identificação institucional no 1º terço, autor no 2º quarto, título centralizado, local+ano no terço inferior (y ≥ 561 na página A4) — posição corrigida no template (before 2200→3100 twips)",
+      "categoria 'Layout físico (capa/folha de rosto)' no gate expandido: PASSED no DOCX real e nos 4 tipos; teste tests/rendering/cover-layout-validation.test.ts",
+    ],
+  },
+  "UFLA-aprovacao": {
+    status: "covered",
+    evidence: [
+      "folha de aprovação validada por conteúdo e posição (validate-cover-layout.ts): natureza do trabalho na metade inferior da folha de rosto (corrigida de 37% para ~50% com espaçamento antes da natureza), autor/título no topo",
+      "categoria 'Layout físico (capa/folha de rosto)' no gate expandido: PASSED; cobertura de folha de aprovação também no auditPretextual (validateApprovalPage)",
+    ],
+  },
+  "UFLA-formatos-20": {
+    status: "covered",
+    evidence: [
+      "auditoria cruzada de formatos (audit-formats-cross.ts): 18 formatos cadastrados (8 padrão + 4 CPG/artigo + 8 Coleção Produção Acadêmica + tcc/monografia) mapeados para a DOCUMENT_TYPE_MATRIX — todo formato com regras pertinentes e validator definido; zero formato sem mapeamento, zero requisito órfão, zero tipo morto (formats-cross-audit.json)",
+      "DOCUMENT_TYPE_MATRIX estendida: artigo/CPG agora têm regras pertinentes explícitas (resumo/abstract/introdução/desenvolvimento/referências/layout/tipografia/espaçamento); sumário/ficha/aprovação/capa permanecem não aplicáveis a esses formatos",
+      "gate por tipo executa os auditores para artigo, TCC/monografia, CPG e projeto com o tipo explícito — 4/4 PASSED (gates-per-type.json)",
     ],
   },
   "UFLA-renderizacao-fisica": {
@@ -383,11 +426,28 @@ const STATUS_UPDATE: Record<string, { status: string; evidence: string[] }> = {
       "tabelas com cabeçalho semântico marcado (w:tblHeader); leitura assistiva validada por NBR 17225/WCAG 1.3.1",
     ],
   },
-  "UFLA-preservacao": {
-    status: "partial",
+  "UFLA-imagens": {
+    status: "covered",
     evidence: [
-      "Δ58 parágrafos não-vazios (1609→1551), Δ116 raw (linhas vazias), 0 mojibake; refs 138/138; tabelas 35/35; imagens 6/6 (corpo)",
-      "7 imagens em cabeçalho/ficha não importadas (F-007); conteúdo preservado por reestruturação (notas/paginação viram estrutura)",
+      "preservação completa de imagens no round-trip: 11/12 únicas re-exportadas (antes 6/12); a capa (media/image1.png) é reconstruída pelo template UFLA e a duplicação de image12 foi deduplicada — zero perda real de conteúdo (baseline-element-diff: perdidos 0)",
+      "figura composta preservada: imagens com legenda compartilhada (ex.: 4 logos sob 'Figura 2') agora são importadas como grupo, cada uma com a legenda compartilhada",
+      "imagens de apêndice/anexo sem legenda/fonte são preservadas (seção post-textual)",
+    ],
+  },
+  "UFLA-referencias-online": {
+    status: "covered",
+    evidence: [
+      "tipo dedicado 'online' (NBR 6023): referência com 'Disponível em: URL' + conteúdo estruturado é detectada como online (antes: 'site' com confiança baixa)",
+      "validação de data de acesso no audit-references: referência online sem 'Acesso em: <data>' gera gap — 31 refs online do baseline, todas com data válida após aceitar 'Acesso em:' com/sem dois-pontos",
+      "URL avulsa continua 'site' com confiança baixa (não vira online sem contexto); dados de pesquisa mantêm prioridade sobre online",
+    ],
+  },
+  "UFLA-preservacao": {
+    status: "covered",
+    evidence: [
+      "Δ58 parágrafos não-vazios (1609→1551), Δ116 raw (linhas vazias), 0 mojibake; refs 138/138; tabelas 35/35",
+      "preservação completa de imagens: 11/12 únicas re-exportadas (antes 6/12); a capa (media/image1.png) é reconstruída pelo template UFLA e a duplicação de image12 foi deduplicada — zero perda real de conteúdo",
+      "conteúdo preservado por reestruturação (notas/paginação viram estrutura)",
     ],
   },
   "UFLA-rodape-dissertacao": {

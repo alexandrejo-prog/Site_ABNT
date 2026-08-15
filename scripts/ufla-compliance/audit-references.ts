@@ -6,6 +6,7 @@ import type {
   ReferenceValidationResult,
   SectionAuditResult,
 } from "./audit-types.js";
+import { hasAccessDate } from "../../src/references-normalizer.js";
 
 async function extractParagraphs(docxPath: string): Promise<string[]> {
   if (!existsSync(docxPath)) return [];
@@ -70,6 +71,14 @@ export async function auditReferences(docxPath: string): Promise<SectionAuditRes
 
     const doiMatch = raw.match(/doi:\s*\S+/i);
     const urlMatch = raw.match(/https?:\/\/\S+/i);
+
+    // Referência online (NBR 6023): documento em meio eletrônico exige
+    // "Acesso em: <dia> <mês> <ano>" quando a URL é a fonte principal.
+    // Sem data de acesso a referência fica incompleta (UFLA-referencias-online).
+    const isOnline = /dispon[ií]vel\s+em\s*:/iu.test(raw) && Boolean(urlMatch);
+    if (isOnline && !hasAccessDate(raw)) {
+      entryIssues.push("Referência online sem data de acesso ('Acesso em: 10 jan. 2026')");
+    }
 
     const valid = entryIssues.length === 0;
     validated.push({

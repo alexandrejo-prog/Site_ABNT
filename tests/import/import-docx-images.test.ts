@@ -312,12 +312,16 @@ describe("importacao de imagens DOCX", () => {
     expect(result.importedImages[0].data?.byteLength).toBeGreaterThan(0);
   });
 
-  it("gera aviso quando ha duas imagens proximas da mesma legenda", async () => {
+  it("preserva o grupo inteiro quando duas imagens compartilham a mesma legenda (figura composta)", async () => {
+    // Duas imagens com a mesma legenda formam uma figura composta (ex.: 4 logos
+    // sob "Figura 2 ...") — todas as imagens do grupo são importadas, cada uma
+    // com a legenda compartilhada, em vez de descartar o grupo inteiro.
     const result = await importSyntheticDocx({ twoImagesSameCaption: true });
 
-    expect(result.importedImages).toHaveLength(0);
+    expect(result.importedImages).toHaveLength(2);
+    expect(result.importedImages.every((image) => image.status === "preserved")).toBe(true);
+    expect(result.importedImages.every((image) => image.caption === "Grafico 1 - Sexo.")).toBe(true);
     expect(result.fields.imageWarnings).toContain("2 imagem(ns)/grafico(s) detectado(s) no DOCX original");
-    expect(result.fields.imageWarnings).toContain("0 preservado(s) automaticamente");
-    expect(result.fields.imageWarnings).toContain("2 exigem revisao manual");
+    expect(result.fields.imageWarnings).toContain("2 preservado(s) automaticamente");
   });
 });

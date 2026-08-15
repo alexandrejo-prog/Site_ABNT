@@ -329,7 +329,15 @@ function computeImageInsertionHint(
   return { hint: "original-position" };
 }
 
-function hasAmbiguousNeighbors(blocks: ImportedBlock[], index: number): boolean {
+/**
+ * Quando N imagens compartilham a MESMA legenda (janela ±3), o documento é uma
+ * figura composta (ex.: 4 logos de periódicos sob "Figura 2 ...") — todas as
+ * imagens do grupo pertencem à mesma figura e devem ser importadas, cada uma com
+ * a legenda compartilhada. Retorna true quando há pelo menos uma vizinha com o
+ * mesmo caption (usado apenas para decidir a mensagem de revisão, não para
+ * descartar: a importação agora preserva o grupo inteiro).
+ */
+function hasSharedCaptionNeighbor(blocks: ImportedBlock[], index: number): boolean {
   const windowSize = 3;
   const currentCaption = nearestAcademicImageContext(blocks, index).caption;
   if (!currentCaption) return false;
@@ -348,7 +356,7 @@ function classifyAcademicImage(block: ImportedBlock, index: number, blocks: Impo
   if (block.type !== "image") return false;
   if (isDecorativeImageBlock(block)) return false;
 
-  if (hasAmbiguousNeighbors(blocks, index)) return false;
+  void hasSharedCaptionNeighbor;
 
   const section = block.section;
   let inBody: boolean;
@@ -362,6 +370,11 @@ function classifyAcademicImage(block: ImportedBlock, index: number, blocks: Impo
     inBody = bodyStart >= 0 && index > bodyStart && (bodyEnd < 0 || index < bodyEnd);
   }
   if (!inBody) return false;
+
+  // Conteúdo de apêndice/anexo (seção post-textual) é sempre preservado, mesmo
+  // sem legenda/fonte — documentos anexados frequentemente têm imagens sem
+  // contexto acadêmico próprio (ex.: documento escaneado no apêndice).
+  if (section === "post-textual") return true;
 
   const { caption, source } = nearestAcademicImageContext(blocks, index);
   return Boolean(caption || source);
@@ -518,12 +531,13 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
 
     const sourceHeaderRows = (block.headerRowIndices ?? []).filter((i) => originalIndices.includes(i));
     const firstSourceHeader = sourceHeaderRows.length ? Math.min(...sourceHeaderRows) : undefined;
+    // Só declara headerRowIndex quando a ORIGEM declara w:tblHeader. Sem isso
+    // (baseline convertido de PDF), a linha de cabeçalho é INFERIDA na
+    // exportação (inferTableHeaderRow) — o fallback 0 aqui marcava o TÍTULO
+    // ("Tema: ...") como header em tabelas com 1ª linha-título + 2ª linha de
+    // rótulos (regressão corrigida 2026-08-15).
     const headerRowIndex =
-      firstSourceHeader !== undefined
-        ? originalIndices.indexOf(firstSourceHeader)
-        : rows.length >= 2 && rows[0].some((cell) => cell.trim())
-          ? 0
-          : undefined;
+      firstSourceHeader !== undefined ? originalIndices.indexOf(firstSourceHeader) : undefined;
 
     const rawTable: ImportedTable = {
       id: `tbl-${imported.length + 1}`,

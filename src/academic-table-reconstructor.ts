@@ -96,7 +96,7 @@ export function normalizeAcademicTableText(value: string): string {
 }
 
 const HEADER_VOCABULARY_RE =
-  /(categoria|grupo|fase|fases|caracter[ií]sticas?|vantagens?|desvantagens?|pontos cr[ií]ticos|autores?|refer[eê]ncias?|fonte|ano|data|norma|indicador|perfil|quest[aã]o|resposta|frequ[eê]ncia|percentual)/i;
+  /(categoria|grupo|fase|fases|caracter[ií]sticas?|vantagens?|desvantagens?|pontos cr[ií]ticos|autores?|refer[eê]ncias?|fonte|ano|data|norma|indicador|perfil|quest[aã]o|resposta|frequ[eê]ncia|percentual|a[çc][ãa]o|atividade|respons[aá]vel|cronograma|unidade|contexto|avalia[çc][ãa]o|perguntas?|quest[õo]es|comunidades?|n[uú]mero)/i;
 
 /**
  * Detecta a linha de cabeçalho APENAS por vocabulário de coluna acadêmica.
@@ -108,13 +108,41 @@ const HEADER_VOCABULARY_RE =
  * Quadro 2 da dissertação como grouped-with-authors, descartando a linha de
  * cabeçalho e embaralhando colunas no round-trip vivo (regressão 2026-08-14).
  */
+/**
+ * Linhas-título que podem preceder a linha de cabeçalho real (tabelas
+ * convertidas de PDF: "Tema: ...", "Cronograma de ações..." na 1ª linha e os
+ * rótulos na 2ª).
+ */
+const TABLE_TITLE_LINE_PATTERNS = [
+  /^Tema\s*[:\\-–]/i,
+  /^Tema\s+geral\s*[:\\-–]/i,
+  /^Cronograma\s+de\s+a[çc][õo]es/i,
+  /^Avalia[çc][ãa]o\s+dos\s+reposit[óo]rios/i,
+  /^Pol[ií]tica\s+Institucional\s+de\s+Informa[çc][ãa]o/i,
+  /^Planejamento\s+para\s+a\s+implementa[çc][ãa]o/i,
+  /^Dados\s+estat[ií]sticos?\s+das?\s+comunidades/i,
+  /^Aspectos?\s+legais/i,
+];
+
+function looksLikeTableTitleLine(text: string): boolean {
+  return TABLE_TITLE_LINE_PATTERNS.some((p) => p.test(text));
+}
+
 export function detectAcademicTableHeader(table: ImportedTable): { headers: string[]; rowIndex: number } {
   const rows = nonEmptyRows(table);
   if (!rows.length) return { headers: [], rowIndex: 0 };
-  const first = rows[0].map((text) => text.trim());
-  const meaningful = first.filter(Boolean);
-  const hasHeaderVocabulary = meaningful.some((text) => HEADER_VOCABULARY_RE.test(text));
-  return hasHeaderVocabulary ? { headers: first, rowIndex: 0 } : { headers: [], rowIndex: 0 };
+  // A linha de cabeçalho pode não ser a primeira: em tabelas convertidas de PDF
+  // a 1ª linha frequentemente é um título ("Tema: ...") e os rótulos vêm na
+  // linha seguinte. Procura nas 3 primeiras linhas não-vazias.
+  for (let offset = 0; offset < Math.min(3, rows.length); offset++) {
+    const candidate = rows[offset].map((text) => text.trim());
+    const meaningful = candidate.filter(Boolean);
+    if (!meaningful.length) continue;
+    if (looksLikeTableTitleLine(meaningful.join(" "))) continue;
+    const hasHeaderVocabulary = meaningful.some((text) => HEADER_VOCABULARY_RE.test(text));
+    if (hasHeaderVocabulary) return { headers: candidate, rowIndex: offset };
+  }
+  return { headers: [], rowIndex: 0 };
 }
 
 export function detectAcademicTableHeaders(table: ImportedTable): string[] {

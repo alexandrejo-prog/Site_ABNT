@@ -84,6 +84,7 @@ export interface ExpandedAuditResult {
     pagination: boolean;
     equations: boolean;
     pdfPhysical: boolean;
+    coverLayout: boolean;
     references: boolean;
     citations: boolean;
     figures: boolean;

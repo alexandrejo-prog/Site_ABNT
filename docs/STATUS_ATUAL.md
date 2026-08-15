@@ -5,15 +5,15 @@
 
 ## Última Atualização
 - Data: 2026-08-15
-- Hora: 17:57 (CONFORMIDADE UFLA APROVADA — análise física real de imagens/tabelas no PDF + gates computados com evidência atual + religação de cross-references + gate por tipo de trabalho)
+- Hora: ~18:55 (FECHAMENTO P0–P2: preservação de imagens 7→0 perdas; layout físico de capa/folha de rosto; referências online; DECISION-010 paginação; auditoria cruzada de formatos; `npm run ufla:audit`)
 - Branch: `feat/ufla-render-validation`
-- Evidência: `npm run verify` 100% verde; tsc limpo; lint 0 erros/0 warnings
+- Evidência: `npm run ufla:audit` completo — lint + verify + regenerate (Word COM + PDF físico + 7 gates) em 61s, all passed; resumoStatus 48/48 covered, 0 partial, 0 not-covered
 
 ## Suíte de Testes
-- Passed: 1543
+- Passed: 1556
 - Failed: 0
 - Skipped: 10
-- Arquivos: 195
+- Arquivos: 197
 - Build: OK (tsc + vite)
 - tsc --noEmit: 0 erros (inclui scripts/ufla-compliance via alias @scripts)
 - lint: 0 erros, 0 warnings
@@ -38,12 +38,18 @@
 5. [x] **Gates computados com evidência real** — `regenerate-official-artifacts.ts` agora executa o gate expandido (`runFullComplianceGate`) e computa renderedLayoutGate/fullComplianceGate a partir do coverage físico real, em vez de hardcodar status.
 6. [x] **Religação de alvos de referência cruzada** (bookmarks/PAGEREF no round-trip) — extração converte hyperlink interno/REF em token `[x:ANCHOR~texto]`; exportação resolve por label (heading → `SECAO_`, legenda → `LISTA_`, degrade para texto plano sem link quebrado) com `InternalHyperlink` + bookmark estável no heading e na legenda de tabela; coberto nos 4 exportadores (dissertação, artigo, CPG, projeto).
 7. [x] **Gate por tipo de trabalho** — `run-gate-per-type.ts` gera DOCX de exemplo (artigo, TCC/monografia, resumo expandido CPG, projeto) e roda o gate expandido com o tipo explícito; `audit-pretextual` respeita a matriz de tipos (ficha/aprovação/sumário não exigidos em artigo/CPG não geram falso positivo); resultado em `gates.json → perTypeGate: passed`.
-8. [ ] **Fidelidade do preview** (header simulado, page-break de ABSTRACT condicional, CSS data-font-size, auditoria axe) — não afeta o DOCX gerado.
+8. [x] **Preservação completa de imagens (UFLA-imagens/preservação)** — classificador de imagens revisto: figura composta com legenda compartilhada (4 logos da Figura 2) é importada como grupo; imagens de apêndice sem legenda são preservadas; perdas 7 → 0 (12 únicas baseline vs 11 gerado; a capa é reconstruída pelo template e a duplicação de image12 é dedupe correto).
+9. [x] **Layout físico de capa e folha de rosto (UFLA-capa/UFLA-aprovacao)** — `validate-cover-layout.ts` valida coordenadas no PDF renderizado (institucional no 1º terço, autor, título centralizado, local+ano no terço inferior y≥561; natureza da folha de rosto na metade inferior — corrigida de 37% para ~50%): categoria no gate expandido PASSED; teste `cover-layout-validation.test.ts`.
+10. [x] **Referências online (UFLA-referencias-online)** — tipo dedicado `online` (NBR 6023) com conteúdo estruturado + 'Disponível em:'; data de acesso bloqueante no audit-references; URL avulsa segue 'site' com confiança baixa; dados de pesquisa mantêm prioridade.
+11. [x] **UFLA-AMBIGUOUS-1 paginação (DECISION-010)** — contagem contínua a partir da folha de rosto (folha de rosto = 1); numeração visível inicia na Introdução com o valor contado (pré-textuais + 1), nunca reinício em 1; checker OOXML (pgNumType start) ↔ PDF físico (folha 18 = 13, contínua); `ooxml-checks` corrigido (pagination-restart-at-1).
+12. [x] **Auditoria cruzada de formatos (UFLA-formatos-20)** — `audit-formats-cross.ts`: 18 formatos × 20 requisitos, mapeamento completo, zero órfão, zero tipo morto, cobertura 100%; DOCUMENT_TYPE_MATRIX estendida para artigo/CPG (resumo/abstract/introdução/desenvolvimento/referências/layout/tipografia/espaçamento); gate `formatsCrossGate` PASSED.
+13. [x] **Comando único de auditoria** — `npm run ufla:audit` orquestra lint + verify + regenerate com lock (`artifacts/ufla-audit/.audit.lock`) e falha rápida; resumo dos 7 gates + overall no final.
+14. [ ] **Fidelidade do preview** (header simulado, page-break de ABSTRACT condicional, CSS data-font-size, auditoria axe) — não afeta o DOCX gerado.
 
 ## Resolução UFLA-AMBIGUOUS-1
-- **Decisão:** paginação contínua a partir da Introdução
-- **Base:** Manual UFLA §3.2.7 p.73
-- **Status:** DECISION_003 documentada; checker `pagination-start` implementado; gate expandido PASSED com esta decisão
+- **Decisão (DECISION-010, complementa DECISION_003):** contagem contínua a partir da folha de rosto (folha de rosto = 1); pré-textuais contadas sem número visível; numeração visível inicia na Introdução com o **valor contado** (pré-textuais + 1) — **nunca reinício em 1**; "(1, 2, 3, ...)" do Manual = sistema de numeração arábico, não reinício
+- **Base:** Manual UFLA § paginação; ABNT NBR 14724; evidência do documento real (pgNumType start=13 ↔ PDF físico folha 18 = 13)
+- **Status:** DECISION-010 documentada; `validate-pagination.ts` implementado com OOXML + PDF físico (canto superior direito, continuidade, sem número nas pré-textuais); `ooxml-checks` corrigido (`pagination-start` substituído por `pagination-restart-at-1`); gate expandido PASSED com esta decisão; teste em `tests/rendering/pagination-physical-validation.test.ts`
 
 ## Próximas Fatias
 1. FATIA 2: Equações OMML (UFLA-023) — CONCLUÍDA (OMML cru re-injetado)

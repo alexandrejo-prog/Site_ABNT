@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeReference, normalizeReferences, normalizeReferencesText, type NormalizedReference } from "../../src/references-normalizer";
+import { hasAccessDate, normalizeReference, normalizeReferences, normalizeReferencesText, type NormalizedReference } from "../../src/references-normalizer";
 import { UFLA_MANUAL_REFERENCE } from "../../src/ufla-rules";
 
 function boldRunFor(reference: NormalizedReference, text: string) {
@@ -336,5 +336,34 @@ describe("references normalizer", () => {
       "IBGE. Mapa político do estado de Minas Gerais. Rio de Janeiro: IBGE, 2020.",
     );
     expect(normalized.detectedType).toBe("cartografico");
+  });
+
+  // === Referências online (NBR 6023 — meio eletrônico) ===
+
+  it("detecta referência online dedicada quando há 'Disponível em: URL'", () => {
+    const normalized = normalizeReference(
+      "UNIVERSIDADE FEDERAL DE LAVRAS. Manual de normalização. Lavras: UFLA, 2025. Disponível em: https://ufla.br/manual. Acesso em: 10 mar. 2026.",
+    );
+    expect(normalized.detectedType).toBe("online");
+    expect(normalized.confidence).not.toBe("baixa");
+  });
+
+  it("mantém 'site' de baixa confiança para URL solta sem rótulo Disponível em", () => {
+    const normalized = normalizeReference("https://ufla.br/pagina-avulsa");
+    expect(normalized.detectedType).toBe("site");
+  });
+
+  it("valida data de acesso presente em referência online", () => {
+    const normalized = normalizeReference(
+      "UFLA. Relatório anual. Disponível em: https://ufla.br/relatorio. Acesso em: 15 abr. 2026.",
+    );
+    expect(hasAccessDate(normalized.text)).toBe(true);
+  });
+
+  it("detecta ausência de data de acesso em referência online", () => {
+    const normalized = normalizeReference(
+      "UFLA. Relatório anual. Disponível em: https://ufla.br/relatorio.",
+    );
+    expect(hasAccessDate(normalized.text)).toBe(false);
   });
 });

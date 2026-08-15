@@ -1025,4 +1025,25 @@ describe("w:tblHeader — identificação semântica de linha de cabeçalho (NBR
     // Acessibilidade mantida: primeira linha é o cabeçalho semântico (2+ linhas).
     expect((documentXml.match(/<w:tblHeader\b[^>]*\/?>/g) ?? []).length).toBe(1);
   });
+
+  it("infere w:tblHeader na linha de rótulos quando a 1ª linha é título (Tema: ...)", async () => {
+    // Baseline convertido de PDF: 1ª linha "Tema: ..." (título) + 2ª linha de
+    // rótulos. O header semântico é a 2ª linha — não a 1ª (regressão corrigida
+    // 2026-08-15: o fallback 0 marcava o TÍTULO como cabeçalho).
+    const documentXml = await exportXmlFromTableBody(
+      tableFromRows([
+        row(["Tema: Formulação e implementação da PII e do RI na UFLA"]),
+        row(["Categoria", "Questões", "Avaliação"]),
+        row(["Movimento de acesso", "Você acredita?", "Sim"]),
+        row(["Visibilidade", "Você conhece?", "Não"]),
+      ].join("")),
+    );
+    const rows = [...documentXml.matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)].map((m) => m[0]);
+    const headerRows = rows.map((r, i) => (/(<w:tblHeader\b[^>]*\/?>)/.test(r) ? i : -1)).filter((i) => i >= 0);
+
+    // Exatamente 1 linha com w:tblHeader e ela é a 2ª (index 1), não o título.
+    expect(headerRows).toEqual([1]);
+    expect(documentText(documentXml)).toContain("Categoria");
+    expect(documentText(documentXml)).toContain("Tema: Formulação");
+  });
 });

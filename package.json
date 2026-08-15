@@ -15,6 +15,7 @@
     "acceptance:word": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/validate-word.ps1",
     "acceptance:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run-docx-acceptance.ps1",
     "skill:validate": "npx tsx skills/ufla-docx-compliance/src/index.ts",
+    "ufla:audit": "npx tsx scripts/ufla-compliance/run-ufla-audit.ts",
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" --fix",
     "format": "prettier --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,tsx}\"",

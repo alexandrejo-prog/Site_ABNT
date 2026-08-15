@@ -25,6 +25,7 @@ export interface NormalizedReference {
     | "documento-institucional"
     | "legislacao"
     | "site"
+    | "online"
     | "patente"
     | "jornal"
     | "periodico"
@@ -458,11 +459,41 @@ function genericTitle(remainder: string): string | undefined {
   return bookTitle(remainder) ?? remainder.split(/\.\s+/u).map((p) => p.trim()).find((p) => p.length > 3);
 }
 
+function isOnlineReference(value: string): boolean {
+  const text = fold(value);
+  // NBR 6023: documento em meio eletrônico tem "Disponível em: <URL>" e
+  // (para material não-publicado) "Acesso em: <data>". URL avulsa (sem rótulo
+  // no original — vira "Disponível em:" só na limpeza) é site com confiança
+  // baixa; com rótulo explícito E conteúdo estruturado antes da URL (autor ou
+  // título institucional), é online dedicado.
+  const urlIndex = text.search(/\bhttps?:\/\//iu);
+  if (urlIndex <= 0) return false;
+  const beforeUrl = text.slice(0, urlIndex).trim();
+  return /\bdispon[ií]vel\s+em\s*:/iu.test(text) && /\bhttps?:\/\//iu.test(text) && beforeUrl.length > 15;
+}
+
+export function hasAccessDate(value: string): boolean {
+  const text = fold(value);
+  // "Acesso em:" com ou sem dois-pontos ("Acesso em 28 set. 2012") — o padrão
+  // com dois-pontos é o recomendado pela NBR 6023, mas o sem é frequente em
+  // conversões de PDF.
+  return /\bacesso\s+em\s*:?/iu.test(text) && /\b\d{1,2}\s+(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z.]*\s+\d{4}\b/iu.test(text);
+}
+
 function detect(value: string): { highlight?: string; confidence: ReferenceConfidence; detectedType: NormalizedReference["detectedType"] } {
   if (isLegislation(value)) return { highlight: legislationTitle(value), confidence: "media", detectedType: "legislacao" };
+  // Referência online explícita (Disponível em: URL) tem tipo dedicado — antes
+  // caía em "site" com confiança baixa mesmo para documentos formais online.
+  // Conjuntos de dados mantêm prioridade sobre o rótulo online (são online E
+  // dados de pesquisa; o tipo específico é mais informativo).
+  if (researchDataMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "dados-pesquisa" };
+  if (isOnlineReference(value)) {
+    return { highlight: genericTitle(value), confidence: "media", detectedType: "online" };
+  }
   const parsed = splitAuthor(value);
   if (!parsed) {
     if (/\bhttps?:\/\//iu.test(value)) return { confidence: "baixa", detectedType: "site" };
+    if (researchDataMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "dados-pesquisa" };
     if (researchDataMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "dados-pesquisa" };
     if (patentMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "patente" };
     if (periodicalMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "periodico" };

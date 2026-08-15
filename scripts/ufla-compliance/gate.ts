@@ -17,6 +17,7 @@ import { auditCitations } from './audit-citations';
 import { auditFigures } from './audit-figures';
 import { auditSections } from './audit-sections';
 import { writeHtmlReport } from './report';
+import { validateCoverLayout } from './validate-cover-layout';
 import JSZip from 'jszip';
 
 import type { AuditGap, ExpandedAuditResult, SectionAuditResult, WorkType } from './audit-types';
@@ -27,6 +28,7 @@ interface GateResult {
   passed: boolean;
   errors: string[];
   warnings: string[];
+  meta?: Record<string, unknown>;
 }
 
 type ValidatorResult = Array<{
@@ -85,7 +87,7 @@ function looksLikeTitle(text: string): boolean {
 function looksLikeHeader(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
-  const cells = t.split(" | ").filter((c) => c.trim().length > 0);
+  const cells = t.split(" | ").map((c) => c.trim()).filter((c) => c.length > 0);
   if (cells.length < 2) return false;
   const headerKeywords = [
     "Categoria", "Questão", "Avaliação", "Etapa", "Meses", "Período",
@@ -97,9 +99,17 @@ function looksLikeHeader(text: string): boolean {
     "Resposta", "Sim", "Não", "Código", "Sigla", "Definição", "Descricao",
     "Indicador", "Meta", "Responsável", "Recurso", "Prazo"
   ];
-  const hasKeyword = cells.some((c) => headerKeywords.some((k) => c.trim().toLowerCase().includes(k.toLowerCase())));
-  const allUpperOrTitle = cells.every((c) => /^[A-ZÀ-Ÿ][a-zà-ÿ]/.test(c.trim()) || /^[A-ZÀ-Ÿ\s]+$/.test(c.trim()));
-  return hasKeyword || (allUpperOrTitle && cells.length >= 2);
+  // keyword como PALAVRA inteira (\b): "ação" dentro de "informação" ou
+  // "ano" dentro de "plano" não conta como vocabulário de cabeçalho.
+  const hasKeyword = cells.some((c) => headerKeywords.some((k) => new RegExp(`\\b${k.toLowerCase()}\\b`).test(c.toLowerCase())));
+  // Rótulos de coluna são CELULAS CURTAS (1-3 palavras). Células longas (frases
+  // descritivas de dados, ex.: "Política Institucional de Informação(PIIUFLA)")
+  // não são header mesmo começando com maiúscula — evita falso positivo.
+  const allShortTitle = cells.every((c) => {
+    const words = c.split(/\s+/).filter(Boolean);
+    return words.length <= 3 && (/^[A-ZÀ-Ÿ][a-zà-ÿ]/.test(c) || /^[A-ZÀ-Ÿ\s]+$/.test(c));
+  });
+  return hasKeyword || allShortTitle;
 }
 
 async function checkTables(docxPath: string): Promise<GateResult> {
@@ -162,9 +172,21 @@ async function checkTables(docxPath: string): Promise<GateResult> {
   }
 }
 
-function checkPaginationGate(docxPath: string): GateResult {
-  const r = validatePagination(docxPath);
-  return { name: 'UFLA-AMBIGUOUS-1 (paginação)', passed: r.isValid, errors: r.errors, warnings: r.warnings };
+async function checkPaginationGate(docxPath: string, pdfPath?: string, documentType?: DocumentType): Promise<GateResult> {
+  const r = await validatePagination(docxPath, pdfPath, documentType ?? "dissertacao");
+  return {
+    name: 'UFLA-AMBIGUOUS-1 (paginação)',
+    passed: r.isValid,
+    errors: r.errors,
+    warnings: r.warnings,
+    meta: {
+      declaredStart: r.declaredStart,
+      firstVisiblePage: r.firstVisiblePage,
+      firstVisibleValue: r.firstVisibleValue,
+      totalPages: r.totalPages,
+      preTextualPages: r.preTextualPages,
+    },
+  };
 }
 
 async function checkEquations(docxPath: string): Promise<GateResult> {
@@ -207,9 +229,10 @@ export async function runExpandedComplianceGate(
   ]);
 
   const footersResult = checkFooters();
-  const paginationResult = checkPaginationGate(docxPath);
+  const paginationResult = await checkPaginationGate(docxPath, pdfPath, documentType);
   const equationsResult = await checkEquations(docxPath);
   const pdfPhysicalResult = pdfPath ? checkPdfPhysical(pdfPath) : { name: 'Físico PDF', passed: true, errors: [], warnings: [] };
+  const coverLayoutResult = pdfPath ? await validateCoverLayout(pdfPath) : { name: 'Capa/folha de rosto (layout físico)', passed: true, errors: [], warnings: [] };
 
   const allGaps: AuditGap[] = [
     ...pretextual.gaps,
@@ -232,6 +255,13 @@ export async function runExpandedComplianceGate(
       description: e,
       suggestion: 'Adicionar w:tblHeader nas tabelas com cabeçalho semântico.',
     })),
+    ...coverLayoutResult.errors.map((e) => ({
+      section: 'layout físico capa/folha de rosto',
+      rule: 'UFLA-010/011 (layout físico)',
+      severity: 'major' as const,
+      description: e,
+      suggestion: 'Ajustar espaçamentos/posição no template da capa e da folha de rosto.',
+    })),
   ];
 
   const technical = {
@@ -240,6 +270,7 @@ export async function runExpandedComplianceGate(
     pagination: paginationResult.passed,
     equations: equationsResult.passed,
     pdfPhysical: pdfPhysicalResult.passed,
+    coverLayout: coverLayoutResult.passed,
     references: sectionPassed(referencesResult),
     citations: sectionPassed(citationsResult),
     figures: sectionPassed(figuresResult),
@@ -301,6 +332,7 @@ export async function runFullComplianceGate(
     { name: 'Tabelas', passed: expanded.technical.tables, errors: expanded.gaps.filter(g => g.section === 'tabelas').map(g => g.description), warnings: [] },
     { name: 'Equações', passed: expanded.technical.equations, errors: expanded.gaps.filter(g => g.section === 'OMML').map(g => g.description), warnings: [] },
     { name: 'Paginação', passed: expanded.technical.pagination, errors: expanded.gaps.filter(g => g.section === 'paginacao').map(g => g.description), warnings: [] },
+    { name: 'Layout físico (capa/folha de rosto)', passed: expanded.technical.coverLayout, errors: expanded.gaps.filter(g => g.section === 'layout físico capa/folha de rosto').map(g => g.description), warnings: [] },
   ];
 
   const gaps: string[] = [];
