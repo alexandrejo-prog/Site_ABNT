@@ -1,18 +1,19 @@
 /**
- * Compara a pré-visualização HTML com o DOCX renderizado pelo Word.
+ * Compara a pré-visualização HTML com o DOCX renderizado pelo Word, por template.
  *
- * Para um documento real (monografia com ficha catalográfica):
- *  1. Gera o DOCX (rascunho editável) e renderiza PDF via Word COM.
+ * Para cada template (monografia, dissertação, tese, artigo, resumo expandido CPG,
+ * projeto de pesquisa):
+ *  1. Gera o DOCX (exportador correspondente) e renderiza PDF via Word COM.
  *  2. Extrai o texto por página do PDF (pdfjs-dist).
  *  3. Gera o HTML do preview (buildPreviewHtml) e extrai o texto por página.
  *  4. Métricas de divergência: sobreposição de tokens (ambos os sentidos),
- *     diferença de número de páginas, cabeçalhos alinhados.
- *  5. Evidência visual: PNG do preview (Playwright chromium) e do PDF
- *     (@napi-rs/canvas) lado a lado em um relatório HTML.
+ *     diferença de número de páginas, best-match por página.
+ *  5. Evidência visual (3 primeiras páginas): PNG do preview (Playwright
+ *     chromium) e do PDF (@napi-rs/canvas), com diff (pixelmatch).
  *
  * Uso: npx tsx scripts/ufla-compliance/compare-preview-docx.ts
- * Saída: artifacts/ufla-compliance/preview-docx-diff.json + report HTML.
- * Gate: similaridade ≥ 0.65 E |Δpáginas| ≤ 3 (sem Word: skipped, passed).
+ * Saída: artifacts/ufla-compliance/preview-docx-diff.json + preview-diff/*.png.
+ * Gate (por template): similaridade ≥ 0.65 E |Δpáginas| ≤ 3 (sem Word: skipped, passed).
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
@@ -22,8 +23,13 @@ import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createCanvas } from "@napi-rs/canvas";
 import pixelmatch from "pixelmatch";
 import { buildPreviewHtml } from "../../src/preview-html.js";
+import { generateDocxBlob } from "../../src/export-docx.js";
+import { generateArticleDocxBlob } from "../../src/export-article-docx.js";
+import { generateCpgDocxBlob } from "../../src/export-cpg-docx.js";
+import { generateResearchProjectDocxBlob } from "../../src/export-research-project-docx.js";
 import { generateGraduateEditableDraftDocxBlob } from "../../src/export-graduate-editable-draft-docx.js";
-import { PER_TYPE_FIELDS, PER_TYPE_EDITOR_TEXT } from "./per-type-fixtures.js";
+import type { DocxGenerationInput } from "../../src/export-docx.js";
+import { PER_TYPE_EDITOR_TEXT, PER_TYPE_FIELDS } from "./per-type-fixtures.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -33,6 +39,33 @@ const PS_RENDER = join(__dirname, "render-docx-to-pdf.ps1");
 pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(
   join(ROOT, "node_modules", "pdfjs-dist", "legacy", "build", "pdf.worker.mjs"),
 ).href;
+
+interface TemplateCase {
+  id: string;
+  input: DocxGenerationInput;
+  generate: (input: DocxGenerationInput) => Promise<Blob>;
+}
+
+const GRADUATE = (input: DocxGenerationInput) => generateGraduateEditableDraftDocxBlob(input);
+
+const TEMPLATES: TemplateCase[] = [
+  {
+    id: "monografia",
+    input: {
+      fields: {
+        ...PER_TYPE_FIELDS.monografia_draft,
+        fichaCatalografica: "Ficha catalográfica elaborada pela Biblioteca Universitária da UFLA.",
+      },
+      editorText: PER_TYPE_EDITOR_TEXT,
+    },
+    generate: GRADUATE,
+  },
+  { id: "dissertacao", input: { fields: PER_TYPE_FIELDS.dissertacao_draft, editorText: PER_TYPE_EDITOR_TEXT }, generate: GRADUATE },
+  { id: "tese", input: { fields: PER_TYPE_FIELDS.tese_draft, editorText: PER_TYPE_EDITOR_TEXT }, generate: GRADUATE },
+  { id: "artigo", input: { fields: PER_TYPE_FIELDS.artigo, editorText: PER_TYPE_EDITOR_TEXT }, generate: (i) => generateArticleDocxBlob(i) },
+  { id: "resumo_expandido_cpg", input: { fields: PER_TYPE_FIELDS.resumo_expandido_cpg, editorText: PER_TYPE_EDITOR_TEXT }, generate: (i) => generateCpgDocxBlob(i) },
+  { id: "projeto_pesquisa", input: { fields: PER_TYPE_FIELDS.projeto_pesquisa, editorText: PER_TYPE_EDITOR_TEXT }, generate: (i) => generateResearchProjectDocxBlob(i) },
+];
 
 /** Normaliza texto para comparação: minúsculas, sem acentos/pontuação, tokens únicos. */
 function tokens(text: string): Set<string> {
@@ -100,34 +133,12 @@ export async function runPreviewDocxCompare(): Promise<{ passed: boolean; failur
   const wordAvailable = canUseWord();
   mkdirSync(OUT, { recursive: true });
 
-  const fields = { ...PER_TYPE_FIELDS.monografia_draft, fichaCatalografica: "Ficha catalográfica elaborada pela Biblioteca Universitária da UFLA." };
-  const input = { fields, editorText: PER_TYPE_EDITOR_TEXT };
-
-  // 1) DOCX + PDF
-  const docxPath = join(OUT, "monografia.docx");
-  const pdfPath = join(OUT, "monografia.pdf");
-  const blob = await generateGraduateEditableDraftDocxBlob(input);
-  writeFileSync(docxPath, Buffer.from(await blob.arrayBuffer()));
-  if (wordAvailable) {
-    execFileSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", PS_RENDER, "-DocxPath", docxPath, "-PdfPath", pdfPath], { stdio: "pipe", timeout: 120000 });
-  }
-
-  // 2) Preview HTML
-  const previewHtml = buildPreviewHtml(input);
-
   const result: Record<string, unknown> = {
-    docx: "preview-diff/monografia.docx",
-    pdf: "preview-diff/monografia.pdf",
-    previewPages: 0,
-    pdfPages: 0,
-    pageDelta: 0,
-    similarityPreviewToPdf: 0,
-    similarityPdfToPreview: 0,
-    similarity: 0,
-    perPage: [] as unknown[],
-    screenshots: [] as unknown[],
-    gate: { similarityMin: 0.65, pageDeltaMax: 3 },
+    wordAvailable,
+    templates: {} as Record<string, unknown>,
+    overall: { similarityMin: 0.65, pageDeltaMax: 3, templates: TEMPLATES.length, passedTemplates: 0 },
   };
+  const overall = result.overall as { passedTemplates: number; templates: number };
 
   if (!wordAvailable) {
     result.status = "skipped-no-word";
@@ -135,130 +146,145 @@ export async function runPreviewDocxCompare(): Promise<{ passed: boolean; failur
     return { passed: true, failures, wordAvailable, result };
   }
 
+  let browser: import("playwright").Browser | null = null;
   try {
-    const pdfTexts = await pdfPages(pdfPath);
-    result.pdfPages = pdfTexts.length;
+    const { chromium } = await import("playwright");
+    browser = await chromium.launch();
+    const css = readFileSync(join(ROOT, "src", "preview-styles.css"), "utf8");
 
-    // Páginas do preview: <section class="preview-page">…</section>
-    const pageRe = /<section class="preview-page[^"]*"[^>]*>([\s\S]*?)<\/section>/g;
-    const previewPages: string[] = [];
-    let m: RegExpExecArray | null;
-    while ((m = pageRe.exec(previewHtml)) !== null) previewPages.push(stripHtml(m[1]));
-    result.previewPages = previewPages.length;
-
-    const pdfTokens = tokens(pdfTexts.join(" "));
-    const previewTokens = tokens(previewPages.join(" "));
-    const simP2D = overlap(pdfTokens, previewTokens);
-    const simD2P = overlap(previewTokens, pdfTokens);
-    result.similarityPreviewToPdf = Number(simP2D.toFixed(3));
-    result.similarityPdfToPreview = Number(simD2P.toFixed(3));
-    result.similarity = Number(Math.min(simP2D, simD2P).toFixed(3));
-    result.pageDelta = Math.abs(result.pdfPages - result.previewPages);
-
-    // Alinhamento por página: páginas de conteúdo (≥ 15 tokens) em ordem
-    const perPage: unknown[] = [];
-    const isContentPage = (t: string): boolean => t.split(/\s+/).filter(Boolean).length >= 15;
-    const pdfTextual = pdfTexts.filter(isContentPage);
-    const previewTextual = previewPages.filter(isContentPage);
-    const pdfContentTokens = pdfTextual.map(tokens);
-    for (let i = 0; i < previewTextual.length; i++) {
-      const prevToks = tokens(previewTextual[i]);
-      // melhor correspondência no PDF (conteúdo existe em alguma página)
-      let best = 0;
-      let bestIdx = -1;
-      for (let j = 0; j < pdfContentTokens.length; j++) {
-        const o = overlap(pdfContentTokens[j], prevToks);
-        if (o > best) { best = o; bestIdx = j; }
-      }
-      perPage.push({
-        page: i + 1,
-        previewText: previewTextual[i].slice(0, 80),
-        pdfPage: bestIdx >= 0 ? bestIdx + 1 : null,
-        bestMatchOverlap: Number(best.toFixed(3)),
-        // overlap sequencial (paginação do preview vs Word na mesma posição)
-        sequentialOverlap: Number(overlap(pdfContentTokens[i] ?? new Set(), prevToks).toFixed(3)),
-      });
-    }
-    result.perPage = perPage;
-
-    // 3) Screenshots lado a lado (evidência visual informativa)
-    const screenshots: unknown[] = [];
-    const previewScreenshot = async (html: string, pageNumber: number): Promise<{ png: Buffer; width: number; height: number }> => {
-      // usa o chromium do Playwright para renderizar a página do preview
-      const { chromium } = await import("playwright");
-      const css = readFileSync(join(ROOT, "src", "preview-styles.css"), "utf8");
-      const wrapper = `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body><div class="preview-document">${html}</div></body></html>`;
-      const tmpFile = join(OUT, `_preview-${pageNumber}.html`);
-      writeFileSync(tmpFile, wrapper);
-      const browser = await chromium.launch();
+    for (const tpl of TEMPLATES) {
+      const entry: Record<string, unknown> = {};
+      const tplFailures: string[] = [];
       try {
-        const page = await browser.newPage({ viewport: { width: 900, height: 1200 } });
-        await page.goto(pathToFileURL(tmpFile).href);
-        const section = page.locator(".preview-page").nth(pageNumber - 1);
-        await section.scrollIntoViewIfNeeded();
-        const shot = await section.screenshot();
-        const box = await section.boundingBox();
-        return { png: shot, width: Math.round(box?.width ?? 595), height: Math.round(box?.height ?? 842) };
-      } finally {
-        await browser.close();
+        // 1) DOCX + PDF
+        const docxPath = join(OUT, `${tpl.id}.docx`);
+        const pdfPath = join(OUT, `${tpl.id}.pdf`);
+        const blob = await tpl.generate(tpl.input);
+        writeFileSync(docxPath, Buffer.from(await blob.arrayBuffer()));
+        execFileSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", PS_RENDER, "-DocxPath", docxPath, "-PdfPath", pdfPath], { stdio: "pipe", timeout: 120000 });
+
+        // 2) Texto por página
+        const pdfTexts = await pdfPages(pdfPath);
+        const previewHtml = buildPreviewHtml(tpl.input);
+        const pageRe = /<section class="preview-page[^"]*"[^>]*>([\s\S]*?)<\/section>/g;
+        const previewPages: string[] = [];
+        let m: RegExpExecArray | null;
+        while ((m = pageRe.exec(previewHtml)) !== null) previewPages.push(stripHtml(m[1]));
+
+        // 3) Métricas globais
+        const pdfTokens = tokens(pdfTexts.join(" "));
+        const previewTokens = tokens(previewPages.join(" "));
+        const simP2D = overlap(pdfTokens, previewTokens);
+        const simD2P = overlap(previewTokens, pdfTokens);
+        const similarity = Math.min(simP2D, simD2P);
+        const pageDelta = Math.abs(pdfTexts.length - previewPages.length);
+
+        // 4) Best-match por página (conteúdo do preview existe no DOCX)
+        const isContentPage = (t: string): boolean => t.split(/\s+/).filter(Boolean).length >= 15;
+        const pdfContentTokens = pdfTexts.filter(isContentPage).map(tokens);
+        const previewContent = previewPages.filter(isContentPage);
+        const perPage: unknown[] = [];
+        for (let i = 0; i < previewContent.length; i++) {
+          const prevToks = tokens(previewContent[i]);
+          let best = 0;
+          let bestIdx = -1;
+          for (let j = 0; j < pdfContentTokens.length; j++) {
+            const o = overlap(pdfContentTokens[j], prevToks);
+            if (o > best) { best = o; bestIdx = j; }
+          }
+          perPage.push({
+            page: i + 1,
+            pdfPage: bestIdx >= 0 ? bestIdx + 1 : null,
+            bestMatchOverlap: Number(best.toFixed(3)),
+            sequentialOverlap: Number(overlap(pdfContentTokens[i] ?? new Set(), prevToks).toFixed(3)),
+          });
+        }
+
+        entry.previewPages = previewPages.length;
+        entry.pdfPages = pdfTexts.length;
+        entry.pageDelta = pageDelta;
+        entry.similarityPreviewToPdf = Number(simP2D.toFixed(3));
+        entry.similarityPdfToPreview = Number(simD2P.toFixed(3));
+        entry.similarity = Number(similarity.toFixed(3));
+        entry.perPage = perPage;
+
+        // 5) Evidência visual (3 primeiras páginas)
+        const screenshots: unknown[] = [];
+        const shotCount = Math.min(3, pdfTexts.length, previewPages.length);
+        for (let i = 0; i < shotCount; i++) {
+          const pdfShot = await rasterizePdfPage(pdfPath, i + 1);
+          // preview: página i+1 em HTML standalone com o CSS real
+          const wrapper = `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body><div class="preview-document">${previewHtml}</div></body></html>`;
+          const tmpFile = join(OUT, `_${tpl.id}-${i + 1}.html`);
+          writeFileSync(tmpFile, wrapper);
+          const page = await browser!.newPage({ viewport: { width: 900, height: 1200 } });
+          let prevShot: Buffer;
+          let prevW = 0;
+          let prevH = 0;
+          try {
+            await page.goto(pathToFileURL(tmpFile).href);
+            const section = page.locator(".preview-page").nth(i);
+            await section.scrollIntoViewIfNeeded();
+            prevShot = await section.screenshot();
+            const box = await section.boundingBox();
+            prevW = Math.round(box?.width ?? 595);
+            prevH = Math.round(box?.height ?? 842);
+          } finally {
+            await page.close();
+          }
+
+          // diff em miniatura 300px de largura
+          const tw = 300;
+          const th = Math.round((Math.min(prevW, prevH, pdfShot.height, pdfShot.width) / Math.max(prevW, 1)) * tw);
+          const safeH = Math.max(20, Math.min(th, 600));
+          const d1 = createCanvas(tw, safeH);
+          const c1 = d1.getContext("2d");
+          c1.drawImage(await (await import("@napi-rs/canvas")).loadImage(pdfShot.png), 0, 0, tw, safeH);
+          const d2 = createCanvas(tw, safeH);
+          const c2 = d2.getContext("2d");
+          c2.drawImage(await (await import("@napi-rs/canvas")).loadImage(prevShot), 0, 0, tw, safeH);
+          const diffCanvas = createCanvas(tw, safeH);
+          const diffCtx = diffCanvas.getContext("2d");
+          const diffPixels = diffCtx.createImageData(tw, safeH);
+          const n = pixelmatch(c1.getImageData(0, 0, tw, safeH).data, c2.getImageData(0, 0, tw, safeH).data, diffPixels.data, tw, safeH, { threshold: 0.25 });
+          diffCtx.putImageData(diffPixels, 0, 0);
+
+          writeFileSync(join(OUT, `${tpl.id}-page-${i + 1}-docx.png`), await pdfShot.png);
+          writeFileSync(join(OUT, `${tpl.id}-page-${i + 1}-preview.png`), prevShot);
+          writeFileSync(join(OUT, `${tpl.id}-page-${i + 1}-diff.png`), await diffCanvas.encode("png"));
+          screenshots.push({
+            page: i + 1,
+            docx: `preview-diff/${tpl.id}-page-${i + 1}-docx.png`,
+            preview: `preview-diff/${tpl.id}-page-${i + 1}-preview.png`,
+            diff: `preview-diff/${tpl.id}-page-${i + 1}-diff.png`,
+            diffRatio: Number((n / (tw * safeH)).toFixed(3)),
+          });
+        }
+        entry.screenshots = screenshots;
+
+        // 6) Gate do template
+        const similarityOk = similarity >= 0.65;
+        const pageDeltaOk = pageDelta <= 3;
+        entry.status = similarityOk && pageDeltaOk ? "passed" : "failed";
+        entry.passed = similarityOk && pageDeltaOk;
+        if (!similarityOk) tplFailures.push(`${tpl.id}: similaridade ${similarity.toFixed(3)} < 0.65`);
+        if (!pageDeltaOk) tplFailures.push(`${tpl.id}: Δpáginas ${pageDelta} > 3 (preview ${previewPages.length} vs PDF ${pdfTexts.length})`);
+        if (entry.passed) overall.passedTemplates += 1;
+        console.log(`${tpl.id}: ${entry.passed ? "passed" : "FAILED"} (sim ${similarity.toFixed(3)}, Δpágs ${pageDelta}, best-match médio ${(perPage.length ? perPage.reduce((s: number, p: { bestMatchOverlap: number }) => s + p.bestMatchOverlap, 0) / perPage.length : 0).toFixed(3)})`);
+      } catch (err) {
+        tplFailures.push(`${tpl.id}: ${err instanceof Error ? err.message : String(err)}`);
+        entry.status = "failed";
+        entry.passed = false;
+        entry.error = err instanceof Error ? err.message : String(err);
       }
-    };
-
-    for (let i = 0; i < Math.min(3, pdfTexts.length); i++) {
-      const pdfShot = await rasterizePdfPage(pdfPath, i + 1);
-      const prevShot = await previewScreenshot(previewHtml, i + 1);
-      const w = Math.min(pdfShot.width, prevShot.width);
-      const h = Math.min(pdfShot.height, prevShot.height);
-      const pdfPng = pdfShot.png;
-      const prevPng = prevShot.png;
-      // redimensionar ambos para o mesmo canvas de diff (só a página inteira, escala fixa)
-      const { createCanvas: cc } = await import("@napi-rs/canvas");
-      const dc = cc(w, h);
-      const dctx = dc.getContext("2d");
-      const img1 = (await import("@napi-rs/canvas")).loadImage(pdfPng);
-      const img2 = (await import("@napi-rs/canvas")).loadImage(prevPng);
-      // diff em miniatura 300px
-      const tw = 300;
-      const th = Math.round((h / w) * tw);
-      const d1 = cc(tw, th);
-      const c1 = d1.getContext("2d");
-      c1.drawImage(await img1, 0, 0, tw, th);
-      const d2 = cc(tw, th);
-      const c2 = d2.getContext("2d");
-      c2.drawImage(await img2, 0, 0, tw, th);
-      const diffCanvas = cc(tw, th);
-      const diffCtx = diffCanvas.getContext("2d");
-      const diffPixels = diffCtx.createImageData(tw, th);
-      const n = pixelmatch(c1.getImageData(0, 0, tw, th).data, c2.getImageData(0, 0, tw, th).data, diffPixels.data, tw, th, { threshold: 0.25 });
-      diffCtx.putImageData(diffPixels, 0, 0);
-
-      const pdfFile = join(OUT, `page-${i + 1}-docx.png`);
-      const prevFile = join(OUT, `page-${i + 1}-preview.png`);
-      const diffFile = join(OUT, `page-${i + 1}-diff.png`);
-      writeFileSync(pdfFile, await pdfShot.png);
-      writeFileSync(prevFile, await prevShot.png);
-      writeFileSync(diffFile, await diffCanvas.encode("png"));
-      screenshots.push({
-        page: i + 1,
-        docx: `preview-diff/page-${i + 1}-docx.png`,
-        preview: `preview-diff/page-${i + 1}-preview.png`,
-        diff: `preview-diff/page-${i + 1}-diff.png`,
-        diffRatio: Number((n / (tw * th)).toFixed(3)),
-      });
+      failures.push(...tplFailures);
+      (result.templates as Record<string, unknown>)[tpl.id] = entry;
     }
-    result.screenshots = screenshots;
 
-    const gate = result.gate as { similarityMin: number; pageDeltaMax: number };
-    const similarityOk = result.similarity >= gate.similarityMin;
-    const pageDeltaOk = result.pageDelta <= gate.pageDeltaMax;
-    if (!similarityOk) failures.push(`similaridade ${result.similarity} < ${gate.similarityMin} (conteúdo divergente entre preview e DOCX)`);
-    if (!pageDeltaOk) failures.push(`Δpáginas ${result.pageDelta} > ${gate.pageDeltaMax} (preview ${result.previewPages} vs PDF ${result.pdfPages})`);
     result.status = failures.length === 0 ? "passed" : "failed";
     result.passed = failures.length === 0;
-  } catch (err) {
-    failures.push(err instanceof Error ? err.message : String(err));
-    result.status = "failed";
-    result.passed = false;
+  } finally {
+    await browser?.close().catch(() => {});
   }
 
   return { passed: failures.length === 0, failures, wordAvailable, result };
@@ -268,7 +294,8 @@ async function main(): Promise<void> {
   const { passed, failures, wordAvailable, result } = await runPreviewDocxCompare();
   writeFileSync(join(ROOT, "artifacts", "ufla-compliance", "preview-docx-diff.json"), JSON.stringify({ wordAvailable, ...result }, null, 2) + "\n", "utf8");
   const failedList = failures.length > 0 ? `\n  - ${failures.join("\n  - ")}` : "";
-  console.log(`Preview vs DOCX: ${passed ? "PASSED" : `FAILED${failedList}`} (similaridade ${result.similarity}, páginas preview ${result.previewPages} vs PDF ${result.pdfPages})`);
+  const templates = Object.entries((result.templates as Record<string, unknown>) ?? {}).map(([id, e]) => `${id}:${(e as { passed: boolean }).passed ? "P" : "F"}`).join(" ");
+  console.log(`Preview vs DOCX: ${passed ? "PASSED" : `FAILED${failedList}`} [${templates}]`);
   process.exit(passed ? 0 : 1);
 }
 

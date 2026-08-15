@@ -7,8 +7,7 @@ import { describeWithArtifacts } from "../test-utils/artifact-guard";
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const root = join(__dirname, "..", "..");
 
-interface PreviewDiffArtifact {
-  wordAvailable: boolean;
+interface TemplateEntry {
   previewPages: number;
   pdfPages: number;
   pageDelta: number;
@@ -21,8 +20,18 @@ interface PreviewDiffArtifact {
   passed: boolean;
 }
 
+interface PreviewDiffArtifact {
+  wordAvailable: boolean;
+  templates: Record<string, TemplateEntry>;
+  overall: { passedTemplates: number; templates: number };
+  status: string;
+  passed: boolean;
+}
+
+const EXPECTED_TEMPLATES = ["monografia", "dissertacao", "tese", "artigo", "resumo_expandido_cpg", "projeto_pesquisa"];
+
 describeWithArtifacts(
-  "ufla-compliance: fidelidade do preview vs DOCX renderizado (Word COM)",
+  "ufla-compliance: fidelidade do preview vs DOCX renderizado (Word COM, 6 templates)",
   ["ufla-compliance/preview-docx-diff.json"],
   () => {
     const artifact = join(root, "artifacts", "ufla-compliance", "preview-docx-diff.json");
@@ -31,41 +40,46 @@ describeWithArtifacts(
       return JSON.parse(readFileSync(artifact, "utf8"));
     }
 
-    it("similaridade global de conteúdo ≥ 0.65 (gate)", () => {
+    it("os 6 templates foram comparados e todos passaram no gate (sim ≥ 0.65, Δpáginas ≤ 3)", () => {
       const a = load();
-      if (a.wordAvailable) {
-        expect(a.similarity).toBeGreaterThanOrEqual(0.65);
-        expect(a.passed).toBe(true);
+      if (!a.wordAvailable) return;
+      expect(Object.keys(a.templates).sort()).toEqual([...EXPECTED_TEMPLATES].sort());
+      expect(a.overall.passedTemplates).toBe(EXPECTED_TEMPLATES.length);
+      expect(a.passed).toBe(true);
+      for (const [id, e] of Object.entries(a.templates)) {
+        expect(e.similarity, id).toBeGreaterThanOrEqual(0.65);
+        expect(e.pageDelta, id).toBeLessThanOrEqual(3);
+        expect(e.passed, id).toBe(true);
       }
     });
 
-    it("diferença de paginação entre preview e PDF ≤ 3 páginas", () => {
+    it("conteúdo do preview existe no DOCX (best-match médio ≥ 0.4 por template)", () => {
       const a = load();
-      if (a.wordAvailable) {
-        expect(a.pageDelta).toBeLessThanOrEqual(3);
-        expect(a.previewPages).toBeGreaterThan(0);
-        expect(a.pdfPages).toBeGreaterThan(0);
+      if (!a.wordAvailable) return;
+      for (const [id, e] of Object.entries(a.templates)) {
+        expect(e.perPage.length, id).toBeGreaterThan(0);
+        const avg = e.perPage.reduce((s, p) => s + p.bestMatchOverlap, 0) / e.perPage.length;
+        expect(avg, id).toBeGreaterThanOrEqual(0.4);
       }
     });
 
-    it("conteúdo do preview existe no DOCX (best-match por página)", () => {
+    it("evidência visual lado a lado gerada para os templates (screenshots com diffRatio)", () => {
       const a = load();
-      if (a.wordAvailable) {
-        expect(a.perPage.length).toBeGreaterThan(0);
-        const avg = a.perPage.reduce((s, p) => s + p.bestMatchOverlap, 0) / a.perPage.length;
-        expect(avg).toBeGreaterThanOrEqual(0.4);
-      }
-    });
-
-    it("evidência visual lado a lado gerada para as 3 primeiras páginas", () => {
-      const a = load();
-      if (a.wordAvailable) {
-        expect(a.screenshots.length).toBeGreaterThanOrEqual(1);
-        for (const s of a.screenshots) {
-          expect(s.diffRatio).toBeGreaterThanOrEqual(0);
-          expect(s.diffRatio).toBeLessThanOrEqual(1);
+      if (!a.wordAvailable) return;
+      for (const [id, e] of Object.entries(a.templates)) {
+        expect(e.screenshots.length, id).toBeGreaterThanOrEqual(1);
+        for (const s of e.screenshots) {
+          expect(s.diffRatio, id).toBeGreaterThanOrEqual(0);
+          expect(s.diffRatio, id).toBeLessThanOrEqual(1);
         }
       }
+    });
+
+    it("artigo e CPG têm similaridade alta (estrutura simples casa com o Word)", () => {
+      const a = load();
+      if (!a.wordAvailable) return;
+      expect(a.templates.artigo.similarity).toBeGreaterThanOrEqual(0.9);
+      expect(a.templates.resumo_expandido_cpg.similarity).toBeGreaterThanOrEqual(0.9);
     });
   },
 );

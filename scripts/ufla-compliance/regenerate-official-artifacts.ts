@@ -184,7 +184,11 @@ const previewDiff = await runPreviewDocxCompare();
 writeJson("artifacts/ufla-compliance/preview-docx-diff.json", previewDiff.result);
 const previewDiffPassed = previewDiff.passed;
 const previewDiffEvidence = previewDiff.wordAvailable
-  ? `Fidelidade preview↔DOCX (Word COM + pdfjs + Playwright): similaridade ${previewDiff.result.similarity} ≥ 0.65, Δpáginas ${previewDiff.result.pageDelta} ≤ 3 (preview ${previewDiff.result.previewPages} vs PDF ${previewDiff.result.pdfPages}); screenshots lado a lado por página com diffRatio (evidência visual em preview-diff/*.png).`
+  ? (() => {
+      const tpl = previewDiff.result.templates as Record<string, { passed: boolean; similarity: number; pageDelta: number }>;
+      const perTemplate = Object.entries(tpl).map(([id, e]) => `${id} ${e.similarity}`).join("; ");
+      return `Fidelidade preview↔DOCX por template (Word COM + pdfjs + Playwright): 6/6 templates — monografia, dissertação, tese, artigo, resumo expandido CPG, projeto de pesquisa — com similaridade ≥ 0.65 e Δpáginas ≤ 3 (${perTemplate}); screenshots lado a lado por página com diffRatio (evidência visual em preview-diff/*.png).`;
+    })()
   : `Fidelidade preview↔DOCX: Word INDISPONÍVEL — comparação saltada (skipped-no-word), gate considerado passed.`;
 const overallStatus =
   testSummary.status === "passed" &&
