@@ -1,7 +1,6 @@
 import JSZip from "jszip";
 import { Packer } from "docx";
 import { rawOmmlForMarker } from "./docx-render-core";
-import { patchTableHeaderRows } from "./fix-table-headers";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const TOC_FIELD_PATTERN = /<w:instrText[^>]*>\s*TOC\b|<w:fldSimple[^>]*w:instr="\s*TOC\b/i;
@@ -96,20 +95,22 @@ export async function ensureDynamicTocField(blob: Blob): Promise<Blob> {
   if (!documentFile) return blob;
 
   const xml = await documentFile.async("string");
-  const tocPatch = patchDynamicTocField(xml);
-  const ommlPatch = patchRawOmml(xml);
-  const tableHeaderPatch = patchTableHeaderRows(xml);
   const updateFieldsChanged = await ensureUpdateFieldsSetting(zip);
 
-  if (tocPatch.changed) {
-    zip.file("word/document.xml", tocPatch.xml);
-  } else if (ommlPatch.changed) {
-    zip.file("word/document.xml", ommlPatch.xml);
-  } else if (tableHeaderPatch.changed) {
-    zip.file("word/document.xml", tableHeaderPatch.xml);
+  // As duas correções operam em partes independentes do XML e COMPÕEM entre
+  // si: campo TOC dinâmico e re-injeção de OMML cru. Aplicá-las em cadeia
+  // (não em exclusão mútua) garante que um documento com sumário + equação
+  // receba ambas.
+  const tocPatch = patchDynamicTocField(xml);
+  const ommlPatch = patchRawOmml(tocPatch.xml);
+  const finalXml = ommlPatch.xml;
+
+  const changed = tocPatch.changed || ommlPatch.changed;
+  if (changed) {
+    zip.file("word/document.xml", finalXml);
   }
 
-  if (!tocPatch.changed && !ommlPatch.changed && !tableHeaderPatch.changed && !updateFieldsChanged) return blob;
+  if (!changed && !updateFieldsChanged) return blob;
   return zip.generateAsync({ type: "blob", mimeType: DOCX_MIME });
 }
 

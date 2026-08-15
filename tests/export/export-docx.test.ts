@@ -697,6 +697,22 @@ Fonte: elaborado pelo autor (2026).`;
     expect(documentXml).toMatch(/<w:trPr><w:tblHeader\/>/);
   });
 
+  it("aplica TOC dinamico E w:tblHeader no mesmo documento (patches compõem, não se excluem)", async () => {
+    const editorText = `Quadro 1 - Cabecalho repetido
+Dimensao\tDescricao
+Recorte\tEscopo
+Fonte: elaborado pelo autor (2026).\n\n# 1 Introducao\nTexto.\n`;
+    const documentXml = await generatedXml(editorText, {
+      ...fields,
+      workType: "dissertacao",
+    });
+
+    expect(documentXml).toContain("SUMÁRIO");
+    expect(documentXml).toContain("TOC \\o");
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toMatch(/<w:trPr><w:tblHeader\/>/);
+  });
+
   it("converte Quadro 2 tabulado com 2 colunas", async () => {
     const editorText = `Quadro 2 - Eixos de analise documental
 Eixo	Descricao
