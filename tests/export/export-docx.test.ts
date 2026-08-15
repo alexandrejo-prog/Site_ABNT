@@ -250,7 +250,8 @@ describe("DOCX export", () => {
     expect((documentXml.match(/w:val="TOC1"/g) ?? []).length).toBe(0);
   });
 
-  it("remove texto interno da natureza do trabalho no DOCX geral", async () => {
+  it("roteia software_aplicativo_ufla para o artigo e não vaza texto interno da natureza (sem capa/folha de rosto)", async () => {
+    expect(templateForWorkType("software_aplicativo_ufla").id).toBe("artigo");
     const documentXml = await generatedXml("# 1 Introducao\nTexto comum.", {
       ...fields,
       workType: "software_aplicativo_ufla",
@@ -258,11 +259,12 @@ describe("DOCX export", () => {
         "Software e aplicativos UFLA apresentada a Universidade Federal de Lavras conforme formato da Colecao Producao Academica UFLA, com suporte inicial no sistema.",
     });
 
+    // Estrutura de artigo: sem folha de rosto/capa e sem o texto interno da natureza.
     expect(documentXml).not.toContain("Software e aplicativos UFLA");
     expect(documentXml).not.toContain("Colecao Producao Academica");
     expect(documentXml).not.toContain("suporte inicial no sistema");
-    expect(documentXml).toContain("Trabalho acadêmico apresentado à Universidade Federal de Lavras");
-    expect(documentXml).toContain("requisitos acadêmicos aplicáveis");
+    expect(documentXml).not.toContain("Trabalho acadêmico apresentado à Universidade Federal de Lavras");
+    expect(documentXml).toContain("Resumo do trabalho.");
   });
 
   it("generates simple article without graduate pre-textual structure", async () => {

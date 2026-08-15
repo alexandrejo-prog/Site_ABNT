@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { templateForWorkType } from "../../src/document-template";
+import { ACADEMIC_PRODUCTION_TYPE_IDS } from "../../src/academic-production-types";
 
 describe("document-template", () => {
   it("usa template de artigo para artigo", () => {
@@ -24,6 +25,12 @@ describe("document-template", () => {
   it("usa template de artigo para artigo_cientifico_ufla e artigo simples", () => {
     expect(templateForWorkType("artigo_cientifico_ufla").id).toBe("artigo");
     expect(templateForWorkType("artigo").id).toBe("artigo");
+  });
+
+  it("roteia os 8 formatos da Coleção Produção Acadêmica para o template de artigo (sem capa/ficha)", () => {
+    for (const id of ACADEMIC_PRODUCTION_TYPE_IDS) {
+      expect(templateForWorkType(id).id, id).toBe("artigo");
+    }
   });
 
   it("usa template de rascunho longo para monografia, dissertacao e tese", () => {

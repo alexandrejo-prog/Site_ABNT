@@ -28,6 +28,7 @@ import "./docx-toc-field-patch";
 import { pageMargins, ibgeTable, BODY_SIZE, SINGLE_LINE, ONE_AND_HALF_LINE, BLACK, AUTHOR_SIZE as COVER_AUTHOR_SIZE, TITLE_SIZE as COVER_TITLE_SIZE, unnumberedTitle } from "./docx-shared";
 import { DOCUMENT_STYLES } from "./docx-styles";
 import { AcademicFields, UFLA_RULES, cmToTwip } from "./ufla-rules";
+import { ACADEMIC_PRODUCTION_TYPE_IDS } from "./academic-production-types";
 import { getWorkTypeRequirements } from "./work-type-requirements";
 import { normalizeReferences, type NormalizedReference, type ReferenceRun } from "./references-normalizer";
 import { buildFlowingImpactText } from "./impact-indicators";
@@ -2860,7 +2861,12 @@ export async function loadDefaultLogoAsset(): Promise<DocxLogoAsset | undefined>
 
 export async function generateDocxBlob(input: DocxGenerationInput): Promise<Blob> {
   clearRawOmmlRegistry();
-  if (input.fields.workType === "artigo" || input.fields.workType === "artigo_cientifico_ufla") {
+  // Todos os formatos da Coleção Produção Acadêmica UFLA são estruturados como
+  // artigo (sem capa/folha de rosto/ficha/aprovação) — DOCUMENT_TYPE_MATRIX.
+  const isArticleStructured =
+    input.fields.workType === "artigo" ||
+    (ACADEMIC_PRODUCTION_TYPE_IDS as readonly string[]).includes(input.fields.workType);
+  if (isArticleStructured) {
     const { generateArticleDocxBlob } = await import("./export-article-docx");
     return generateArticleDocxBlob(input);
   }

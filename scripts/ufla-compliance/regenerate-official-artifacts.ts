@@ -220,7 +220,7 @@ const gates = {
     },
     perTypeGate: {
       status: perTypeAllPassed ? "passed" : "failed",
-      evidence: `Gate expandido executado para cada tipo de trabalho com o exportador correspondente: ${perTypeSummary}. Os auditores respeitam a matriz de tipos (elementos pré-textuais não aplicáveis — ficha/aprovação/sumário para artigo/CPG — não geram falso positivo). DOCX de exemplo em artifacts/ufla-compliance/per-type/.`,
+      evidence: `Gate expandido executado para cada tipo de trabalho com o exportador correspondente: ${perTypeSummary}. Os auditores respeitam a matriz de tipos (elementos pré-textuais não aplicáveis — ficha/aprovação/sumário para artigo/CPG — não geram falso positivo). Os 8 formatos da Coleção Produção Acadêmica (patente, revisão sistemática, estudo de caso, software, cultivar, relatório de estágio, proposta de intervenção, artigo científico) são roteados para a estrutura de artigo e têm os requiredFields PRÓPRIOS verificados no DOCX gerado (requiredFieldsCheck em gates-per-type.json). DOCX de exemplo em artifacts/ufla-compliance/per-type/.`,
     },
     formatsCrossGate: {
       status: formatsCrossPassed ? "passed" : "failed",
