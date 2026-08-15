@@ -916,10 +916,40 @@ SILVA, M. Projeto. Lavras: UFLA, 2024.
     expect(hasHeadingAtLevel(xml, stylesXml, 1, "1 INTRODUÇÃO")).toBe(true);
   });
 
-  it("artigo simples não recebe campo TOC (apenas monografias/projetos têm sumário)", async () => {
-    const blob = await generateArticleDocxBlob({ fields: articleFields, editorText: "# Introducao\nTexto." });
+  it("referência cruzada [x:ANCHOR|título] religa para o bookmark SECAO_ do heading", async () => {
+    const blob = await generateDocxBlob({
+      fields,
+      editorText: "# 1 INTRODUÇÃO\nTexto que referencia [x:_bookmark7~1 INTRODUÇÃO] no corpo.\n",
+    });
     const xml = await documentXmlFromBlob(blob);
-    expect(fieldInstructionRuns(xml)).not.toContain("TOC");
+
+    // bookmark estável no heading
+    expect(xml).toMatch(/<w:bookmarkStart[^>]*w:name="SECAO_1_INTRODUCAO"/);
+    // hyperlink interno aponta para o bookmark do heading
+    expect(xml).toMatch(/<w:hyperlink[^>]*w:anchor="SECAO_1_INTRODUCAO"/);
+    expect(xml).toContain("1 INTRODUÇÃO");
+  });
+
+  it("referência cruzada a legenda religa para o bookmark LISTA_ da tabela", async () => {
+    const blob = await generateDocxBlob({
+      fields,
+      editorText: "# 1 INTRODUÇÃO\nVer [x:origem~Tabela 3] para detalhes.\nTabela 3 - Exemplo de dados\n| A | B |\n|---|---|\n| 1 | 2 |\n",
+    });
+    const xml = await documentXmlFromBlob(blob);
+
+    expect(xml).toMatch(/<w:hyperlink[^>]*w:anchor="LISTA_TABELA_3___EXEMPLO_DE_DADOS"/);
+    expect(xml).toMatch(/<w:bookmarkStart[^>]*w:name="LISTA_TABELA_3___EXEMPLO_DE_DADOS"/);
+  });
+
+  it("referência cruzada sem alvo degrada para texto plano (sem link quebrado)", async () => {
+    const blob = await generateDocxBlob({
+      fields,
+      editorText: "# 1 INTRODUÇÃO\nTexto sem alvo [x:nao_existe~Seção inexistente] aqui.\n",
+    });
+    const xml = await documentXmlFromBlob(blob);
+
+    expect(xml).toContain("Seção inexistente");
+    expect(xml).not.toMatch(/<w:hyperlink[^>]*w:anchor="[^"]*nao_existe/);
   });
 
   it("CPG não recebe campo TOC", async () => {

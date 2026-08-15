@@ -7,6 +7,19 @@ import type {
   SectionAuditResult,
   WorkType,
 } from "./audit-types.js";
+import { DOCUMENT_TYPE_MATRIX, type DocumentType } from "./document-type-matrix.js";
+
+/**
+ * Verifica se o requisito da matriz se aplica ao tipo de documento (required
+ * !== false e o tipo listado). Permite que artigo/CPG não exijam ficha,
+ * aprovação, sumário etc. — o Manual UFLA só os exige para tipos específicos.
+ */
+function appliesTo(documentType: DocumentType | undefined, validator: string): boolean {
+  if (!documentType) return true;
+  return DOCUMENT_TYPE_MATRIX.some(
+    (req) => req.validator === validator && req.documentTypes.includes(documentType) && req.required !== false,
+  );
+}
 
 async function extractParagraphs(docxPath: string): Promise<string[]> {
   if (!existsSync(docxPath)) return [];
@@ -57,7 +70,10 @@ function gap(overrides: Partial<AuditGap>): AuditGap {
   };
 }
 
-export async function auditPretextual(docxPath: string): Promise<PretextualAuditResult> {
+export async function auditPretextual(
+  docxPath: string,
+  documentType?: DocumentType,
+): Promise<PretextualAuditResult> {
   const paragraphs = await extractParagraphs(docxPath).then((ps) => ps);
   void normalizeWorkType(docxPath);
 
@@ -245,14 +261,29 @@ export async function auditPretextual(docxPath: string): Promise<PretextualAudit
       : [],
   });
 
+  // Aplica a matriz de tipos: seções cujo requisito não se aplica ao tipo do
+  // documento entram como "não aplicável" (sem gap) em vez de falso positivo.
+  const na = (label: string): SectionAuditResult => sectionResult({ itemsFound: [`${label} (não aplicável ao tipo)`] });
+  const coverFinal = appliesTo(documentType, "validateCover") ? cover : na("capa");
+  const titlePageFinal = appliesTo(documentType, "validateTitlePage") ? titlePage : na("folha de rosto");
+  const catalogCardFinal = appliesTo(documentType, "validateCatalogCard") ? catalogCard : na("ficha catalográfica");
+  const approvalPageFinal = appliesTo(documentType, "validateApprovalPage") ? approvalPage : na("folha de aprovação");
+  const abstractFinal = appliesTo(documentType, "validateResumo") && appliesTo(documentType, "validateAbstract")
+    ? abstract
+    : na("resumo/abstract");
+  const listsFinal = appliesTo(documentType, "validateListOfIllustrations") || appliesTo(documentType, "validateListOfTables")
+    ? lists
+    : na("listas");
+  const summaryFinal = appliesTo(documentType, "validateToc") ? summary : na("sumário");
+
   const allGaps = [
-    ...cover.gaps,
-    ...titlePage.gaps,
-    ...catalogCard.gaps,
-    ...approvalPage.gaps,
-    ...abstract.gaps,
-    ...lists.gaps,
-    ...summary.gaps,
+    ...coverFinal.gaps,
+    ...titlePageFinal.gaps,
+    ...catalogCardFinal.gaps,
+    ...approvalPageFinal.gaps,
+    ...abstractFinal.gaps,
+    ...listsFinal.gaps,
+    ...summaryFinal.gaps,
   ];
   const passed = allGaps.filter((g) => g.severity === "critical").length === 0;
   const score = allGaps.length === 0 ? 100 : Math.max(0, 100 - allGaps.length * 10);
@@ -261,30 +292,30 @@ export async function auditPretextual(docxPath: string): Promise<PretextualAudit
     passed,
     score,
     itemsFound: [
-      ...cover.itemsFound,
-      ...titlePage.itemsFound,
-      ...catalogCard.itemsFound,
-      ...approvalPage.itemsFound,
-      ...abstract.itemsFound,
-      ...lists.itemsFound,
-      ...summary.itemsFound,
+      ...coverFinal.itemsFound,
+      ...titlePageFinal.itemsFound,
+      ...catalogCardFinal.itemsFound,
+      ...approvalPageFinal.itemsFound,
+      ...abstractFinal.itemsFound,
+      ...listsFinal.itemsFound,
+      ...summaryFinal.itemsFound,
     ],
     itemsMissing: [
-      ...cover.itemsMissing,
-      ...titlePage.itemsMissing,
-      ...catalogCard.itemsMissing,
-      ...approvalPage.itemsMissing,
-      ...abstract.itemsMissing,
-      ...lists.itemsMissing,
-      ...summary.itemsMissing,
+      ...coverFinal.itemsMissing,
+      ...titlePageFinal.itemsMissing,
+      ...catalogCardFinal.itemsMissing,
+      ...approvalPageFinal.itemsMissing,
+      ...abstractFinal.itemsMissing,
+      ...listsFinal.itemsMissing,
+      ...summaryFinal.itemsMissing,
     ],
     gaps: allGaps,
-    cover,
-    titlePage,
-    catalogCard,
-    approvalPage,
-    abstract,
-    lists,
-    summary,
+    cover: coverFinal,
+    titlePage: titlePageFinal,
+    catalogCard: catalogCardFinal,
+    approvalPage: approvalPageFinal,
+    abstract: abstractFinal,
+    lists: listsFinal,
+    summary: summaryFinal,
   };
 }

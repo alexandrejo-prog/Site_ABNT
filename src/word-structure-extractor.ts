@@ -202,26 +202,70 @@ function isPageBreakToken(token: string): boolean {
   return /<w:lastRenderedPageBreak\b/.test(token) || /<w:br\b[^>]*w:type="page"/.test(token);
 }
 
-function extractTextFromXml(xml: string): { rawText: string; text: string } {
+const XREF_HYPERLINK_PATTERN = /<w:hyperlink\b[^>]*w:anchor="([^"]+)"[^>]*>([\s\S]*?)<\/w:hyperlink>/g;
+
+/**
+ * Extrai o texto plano de um fragmento XML (w:t/m:t), sem tokens de controle.
+ */
+function extractPlainText(xml: string): string {
   const parts: string[] = [];
   let match: RegExpExecArray | null;
-
   TEXT_TOKEN_PATTERN.lastIndex = 0;
   while ((match = TEXT_TOKEN_PATTERN.exec(xml)) !== null) {
     if (match[0].startsWith("<w:tab")) {
       parts.push(" ");
-    } else if (isPageBreakToken(match[0])) {
+    } else if (isPageBreakToken(match[0]) || match[0].startsWith("<w:br")) {
       continue;
-    } else if (match[0].startsWith("<w:br")) {
-      parts.push("\n");
     } else {
-      // w:t e m:t têm o conteúdo no mesmo grupo de captura alternado.
       parts.push(decodeXml(match[1] ?? match[2] ?? ""));
     }
+  }
+  return parts.join("");
+}
+
+function extractTextFromXml(xml: string): { rawText: string; text: string } {
+  const parts: string[] = [];
+  let match: RegExpExecArray | null;
+  let tokenMatch: RegExpExecArray | null;
+  let cursor = 0;
+
+  // Religação de referências cruzadas: hiperlinks internos (w:hyperlink w:anchor)
+  // viram tokens [x:ANCHOR|texto visível] que sobrevivem ao round-trip e são
+  // reemitidos como hyperlink interno na exportação (ver docx-render-core/export).
+  XREF_HYPERLINK_PATTERN.lastIndex = 0;
+  while ((match = XREF_HYPERLINK_PATTERN.exec(xml)) !== null) {
+    const before = xml.slice(cursor, match.index);
+    TEXT_TOKEN_PATTERN.lastIndex = 0;
+    while ((tokenMatch = TEXT_TOKEN_PATTERN.exec(before)) !== null) {
+      pushTextToken(tokenMatch, parts);
+    }
+    const anchor = match[1];
+    const visible = extractPlainText(match[2]).replace(/\s+/g, " ").trim();
+    parts.push(visible ? `[x:${anchor}~${visible}]` : `[x:${anchor}]`);
+    cursor = XREF_HYPERLINK_PATTERN.lastIndex;
+  }
+
+  const tail = xml.slice(cursor);
+  TEXT_TOKEN_PATTERN.lastIndex = 0;
+  while ((tokenMatch = TEXT_TOKEN_PATTERN.exec(tail)) !== null) {
+    pushTextToken(tokenMatch, parts);
   }
 
   const rawText = parts.join("");
   return { rawText, text: cleanText(rawText) };
+}
+
+function pushTextToken(match: RegExpExecArray, parts: string[]): void {
+  if (match[0].startsWith("<w:tab")) {
+    parts.push(" ");
+  } else if (isPageBreakToken(match[0])) {
+    return;
+  } else if (match[0].startsWith("<w:br")) {
+    parts.push("\n");
+  } else {
+    // w:t e m:t têm o conteúdo no mesmo grupo de captura alternado.
+    parts.push(decodeXml(match[1] ?? match[2] ?? ""));
+  }
 }
 
 function splitParagraphXmlByPageBreak(xml: string): Array<{ xml: string; pageBreakAfter: boolean }> {

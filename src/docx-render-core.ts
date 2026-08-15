@@ -1,6 +1,9 @@
 import {
   AlignmentType,
+  BookmarkEnd,
+  BookmarkStart,
   BorderStyle,
+  InternalHyperlink,
   IParagraphOptions,
   Math as DocxMath,
   MathRun,
@@ -154,9 +157,39 @@ export function textRunsFromMarkup(
   size = 24,
   font = "Times New Roman",
   color = "000000",
-): TextRun[] {
+): Array<TextRun | InternalHyperlink> {
+  const lineRuns = (line: string): Array<TextRun | InternalHyperlink> => {
+    if (!/\[x:[^\]]*\]/.test(line)) return textRunsForSingleLine(line, size, font, color);
+    const segments = line.split(/(\[x:[^\]]*\])/);
+    const runs: Array<TextRun | InternalHyperlink> = [];
+    for (const segment of segments) {
+      if (!segment) continue;
+      const xref = /^\[x:([^\]~]+)(?:~([^\]]*))?\]$/.exec(segment);
+      if (xref) {
+        const anchor = xref[1].trim();
+        const visible = (xref[2] ?? "").trim();
+        const target = resolveXrefTarget(anchor, visible);
+        if (target && visible) {
+          runs.push(
+            new InternalHyperlink({
+              anchor: target,
+              children: [
+                new TextRun({ text: cleanMojibakeText(visible), font, size, color }),
+              ],
+            }),
+          );
+        } else if (visible) {
+          runs.push(...textRunsForSingleLine(visible, size, font, color));
+        }
+        continue;
+      }
+      runs.push(...textRunsForSingleLine(segment, size, font, color));
+    }
+    return runs;
+  };
+
   return text.split(/\n/).flatMap((line, index) => {
-    const runs = textRunsForSingleLine(line, size, font, color);
+    const runs = lineRuns(line);
     if (index === 0) return runs;
     return [new TextRun({ break: 1 }), ...runs];
   });
@@ -241,16 +274,43 @@ export function detectCaption(text: string): CaptionInfo | null {
   };
 }
 
+/**
+ * ID de bookmark de legenda (`LISTA_<rótulo normalizado>`), compartilhado com
+ * a exportação (captionBookmarkId) para que PAGEREF/hyperlinks resolvam.
+ */
+export function captionBookmarkIdFromText(cleanedText: string): string {
+  const fonteMatch = cleanedText.match(/^(.*?)(\s*Fonte:.*)$/is);
+  const base = fonteMatch ? fonteMatch[1].trim() : cleanedText.trim();
+  const label =
+    base
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      .replace(/[\u2013\u2014]/g, "-")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/[^A-Z0-9]/g, "_")
+      .slice(0, 60) || "ITEM";
+  return `LISTA_${label}`;
+}
+
+let captionNumericId = 0;
+
+function nextCaptionNumericId(): number {
+  captionNumericId += 1;
+  return captionNumericId;
+}
+
 export function captionParagraph(
   text: string,
   kind: CaptionKind = "illustration",
+  bookmarkId?: string,
 ): Paragraph {
-  return new Paragraph({
-    style: kind === "table" ? "ufla_legenda_tabela" : "ufla_legenda_ilustracao",
-    alignment: AlignmentType.CENTER,
-    spacing: { before: 120, after: 120, line: UFLA_RULES.spacing.singleLineTwip },
-    indent: { left: 454, right: 454 },
-    children: [
+  const children = [];
+  if (bookmarkId) {
+    const numericId = nextCaptionNumericId();
+    children.push(new BookmarkStart(bookmarkId, numericId));
+    children.push(
       new TextRun({
         text: cleanMojibakeText(text),
         bold: true,
@@ -258,7 +318,25 @@ export function captionParagraph(
         size: UFLA_RULES.typography.captionFontSizePt * 2,
         color: "000000",
       }),
-    ],
+    );
+    children.push(new BookmarkEnd(numericId));
+  } else {
+    children.push(
+      new TextRun({
+        text: cleanMojibakeText(text),
+        bold: true,
+        font: "Times New Roman",
+        size: UFLA_RULES.typography.captionFontSizePt * 2,
+        color: "000000",
+      }),
+    );
+  }
+  return new Paragraph({
+    style: kind === "table" ? "ufla_legenda_tabela" : "ufla_legenda_ilustracao",
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 120, after: 120, line: UFLA_RULES.spacing.singleLineTwip },
+    indent: { left: 454, right: 454 },
+    children,
   });
 }
 
@@ -409,7 +487,7 @@ export function tabbedTableBlock(
 
   const kind: CaptionKind = /^(quadro|tabela)\s+\d+/i.test(detected.caption.trim()) ? "table" : "illustration";
   const result: Array<Paragraph | Table> = [
-    captionParagraph(captionPrefix + detected.caption, kind),
+    captionParagraph(captionPrefix + detected.caption, kind, captionBookmarkIdFromText(captionPrefix + detected.caption)),
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       borders: {
@@ -572,3 +650,66 @@ export function ommlContentTokenDecode(token: string): string {
 
 /** Padrão que localiza o token OMML no final de uma linha `[EQ]` do rascunho. */
 export const OMML_CONTENT_TOKEN_PATTERN = /\uF001OMML:([A-Za-z0-9+/=]+)\uF001$/;
+
+// ---------------------------------------------------------------------------
+// Religação de referências cruzadas (bookmarks/PAGEREF no round-trip)
+// ---------------------------------------------------------------------------
+
+/**
+ * Token de referência cruzada no rascunho: `[x:ANCHOR~texto visível]` (ou
+ * `[x:ANCHOR]` quando não há texto próprio). O separador `~` evita colisão com
+ * a sintaxe de tabela markdown (`|`) usada pelo `parseEditorContent`. Produzido
+ * na importação para hiperlinks internos (`w:hyperlink w:anchor`) e resolvido
+ * na exportação para um `InternalHyperlink` apontando ao bookmark atual
+ * (religação por label).
+ */
+export const XREF_TOKEN_PATTERN = /\[x:([^\]~]+)(?:~([^\]]*))?\]/g;
+
+/**
+ * Resolve a âncora de uma referência cruzada para o bookmark vigente do DOCX
+ * que está sendo exportado. Registrado por exportador (escopo de documento);
+ * sem resolver registrado, `resolveXrefTarget` retorna null (texto plano).
+ */
+export type XrefResolver = (anchor: string, visible: string) => string | null;
+
+let xrefResolver: XrefResolver | null = null;
+
+export function clearXrefRegistry(): void {
+  xrefResolver = null;
+}
+
+export function registerXrefResolver(resolver: XrefResolver): void {
+  xrefResolver = resolver;
+}
+
+export function resolveXrefTarget(anchor: string, visible: string): string | null {
+  return xrefResolver ? xrefResolver(anchor, visible) : null;
+}
+
+/**
+ * ID estável de bookmark para títulos de seção (`SECAO_<label normalizado>`),
+ * usado tanto pelo BookmarkStart dos headings quanto pela resolução de
+ * referências cruzadas que apontam para seções.
+ */
+export function sectionBookmarkId(text: string): string {
+  const base = cleanMojibakeText(text)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 60);
+  return `SECAO_${base || "ITEM"}`;
+}
+
+/** Extrai os tokens `[x:...]` de um texto, devolvendo (anchor, visible). */
+export function extractXrefTokens(text: string): Array<{ anchor: string; visible: string }> {
+  const tokens: Array<{ anchor: string; visible: string }> = [];
+  let match: RegExpExecArray | null;
+  XREF_TOKEN_PATTERN.lastIndex = 0;
+  while ((match = XREF_TOKEN_PATTERN.exec(text)) !== null) {
+    tokens.push({ anchor: match[1].trim(), visible: (match[2] ?? "").trim() });
+  }
+  return tokens;
+}

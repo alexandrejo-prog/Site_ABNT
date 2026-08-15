@@ -5,12 +5,12 @@
 
 ## Última Atualização
 - Data: 2026-08-15
-- Hora: 17:35 (CONFORMIDADE UFLA APROVADA — análise física real de imagens/tabelas no PDF + gates computados com evidência atual)
+- Hora: 17:57 (CONFORMIDADE UFLA APROVADA — análise física real de imagens/tabelas no PDF + gates computados com evidência atual + religação de cross-references + gate por tipo de trabalho)
 - Branch: `feat/ufla-render-validation`
 - Evidência: `npm run verify` 100% verde; tsc limpo; lint 0 erros/0 warnings
 
 ## Suíte de Testes
-- Passed: 1539
+- Passed: 1543
 - Failed: 0
 - Skipped: 10
 - Arquivos: 195
@@ -36,8 +36,9 @@
 3. [x] **Criação de notas de rodapé na UI** — botão na faixa do editor insere `[^N]` no cursor e a definição `[^N]: ` ao fim, com numeração sequencial automática.
 4. [x] **Análise física do PDF (images/tables not-detected)** — detecção real implementada: 6 imagens via opList/CTM (6/6 do DOCX) e 37 regiões de tabela por grade de colunas alinhadas (35 tabelas no OOXML). Cobertura completa: nenhum item crítico not-detected/failed → renderedLayoutGate PASSED.
 5. [x] **Gates computados com evidência real** — `regenerate-official-artifacts.ts` agora executa o gate expandido (`runFullComplianceGate`) e computa renderedLayoutGate/fullComplianceGate a partir do coverage físico real, em vez de hardcodar status.
-6. [ ] **Preservação de alvos de referência cruzada** (bookmarks/PAGEREF no round-trip) — extração completa; religação dos alvos é melhoria futura.
-7. [ ] **Fidelidade do preview** (header simulado, page-break de ABSTRACT condicional, CSS data-font-size, auditoria axe) — não afeta o DOCX gerado.
+6. [x] **Religação de alvos de referência cruzada** (bookmarks/PAGEREF no round-trip) — extração converte hyperlink interno/REF em token `[x:ANCHOR~texto]`; exportação resolve por label (heading → `SECAO_`, legenda → `LISTA_`, degrade para texto plano sem link quebrado) com `InternalHyperlink` + bookmark estável no heading e na legenda de tabela; coberto nos 4 exportadores (dissertação, artigo, CPG, projeto).
+7. [x] **Gate por tipo de trabalho** — `run-gate-per-type.ts` gera DOCX de exemplo (artigo, TCC/monografia, resumo expandido CPG, projeto) e roda o gate expandido com o tipo explícito; `audit-pretextual` respeita a matriz de tipos (ficha/aprovação/sumário não exigidos em artigo/CPG não geram falso positivo); resultado em `gates.json → perTypeGate: passed`.
+8. [ ] **Fidelidade do preview** (header simulado, page-break de ABSTRACT condicional, CSS data-font-size, auditoria axe) — não afeta o DOCX gerado.
 
 ## Resolução UFLA-AMBIGUOUS-1
 - **Decisão:** paginação contínua a partir da Introdução

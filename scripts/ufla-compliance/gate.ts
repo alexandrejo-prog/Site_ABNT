@@ -19,8 +19,8 @@ import { auditSections } from './audit-sections';
 import { writeHtmlReport } from './report';
 import JSZip from 'jszip';
 
-import type { AuditGap, ExpandedAuditResult, SectionAuditResult } from './audit-types';
-import type { RequirementStatus, Severity } from './document-type-matrix';
+import type { AuditGap, ExpandedAuditResult, SectionAuditResult, WorkType } from './audit-types';
+import type { DocumentType, RequirementStatus, Severity } from './document-type-matrix';
 
 interface GateResult {
   name: string;
@@ -184,9 +184,13 @@ function checkPdfPhysical(pdfPath: string): GateResult {
   return { name: 'Físico PDF', passed: true, errors: [], warnings: [] };
 }
 
-export async function runExpandedComplianceGate(docxPath: string, pdfPath?: string): Promise<ExpandedAuditResult> {
+export async function runExpandedComplianceGate(
+  docxPath: string,
+  pdfPath?: string,
+  documentType?: DocumentType,
+): Promise<ExpandedAuditResult> {
   const [pretextual, textual, posttextual, referencesResult, citationsResult, figuresResult, sectionsResult, layoutResult, typographyResult, catalogCardResult, tocResult, ommlResult, documentStructureResult, tablesGate] = await Promise.all([
-    auditPretextual(docxPath),
+    auditPretextual(docxPath, documentType ?? 'dissertacao'),
     auditTextual(docxPath),
     auditPosttextual(docxPath),
     auditReferences(docxPath),
@@ -198,7 +202,7 @@ export async function runExpandedComplianceGate(docxPath: string, pdfPath?: stri
     validateCatalogCard(docxPath),
     validateToc(docxPath),
     validateOMML(docxPath),
-    validateDocumentStructure(docxPath, 'dissertacao'),
+    validateDocumentStructure(docxPath, documentType ?? 'dissertacao'),
     checkTables(docxPath),
   ]);
 
@@ -254,7 +258,7 @@ export async function runExpandedComplianceGate(docxPath: string, pdfPath?: stri
   const compliant = passed && score >= 90;
 
   const result: ExpandedAuditResult = {
-    documentType: 'dissertacao',
+    documentType: (documentType ?? 'dissertacao') as WorkType,
     preTextual: pretextual,
     textual,
     postTextual: posttextual,
@@ -279,8 +283,12 @@ interface FullComplianceResult {
   results: GateResult[];
 }
 
-export async function runFullComplianceGate(docxPath: string, pdfPath?: string): Promise<FullComplianceResult> {
-  const expanded = await runExpandedComplianceGate(docxPath, pdfPath);
+export async function runFullComplianceGate(
+  docxPath: string,
+  pdfPath?: string,
+  documentType?: DocumentType,
+): Promise<FullComplianceResult> {
+  const expanded = await runExpandedComplianceGate(docxPath, pdfPath, documentType);
 
   const results: GateResult[] = [
     { name: 'Pré-textuais', passed: expanded.preTextual.passed, errors: expanded.preTextual.gaps.map(g => g.description), warnings: [] },

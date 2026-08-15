@@ -388,7 +388,9 @@ function isStandalonePageNumber(text: string): boolean {
 }
 
 function isTocEntry(text: string): boolean {
-  const cleaned = cleanText(text);
+  // remove tokens de referência cruzada ([x:ANCHOR|texto]) antes do teste —
+  // entradas de sumário tokenizadas continuam sendo descartadas no import.
+  const cleaned = cleanText(text).replace(/\[x:[^\]]*\]/g, " ");
   const normalized = normalizeForDetection(cleaned);
   if (!normalized) return false;
   if (isStandalonePageNumber(cleaned)) return true;

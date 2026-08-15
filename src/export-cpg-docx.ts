@@ -4,6 +4,7 @@ import {
   Document,
   Header,
   HeadingLevel,
+  InternalHyperlink,
   Packer,
   PageNumber,
   PageOrientation,
@@ -88,7 +89,7 @@ function ensureTerminalPeriod(value: string): string {
   return /[.!?]$/.test(text) ? text : `${text}.`;
 }
 
-function textRunsFromMarkup(text: string, size = BODY_SIZE, font = CPG_RULES.typography.fontFamily): TextRun[] {
+function textRunsFromMarkup(text: string, size = BODY_SIZE, font = CPG_RULES.typography.fontFamily): Array<TextRun | InternalHyperlink> {
   return coreTextRunsFromMarkup(cleanMojibakeText(text), size, font);
 }
 

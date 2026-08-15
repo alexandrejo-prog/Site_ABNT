@@ -12,7 +12,7 @@ Sem estes itens, o documento **não pode** ser considerado conforme.
 
 | # | Item | Regra/Seção Manual UFLA | Status | Arquivo(s) | Notas |
 |---|------|--------------------------|--------|------------|-------|
-| 1 | Sequência pré-textual → textual → pós-textual correta por tipo de trabalho | §3.1 | ✅ | `scripts/ufla-compliance/validate-document-structure.ts` | Matriz REQ-001..020 por tipo; integrado ao gate |
+| 1 | Sequência pré-textual → textual → pós-textual correta por tipo de trabalho | §3.1 | ✅ | `scripts/ufla-compliance/validate-document-structure.ts` | Matriz REQ-001..020 por tipo; gate por tipo (`perTypeGate`) 4/4 passed em 15/08 |
 | 2 | Capa com identificação UFLA, título, autor, natureza do trabalho, curso, programa, local e ano | §3.1.1 | ✅ | `src/export-docx.ts`, `src/export-article-docx.ts`, `src/export-cpg-docx.ts`, `src/export-research-project-docx.ts` | Auditado por `audit-pretextual` (gate PASSED) |
 | 3 | Folha de rosto com título, autor, orientador, coorientador (se houver), natureza, curso, programa, local e ano | §3.1.2 | ✅ | `src/export-docx.ts` | Detecção por conteúdo real (natureza do trabalho); gate PASSED |
 | 4 | Ficha catalográfica completa (campos obrigatórios) | §3.1.3 | ✅ | `skills/ufla-docx-compliance/src/docx-analyzer.ts`, `validate-catalog-toc.ts` | `catalogCard.exists/hasPlaceholder` detectado; texto OU imagem da ficha oficial |
@@ -50,7 +50,7 @@ Itens que afetam preservação de conteúdo, acessibilidade ou fidelidade ao DOC
 | 27 | Folha de rosto: validar natureza do trabalho, curso, orientador, título inglês | §3.1.2 | ⬜ | `skills/ufla-docx-compliance/src/docx-analyzer.ts` | Análise de parágrafos por tipo de trabalho |
 | 28 | TOC: validar campo `TOC \o "1-3" \h` real, não só presença de headings | §3.1.7 | ⬜ | `skills/ufla-docx-compliance/src/checklist-checker.ts` | Verificar `w:fldChar` begin/separate/end |
 | 29 | Track changes/comments — extrair `<w:ins>`/`<w:del>` e `w:comment` | Import | ✅ | `src/word-structure-extractor.ts` | changeKind/comentários propagados a runs, parágrafos e blocos; teste com DOCX real |
-| 30 | Bookmarks/cross-references — extrair `<w:bookmarkStart>`/`<w:bookmarkEnd>` | Import | 🔄 | `src/word-structure-extractor.ts` | Extração ✅; preservação de alvos de referência cruzada pendente |
+| 30 | Bookmarks/cross-references — extrair `<w:bookmarkStart>`/`<w:bookmarkEnd>` | Import/Export | ✅ | `src/word-structure-extractor.ts`, `src/docx-render-core.ts`, `src/export-docx.ts` | Extração + religação por label (`SECAO_`/`LISTA_`, `InternalHyperlink`, degrade para texto plano) nos 4 exportadores (15/08) |
 | 31 | Merge vertical de células — propagar conteúdo de `vMerge-continue` | Import | ✅ | `src/word-structure-extractor.ts` | cellMerges vMerge-restart/continue extraídos e testados |
 | 32 | Soft hyphens e hifenização — remover `\u00AD`/`\u200B` | Import | ⬜ | `src/import-normalizer.ts` | `cleanText()` deve normalizar quebras de linha |
 | 33 | Aspas inteligentes — normalizar `""`/`''`/`«»` para retas | Import | ⬜ | `src/import-normalizer.ts` | `normalizeQuotes()` em `cleanText()` |
@@ -124,7 +124,7 @@ Itens de baixo impacto que não bloqueiam conformidade, mas melhoram robustez.
 ## Critério de conformidade plena
 
 - ✅ Todos os itens **CRITICAL** fechados (2026-08-15)
-- ✅ Nenhum item **HIGH** em estado de falha confirmada (pendências restantes são fidelidade do preview / religação de cross-references — não afetam o DOCX gerado)
+- ✅ Nenhum item **HIGH** em estado de falha confirmada (pendência restante é fidelidade do preview — não afeta o DOCX gerado)
 - ✅ Score de conformidade ≥ 95% (gate expandido: 10/10 categorias)
 - ✅ Todos os gates automáticos (`npm run verify`, `npm run skill:validate`, gates UFLA) verdes — **FULL COMPLIANCE GATE APROVADO**
 

@@ -7,6 +7,7 @@ import {
   FootnoteReferenceRun,
   Header,
   ImageRun,
+  InternalHyperlink,
   Packer,
   PageBreak,
   PageNumber,
@@ -31,7 +32,7 @@ import { getWorkTypeRequirements } from "./work-type-requirements";
 import { normalizeReferences, type NormalizedReference, type ReferenceRun } from "./references-normalizer";
 import { buildFlowingImpactText } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
-import { cleanMojibakeText, clearRawOmmlRegistry, detectCaption, OMML_CONTENT_TOKEN_PATTERN, ommlContentTokenDecode, rawOmmlMarkerParagraph, sourceParagraph, tabbedTableBlock, tokenizeMarkup, type CaptionKind } from "./docx-render-core";
+import { cleanMojibakeText, clearRawOmmlRegistry, clearXrefRegistry, detectCaption, detectTabbedTableBlock, OMML_CONTENT_TOKEN_PATTERN, ommlContentTokenDecode, rawOmmlMarkerParagraph, registerXrefResolver, resolveXrefTarget, sectionBookmarkId, sourceParagraph, tabbedTableBlock, tokenizeMarkup, type CaptionKind, type XrefResolver } from "./docx-render-core";
 import { ImportedDocumentImage, IMPORTED_IMAGE_MARKER_PATTERN } from "./imported-images";
 import { ImportedTable, IMPORTED_TABLE_MARKER_PATTERN, buildStructuredTextFromTable } from "./imported-tables";
 
@@ -400,7 +401,7 @@ function textRunsForSingleLine(text: string, size = BODY_SIZE): TextRun[] {
   return runs.length ? runs : [plainRun("", size)];
 }
 
-function textRunsFromMarkup(text: string, size = BODY_SIZE): Array<TextRun | FootnoteReferenceRun> {
+function textRunsFromMarkup(text: string, size = BODY_SIZE): Array<TextRun | FootnoteReferenceRun | InternalHyperlink> {
   return text.split(/\n/).flatMap((line, index) => {
     const runs = textRunsWithFootnotes(line, currentFootnoteIdMap, size);
     if (index === 0) return runs;
@@ -418,18 +419,39 @@ export function textRunsWithFootnotes(
   text: string,
   footnoteIdMap: ReadonlyMap<number, number> | null,
   size = BODY_SIZE,
-): Array<TextRun | FootnoteReferenceRun> {
-  const segments = text.split(/(\[\^\d+\])/);
-  const runs: Array<TextRun | FootnoteReferenceRun> = [];
+): Array<TextRun | FootnoteReferenceRun | InternalHyperlink> {
+  const segments = text.split(/(\[\^\d+\]|\[x:[^\]]*\])/);
+  const runs: Array<TextRun | FootnoteReferenceRun | InternalHyperlink> = [];
   for (const segment of segments) {
     if (!segment) continue;
-    const marker = /^\[\^(\d+)\]$/.exec(segment);
-    if (marker && footnoteIdMap) {
-      const assignedId = footnoteIdMap.get(Number(marker[1]));
+    const footnote = /^\[\^(\d+)\]$/.exec(segment);
+    if (footnote && footnoteIdMap) {
+      const assignedId = footnoteIdMap.get(Number(footnote[1]));
       if (assignedId !== undefined) {
         runs.push(new FootnoteReferenceRun(assignedId));
         continue;
       }
+    }
+    const xref = /^\[x:([^\]~]+)(?:~([^\]]*))?\]$/.exec(segment);
+    if (xref) {
+      const anchor = xref[1].trim();
+      const visible = (xref[2] ?? "").trim();
+      const target = resolveXrefTarget(anchor, visible);
+      if (target) {
+        runs.push(
+          new InternalHyperlink({
+            anchor: target,
+            children: [plainRun(visible, size)],
+          }),
+        );
+        continue;
+      }
+      // sem alvo resolvido: degrada para texto plano (sem link quebrado)
+      if (visible) {
+        runs.push(...textRunsForSingleLine(visible, size));
+        continue;
+      }
+      continue;
     }
     runs.push(...textRunsForSingleLine(segment, size));
   }
@@ -1273,11 +1295,14 @@ function blockToParagraph(
   importedTables: ImportedTable[] = [],
 ): Array<Paragraph | Table> {
   if (block.type === "heading1") {
+    const bookmarkId = sectionBookmarkId(block.text);
+    const numericId = nextListBookmarkNumericId();
     const title = new Paragraph({
       style: "ufla_titulo_primario",
       alignment: AlignmentType.LEFT,
       spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
       children: [
+        new BookmarkStart(bookmarkId, numericId),
         new TextRun({
           text: block.text.toUpperCase(),
           bold: true,
@@ -1285,6 +1310,7 @@ function blockToParagraph(
           size: BODY_SIZE,
           color: BLACK,
         }),
+        new BookmarkEnd(numericId),
       ],
     });
 
@@ -1292,28 +1318,35 @@ function blockToParagraph(
   }
 
   if (block.type === "heading2") {
+    const bookmarkId = sectionBookmarkId(block.text);
+    const numericId = nextListBookmarkNumericId();
     return [
       new Paragraph({
         style: "ufla_titulo_secundario",
         spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
         children: [
+          new BookmarkStart(bookmarkId, numericId),
           new TextRun({
             text: block.text,
             font: UFLA_RULES.typography.fontFamily,
             size: BODY_SIZE,
             color: BLACK,
           }),
+          new BookmarkEnd(numericId),
         ],
       }),
     ];
   }
 
   if (block.type === "heading3") {
+    const bookmarkId = sectionBookmarkId(block.text);
+    const numericId = nextListBookmarkNumericId();
     return [
       new Paragraph({
         style: "ufla_titulo_terciario",
         spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
         children: [
+          new BookmarkStart(bookmarkId, numericId),
           new TextRun({
             text: block.text,
             bold: true,
@@ -1321,6 +1354,7 @@ function blockToParagraph(
             size: BODY_SIZE,
             color: BLACK,
           }),
+          new BookmarkEnd(numericId),
         ],
       }),
     ];
@@ -1772,6 +1806,49 @@ function bookmarkedCaptionParagraph(text: string, kind: CaptionKind, bookmarkId:
   });
 }
 
+/**
+ * Resolve referências cruzadas do rascunho (`[x:ANCHOR|texto]`) para o bookmark
+ * vigente do documento exportado (religação por label, resiliente a edições de
+ * legenda/título):
+ * 1. âncora já gerada (LISTA_/SECAO_) → usa direto;
+ * 2. texto visível referencia legenda (Tabela 3, Figura 2, Quadro 5...) →
+ *    bookmark LISTA_ da legenda correspondente;
+ * 3. texto visível referencia seção → bookmark SECAO_ do heading;
+ * 4. sem alvo → null (texto plano, sem link quebrado).
+ */
+export function buildXrefResolver(
+  bodyBlocks: EditorBlock[],
+  importedImages: ImportedDocumentImage[] = [],
+  importedTables: ImportedTable[] = [],
+): XrefResolver {
+  const headings = bodyBlocks
+    .filter((b) => b.type === "heading1" || b.type === "heading2" || b.type === "heading3")
+    .map((b) => b.text);
+  const captions = collectListItems(bodyBlocks, importedImages, importedTables);
+
+  return (anchor: string, visible: string): string | null => {
+    if (/^(LISTA_|SECAO_)/.test(anchor)) return anchor;
+
+    const captionRef = visible.match(/^(Tabela|Quadro|Figura|Gr[áa]fico|Ilustra[çc][ãa]o)\s+(\d+(?:\.\d+)*)/i);
+    if (captionRef) {
+      const type = captionRef[1];
+      const number = captionRef[2].replace(/^0+/, "");
+      const match = captions.find(
+        (item) => item.type.toLowerCase() === type.toLowerCase() && item.number.replace(/^0+/, "") === number,
+      );
+      if (match) return match.bookmarkId;
+    }
+
+    const normalizedVisible = normalizeForDetection(visible);
+    if (normalizedVisible) {
+      const heading = headings.find((h) => normalizeForDetection(h) === normalizedVisible);
+      if (heading) return sectionBookmarkId(heading);
+    }
+
+    return null;
+  };
+}
+
 function collectListItems(
   bodyBlocks: EditorBlock[],
   importedImages: ImportedDocumentImage[] = [],
@@ -1803,6 +1880,14 @@ function collectListItems(
     }
     if (block.type === "importedTable") {
       push(importedTableListItem(importedTables.find((table) => table.id === block.text)));
+      continue;
+    }
+    if (block.type === "tabbedTable") {
+      // legenda de tabela tabulada: primeira linha "Tabela/Quadro N - título"
+      const detected = detectTabbedTableBlock(block.text);
+      if (detected?.caption) {
+        push(captionListItem(detected.caption, "table", captionBookmarkId(cleanMojibakeText(detected.caption))));
+      }
       continue;
     }
   }
@@ -2540,6 +2625,12 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
     .map((block) => block.text);
   const extractedReferencesSection = extractReferencesSection(bodyBlocks);
   const bodyBlocksWithoutReferences = extractedReferencesSection.bodyBlocks;
+
+  // Religação de referências cruzadas: o resolver precisa estar registrado ANTES
+  // de os runs serem materializados (bodyBlocks → blockToParagraph → textRuns).
+  registerXrefResolver(
+    buildXrefResolver(bodyBlocksWithoutReferences, input.importedImages ?? [], input.importedTables ?? []),
+  );
   const references = [
     ...splitParagraphs(fields.referencias),
     ...editorReferences,
@@ -2613,7 +2704,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   const footnotes = buildFootnotes(allFootnoteDefinitions, footnoteIdMap);
   currentFootnoteIdMap = null;
 
-  return new Document({
+  const document = new Document({
     creator: "UFLA DOCX Acadêmico",
     title: fields.title || "Trabalho acadêmico",
     description: "Documento acadêmico gerado conforme regras centrais da UFLA.",
@@ -2657,6 +2748,8 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
       },
     ],
   });
+  clearXrefRegistry();
+  return document;
 }
 
 export async function loadDefaultLogoAsset(): Promise<DocxLogoAsset | undefined> {

@@ -3,6 +3,7 @@ import {
   Document,
   Header,
   HeadingLevel,
+  InternalHyperlink,
   Packer,
   PageNumber,
   PageOrientation,
@@ -11,7 +12,8 @@ import {
   TextRun,
 } from "docx";
 import type { IParagraphOptions } from "docx";
-import { parseEditorContent, importedTableParagraph, importedImageParagraph, buildFootnoteIdMap, buildFootnotes, textRunsWithFootnotes, buildReferenceFootnoteDefinitions, appendFootnoteMarkers, type DocxGenerationInput, type EditorBlock } from "./export-docx";
+import { parseEditorContent, importedTableParagraph, importedImageParagraph, buildFootnoteIdMap, buildFootnotes, textRunsWithFootnotes, buildReferenceFootnoteDefinitions, appendFootnoteMarkers, buildXrefResolver, type DocxGenerationInput, type EditorBlock } from "./export-docx";
+import { registerXrefResolver, clearXrefRegistry } from "./docx-render-core";
 import type { ImportedTable } from "./imported-tables";
 import { DOCUMENT_STYLES } from "./docx-styles";
 import type { ImportedDocumentImage } from "./imported-images";
@@ -96,7 +98,7 @@ function run(text: string, options: RunOptions = {}): TextRun {
   });
 }
 
-function textRunsFromMarkup(text: string): TextRun[] {
+function textRunsFromMarkup(text: string): Array<TextRun | InternalHyperlink> {
   return coreTextRunsFromMarkup(cleanMojibakeText(text || " "), BODY_SIZE, UFLA_RULES.typography.fontFamily, BLACK);
 }
 
@@ -268,6 +270,8 @@ function createArticleDocument(input: DocxGenerationInput): Document {
   const footnoteIdMap = buildFootnoteIdMap(articleFootnoteDefinitions);
   const footnotes = buildFootnotes(articleFootnoteDefinitions, footnoteIdMap);
 
+  registerXrefResolver(buildXrefResolver(bodyBlocks, input.importedImages ?? [], input.importedTables ?? []));
+
   const pageNumberHeader = new Header({
     children: [
       new Paragraph({
@@ -284,7 +288,7 @@ function createArticleDocument(input: DocxGenerationInput): Document {
     ],
   });
 
-  return new Document({
+  const document = new Document({
     creator: "UFLA DOCX Academico",
     title: input.fields.title || "Artigo academico",
     description: "Artigo academico simples sem estrutura pre-textual de monografia.",
@@ -353,6 +357,8 @@ function createArticleDocument(input: DocxGenerationInput): Document {
     ],
     footnotes,
   });
+  clearXrefRegistry();
+  return document;
 }
 
 export async function generateArticleDocxBlob(input: DocxGenerationInput): Promise<Blob> {

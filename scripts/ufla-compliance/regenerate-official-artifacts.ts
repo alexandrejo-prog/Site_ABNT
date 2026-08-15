@@ -147,8 +147,17 @@ const coverageGaps = CRITICAL_COVERAGE.filter((k) => {
 const renderedLayoutStatus = coverageGaps.length > 0 ? "failed" : "passed";
 
 const { runFullComplianceGate } = await import(pathToFileURL(join(ROOT, "scripts", "ufla-compliance", "gate.ts")).href);
+const { runPerTypeGates } = await import(pathToFileURL(join(ROOT, "scripts", "ufla-compliance", "run-gate-per-type.ts")).href);
 const fullCompliance = await runFullComplianceGate(docx, pdf);
 const fullComplianceStatus = fullCompliance.passed ? "passed" : "failed";
+// Gate por tipo de trabalho (artigo, TCC/monografia, CPG, projeto de pesquisa):
+// os auditores respeitam a matriz de tipos (elementos não aplicáveis ao tipo não
+// geram falso positivo) e o resultado é registrado no gates.json.
+const perTypeResults = await runPerTypeGates();
+const perTypeSummary = Object.entries(perTypeResults)
+  .map(([type, r]) => `${type}: ${(r as { passed: boolean }).passed ? "passed" : "failed"}`)
+  .join(", ");
+const perTypeAllPassed = Object.values(perTypeResults).every((r) => (r as { passed: boolean }).passed);
 const overallStatus = testSummary.status === "passed" && fullComplianceStatus === "passed" && renderedLayoutStatus === "passed" ? "passed" : "failed";
 
 const renderedLayoutEvidence =
@@ -192,6 +201,10 @@ const gates = {
     fullComplianceGate: {
       status: fullComplianceStatus,
       evidence: fullComplianceEvidence,
+    },
+    perTypeGate: {
+      status: perTypeAllPassed ? "passed" : "failed",
+      evidence: `Gate expandido executado para cada tipo de trabalho com o exportador correspondente: ${perTypeSummary}. Os auditores respeitam a matriz de tipos (elementos pré-textuais não aplicáveis — ficha/aprovação/sumário para artigo/CPG — não geram falso positivo). DOCX de exemplo em artifacts/ufla-compliance/per-type/.`,
     },
   },
   overall: overallStatus,

@@ -31,6 +31,31 @@ describe("extração estrutural DOCX", () => {
     expect(structure.paragraphs[0].rawText).toBe("Linha 1\nLinha 2");
     expect(structure.paragraphs[0].containsPageBreak).toBe(false);
   });
+
+  it("converte hiperlink interno em token de referência cruzada [x:ANCHOR~texto]", async () => {
+    const docx = await makeDocx(
+      `<w:p><w:r><w:t>Ver </w:t></w:r>` +
+        `<w:hyperlink w:history="true" w:anchor="_bookmark5"><w:r><w:t>Quadro 3</w:t></w:r></w:hyperlink>` +
+        `<w:r><w:t>.</w:t></w:r></w:p>`,
+    );
+
+    const structure = await extractDocxStructure(docx);
+
+    expect(structure.paragraphs[0].text).toContain("[x:_bookmark5~Quadro 3]");
+    expect(structure.paragraphs[0].text).toContain("Ver");
+    expect(structure.paragraphs[0].text.endsWith(".")).toBe(true);
+  });
+
+  it("mantém hiperlink externo (r:id) como texto plano, sem token", async () => {
+    const docx = await makeDocx(
+      `<w:p><w:hyperlink r:id="rId25"><w:r><w:t>http://exemplo.com</w:t></w:r></w:hyperlink></w:p>`,
+    );
+
+    const structure = await extractDocxStructure(docx);
+
+    expect(structure.paragraphs[0].text).toBe("http://exemplo.com");
+    expect(structure.paragraphs[0].text).not.toContain("[x:");
+  });
 });
 
 describe("nível de heading com indicativo misto (numeração quinária)", () => {

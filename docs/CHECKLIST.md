@@ -55,7 +55,7 @@ Resolvidas em 15/08:
 Pendências declaradas (não bloqueiam conformidade do DOCX):
 - Lombada (§3.1) — fechada: Manual consolidado determina "Não gerar no MVP" (elemento físico de impressão)
 - Ilustração multipágina (§23.3) — item 25.9 no checker (alerta + marcas continua/continuação/conclusão)
-- Preservação de alvos de referência cruzada (bookmarks/PAGEREF) — extração ✓, religação futura
+- Religação de alvos de referência cruzada (bookmarks/PAGEREF) — extração ✓ + religação por label (`[x:ANCHOR~texto]` → `InternalHyperlink` + bookmark `SECAO_`/`LISTA_`) nos 4 exportadores
 - Fidelidade do preview (header simulado, page-break ABSTRACT, axe) — não afeta o DOCX
 ```
 
@@ -78,7 +78,7 @@ Pendências declaradas (não bloqueiam conformidade do DOCX):
 ## Próximos Passos
 
 1. ✅ Regenerar artefatos oficiais — CONCLUÍDO (gates.json overall=passed; report.md declara CONFORMIDADE UFLA APROVADA)
-2. Preservação de alvos de referência cruzada (bookmarks/PAGEREF) — melhoria futura
+2. ~~Preservação de alvos de referência cruzada (bookmarks/PAGEREF) — melhoria futura~~ → religação implementada (round-trip) em 2026-08-15
 3. Fidelidade do preview (header simulado, page-break ABSTRACT condicional, auditoria axe)
 
 ## Decisões Técnicas
