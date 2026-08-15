@@ -10,7 +10,7 @@
  * Saída: exit != 0 se accessibility < 90 (gate de governança).
  */
 import { spawnSync, spawn, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
@@ -90,9 +90,18 @@ async function main() {
       for (const [name, score] of Object.entries(summary)) console.log(`  ${name}: ${score}`);
       console.log(`Relatório: ${reportPath}`);
 
-      const a11y = summary.accessibility ?? 100;
-      if (a11y < 90) {
-        console.error(`\nFALHOU: acessibilidade ${a11y} < 90 (gate de governança).`);
+      // Orçamentos de governança (lighthouse-budgets.json): falha quando uma
+      // categoria auditada fica abaixo da nota mínima configurada.
+      const budgetsPath = join(ROOT, "lighthouse-budgets.json");
+      const budgets = existsSync(budgetsPath) ? JSON.parse(readFileSync(budgetsPath, "utf8")) : { accessibility: 90 };
+      const violations = [];
+      for (const [name, min] of Object.entries(budgets)) {
+        if (!(name in summary)) continue;
+        if (summary[name] < min) violations.push(`${name} ${summary[name]} < ${min}`);
+      }
+      writeFileSync(join(OUT_DIR, "budgets.json"), JSON.stringify({ budgets, scores: summary, violations, passed: violations.length === 0 }, null, 2) + "\n", "utf8");
+      if (violations.length > 0) {
+        console.error(`\nFALHOU orçamentos de governança: ${violations.join("; ")}`);
         process.exitCode = 1;
       }
     } finally {

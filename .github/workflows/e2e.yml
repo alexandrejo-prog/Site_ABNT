@@ -24,5 +24,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lighthouse-report
-          path: artifacts/lighthouse/lighthouse.json
+          path: |
+            artifacts/lighthouse/lighthouse.json
+            artifacts/lighthouse/budgets.json
           if-no-files-found: warn

@@ -23,6 +23,7 @@ import {
 } from "../../src/footer-reporting.js";
 import { auditFormatsCross } from "./audit-formats-cross.js";
 import { runPerTypePhysical } from "./analyze-per-type-pdfs.js";
+import { runPreviewDocxCompare } from "./compare-preview-docx.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -177,12 +178,21 @@ const perTypePhysicalPassed = perTypePhysical.passed;
 const perTypePhysicalEvidence = perTypePhysical.wordAvailable
   ? `Física PDF por tipo (Word COM + pdfjs): ${Object.keys(perTypePhysical.rendered).length}/${Object.keys(perTypePhysical.rendered).length} DOCX renderizados e validados fisicamente — A4, paginação OOXML↔PDF alinhada (DECISION-010), ${perTypePhysical.passed ? "0 falhas" : perTypePhysical.failures.join("; ")}. Detalhe por tipo em per-type-physical.json.`
   : `Física PDF por tipo: Word INDISPONÍVEL — renderização física saltada (skipped-no-word), gate considerado passed (sem Word não há PDF para analisar).`;
+// Fidelidade do preview vs DOCX renderizado (monografia com ficha): o HTML da
+// pré-visualização é comparado ao PDF do Word — similaridade de tokens e Δpáginas.
+const previewDiff = await runPreviewDocxCompare();
+writeJson("artifacts/ufla-compliance/preview-docx-diff.json", previewDiff.result);
+const previewDiffPassed = previewDiff.passed;
+const previewDiffEvidence = previewDiff.wordAvailable
+  ? `Fidelidade preview↔DOCX (Word COM + pdfjs + Playwright): similaridade ${previewDiff.result.similarity} ≥ 0.65, Δpáginas ${previewDiff.result.pageDelta} ≤ 3 (preview ${previewDiff.result.previewPages} vs PDF ${previewDiff.result.pdfPages}); screenshots lado a lado por página com diffRatio (evidência visual em preview-diff/*.png).`
+  : `Fidelidade preview↔DOCX: Word INDISPONÍVEL — comparação saltada (skipped-no-word), gate considerado passed.`;
 const overallStatus =
   testSummary.status === "passed" &&
   fullComplianceStatus === "passed" &&
   renderedLayoutStatus === "passed" &&
   formatsCrossPassed &&
-  perTypePhysicalPassed
+  perTypePhysicalPassed &&
+  previewDiffPassed
     ? "passed"
     : "failed";
 
@@ -239,6 +249,10 @@ const gates = {
     perTypePhysicalGate: {
       status: perTypePhysicalPassed ? "passed" : "failed",
       evidence: perTypePhysicalEvidence,
+    },
+    previewDiffGate: {
+      status: previewDiffPassed ? "passed" : "failed",
+      evidence: previewDiffEvidence,
     },
   },
   overall: overallStatus,
