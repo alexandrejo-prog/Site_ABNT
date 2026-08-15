@@ -1,11 +1,21 @@
 /**
- * Gate de compliance UFLA
+ * Gate de compliance UFLA expandido
  */
 import * as fs from 'fs';
 import * as path from 'path';
 import { validatePagination } from './validate-pagination';
 import { validateEquations } from './validate-equations';
+import { auditPretextual } from './audit-pretextual';
+import { auditTextual } from './audit-textual';
+import { auditPosttextual } from './audit-posttextual';
+import { auditReferences } from './audit-references';
+import { auditCitations } from './audit-citations';
+import { auditFigures } from './audit-figures';
+import { auditSections } from './audit-sections';
+import { writeHtmlReport } from './report';
 import JSZip from 'jszip';
+
+import type { ExpandedAuditResult } from './audit-types';
 
 interface GateResult {
   name: string;
@@ -151,14 +161,82 @@ function checkPdfPhysical(pdfPath: string): GateResult {
   return { name: 'Físico PDF', passed: true, errors: [], warnings: [] };
 }
 
-export async function runFullComplianceGate(docxPath: string, pdfPath?: string): Promise<FullComplianceResult> {
-  const results: GateResult[] = [
-    checkFooters(),
-    await checkTables(docxPath),
-    checkPaginationGate(docxPath),
-    await checkEquations(docxPath),
+export async function runExpandedComplianceGate(docxPath: string, pdfPath?: string): Promise<ExpandedAuditResult> {
+  const [pretextual, textual, posttextual, referencesResult, citationsResult, figuresResult, sectionsResult] = await Promise.all([
+    auditPretextual(docxPath),
+    auditTextual(docxPath),
+    auditPosttextual(docxPath),
+    auditReferences(docxPath),
+    auditCitations(docxPath),
+    auditFigures(docxPath),
+    auditSections(docxPath),
+  ]);
+
+  const footersResult = checkFooters();
+  const tablesResult = await checkTables(docxPath);
+  const paginationResult = checkPaginationGate(docxPath);
+  const equationsResult = await checkEquations(docxPath);
+  const pdfPhysicalResult = pdfPath ? checkPdfPhysical(pdfPath) : { name: 'Físico PDF', passed: true, errors: [], warnings: [] };
+
+  const allGaps = [
+    ...pretextual.gaps,
+    ...textual.gaps,
+    ...posttextual.gaps,
+    ...referencesResult.gaps,
+    ...citationsResult.gaps,
+    ...figuresResult.gaps,
+    ...sectionsResult.gaps,
   ];
-  if (pdfPath) results.push(checkPdfPhysical(pdfPath));
+
+  const technical = {
+    footers: footersResult.passed,
+    tables: tablesResult.passed,
+    pagination: paginationResult.passed,
+    equations: equationsResult.passed,
+    pdfPhysical: pdfPhysicalResult.passed,
+    references: referencesResult.passed,
+    citations: citationsResult.passed,
+    figures: figuresResult.passed,
+    sections: sectionsResult.passed,
+  };
+
+  const criticalGaps = allGaps.filter((g) => g.severity === 'critical').length;
+  const passed = criticalGaps === 0;
+  const score = allGaps.length === 0 ? 100 : Math.max(0, 100 - allGaps.length * 10);
+  const compliant = passed && score >= 90;
+
+  const result: ExpandedAuditResult = {
+    documentType: 'dissertacao',
+    preTextual: pretextual,
+    textual,
+    postTextual: posttextual,
+    technical,
+    gaps: allGaps,
+    score,
+    compliant,
+  };
+
+  try {
+    writeHtmlReport(result, 'artifacts/ufla-compliance/audit-report.html');
+  } catch {
+    // non-blocking
+  }
+
+  return result;
+}
+
+export async function runFullComplianceGate(docxPath: string, pdfPath?: string): Promise<FullComplianceResult> {
+  const expanded = await runExpandedComplianceGate(docxPath, pdfPath);
+
+  const results: GateResult[] = [
+    { name: 'Pré-textuais', passed: expanded.preTextual.passed, errors: expanded.preTextual.gaps.map(g => g.description), warnings: [] },
+    { name: 'Textuais', passed: expanded.textual.passed, errors: expanded.textual.gaps.map(g => g.description), warnings: [] },
+    { name: 'Pós-textuais', passed: expanded.postTextual.passed, errors: expanded.postTextual.gaps.map(g => g.description), warnings: [] },
+    { name: 'Referências', passed: expanded.technical.references, errors: expanded.gaps.filter(g => g.section === 'referências').map(g => g.description), warnings: [] },
+    { name: 'Citações', passed: expanded.technical.citations, errors: expanded.gaps.filter(g => g.section === 'citações').map(g => g.description), warnings: [] },
+    { name: 'Figuras', passed: expanded.technical.figures, errors: expanded.gaps.filter(g => g.section === 'figuras').map(g => g.description), warnings: [] },
+    { name: 'Seções', passed: expanded.technical.sections, errors: expanded.gaps.filter(g => g.section === 'seções').map(g => g.description), warnings: [] },
+  ];
 
   const gaps: string[] = [];
   for (const r of results) {
@@ -167,4 +245,3 @@ export async function runFullComplianceGate(docxPath: string, pdfPath?: string):
 
   return { passed: gaps.length === 0, gaps, results };
 }
-
