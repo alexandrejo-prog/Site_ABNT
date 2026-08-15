@@ -1,6 +1,6 @@
 {
   "schema": "ufla-audit/preview-snapshot/v1",
-  "generatedAt": "2026-08-15T23:32:48.342Z",
+  "generatedAt": "2026-08-15T23:46:07.360Z",
   "templates": {
     "monografia": {
       "previewPages": 9,
@@ -26,7 +26,32 @@
         "7c3c29b0560907b0",
         "e4bf37a6a504162f"
       ],
+      "docxDigest": "445b2058f59dfadb",
       "pdfPages": 10,
+      "pdfSignatures": [
+        "92f58b989b70e122",
+        "c51258c4f033b0ef",
+        "ddbea74edc07ec08",
+        "c1353f670f295ae8",
+        "2ab9f50b6b481b8f",
+        "8358f5ac0c184de8",
+        "b9465548570f7168",
+        "96baa6c871b0f656",
+        "07a465606b796884",
+        "9da051400c58b0ce"
+      ],
+      "pdfPageNumbers": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        6,
+        7,
+        8
+      ],
       "similarity": 0.963,
       "pageDelta": 1
     },
@@ -56,7 +81,34 @@
         "dd24dd602aad5b81",
         "87a63636efc3feec"
       ],
+      "docxDigest": "a85e8a03e563fe98",
       "pdfPages": 11,
+      "pdfSignatures": [
+        "92f58b989b70e122",
+        "f4a817a6072cd616",
+        "878b3dea4bf4e67d",
+        "87d5f1e3c2fdc1e4",
+        "2ab9f50b6b481b8f",
+        "8358f5ac0c184de8",
+        "32ad7e18326045f7",
+        "64b2f7f4eeda8328",
+        "a8ea7be41642767d",
+        "ae23afddcfc2aa8d",
+        "e4bf37a6a504162f"
+      ],
+      "pdfPageNumbers": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        7,
+        8,
+        9
+      ],
       "similarity": 0.968,
       "pageDelta": 1
     },
@@ -86,7 +138,34 @@
         "dd24dd602aad5b81",
         "87a63636efc3feec"
       ],
+      "docxDigest": "1f6ae822062bc454",
       "pdfPages": 11,
+      "pdfSignatures": [
+        "92f58b989b70e122",
+        "72e3c6956ff77dbb",
+        "77337046b47db471",
+        "264befffd0a3365e",
+        "2ab9f50b6b481b8f",
+        "8358f5ac0c184de8",
+        "32ad7e18326045f7",
+        "64b2f7f4eeda8328",
+        "a8ea7be41642767d",
+        "ae23afddcfc2aa8d",
+        "e4bf37a6a504162f"
+      ],
+      "pdfPageNumbers": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        7,
+        8,
+        9
+      ],
       "similarity": 0.968,
       "pageDelta": 1
     },
@@ -100,7 +179,14 @@
         "70576ebb794b4e49",
         "54e94f7be60ffbbd"
       ],
+      "docxDigest": "96877c48bad7c778",
       "pdfPages": 1,
+      "pdfSignatures": [
+        "4859fe77758bb251"
+      ],
+      "pdfPageNumbers": [
+        1
+      ],
       "similarity": 1,
       "pageDelta": 1
     },
@@ -114,7 +200,14 @@
         "da037b6fce314d70",
         "54e94f7be60ffbbd"
       ],
+      "docxDigest": "5995e3d46cbfa705",
       "pdfPages": 1,
+      "pdfSignatures": [
+        "7a04ab2e668e14c5"
+      ],
+      "pdfPageNumbers": [
+        1
+      ],
       "similarity": 1,
       "pageDelta": 1
     },
@@ -138,7 +231,28 @@
         "3fd65c3e9e669da5",
         "09f16bcf28d69609"
       ],
+      "docxDigest": "34d878d59af3e8fa",
       "pdfPages": 8,
+      "pdfSignatures": [
+        "92f58b989b70e122",
+        "48dcadd6d0c2a01c",
+        "2ab9f50b6b481b8f",
+        "8358f5ac0c184de8",
+        "00e4aed590300205",
+        "e061fb65610f6994",
+        "909a0ce6e0bfacaf",
+        "93b2ac1666a9e161"
+      ],
+      "pdfPageNumbers": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        1,
+        2,
+        3
+      ],
       "similarity": 0.967,
       "pageDelta": 1
     }

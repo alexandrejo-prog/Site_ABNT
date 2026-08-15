@@ -184,14 +184,22 @@ const perTypePhysicalEvidence = perTypePhysical.wordAvailable
 const previewDiff = await runPreviewDocxCompare();
 writeJson("artifacts/ufla-compliance/preview-docx-diff.json", previewDiff.result);
 const previewDiffPassed = previewDiff.passed;
-// Snapshot de paginação (commitado): lado preview é Word-free e revalidado no CI
-// por check-preview-snapshot; o lado PDF (páginas reais do Word) entra como referência.
+// Snapshot de paginação (commitado): o lado preview + digest do DOCX são
+// Word-free e revalidados no CI por check-preview-snapshot; o lado PDF
+// (páginas/assinaturas renderizadas pelo Word) entra como referência.
 {
-  const snap = buildPreviewSnapshot();
-  const cmp = previewDiff.result.templates as Record<string, { pdfPages?: number; similarity?: number; pageDelta?: number }>;
+  const snap = await buildPreviewSnapshot();
+  const cmp = previewDiff.result.templates as Record<string, { pdfPages?: number; pdfSignatures?: Array<string>; pdfPageNumbers?: Array<number | null>; similarity?: number; pageDelta?: number }>;
   const merged: Record<string, unknown> = {};
   for (const [id, entry] of Object.entries(snap)) {
-    merged[id] = { ...entry, pdfPages: cmp[id]?.pdfPages ?? null, similarity: cmp[id]?.similarity ?? null, pageDelta: cmp[id]?.pageDelta ?? null };
+    merged[id] = {
+      ...entry,
+      pdfPages: cmp[id]?.pdfPages ?? null,
+      pdfSignatures: cmp[id]?.pdfSignatures ?? null,
+      pdfPageNumbers: cmp[id]?.pdfPageNumbers ?? null,
+      similarity: cmp[id]?.similarity ?? null,
+      pageDelta: cmp[id]?.pageDelta ?? null,
+    };
   }
   writePreviewSnapshot(merged as never);
   console.log("OK:", snapshotPath());
@@ -200,7 +208,7 @@ const previewDiffEvidence = previewDiff.wordAvailable
   ? (() => {
       const tpl = previewDiff.result.templates as Record<string, { passed: boolean; similarity: number; pageDelta: number }>;
       const perTemplate = Object.entries(tpl).map(([id, e]) => `${id} ${e.similarity}`).join("; ");
-      return `Fidelidade preview↔DOCX por template (Word COM + pdfjs + Playwright): 6/6 templates — monografia, dissertação, tese, artigo, resumo expandido CPG, projeto de pesquisa — com similaridade ≥ 0.65 e Δpáginas ≤ 3 (${perTemplate}); screenshots lado a lado por página com diffRatio (evidência visual em preview-diff/*.png); snapshot de paginação commitado (check-preview-snapshot no CI).`;
+      return `Fidelidade preview↔DOCX por template (Word COM + pdfjs + Playwright): 6/6 templates — monografia, dissertação, tese, artigo, resumo expandido CPG, projeto de pesquisa — com similaridade ≥ 0.65 e Δpáginas ≤ 3 (${perTemplate}); screenshots lado a lado por página com diffRatio (evidência visual em preview-diff/*.png); snapshot commitado com digest do DOCX (pgNumType/estrutura — verificável no CI) e referência do PDF do Word (páginas + numeração visível + assinaturas por página).`;
     })()
   : `Fidelidade preview↔DOCX: Word INDISPONÍVEL — comparação saltada (skipped-no-word), gate considerado passed.`;
 const overallStatus =

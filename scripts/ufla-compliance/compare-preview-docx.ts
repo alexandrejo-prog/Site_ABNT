@@ -22,6 +22,7 @@ import { execFileSync } from "node:child_process";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createCanvas } from "@napi-rs/canvas";
 import pixelmatch from "pixelmatch";
+import { createHash } from "node:crypto";
 import { buildPreviewHtml } from "../../src/preview-html.js";
 import { generateArticleDocxBlob } from "../../src/export-article-docx.js";
 import { generateCpgDocxBlob } from "../../src/export-cpg-docx.js";
@@ -106,15 +107,37 @@ function canUseWord(): boolean {
   }
 }
 
-async function pdfPages(pdfPath: string): Promise<string[]> {
+function normalizeForSignature(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 16);
+}
+
+async function pdfPagesInfo(pdfPath: string): Promise<Array<{ text: string; number: number | null }>> {
   const doc = await pdfjsLib.getDocument({ data: new Uint8Array(readFileSync(pdfPath)) }).promise;
-  const pages: string[] = [];
+  const out: Array<{ text: string; number: number | null }> = [];
+  const PAGE_W = 595.32;
+  const PAGE_H = 841.92;
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
     const tc = await page.getTextContent();
-    pages.push((tc.items as Array<{ str: string }>).map((it) => it.str).join(" "));
+    const items = tc.items as Array<{ str: string; transform: number[] }>;
+    const text = items.map((it) => it.str).join(" ");
+    // número visível: token numérico isolado no canto superior direito (mesma heurística do validate-pagination)
+    const nums = items
+      .filter((it) => /^\d{1,3}$/.test(it.str.trim()) && it.transform[5] > PAGE_H - 75 && it.transform[4] > PAGE_W * 0.7)
+      .map((it) => parseInt(it.str.trim(), 10));
+    out.push({ text, number: nums[0] ?? null });
   }
-  return pages;
+  return out;
 }
 
 async function rasterizePdfPage(pdfPath: string, pageNumber: number): Promise<{ png: Buffer; width: number; height: number }> {
@@ -163,7 +186,8 @@ export async function runPreviewDocxCompare(): Promise<{ passed: boolean; failur
         execFileSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", PS_RENDER, "-DocxPath", docxPath, "-PdfPath", pdfPath], { stdio: "pipe", timeout: 120000 });
 
         // 2) Texto por página
-        const pdfTexts = await pdfPages(pdfPath);
+        const pdfInfo = await pdfPagesInfo(pdfPath);
+        const pdfTexts = pdfInfo.map((p) => p.text);
         const previewHtml = buildPreviewHtml(tpl.input);
         const pageRe = /<section class="preview-page[^"]*"[^>]*>([\s\S]*?)<\/section>/g;
         const previewPages: string[] = [];
@@ -206,6 +230,9 @@ export async function runPreviewDocxCompare(): Promise<{ passed: boolean; failur
         entry.similarityPdfToPreview = Number(simD2P.toFixed(3));
         entry.similarity = Number(similarity.toFixed(3));
         entry.perPage = perPage;
+        // Assinaturas do PDF (referência do Word): hash por página + números visíveis.
+        entry.pdfSignatures = pdfInfo.map((p) => sha256(normalizeForSignature(p.text)));
+        entry.pdfPageNumbers = pdfInfo.map((p) => p.number);
 
         // 5) Evidência visual (3 primeiras páginas)
         const screenshots: unknown[] = [];

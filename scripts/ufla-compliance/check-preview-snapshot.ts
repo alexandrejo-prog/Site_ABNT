@@ -18,7 +18,9 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
+import AdmZip from "adm-zip";
 import { buildPreviewHtml } from "../../src/preview-html.js";
+import type { DocxGenerationInput } from "../../src/export-docx.js";
 import { TEMPLATES } from "./compare-preview-docx.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -54,15 +56,45 @@ export interface PreviewSnapshotTemplate {
   previewPages: number;
   pageNumbers: Array<number | null>;
   signatures: string[];
+  /** Digest do DOCX gerado (sem Word): normalizado p/ bookmarks — verificável no CI. */
+  docxDigest: string | null;
+  /** Referência do Word (não re-verificável no CI — revisão via diff do snapshot). */
   pdfPages: number | null;
+  pdfSignatures: Array<string> | null;
+  pdfPageNumbers: Array<number | null> | null;
   similarity: number | null;
   pageDelta: number | null;
 }
 
 export type PreviewSnapshot = Record<string, PreviewSnapshotTemplate>;
 
-/** Reconstrói o preview de cada template e extrai a paginação real (sem Word). */
-export function buildPreviewSnapshot(): PreviewSnapshot {
+/** Digest determinístico do DOCX gerado (Word-free): normaliza w:id de bookmarks
+ *  (aleatórios por geração) e exclui docProps (timestamps). Qualquer mudança no
+ *  documento gerado que possa afetar a renderização altera o digest. */
+export async function docxDigestFor(input: DocxGenerationInput, generate: (i: DocxGenerationInput) => Promise<Blob>): Promise<string> {
+  const blob = await generate(input);
+  const zip = new AdmZip(Buffer.from(await blob.arrayBuffer()));
+  const parts = zip
+    .getEntries()
+    .map((e) => e.entryName)
+    .filter((n) => !n.startsWith("docProps/"))
+    .sort()
+    .map((n) => {
+      const buf = zip.readFile(n);
+      if (!buf) return `${n}::<missing>`;
+      let xml = buf.toString("utf8");
+      if (n === "word/document.xml") {
+        // w:id de bookmarks é aleatório por geração; o nome carrega a identidade.
+        xml = xml.replace(/(<w:bookmark(?:Start|End)[^>]*w:id=")\d+(")/g, "$10$2");
+      }
+      return `${n}::${xml}`;
+    })
+    .join("\n");
+  return createHash("sha256").update(parts).digest("hex").slice(0, 16);
+}
+
+/** Reconstrói o preview de cada template e gera o DOCX, extraindo a paginação real (sem Word). */
+export async function buildPreviewSnapshot(): Promise<PreviewSnapshot> {
   const snapshot: PreviewSnapshot = {};
   for (const tpl of TEMPLATES) {
     const html = buildPreviewHtml(tpl.input);
@@ -76,11 +108,20 @@ export function buildPreviewSnapshot(): PreviewSnapshot {
         signature: sha256(normalizeText(m[1])),
       });
     }
+    let digest: string | null = null;
+    try {
+      digest = await docxDigestFor(tpl.input, tpl.generate);
+    } catch (err) {
+      digest = null;
+    }
     snapshot[tpl.id] = {
       previewPages: pages.length,
       pageNumbers: pages.map((p) => p.number),
       signatures: pages.map((p) => p.signature),
+      docxDigest: digest,
       pdfPages: null,
+      pdfSignatures: null,
+      pdfPageNumbers: null,
       similarity: null,
       pageDelta: null,
     };
@@ -128,6 +169,9 @@ export function compareSnapshots(committed: PreviewSnapshot, current: PreviewSna
         failures.push(`REGRESSÃO DE CONTEÚDO ${id} página ${i + 1}: texto da página mudou (assinatura ${exp.signatures[i]} → ${got.signatures[i]}).`);
       }
     }
+    if (exp.docxDigest !== got.docxDigest) {
+      failures.push(`REGRESSÃO DO DOCX ${id}: digest do documento gerado mudou (${exp.docxDigest ?? "sem digest"} → ${got.docxDigest ?? "sem digest"}) — o DOCX gerado mudou e pode alterar a renderização/paginação.`);
+    }
   }
   return failures;
 }
@@ -138,7 +182,7 @@ export async function runPreviewSnapshotCheck(): Promise<{ passed: boolean; fail
     return { passed: false, failures: ["Snapshot de preview não encontrado (scripts/ufla-compliance/snapshots/preview-docx-snapshot.json) — rode o regenerate localmente para criá-lo."] };
   }
   const committed = JSON.parse(readFileSync(SNAPSHOT_PATH, "utf8")).templates as PreviewSnapshot;
-  const current = buildPreviewSnapshot();
+  const current = await buildPreviewSnapshot();
   const failures = compareSnapshots(committed, current);
   return { passed: failures.length === 0, failures };
 }
