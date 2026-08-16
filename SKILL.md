@@ -57,7 +57,7 @@ Toda exportação de DOCX deve preservar:
   - [docx-shared.ts](file:///C:/Users/User/Desktop/Alexandre/Site_Normas_UFLA/Site_ABNT/src/docx-shared.ts): Funções de bloco compartilhadas.
   - [ufla-rules.ts](file:///C:/Users/User/Desktop/Alexandre/Site_Normas_UFLA/Site_ABNT/src/ufla-rules.ts): Constantes e dimensões tipográficas da UFLA.
 - **Validador de Conformidade (`skills/ufla-docx-compliance`):**
-  - Uma ferramenta integrada de auditoria do DOCX contra o [CHECKLIST_SITE_UFLA_MANUAL.md](file:///C:/Users/User/Desktop/Alexandre/Site_Normas_UFLA/Site_ABNT/CHECKLIST_SITE_UFLA_MANUAL.md).
+  - Uma ferramenta integrada de auditoria do DOCX contra o checklist normativo (Manual UFLA + ABNT); canônico de status: [docs/STATUS_ATUAL.md](../docs/STATUS_ATUAL.md).
   - Execute-a para validar as alterações nos exportadores.
 
 ---

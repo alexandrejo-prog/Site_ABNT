@@ -30,8 +30,11 @@ Site_ABNT/
 │       │   ├── SKILL.md
 │       ├── abnt_latest_rules/        # Regras das normas ABNT quando a UFLA for omissa
 │       │   ├── SKILL.md
-│       └── ufla_docx_compliance/     # Validador automático de DOCX
-│           └── SKILL.md
+│       ├── ufla_docx_compliance/     # Validador automático de DOCX
+│       │   └── SKILL.md
+│       ├── evidence-regeneration.md  # Skill avulsa: regeneração anti-workslop
+│       ├── tables-preservation-testing.md  # Skill avulsa: round-trip de tabelas
+│       └── tblheader-implementation.md    # Skill avulsa: w:tblHeader semântico
 ├── src/                              # Código-fonte da aplicação React
 │   ├── App.tsx                       # Componente principal da aplicação
 │   ├── components/                   # Componentes React de UI
@@ -65,12 +68,12 @@ Site_ABNT/
 │   ├── ufla-compliance/              # report.md canônico, PDFs, JSONs, content-preservation
 │   └── ufla-audit/                   # gates.json, rendered-analysis.json, findings
 ├── docs/
+│   ├── README.md                     # Mapa da documentação (o que ler por tarefa — LEIA SEMPRE)
 │   ├── STATUS_ATUAL.md               # Documento canônico de status (única fonte de verdade)
-│   ├── decisions/NNN-*.md            # Decisões registradas (001–010)
-│   ├── DECISION_*.md                 # Resumos históricos (apontam para decisions/)
-│   └── RUNNER_WORD.md                # Operação do runner self-hosted com Word
+│   ├── decisions/NNN-*.md            # Decisões canônicas registradas (001–012)
+│   ├── RUNNER_WORD.md                # Operação do runner self-hosted com Word
+│   └── historico/                    # Estado antigo (14/08) — auditoria, checkpoint, checklists, manuais avulsos
 ├── Regras/                           # PDFs do Manual da UFLA e guias de formatos específicos
-├── CHECKLIST_SITE_UFLA_MANUAL.md     # Checklist técnico de conformidade
 ├── PRD.md                            # Requisitos de Produto
 ├── SKILL.md                          # Instruções da IA na raiz do repositório
 ├── context.md                        # ← Este arquivo
@@ -117,7 +120,7 @@ O repositório inclui um analisador automático que lê um arquivo `.docx` gerad
 ---
 
 ## 6. PENDÊNCIAS CONHECIDAS (Checklist UFLA/ABNT)
-As pendências abaixo constam no [CHECKLIST_SITE_UFLA_MANUAL.md](file:///C:/Users\User/Desktop\Alexandre\Site_Normas_UFLA\Site_ABNT\CHECKLIST_SITE_UFLA_MANUAL.md):
+As pendências abaixo constam no checklist normativo (status canônico: `docs/STATUS_ATUAL.md`; evidência: `artifacts/ufla-compliance/report.md`):
 1. **Tabelas:** traço duplo superior/inferior **[x]** (implementado — `BorderStyle.DOUBLE` em `docx-shared.ts`).  
 2. **Apêndices/Anexos:** numeração de páginas contínua **[x]** (já na mesma seção textual; teste cobre).  
 3. **Folha de Aprovação:** título em inglês e coorientador **[x]** (implementado — dissertação/tese; `englishTitle` no form).  
@@ -331,7 +334,7 @@ Estado documentado no canônico `docs/STATUS_ATUAL.md`. Branch `feat/ufla-render
 7. **Preservação de imagens em grupo** — figura composta com legenda compartilhada importada como grupo; imagens de apêndice preservadas.
 
 ## 6q. FECHAMENTO DO WIP + HIGIENE DE GOVERNANÇA (16/08/2026)
-Sincronização do manual de bordo com o canônico `docs/STATUS_ATUAL.md`. **209 arquivos, 1684 testes (10 skipped), build OK, lint 0/0, 11/11 gates.**
+Sincronização do manual de bordo com o canônico `docs/STATUS_ATUAL.md`. **210 arquivos, 1688 testes (10 skipped), build OK, lint 0/0, 11/11 gates.**
 
 1. **Preview de equações importadas igual ao Word** — `src/omml-to-latex.ts` (novo): conversor OMML→LaTeX (tokenizador XML de pilha, sem DOM/DOMParser) com cobertura de `m:f` (frac), `m:rad`, `m:sSup/sSub/sSubSup/sPre`, `m:nary` (∫/∑/∏), `m:limLow/limUpp`, `m:d` (delimitadores), `m:func`, `m:acc/m:bar`, `m:eqArr`; `preview-html.ts` usa `ommlToLatex` quando o bloco carrega o token `\uF001OMML:` → KaTeX renderiza a fração real do Word (não texto achatado). 15 testes do conversor + 1 de regressão do preview.
 2. **Conciliação física DOCX→PDF página-a-página** — `coverage-docx-pdf.ts` ganhou `tables.pageMap` (página física de cada tabela OOXML) e `pageMapping` (reverse map página→índices), evidenciando LAYOUT não só presença; `analyze-per-type-pdfs.ts` detecta conteúdo invadindo a margem inferior (área do rodapé, DECISION-010) e registra a posição exata do 1º número visível (`headerNumber`); 3 testes novos.
@@ -371,6 +374,17 @@ Ogate Lighthouse flakou no PR #21 (mediana 65 < 70 por contenção do runner). I
 6. **Lighthouse** — local: perf **85→99**, a11y 100, best-practices 92-96 (na 1ª execução, sem retry). Projeção: mediana ≥ 90 no CI.
 7. **Validação** — `npm test` 210/1688 green; `npm run e2e` 13/13; lint 0/0; `npm run ufla:audit` **11/11 gates** (fingerprint regenerado `9f7798a7…`); `npm run verify` OK. Snapshot de paginação regenerado na auditoria.
 
+## 6u. REORGANIZAÇÃO DA DOCUMENTAÇÃO + AUDITORIA FRESCA (16/08/2026)
+PR #22 (`docs/housekeeping-reorg`) — reduzir a releitura por rodada. Auditoria re-regenerada no fim: **210 arquivos, 1688 testes (10 skipped), 147s, 11/11 gates, `sourceFingerprint` `9f7798a7…`**.
+
+1. **Mapa central `docs/README.md`** — o que ler por tarefa (canônico vs histórico); regra de ouro: `docs/STATUS_ATUAL.md` (status) e `artifacts/ufla-compliance/report.md` (evidência) são os únicos com números.
+2. **Histórico consolidado em `docs/historico/`** — 23 arquivos movidos (git mv): `docs/auditoria/*` (11 de 14/08), stubs `DECISION_002/003/006/007/008/010*`, `CHECKLIST*.md`, `ISSUE_19_TABELAS_HEADER.md`, `checkpoint/workslop-assessment.*`, `MANUAL_DE_NORMALIZACAO_2024.md` e `NBR15287_PROJETO_PESQUISA.md` → `manuais/`. `MANUAL_NORMALIZACAO_2024.md` ficou na raiz (fonte citada em `src/footer-rules.ts` e testada).
+3. **Skills reais em `.agents/skills/`** — as 4 skills que este arquivo já referenciava (site_abnt_ufla, ufla_docx_rules, abnt_latest_rules, ufla_docx_compliance) + `.agents/AGENTS.md`; 3 skill-files avulsos de contexto preservados.
+4. **Referências quebradas corrigidas** — SKILL.md/context.md apontavam para `CHECKLIST_SITE_UFLA_MANUAL.md` (inexistente) → agora para o canônico; `STATUS_ATUAL.md` referenciava `checkpoint/workslop-assessment.md` → `docs/historico/checkpoint/`; `docs/decisions/001` idem.
+5. **Teste do CHECKLIST ajustado** — `tests/meta/checklist.test.ts` verificava `docs/CHECKLIST.md` (movido); agora verifica `docs/historico/CHECKLIST.md` + presença do canônico `docs/STATUS_ATUAL.md`.
+6. **Fonte única DECISION-010** — `docs/DECISION_010_PAGINATION.md` virou stub histórico apontando para `docs/decisions/010-paginacao-contagem-folha-rosto.md` (regra do checkpoint: um canônico, sem números duplicados).
+7. **`docs/checklist-14-correcoes.md`** — checklist dinâmico das 14 correções da análise criteriosa (Blocos A/B/C com critério de aceite e teste de prova).
+
 ---
 
 ## 7. COMANDOS ÚTEIS
@@ -389,7 +403,7 @@ npm run skill:validate   # Valida um DOCX; use --type para classificar itens est
 
 ## 8. REGRAS PARA A IA
 1. **SEMPRE** consulte `[ufla-docx-rules/SKILL.md](file:///C:/Users/User/Desktop/Alexandre/Site_ABNT/.agents/skills/ufla-docx-rules/SKILL.md)` antes de criar ou modificar geradores de documentos.  
-2. **NÃO** altere estilos sem confirmar conformidade no `CHECKLIST_SITE_UFLA_MANUAL.md`.  
+2. **NÃO** altere estilos sem confirmar conformidade no checklist normativo (canônico: `docs/STATUS_ATUAL.md`; evidência: `artifacts/ufla-compliance/report.md`).  
 3. **MANTENHA** este arquivo atualizado conforme novas pendências ou mudanças de escopo.  
 4. **EXPLIQUE** termos técnicos em português nas interações com o usuário.
 5. **FONTE ÚNICA DE VERDADE** — status/gates/contagens vivem em `docs/STATUS_ATUAL.md` (canônico) e `artifacts/ufla-compliance/report.md`; nunca duplicar números em outro arquivo sem marcar como histórico (data + commit + apontar para o canônico).
