@@ -11,11 +11,11 @@ import {
 import { parseEditorContent, importedTableParagraph, type DocxGenerationInput, type EditorBlock, loadDefaultLogoAsset } from "./export-docx";
 import { DOCUMENT_STYLES } from "./docx-styles";
 import type { ImportedTable } from "./imported-tables";
-import { AUTHOR_SIZE, BLACK, BODY_SIZE, ONE_AND_HALF_LINE, SINGLE_LINE, TITLE_SIZE, centered, ibgeTable, logoParagraph, pageBreak, pageMargins, pageNumberHeader, paragraph, run, unnumberedTitle } from "./docx-shared";
+import { AUTHOR_SIZE, BLACK, BODY_SIZE, ONE_AND_HALF_LINE, SINGLE_LINE, TITLE_SIZE, centered, dedupeReferences, ibgeTable, logoParagraph, pageBreak, pageMargins, pageNumberHeader, paragraph, referenceRunToTextRun, run, sortReferencesByAuthorKey, unnumberedTitle } from "./docx-shared";
 import { repairHeadingFragments } from "./heading-fragment-repair";
 import { normalizeUflaManualInTextCitations } from "./in-text-citation-normalizer";
 import { isResearchProjectProvisionalText, normalizeKeywordSentence, normalizeResearchProjectEditorText } from "./research-project-cleaner";
-import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
+import { normalizeReferences } from "./references-normalizer";
 import { UFLA_RULES, cmToTwip } from "./ufla-rules";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
 import { cleanMojibakeText, rawOmmlMarkerParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, tabbedTableBlock, textRunsFromMarkup } from "./docx-render-core";
@@ -354,17 +354,6 @@ function bodyChildrenFromBlocks(blocks: EditorBlock[], importedTables: ImportedT
   return children;
 }
 
-function referenceRunToTextRun(referenceRun: ReferenceRun): TextRun {
-  return new TextRun({
-    text: cleanMojibakeText(referenceRun.text),
-    bold: referenceRun.bold,
-    italics: referenceRun.italics,
-    font: UFLA_RULES.typography.fontFamily,
-    size: BODY_SIZE,
-    color: BLACK,
-  });
-}
-
 function hasEditorHeading(blocks: EditorBlock[], text: string): boolean {
   const normalizedTarget = text
     .normalize("NFD")
@@ -392,17 +381,9 @@ function referenceParagraphs(references: string[], bodyBlocks: EditorBlock[] = [
     children.push(new Paragraph({ style: "ufla_titulo_sem_indicativo", alignment: AlignmentType.CENTER, spacing: { before: UFLA_RULES.spacing.afterParagraphTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE }, children: [run("REFERÊNCIAS", true)] }));
   }
   const normalized = normalizeReferences(references);
-  const seen = new Set<string>();
-  const deduped = normalized.filter((ref) => {
-    const key = ref.text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
   children.push(
-    ...deduped
-      .sort((a, b) => cleanMojibakeText(a.text).localeCompare(cleanMojibakeText(b.text), "pt-BR", { sensitivity: "base" }))
-      .map((reference) => new Paragraph({ style: "ufla_referencia", alignment: AlignmentType.LEFT, spacing: { line: SINGLE_LINE, after: SINGLE_LINE }, indent: { left: cmToTwip(0.5), hanging: cmToTwip(0.5) }, children: reference.runs.length ? reference.runs.map(referenceRunToTextRun) : [run(cleanMojibakeText(reference.text || " "))] })),
+    ...sortReferencesByAuthorKey(dedupeReferences(normalized))
+      .map((reference) => new Paragraph({ style: "ufla_referencia", alignment: AlignmentType.LEFT, spacing: { line: SINGLE_LINE, after: SINGLE_LINE }, indent: { left: UFLA_RULES.spacing.referenceHangingTwip, hanging: UFLA_RULES.spacing.referenceHangingTwip }, children: reference.runs.length ? reference.runs.map((r) => referenceRunToTextRun(r)) : [run(cleanMojibakeText(reference.text || " "))] })),
   );
   return children;
 }

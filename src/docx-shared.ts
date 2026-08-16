@@ -3,6 +3,7 @@ import type { IParagraphOptions } from "docx";
 import type { DocxLogoAsset } from "./export-docx";
 import { UFLA_RULES } from "./ufla-rules";
 import { cleanMojibakeText } from "./docx-render-core";
+import type { NormalizedReference, ReferenceRun } from "./references-normalizer";
 
 export const BLACK = "000000";
 export const BODY_SIZE = UFLA_RULES.typography.bodyFontSizePt * 2;
@@ -82,6 +83,53 @@ export function pageNumberHeader(): Header {
       }),
     ],
   });
+}
+
+/**
+ * C8 — única cópia de referenceRunToTextRun: TextRun de referência ABNT.
+ * Os exportadores passam a fonte/tamanho do seu tipo (UFLA ou CPG);
+ * o padrão é o corpo UFLA (equivalente às cópias antigas de cada exportador).
+ */
+export function referenceRunToTextRun(
+  referenceRun: ReferenceRun,
+  font: string = UFLA_RULES.typography.fontFamily,
+  size: number = BODY_SIZE,
+): TextRun {
+  return new TextRun({
+    text: cleanMojibakeText(referenceRun.text),
+    bold: referenceRun.bold,
+    italics: referenceRun.italics,
+    font,
+    size,
+    color: BLACK,
+  });
+}
+
+/** Chave de ordenação ABNT: sobrenome (texto antes da 1ª vírgula). */
+export function getAuthorKey(ref: NormalizedReference): string {
+  const text = ref.text.trim();
+  const commaIndex = text.indexOf(",");
+  if (commaIndex > 0) return text.substring(0, commaIndex).trim();
+  const firstSpace = text.search(/\s/);
+  return firstSpace > 0 ? text.substring(0, firstSpace) : text;
+}
+
+/** Deduplica referências por texto normalizado (sem acento/maiúsculas). */
+export function dedupeReferences(normalized: NormalizedReference[]): NormalizedReference[] {
+  const seen = new Set<string>();
+  return normalized.filter((ref) => {
+    const key = ref.text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Ordena referências alfabeticamente pela chave ABNT (getAuthorKey). */
+export function sortReferencesByAuthorKey(normalized: NormalizedReference[]): NormalizedReference[] {
+  return [...normalized].sort((a, b) =>
+    getAuthorKey(a).localeCompare(getAuthorKey(b), "pt-BR", { sensitivity: "base" }),
+  );
 }
 
 export interface IbgeTableOptions {

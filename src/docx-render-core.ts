@@ -29,7 +29,7 @@ import {
   XmlComponent,
 } from "docx";
 import type { MathComponent } from "docx";
-import { UFLA_RULES, cmToTwip } from "./ufla-rules";
+import { UFLA_RULES } from "./ufla-rules";
 import { cleanMojibakeText } from "./text-utils";
 export { cleanMojibakeText };
 
@@ -536,7 +536,7 @@ export function equationParagraph(text: string): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { line: 360, before: 120, after: 120 },
-    tabStops: [{ type: TabStopType.RIGHT, position: cmToTwip(16) }],
+    tabStops: [{ type: TabStopType.RIGHT, position: UFLA_RULES.page.tabRightTwip }],
     children,
   });
 }
@@ -820,7 +820,7 @@ export function ommlEquationParagraph(text: string): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { line: 360, before: 120, after: 120 },
-    tabStops: [{ type: TabStopType.RIGHT, position: cmToTwip(16) }],
+    tabStops: [{ type: TabStopType.RIGHT, position: UFLA_RULES.page.tabRightTwip }],
     children,
   });
 }
@@ -879,7 +879,7 @@ export function rawOmmlMarkerParagraph(
   return new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { line: 360, before: 120, after: 120 },
-    tabStops: [{ type: TabStopType.RIGHT, position: cmToTwip(16) }],
+    tabStops: [{ type: TabStopType.RIGHT, position: UFLA_RULES.page.tabRightTwip }],
     children: [new TextRun({ text: `${RAW_OMML_MARKER}_${markerId}\uF000` })],
   });
 }

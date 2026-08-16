@@ -1,11 +1,9 @@
 import {
   AlignmentType,
   Document,
-  Header,
   HeadingLevel,
   InternalHyperlink,
   Packer,
-  PageNumber,
   PageOrientation,
   Paragraph,
   Table,
@@ -17,8 +15,9 @@ import { registerXrefResolver, clearXrefRegistry } from "./docx-render-core";
 import type { ImportedTable } from "./imported-tables";
 import { DOCUMENT_STYLES } from "./docx-styles";
 import type { ImportedDocumentImage } from "./imported-images";
-import { UFLA_RULES, cmToTwip } from "./ufla-rules";
-import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
+import { UFLA_RULES } from "./ufla-rules";
+import { referenceRunToTextRun, pageNumberHeader as sharedPageNumberHeader } from "./docx-shared";
+import { normalizeReferences } from "./references-normalizer";
 import { cleanMojibakeText, longQuoteParagraph, rawOmmlMarkerParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, tabbedTableBlock } from "./docx-render-core";
 
 const BLACK = "000000";
@@ -186,7 +185,7 @@ function blockToParagraph(
   }
   if (block.type === "reference" || normalizeComparable(block.text) === "REFERENCIAS") return [];
   const runs = textRunsWithFootnotes(block.text, footnoteIdMap, BODY_SIZE);
-  return [new Paragraph({ style: "ufla_corpo_texto", alignment: AlignmentType.BOTH, spacing: { line: ONE_AND_HALF_LINE, after: UFLA_RULES.spacing.afterParagraphTwip }, indent: { firstLine: cmToTwip(1.25) }, children: runs })];
+  return [new Paragraph({ style: "ufla_corpo_texto", alignment: AlignmentType.BOTH, spacing: { line: ONE_AND_HALF_LINE, after: UFLA_RULES.spacing.afterParagraphTwip }, indent: { firstLine: UFLA_RULES.typography.paragraphFirstLineTwip }, children: runs })];
 }
 
 function stripTrailingReferenceSection(blocks: EditorBlock[]): EditorBlock[] {
@@ -195,13 +194,6 @@ function stripTrailingReferenceSection(blocks: EditorBlock[]): EditorBlock[] {
     return normalized === "REFERENCIAS" || normalized.startsWith("REFERENCIAS");
   });
   return refIndex === -1 ? blocks : blocks.slice(0, refIndex);
-}
-
-function referenceRunToTextRun(referenceRun: ReferenceRun): TextRun {
-  return run(referenceRun.text, {
-    bold: referenceRun.bold,
-    italics: referenceRun.italics,
-  });
 }
 
 function referenceParagraphs(references: string[]): (Paragraph | Table)[] {
@@ -235,9 +227,9 @@ function referenceParagraphs(references: string[]): (Paragraph | Table)[] {
             style: "ufla_referencia",
             alignment: AlignmentType.LEFT,
             spacing: { line: SINGLE_LINE, after: UFLA_RULES.spacing.afterPrimaryTitleTwip },
-            indent: { left: cmToTwip(0.5), hanging: cmToTwip(0.5) },
+            indent: { left: UFLA_RULES.spacing.referenceHangingTwip, hanging: UFLA_RULES.spacing.referenceHangingTwip },
             children: reference.runs.length
-              ? reference.runs.map(referenceRunToTextRun)
+              ? reference.runs.map((r) => referenceRunToTextRun(r))
               : [run(reference.text || " ")],
           }),
       ),
@@ -272,21 +264,7 @@ function createArticleDocument(input: DocxGenerationInput): Document {
 
   registerXrefResolver(buildXrefResolver(bodyBlocks, input.importedImages ?? [], input.importedTables ?? []));
 
-  const pageNumberHeader = new Header({
-    children: [
-      new Paragraph({
-        alignment: AlignmentType.RIGHT,
-        children: [
-          new TextRun({
-            children: [PageNumber.CURRENT],
-            font: UFLA_RULES.typography.fontFamily,
-            size: UFLA_RULES.typography.pageNumberFontSizePt * 2,
-            color: BLACK,
-          }),
-        ],
-      }),
-    ],
-  });
+  const pageNumberHeader = sharedPageNumberHeader();
 
   const document = new Document({
     creator: "UFLA DOCX Academico",
@@ -317,9 +295,9 @@ function createArticleDocument(input: DocxGenerationInput): Document {
           default: pageNumberHeader,
         },
         children: [
-          centered((input.fields.title || "Titulo do artigo").toUpperCase(), true, 32),
-          ...(hasText(input.fields.subtitle) ? [centered(input.fields.subtitle, false, 28)] : []),
-          centered((input.fields.author || "Autor").toUpperCase(), false, 28),
+          centered((input.fields.title || "Titulo do artigo").toUpperCase(), true, UFLA_RULES.typography.coverTitleFontSizePt * 2),
+          ...(hasText(input.fields.subtitle) ? [centered(input.fields.subtitle, false, UFLA_RULES.typography.coverAuthorFontSizePt * 2)] : []),
+          centered((input.fields.author || "Autor").toUpperCase(), false, UFLA_RULES.typography.coverAuthorFontSizePt * 2),
           ...labeledSection("Resumo", input.fields.resumo),
           ...(hasText(input.fields.palavrasChave)
             ? [

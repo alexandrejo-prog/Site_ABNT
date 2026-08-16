@@ -17,14 +17,14 @@ import {
   WidthType,
 } from "docx";
 import type { IParagraphOptions } from "docx";
-import { BLACK as SHARED_BLACK } from "./docx-shared";
+import { BLACK as SHARED_BLACK, referenceRunToTextRun } from "./docx-shared";
 import { DOCUMENT_STYLES } from "./docx-styles";
 import { cleanMojibakeText, rawOmmlMarkerParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, hasText, detectCaption, tabbedTableBlock } from "./docx-render-core";
 import { parseEditorContent, importedTableParagraph, type DocxGenerationInput, type EditorBlock } from "./export-docx";
 import type { ImportedTable } from "./imported-tables";
 import { CPG_RULES, UFLA_RULES, cmToTwip } from "./ufla-rules";
 import { stripCpgForbiddenSections } from "./cpg-content-filter";
-import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
+import { normalizeReferences } from "./references-normalizer";
 
 const BLACK = SHARED_BLACK;
 const BODY_SIZE = CPG_RULES.typography.bodyFontSizePt * 2;
@@ -59,17 +59,6 @@ function run(text: string, options: RunOptions = {}): TextRun {
     color: BLACK,
     bold: options.bold,
     italics: options.italics,
-  });
-}
-
-function referenceRunToTextRun(item: ReferenceRun): TextRun {
-  return new TextRun({
-    text: cleanMojibakeText(item.text),
-    font: CPG_RULES.typography.fontFamily,
-    size: BODY_SIZE,
-    color: BLACK,
-    bold: item.bold,
-    italics: item.italics,
   });
 }
 
@@ -369,7 +358,7 @@ function referenceParagraphs(references: string[], bodyBlocks: EditorBlock[] = [
             left: REFERENCE_HANGING,
             hanging: REFERENCE_HANGING,
           },
-          children: reference.runs.map(referenceRunToTextRun),
+          children: reference.runs.map((item) => referenceRunToTextRun(item, CPG_RULES.typography.fontFamily, BODY_SIZE)),
         }),
     ),
   );

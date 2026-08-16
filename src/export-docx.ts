@@ -5,12 +5,10 @@ import {
   BorderStyle,
   Document,
   FootnoteReferenceRun,
-  Header,
   ImageRun,
   InternalHyperlink,
   Packer,
   PageBreak,
-  PageNumber,
   PageOrientation,
   Paragraph,
   SimpleField,
@@ -25,15 +23,16 @@ import {
 } from "docx";
 import type { IParagraphOptions, ISectionOptions } from "docx";
 import "./docx-toc-field-patch";
-import { pageMargins, ibgeTable, BODY_SIZE, SINGLE_LINE, ONE_AND_HALF_LINE, BLACK, AUTHOR_SIZE as COVER_AUTHOR_SIZE, TITLE_SIZE as COVER_TITLE_SIZE, unnumberedTitle } from "./docx-shared";
+import { pageMargins, ibgeTable, BODY_SIZE, SINGLE_LINE, ONE_AND_HALF_LINE, BLACK, AUTHOR_SIZE as COVER_AUTHOR_SIZE, TITLE_SIZE as COVER_TITLE_SIZE, unnumberedTitle, pageNumberHeader as sharedPageNumberHeader, referenceRunToTextRun, dedupeReferences, sortReferencesByAuthorKey } from "./docx-shared";
 import { DOCUMENT_STYLES } from "./docx-styles";
-import { AcademicFields, UFLA_RULES, cmToTwip } from "./ufla-rules";
+import { AcademicFields, UFLA_RULES } from "./ufla-rules";
+import { isValidImageBytes } from "./image-asset-utils";
 import { ACADEMIC_PRODUCTION_TYPE_IDS } from "./academic-production-types";
 import { getWorkTypeRequirements } from "./work-type-requirements";
-import { normalizeReferences, type NormalizedReference, type ReferenceRun } from "./references-normalizer";
+import { normalizeReferences } from "./references-normalizer";
 import { buildFlowingImpactText } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
-import { cleanMojibakeText, clearXrefRegistry, detectCaption, detectTabbedTableBlock, OMML_CONTENT_TOKEN_PATTERN, ommlContentTokenDecode, rawOmmlMarkerParagraph, registerXrefResolver, resolveXrefTarget, sectionBookmarkId, sourceParagraph, tabbedTableBlock, tokenizeMarkup, type CaptionKind, type XrefResolver } from "./docx-render-core";
+import { cleanMojibakeText, clearXrefRegistry, detectCaption, detectTabbedTableBlock, OMML_CONTENT_TOKEN_PATTERN, ommlContentTokenDecode, rawOmmlMarkerParagraph, registerXrefResolver, resolveXrefTarget, sectionBookmarkId, sourceParagraph, splitParagraphs, tabbedTableBlock, tokenizeMarkup, type CaptionKind, type XrefResolver } from "./docx-render-core";
 import { ImportedDocumentImage, IMPORTED_IMAGE_MARKER_PATTERN } from "./imported-images";
 import { ImportedTable, IMPORTED_TABLE_MARKER_PATTERN, buildStructuredTextFromTable } from "./imported-tables";
 
@@ -87,8 +86,6 @@ interface ScheduleRow {
 export const DEFAULT_UFLA_LOGO_PATH = "/assets/ufla-logo.jpeg";
 
 const LONG_QUOTE_SIZE = UFLA_RULES.typography.longQuoteFontSizePt * 2;
-const REFERENCE_FONT = UFLA_RULES.typography.fontFamily;
-const REFERENCE_SIZE = UFLA_RULES.typography.bodyFontSizePt * 2;
 // Notas de rodapé: 11 pt (meio-pontos 22) — §3.2.1 do Manual UFLA.
 const FOOTNOTE_SIZE = UFLA_RULES.typography.sourceFontSizePt * 2;
 const UFLA_LOGO_WIDTH_PX = 265;
@@ -405,17 +402,6 @@ function plainRun(text: string, size = BODY_SIZE): TextRun {
     text,
     font: UFLA_RULES.typography.fontFamily,
     size,
-    color: BLACK,
-  });
-}
-
-function referenceRunToTextRun(run: ReferenceRun): TextRun {
-  return new TextRun({
-    text: cleanMojibakeText(run.text),
-    bold: run.bold,
-    italics: run.italics,
-    font: REFERENCE_FONT,
-    size: REFERENCE_SIZE,
     color: BLACK,
   });
 }
@@ -1412,8 +1398,8 @@ export function importedTableParagraph(table: ImportedTable | undefined): Array<
   return result;
 }
 
-/** Largura útil do retrato A4 (11906 − margem esq. 1701 − dir. 1134 twips). */
-const PORTRAIT_CONTENT_TWIP = UFLA_RULES.page.widthTwip - 1701 - 1134;
+/** Largura útil do retrato A4 (largura − margens esq./dir. em twips). */
+const PORTRAIT_CONTENT_TWIP = UFLA_RULES.page.widthTwip - UFLA_RULES.margins.leftTwip - UFLA_RULES.margins.rightTwip;
 const LANDSCAPE_MIN_COLUMNS = 6;
 
 function editorTableColumnCount(block: EditorBlock): number {
@@ -1623,13 +1609,6 @@ function isShortCitationParagraph(text: string): boolean {
   return /^[“"]/.test(trimmed) && /[”"][\s\S]*$/.test(trimmed.slice(1));
 }
 
-function splitParagraphs(value: string): string[] {
-  return value
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
 function buildSimpleParagraphs(value: string): Paragraph[] {
   return splitParagraphs(value).map((line) => simpleParagraph(line));
 }
@@ -1688,40 +1667,18 @@ function collectSummaryEntries(bodyBlocks: EditorBlock[], references: string[], 
   return entries;
 }
 
-function getAuthorKey(ref: NormalizedReference): string {
-  const text = ref.text.trim();
-  const commaIndex = text.indexOf(",");
-  if (commaIndex > 0) {
-    return text.substring(0, commaIndex).trim();
-  }
-  const firstSpace = text.search(/\s/);
-  return firstSpace > 0 ? text.substring(0, firstSpace) : text;
-}
-
 function buildReferences(references: string[]): Paragraph[] {
   const normalized = normalizeReferences(references);
-  const seen = new Set<string>();
-  const deduped = normalized.filter((ref) => {
-    const key = ref.text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-  return deduped
-    .sort((a, b) => {
-      const aKey = getAuthorKey(a);
-      const bKey = getAuthorKey(b);
-      return aKey.localeCompare(bKey, "pt-BR", { sensitivity: "base" });
-    })
+  return sortReferencesByAuthorKey(dedupeReferences(normalized))
     .map(
       (reference) =>
         new Paragraph({
           style: "ufla_referencia",
           alignment: AlignmentType.LEFT,
           spacing: { line: SINGLE_LINE, after: SINGLE_LINE },
-          indent: { left: cmToTwip(0.5), hanging: cmToTwip(0.5) },
+          indent: { left: UFLA_RULES.spacing.referenceHangingTwip, hanging: UFLA_RULES.spacing.referenceHangingTwip },
           children: reference.runs.length
-            ? reference.runs.map(referenceRunToTextRun)
+            ? reference.runs.map((r) => referenceRunToTextRun(r))
             : [referenceRunToTextRun({ text: reference.text || " " })],
         }),
     );
@@ -2072,7 +2029,7 @@ function listEntryParagraph(item: ListItem): Paragraph {
     style: "ufla_lista_item",
     alignment: AlignmentType.LEFT,
     spacing: { line: SINGLE_LINE, after: 120 },
-    tabStops: [{ type: TabStopType.RIGHT, position: 9071, leader: "dot" }],
+    tabStops: [{ type: TabStopType.RIGHT, position: UFLA_RULES.page.tabRightTwip, leader: "dot" }],
     indent: { left: 709, hanging: 709 },
     children: [
       new TextRun({
@@ -2610,7 +2567,11 @@ function preTextualChildren(
   if (requirements.requiresCatalogCard) {
     children.push(pageBreak(), unnumberedTitle("Ficha catalográfica"));
     const fichaText = cleanMojibakeText(fields.fichaCatalografica?.trim() || "");
-    if (fichaCatalograficaImage?.data?.byteLength) {
+    // C10 — ImageRun só recebe imagem válida (magic bytes); caso contrário cai no texto.
+    const fichaImgValid =
+      fichaCatalograficaImage?.data?.byteLength &&
+      isValidImageBytes(new Uint8Array(fichaCatalograficaImage.data));
+    if (fichaImgValid && fichaCatalograficaImage) {
       children.push(
         new Paragraph({
           alignment: AlignmentType.CENTER,
@@ -2896,21 +2857,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
     false,
   );
 
-  const pageNumberHeader = new Header({
-    children: [
-      new Paragraph({
-        alignment: AlignmentType.RIGHT,
-        children: [
-          new TextRun({
-            children: [PageNumber.CURRENT],
-            font: UFLA_RULES.typography.fontFamily,
-            size: UFLA_RULES.typography.pageNumberFontSizePt * 2,
-            color: BLACK,
-          }),
-        ],
-      }),
-    ],
-  });
+  const pageNumberHeader = sharedPageNumberHeader();
 
   const footnotes = buildFootnotes(allFootnoteDefinitions, footnoteIdMap);
   currentFootnoteIdMap = null;

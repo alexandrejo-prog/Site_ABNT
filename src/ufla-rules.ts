@@ -230,6 +230,9 @@ export const UFLA_RULES = {
     format: "A4",
     widthTwip: 11906,
     heightTwip: 16838,
+    // Tab direito de conteúdo (16 cm): sumário/lista de ilustrações e tabelas
+    // (leader de pontos) e numeração de equações à direita (Manual §3.2.8).
+    tabRightTwip: cmToTwip(16),
   },
   margins: {
     topCm: 3,
@@ -276,6 +279,9 @@ export const UFLA_RULES = {
     afterParagraphTwip: 0,
     beforePrimaryTitleTwip: 240,
     afterPrimaryTitleTwip: 240,
+    // Recuo deslocante (hanging) das referências: 0,5 cm (NBR 6023).
+    referenceHangingCm: 0.5,
+    referenceHangingTwip: cmToTwip(0.5),
   },
   structure: {
     preTextualOrder: [
