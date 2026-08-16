@@ -11,11 +11,11 @@
 
 ## Bloco A — Riscos de crash e perda de dados
 
-### A1. Token OMML editável não pode derrubar export/preview
-- [ ] **Problema:** `ommlContentTokenDecode` (`src/docx-render-core.ts:901-905`) chama `atob()` sem try/catch; token `\uF001OMML:<base64>\uF001` editável pelo usuário → `export-docx.ts:320` (usado por 4 exportadores + preview) falha.
-- [ ] **Correção:** envolver decode em try/catch; em falha, degradar para texto achatado e emitir alerta (não crashar).
-- [ ] **Critério de aceite:** token base64 truncado/inválido no rascunho NÃO lança erro; DOCX gerado com texto achatado + aviso.
-- [ ] **Teste:** teste novo em `tests/` que injeta token corrompido e garante geração sem throw + aviso. Rodar `npm test`.
+### A1. Token OMML editável não pode derrubar export/preview ✅
+- [x] **Problema:** `ommlContentTokenDecode` (`src/docx-render-core.ts:901-905`) chama `atob()` sem try/catch; token `\uF001OMML:<base64>\uF001` editável pelo usuário → `export-docx.ts:320` (usado por 4 exportadores + preview) falha.
+- [x] **Correção:** envolver decode em try/catch; em falha, degradar para texto achatado e emitir alerta (não crashar).
+- [x] **Critério de aceite:** token base64 truncado/inválido no rascunho NÃO lança erro; DOCX gerado com texto achatado + aviso.
+- [x] **Teste:** `tests/regression/omml-token-robustness.test.ts` (A1): decode com base64 inválido retorna `""` + `console.warn`; `parseEditorContent`/`generateDocxBlob` com token corrompido sem throw; round-trip de token válido intacto. `npm test` verde (1695).
 
 ### A2. Importação avisa que formatação de caracteres não é preservada
 - [ ] **Problema:** `import-normalizer.ts:342-366` reconstrói blocos via `textBlock()` (`:124-133`), perdendo bold/italic/underline/runs de `word-structure-extractor.ts` sem alerta.
@@ -29,11 +29,11 @@
 - [ ] **Critério de aceite:** linha digitada pelo usuário com marcador inválido aparece como placeholder no DOCX, não desaparece.
 - [ ] **Teste:** teste de geração com `[[Imagem importada preservada: inexistente]]` → assert do parágrafo placeholder.
 
-### A4. Registro OMML escopado por documento (corrida em geração paralela)
-- [ ] **Problema:** `clearRawOmmlRegistry()` em cada `generate*` (`export-docx.ts:2983`) + patch pós-Packer lê `rawOmmlRegistry` após `toBlob` → pool 3 de renders pode limpar antes do patch da 1ª geração.
-- [ ] **Correção:** escopar o registry por id de documento/geração (ex.: Map por geração; limpar ao final de CADA toBlob, não no início).
-- [ ] **Critério de aceite:** 2 gerações paralelas com equações OMML → ambos DOCX re-injetam OMML corretamente (sem marcador `\uF000UFLAOMML_` vazando).
-- [ ] **Teste:** teste concorrente (Promise.all de 2 `generateXxxDocxBlob`) com equações; assert do OOXML pós-Packer.
+### A4. Registro OMML escopado por documento (corrida em geração paralela) ✅
+- [x] **Problema:** `clearRawOmmlRegistry()` em cada `generate*` (`export-docx.ts:2983`) + patch pós-Packer lê `rawOmmlRegistry` após `toBlob` → pool 3 de renders pode limpar antes do patch da 1ª geração.
+- [x] **Correção:** IDs de marcador únicos (contador monotônico, sem reset) + entrada DELETADA no consumo pelo patch pós-Packer (`rawOmmlDeleteMarker`) + `clearRawOmmlRegistry()` removido dos 4 exportadores (limpar no início apagaria os registros de outra geração em voo).
+- [x] **Critério de aceite:** 2 gerações paralelas com equações OMML → ambos DOCX re-injetam OMML corretamente (sem marcador `\uF000UFLAOMML_` vazando).
+- [x] **Teste:** `tests/regression/omml-token-robustness.test.ts` (A4): `Promise.all` de 2 `generateDocxBlob` (OMML distintos a/b vs c/d + monografia×artigo) → cada DOCX só com o OMML próprio, sem marcador vazando, `rawOmmlRegistrySize() === 0`.
 
 ---
 

@@ -385,6 +385,14 @@ PR #22 (`docs/housekeeping-reorg`) — reduzir a releitura por rodada. Auditoria
 6. **Fonte única DECISION-010** — `docs/DECISION_010_PAGINATION.md` virou stub histórico apontando para `docs/decisions/010-paginacao-contagem-folha-rosto.md` (regra do checkpoint: um canônico, sem números duplicados).
 7. **`docs/checklist-14-correcoes.md`** — checklist dinâmico das 14 correções da análise criteriosa (Blocos A/B/C com critério de aceite e teste de prova).
 
+## 6v. CHECKLIST-14: A1 (TOKEN OMML CORROMPIDO) + A4 (CORRIDA DO REGISTRY OMML) (16/08/2026)
+Implementadas as 2 correções prioritárias do `docs/checklist-14-correcoes.md` (Bloco A — crash/perda). `npm test` **211 arquivos, 1695 testes (10 skipped)**, lint 0/0, auditoria 140s, 11/11 gates, `sourceFingerprint` `7d1dfd16…`.
+
+1. **A1 — token OMML não derruba export/preview** — `ommlContentTokenDecode` (`docx-render-core.ts`) agora envolve `atob()` em try/catch: base64 inválido (editado/corrompido) degrada para `""` + `console.warn`; o `parseEditorContent` (fonte única dos 4 exportadores E do preview) segue com o bloco `equation` achatado (m:r/m:t) — sem crash.
+2. **A4 — registry OMML escopado por geração** — `rawOmmlSeq` virou contador MONOTÔNICO (IDs únicos entre gerações; `clearRawOmmlRegistry` não o reseta mais); o patch pós-Packer CONSUMEr a entrada ao substituir o marcador (`rawOmmlDeleteMarker`, `docx-toc-field-patch.ts`); `clearRawOmmlRegistry()` removido dos 4 `generate*` (limpar no início apagava os registros de outra geração em voo — pool 3 de renders). Resultado: gerações paralelas não colidem nem vazam `\uF000UFLAOMML_`.
+3. **Testes** — `tests/regression/omml-token-robustness.test.ts` (7): A1 round-trip válido, decode inválido→`""`+aviso, `[EQ]` corrompido sem throw (bloco achatado), DOCX sem marcador vazando; A4 `Promise.all` de 2 `generateDocxBlob` com OMML distintos (a/b vs c/d) e monografia×artigo — cada DOCX só com o OMML próprio, `rawOmmlRegistrySize()===0`.
+4. **Próximo** — A2 (aviso de perda de formatação na importação) e A3 (placeholder de imagem inválida) seguem abertos no checklist-14; A1/A4 marcados `[x]`.
+
 ---
 
 ## 7. COMANDOS ÚTEIS
