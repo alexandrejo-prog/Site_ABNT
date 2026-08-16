@@ -26,6 +26,7 @@ import { runPerTypePhysical } from "./analyze-per-type-pdfs.js";
 import { runPreviewDocxCompare } from "./compare-preview-docx.js";
 import { buildPreviewSnapshot, writePreviewSnapshot, snapshotPath, readCommittedPreviewSnapshot, classifyPdfChange } from "./check-preview-snapshot.js";
 import { sourceFingerprint } from "./freshness.js";
+import { loadDocxPartsFromFile, runOoxmlChecks, evaluateOoxmlGate } from "./ooxml-checks.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -478,6 +479,16 @@ const preservation = JSON.parse(readFileSync(join(ROOT, "artifacts", "ufla-compl
 writeJson("artifacts/ufla-compliance/content-preservation.json", preservation);
 
 // ---------------------------------------------------------------------------
+// ooxmlGate COMPUTADO (B6): runOoxmlChecks na mesma rodada + openedByRepair.
+// Antes o status era "passed" fixo sem invocar checker — agora é derivado:
+// falha se o Word abriu com reparo ou se houver achado estrutural (error).
+// ---------------------------------------------------------------------------
+const ooxmlParts = await loadDocxPartsFromFile(docx);
+const ooxmlIssues = runOoxmlChecks(ooxmlParts);
+const ooxmlGateResult = evaluateOoxmlGate(ooxmlIssues, manifest.openedByRepair === true);
+const ooxmlGateEvidence = `OOXML computado na rodada (runOoxmlChecks): ${ooxmlIssues.length} achado(s) — ${ooxmlGateResult.errors.length} estrutural(is) (${ooxmlGateResult.errors.map((e) => e.code).join(", ") || "nenhum"}), ${ooxmlGateResult.warnings.length} não-estrutural(is); Word abriu sem reparo (openedByRepair=${manifest.openedByRepair}); achados não-estruturais: ${[...new Set(ooxmlGateResult.warnings.map((w) => w.code))].join(", ") || "nenhum"}.`;
+
+// ---------------------------------------------------------------------------
 // gates.json
 // ---------------------------------------------------------------------------
 const gates = {
@@ -489,10 +500,12 @@ const gates = {
       evidence: testSummary.evidence,
     },
     ooxmlGate: {
-      status: "passed",
-      evidence:
-        "ESTRUTURA OOXML válida: Word abriu sem reparo (openedByRepair=false) e exportou PDF; 22 estilos aplicados e todos definidos (27 ufla_* + Heading1-3 + TOC1-3); outlineLvl 0/1/2 com basedOn Heading1/2/3; bookmarks 39 pareados com 31 PAGEREF, 0 alvos ausentes; 0 mojibake. Achados NÃO-estruturais do checker registrados em separado: toc-style (falso positivo — campo TOC presente, TOC1-3 populados no update), appendices-after-references (fidelidade à ordem da fonte importada). Paginação validada em DECISION-010 (contagem contínua a partir da folha de rosto; OOXML pgNumType start=13 ↔ PDF físico folha 18=13; sem reinício em 1).",
-      finding: "Resolvido em DECISION-010 — paginação validada em OOXML + PDF físico.",
+      status: ooxmlGateResult.status,
+      evidence: ooxmlGateEvidence,
+      finding:
+        ooxmlGateResult.status === "failed"
+          ? `Falha estrutural OOXML detectada (B6): ${ooxmlGateResult.errors.map((e) => e.code).join(", ") || "openedByRepair=true"}.`
+          : "Resolvido em DECISION-010 — paginação validada em OOXML + PDF físico.",
     },
     contentPreservationGate: {
       status: "passed",
@@ -573,7 +586,7 @@ writeJson("artifacts/ufla-compliance/rendered-analysis.json", {
   ],
   gates: {
     codeGate: { status: testSummary.status, evidence: testSummary.evidence },
-    ooxmlGate: { status: "passed", evidence: "Estrutura OOXML válida; Word abriu sem reparo; bookmarks/PAGEREF pareados; 0 mojibake. Achados não-estruturais em findings/requirements." },
+    ooxmlGate: { status: ooxmlGateResult.status, evidence: ooxmlGateEvidence },
     contentPreservationGate: { status: "passed", evidence: "Δ58 não-vazios; 0 mojibake; refs 138/138; tabelas 35/35; imagens 11/12 únicas (capa reconstruída pelo template)." },
     renderedLayoutGate: { status: renderedLayoutStatus, evidence: renderedLayoutEvidence },
     fullComplianceGate: { status: fullComplianceStatus, evidence: fullComplianceEvidence },

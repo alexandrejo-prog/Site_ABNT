@@ -226,8 +226,23 @@ export function runOoxmlChecks(parts: DocxParts): ComplianceIssue[] {
     if (!/\\o/.test(tocInstr)) issues.push(issue("toc-range", "Campo TOC sem faixa de níveis (\\o).", "error", "Manual UFLA 3.3", "sumário"));
     if (!/\\h/.test(tocInstr)) issues.push(issue("toc-hyperlink", "Campo TOC sem hiperlinks (\\h).", "error", "Manual UFLA 3.3", "sumário"));
   }
+  // toc-style: o gerador emite o campo TOC (TOC \o \h) e os estilos TOC1-3 são
+  // aplicados pelo Word ao atualizar o campo; a referência literal w:val="TOC"
+  // só existe no RESULTADO do campo (pós-update). Com campo presente é
+  // não-estrutural (warning); sem campo, o gap real já é toc-field (error).
   if (!/w:val="TOC"/.test(documentXml) && !/w:val="TableOfContents"/.test(documentXml)) {
-    issues.push(issue("toc-style", "Estilo do sumário (TOC) não referenciado no documento.", "error", "Manual UFLA 3.3", "sumário"));
+    const hasTocField = /TOC/.test(tocInstr);
+    issues.push(
+      issue(
+        "toc-style",
+        hasTocField
+          ? "Estilo do sumário não referenciado literalmente (campo TOC presente; TOC1-3 populados pelo Word no update) — não-estrutural."
+          : "Estilo do sumário (TOC) não referenciado no documento.",
+        hasTocField ? "warning" : "error",
+        "Manual UFLA 3.3",
+        "sumário",
+      ),
+    );
   }
   // Títulos primários: classificação semântica (estilo aplicado + outlineLvl
   // resolvido em styles.xml). Reconhece ufla_titulo_* e Heading1/2/3 legados;
@@ -330,4 +345,22 @@ export function runOoxmlChecks(parts: DocxParts): ComplianceIssue[] {
   void tableCount;
   void imageCount;
   return issues;
+}
+
+export interface OoxmlGateResult {
+  status: "passed" | "failed";
+  errors: ComplianceIssue[];
+  warnings: ComplianceIssue[];
+}
+
+/**
+ * B6 — ooxmlGate computado de verdade: falha se o Word abriu com reparo
+ * (openedByRepair) ou se houver achado estrutural (severity "error").
+ * Achados "warning" são não-estruturais e não derrubam o gate.
+ */
+export function evaluateOoxmlGate(issues: ComplianceIssue[], openedByRepair: boolean): OoxmlGateResult {
+  const errors = issues.filter((i) => i.severity === "error");
+  const warnings = issues.filter((i) => i.severity === "warning");
+  const status = openedByRepair || errors.length > 0 ? "failed" : "passed";
+  return { status, errors, warnings };
 }

@@ -548,7 +548,6 @@ function detect(value: string): { highlight?: string; confidence: ReferenceConfi
   if (!parsed) {
     if (/\bhttps?:\/\//iu.test(value)) return { confidence: "baixa", detectedType: "site" };
     if (researchDataMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "dados-pesquisa" };
-    if (researchDataMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "dados-pesquisa" };
     if (patentMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "patente" };
     if (periodicalMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "periodico" };
     if (correspondenceMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "correspondencia" };
