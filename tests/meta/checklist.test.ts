@@ -3,8 +3,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("segurança e checklist", () => {
-  it("CHECKLIST.md existe", () => {
-    expect(existsSync(join(process.cwd(), "docs", "CHECKLIST.md"))).toBe(true);
+  it("CHECKLIST.md existe (histórico) e status canônico presente", () => {
+    // docs/CHECKLIST.md foi movido para docs/historico/ na reorg (regra do projeto:
+    // um canônico por documento, sem duplicatas; status vive em STATUS_ATUAL.md).
+    expect(existsSync(join(process.cwd(), "docs", "historico", "CHECKLIST.md"))).toBe(true);
+    expect(existsSync(join(process.cwd(), "docs", "STATUS_ATUAL.md"))).toBe(true);
   });
 
   it("não existe chave de API hardcoded nos arquivos principais", () => {
