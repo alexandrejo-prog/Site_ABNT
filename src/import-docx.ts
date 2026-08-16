@@ -1,4 +1,5 @@
 import * as mammoth from "mammoth/mammoth.browser";
+import JSZip from "jszip";
 import { detectAcademicFieldsFromStructure } from "./field-detector";
 import {
   AcademicFieldKey,
@@ -11,6 +12,7 @@ import {
   DocxStructure,
   extractDocxStructure,
   normalizeForDetection,
+  assertReasonableUncompressedSize,
 } from "./word-structure-extractor";
 import {
   normalizeImportedStructure,
@@ -900,16 +902,35 @@ export function identifyAcademicFields(
   };
 }
 
+// C12 — limites de importação: arquivo grande (60 MB) e descompressão anômala
+// (zip bomb) são recusados com mensagem amigável antes de ler o conteúdo.
+export const MAX_IMPORT_FILE_BYTES = 60 * 1024 * 1024; // 60 MB
+
 export async function importDocumentFile(file: File): Promise<ImportResult> {
   const extension = file.name.split(".").pop()?.toLowerCase();
   const messages: string[] = [];
 
   if (extension === "docx") {
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+      throw new Error(
+        `Arquivo muito grande (${Math.round(file.size / 1024 / 1024)} MB > ${Math.round(MAX_IMPORT_FILE_BYTES / 1024 / 1024)} MB). Reduza o tamanho ou remova imagens pesadas antes de importar.`,
+      );
+    }
     const arrayBuffer = await file.arrayBuffer();
     let mammothText = "";
 
     if (!arrayBuffer.byteLength || !isLikelyZipFile(arrayBuffer)) {
       throw docxOpenError(file.name);
+    }
+
+    // C12 — mede o tamanho total descomprimido SEM descomprimir (diretório
+    // central do ZIP), antes do mammoth (que descomprime tudo).
+    try {
+      const zip = await JSZip.loadAsync(arrayBuffer);
+      assertReasonableUncompressedSize(zip);
+    } catch (error) {
+      if (error instanceof Error && /descomprimido excessivo/.test(error.message)) throw error;
+      // ZIP ilegível cai no fluxo normal (docxOpenError/estrutura).
     }
 
     try {

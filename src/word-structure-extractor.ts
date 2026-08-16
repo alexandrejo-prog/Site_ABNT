@@ -909,11 +909,41 @@ export function extractFootnotesFromXml(footnotesXml: string): Record<string, st
   return footnotes;
 }
 
+// C12 — teto de descompressão (zip bomb/OOM): JSZip.loadAsync parseia o diretório
+// central sem descomprimir; medimos o tamanho total declarado ANTES de ler
+// qualquer parte, para recusar bombas sem alocar memória.
+export const MAX_UNCOMPRESSED_IMPORT_BYTES = 500 * 1024 * 1024; // 500 MB
+
+function totalUncompressedSize(zip: JSZip): number {
+  let total = 0;
+  for (const name of Object.keys(zip.files)) {
+    const entry = zip.files[name];
+    if (entry.dir) continue;
+    const raw = (entry as unknown as { _data?: { uncompressedSize?: number } })._data;
+    total += raw?.uncompressedSize ?? 0;
+  }
+  return total;
+}
+
+/**
+ * C12 — recusa ZIPs com descompressão anômala (zip bomb) medindo o tamanho
+ * total declarado SEM descomprimir (parse do diretório central apenas).
+ */
+export function assertReasonableUncompressedSize(zip: JSZip): void {
+  const uncompressed = totalUncompressedSize(zip);
+  if (uncompressed > MAX_UNCOMPRESSED_IMPORT_BYTES) {
+    throw new Error(
+      `Arquivo DOCX com conteúdo descomprimido excessivo (${Math.round(uncompressed / 1024 / 1024)} MB > ${Math.round(MAX_UNCOMPRESSED_IMPORT_BYTES / 1024 / 1024)} MB). Pode ser um arquivo corrompido ou com compressão anômala; importação recusada por segurança.`,
+    );
+  }
+}
+
 export async function extractDocxStructure(
   input: ArrayBuffer | Uint8Array,
   options: DocxStructureOptions = {},
 ): Promise<DocxStructure> {
   const zip = await JSZip.loadAsync(input);
+  assertReasonableUncompressedSize(zip);
   const documentXml = await zip.file("word/document.xml")?.async("string");
 
   if (!documentXml) {

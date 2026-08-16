@@ -6,6 +6,8 @@ import { draftWorkTypeSupportsIndicators } from "../draft-builder";
 import { FileCheck2, FilePlus2, ImagePlus, Trash2, Upload } from "lucide-react";
 import { generateCatalogCard } from "../catalog-card";
 import { FIELD_LABELS, ASSISTED_FIELD_KEYS, LONG_FIELDS, IMPACT_KEYS, rowsForField, visibleField, courseFieldLabel } from "../app-constants";
+import { isValidImageBytes, readImageDimensions, MAX_FICHA_IMAGE_BYTES } from "../image-asset-utils";
+import { useState } from "react";
 
 export interface FichaCatalograficaImageAsset {
   data: ArrayBuffer | Uint8Array;
@@ -142,20 +144,33 @@ export default function MetadataFields({ fields, confidence, updateField, assist
     );
   };
 
+  const [fichaUploadError, setFichaUploadError] = useState<string | null>(null);
+
   const handleFichaImageUpload = async (file: File) => {
     if (!onFichaCatalograficaImageChange) return;
+    setFichaUploadError(null);
+    // C10 — validação real: tipo (magic bytes) e tamanho, antes de aceitar.
+    if (file.size > MAX_FICHA_IMAGE_BYTES) {
+      setFichaUploadError("Imagem muito grande (máx. 10 MB). Escaneie a ficha com menos resolução.");
+      return;
+    }
     const data = await file.arrayBuffer();
+    if (!isValidImageBytes(new Uint8Array(data))) {
+      setFichaUploadError("Arquivo não é uma imagem PNG/JPEG/WebP válida — envie a ficha em imagem ou cole o texto acima.");
+      return;
+    }
     let width: number | undefined;
     let height: number | undefined;
-    if (file.type.startsWith("image/")) {
-      try {
-        const bitmap = await createImageBitmap(new Blob([data], { type: file.type }));
-        width = bitmap.width;
-        height = bitmap.height;
-        bitmap.close();
-      } catch {
-        // PNG/JPEG tipicamente ok; sem dimensoes, o export usa o padrao.
-      }
+    try {
+      const bitmap = await createImageBitmap(new Blob([data], { type: file.type }));
+      width = bitmap.width;
+      height = bitmap.height;
+      bitmap.close();
+    } catch {
+      // C10 — fallback de dimensões sem distorção: lê os cabeçalhos PNG/JPEG.
+      const dims = readImageDimensions(new Uint8Array(data));
+      width = dims.width;
+      height = dims.height;
     }
     onFichaCatalograficaImageChange({ data, fileName: file.name, width, height });
   };
@@ -177,6 +192,7 @@ export default function MetadataFields({ fields, confidence, updateField, assist
         )}
       </div>
       <div className="field-note"><p>O Manual UFLA (§6.1) aceita texto <em>ou</em> imagem da ficha oficial da Biblioteca Universitária. O texto colado acima prevalece sobre a imagem na exportação.</p></div>
+      {fichaUploadError && <p className="field-note ficha-upload-error" role="alert">{fichaUploadError}</p>}
     </div>
   );
 

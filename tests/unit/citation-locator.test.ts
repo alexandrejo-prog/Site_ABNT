@@ -55,4 +55,40 @@ describe("validação de citação direta curta autor-data-página (NBR 10520)",
     expect(c.has("citation-author-missing")).toBe(false);
     expect(c.has("citation-year-missing")).toBe(false);
   });
+
+  // C11 — sem falso-positivos: parênteses que não são citação não geram warning
+  it("não acusa (IBGE) como citação sem ano", () => {
+    const c = codesFor("Os dados foram obtidos no portal (IBGE).");
+    expect(c.has("citation-year-missing")).toBe(false);
+    expect(c.has("citation-author-missing")).toBe(false);
+  });
+
+  it("não acusa (Tabela 2) como citação", () => {
+    const c = codesFor("O resultado está consolidado (Tabela 2) abaixo.");
+    expect(c.has("citation-year-missing")).toBe(false);
+    expect(c.has("citation-author-missing")).toBe(false);
+  });
+
+  it("não acusa (2020) sozinho como citação sem autor", () => {
+    const c = codesFor("O marco regulatório data de (2020).");
+    expect(c.has("citation-author-missing")).toBe(false);
+    expect(c.has("citation-year-missing")).toBe(false);
+  });
+
+  it("não acusa author-missing quando o autor está fora na forma correta SILVA (2024)", () => {
+    const c = codesFor("Conforme SILVA (2024), a hipótese foi confirmada.");
+    expect(c.has("citation-author-missing")).toBe(false);
+    expect(c.has("citation-year-missing")).toBe(false);
+  });
+
+  it("aceita (SILVA, 2024) correto sem nenhum warning", () => {
+    const c = codesFor("A literatura aponta o fenômeno (SILVA, 2024).");
+    expect(c.has("citation-author-missing")).toBe(false);
+    expect(c.has("citation-year-missing")).toBe(false);
+  });
+
+  it("ainda acusa citação real sem ano com indicador de página (SILVA, p. 15)", () => {
+    const c = codesFor("Texto com (SILVA, p. 15) sem ano.");
+    expect(c.has("citation-year-missing")).toBe(true);
+  });
 });

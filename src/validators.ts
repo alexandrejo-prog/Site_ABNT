@@ -349,7 +349,22 @@ function validateShortCitation(editorText: string): ValidationIssue[] {
       if (inner.length > 60) continue;
       const yearMatch = inner.match(/\b(19|20)\d{2}\b/);
       const authorPart = yearMatch ? inner.slice(0, inner.indexOf(yearMatch[0])).trim() : "";
-      const hasAuthor = /[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/i.test(authorPart.replace(/[,;]\s*$/, ""));
+      const hasAuthorInside = /[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/i.test(authorPart.replace(/[,;]\s*$/, ""));
+      // C11 — autor fora do parêntese na forma correta: SILVA (2024)
+      const hasAuthorOutside = !hasAuthorInside
+        ? /([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç.'-]{1,50})\s+\(\s*$/u.test(paragraph.slice(0, match.index))
+        : false;
+      const bareYear = !!yearMatch && /^\s*(?:19|20)\d{2}\s*$/.test(inner);
+      const hasPageIndicator =
+        /,\s*(p\.?|pag\.?|f\.?|página[s]?)\b/i.test(inner) ||
+        /\b(p\.?|pag\.?|f\.?|página[s]?)\s*:?\s*\d/i.test(inner);
+
+      // C11 — só trata como citação parêntese com padrão autor-ano plausível
+      // (ano presente ou indicador de página); (IBGE), (Tabela 2) e (2020)
+      // sozinhos não são citações e não podem gerar warning.
+      if (!yearMatch && !hasPageIndicator) continue;
+      // Ano puro sem autor dentro nem fora (ex.: "(2020)" isolado) → não é citação.
+      if (bareYear && !hasAuthorInside && !hasAuthorOutside) continue;
 
       // página indicada de forma vazia: (SILVA, 2024, p.) ou (SILVA, 2024, p. )
       if (/,\s*p\.?\s*\)?$/i.test(inner.trim()) || /p\.\s*$/.test(inner.trim())) {
@@ -363,7 +378,7 @@ function validateShortCitation(editorText: string): ValidationIssue[] {
       }
 
       if (!yearMatch) {
-        // tem autor mas não tem ano → toda citação deve indicar o ano
+        // tem autor (ou indicador de página) mas não tem ano → toda citação deve indicar o ano
         found.push({
           severity: "warning",
           code: "citation-year-missing",
@@ -373,7 +388,7 @@ function validateShortCitation(editorText: string): ValidationIssue[] {
         continue;
       }
 
-      if (!hasAuthor) {
+      if (!hasAuthorInside && !hasAuthorOutside) {
         found.push({
           severity: "warning",
           code: "citation-author-missing",
