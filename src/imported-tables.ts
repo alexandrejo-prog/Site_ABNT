@@ -30,6 +30,8 @@ export interface ImportedTable {
   id: string;
   caption?: string;
   source?: string;
+  /** Orientação da seção OOXML de origem (seção paisagem = tabela larga). */
+  orientation?: "portrait" | "landscape";
   rowCount: number;
   columnCount: number;
   rows: ImportedTableCell[][];

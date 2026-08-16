@@ -10,13 +10,14 @@
  * Uso (CI): npx tsx scripts/ufla-compliance/ci-checks.ts
  * Saída: artifacts/ufla-compliance/ci-checks.json; exit != 0 em falha.
  */
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { auditFormatsCross } from "./audit-formats-cross";
 import { runPerTypeGates } from "./run-gate-per-type";
 import { runPerTypePhysical } from "./analyze-per-type-pdfs";
 import { runPreviewSnapshotCheck, readCommittedPreviewSnapshot, validateSnapshotOoxmlCoherence } from "./check-preview-snapshot";
+import { embedFreshness, checkArtifactFreshness, sourceFingerprint, reportFreshnessFromMarkdown } from "./freshness";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -84,7 +85,45 @@ async function main(): Promise<void> {
   }
   if (pdfCoherenceFailures.length > 0) failures.push(`Referência PDF commitada: ${pdfCoherenceFailures.join("; ")}`);
 
-  const summary = {
+  // 6) Frescor dos artefatos (WORKSLOP-003): se a fonte mudou desde a última
+  //    regeneração sem re-auditoria, a evidência está desatualizada. artifacts/
+  //    é gitignored e só existe onde o ufla:audit rodou (máquina com Word); no
+  //    CI sem artefatos a checagem é skipped (nada a validar), como os demais
+  //    gates word-dependentes. ONDE O ARTEFATO EXISTE, a checagem é ESTRITA.
+  const artifactChecks: Array<{ artifact: string; fresh: boolean; failures: string[] }> = [];
+  for (const rel of [
+    "artifacts/ufla-audit/gates.json",
+    "artifacts/ufla-compliance/rendered-analysis.json",
+    "artifacts/ufla-compliance/report.md",
+  ]) {
+    const path = join(ROOT, rel);
+    if (!existsSync(path)) {
+      artifactChecks.push({ artifact: rel, fresh: true, failures: [`${rel}: ausente (artifacts/ gitignored) — checagem skipped no CI sem Word.`] });
+      continue;
+    }
+    try {
+      if (rel.endsWith(".md")) {
+        const text = readFileSync(path, "utf8");
+        const fp = reportFreshnessFromMarkdown(text);
+        const failures = fp === sourceFingerprint() ? [] : [
+          `${rel}: ${fp ? `impressão ${fp} ≠ fonte atual ${sourceFingerprint()}` : "sem impressão digital no rodapé"} — rode npm run ufla:audit nesta máquina com Word.`,
+        ];
+        artifactChecks.push({ artifact: rel, fresh: failures.length === 0, failures });
+      } else {
+        const json = JSON.parse(readFileSync(path, "utf8"));
+        const failures = checkArtifactFreshness(json, rel);
+        artifactChecks.push({ artifact: rel, fresh: failures.length === 0, failures });
+      }
+    } catch {
+      artifactChecks.push({ artifact: rel, fresh: false, failures: [`${rel}: ilegível — rode npm run ufla:audit nesta máquina com Word.`] });
+    }
+  }
+  const staleArtifacts = artifactChecks.filter((a) => !a.fresh);
+  if (staleArtifacts.length > 0) {
+    failures.push(`Frescor dos artefatos (WORKSLOP-003): ${staleArtifacts.flatMap((a) => a.failures).join("; ")}`);
+  }
+
+  const summary = embedFreshness({
     schema: "ufla-audit/ci-checks/v1",
     generatedAt: new Date().toISOString(),
     formatsCross: formats.checks,
@@ -104,9 +143,13 @@ async function main(): Promise<void> {
         "Referência do PDF do Word não re-verificável no CI (sem Word) — o gate roda na máquina com Word (regenerate) comparando a renderização atual com a referência commitada; aqui valida-se apenas a coerência da referência (páginas × numeração × assinaturas) e o digest do DOCX cobre o lado gerado.",
       coherent: pdfCoherenceFailures.length === 0,
     },
+    artifactFreshness: {
+      checked: artifactChecks,
+      stale: staleArtifacts.map((a) => a.artifact),
+    },
     passed: failures.length === 0,
     failures,
-  };
+  });
 
   mkdirSync(join(ROOT, "artifacts", "ufla-compliance"), { recursive: true });
   writeFileSync(join(ROOT, "artifacts", "ufla-compliance", "ci-checks.json"), JSON.stringify(summary, null, 2) + "\n", "utf8");

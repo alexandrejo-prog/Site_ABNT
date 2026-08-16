@@ -3,7 +3,7 @@ import JSZip from "jszip";
 import { emptyAcademicFields } from "../../src/ufla-rules";
 import { generateDocxBlob, parseEditorContent } from "../../src/export-docx";
 import { importDocumentFile } from "../../src/import-docx";
-import { equationParagraph } from "../../src/docx-render-core";
+import { equationParagraph, parseLatexMath } from "../../src/docx-render-core";
 import { Document, Packer, Paragraph } from "docx";
 
 const NAMESPACES =
@@ -77,6 +77,36 @@ describe("UFLA-023 equacoes e formulas (§3.2.8 Manual UFLA): importacao OMML", 
     expect(blocks[0].text).toContain("f(x) = x² + 2x - 1");
   });
 
+  it("parseLatexMath: \\frac gera MathFraction (m:f) com numerador/denominador", () => {
+    const comps = parseLatexMath("\\frac{a}{b}");
+    expect(comps).not.toBeNull();
+    expect(comps).toHaveLength(1);
+    const json = JSON.stringify(comps);
+    expect(json).toContain("\"m:f\"");
+    expect(json).toContain("a");
+    expect(json).toContain("b");
+  });
+
+  it("parseLatexMath: \\sqrt[3]{x} gera MathRadical (m:rad) com grau", () => {
+    const comps = parseLatexMath("\\sqrt[3]{x}");
+    expect(comps).not.toBeNull();
+    const json = JSON.stringify(comps);
+    expect(json).toContain("\"m:rad\"");
+    expect(json).toContain("3");
+    expect(json).toContain("x");
+  });
+
+  it("parseLatexMath: x^2 e x_i geram m:sSup e m:sSub", () => {
+    const sup = parseLatexMath("x^2");
+    expect(JSON.stringify(sup)).toContain("\"m:sSup\"");
+    const sub = parseLatexMath("x_i");
+    expect(JSON.stringify(sub)).toContain("\"m:sSub\"");
+  });
+
+  it("parseLatexMath: retorna null sem estrutura LaTeX (equacao achatada preservada)", () => {
+    expect(parseLatexMath("x² + y² = z²")).toBeNull();
+  });
+
   it("equationParagraph centraliza e alinha o numero a direita via tab stop", () => {
     const para = equationParagraph("f(x) = x² + 2x - 1 (1.1)") as unknown as {
       root: Array<{ rootKey: string; root: unknown }>;
@@ -143,6 +173,30 @@ describe("UFLA-023 renderizacao no DOCX gerado", () => {
     const docXml = (await zip.file("word/document.xml")?.async("string")) ?? "";
     expect(docXml).toContain("<m:oMath>");
     expect(docXml).toContain("<m:t>E = mc²</m:t>");
+  });
+
+  it("bloco [EQ] com LaTeX emite fracao/raiz/sobrescrito OMML reais no DOCX", async () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "monografia" as const,
+      author: "SILVA, J.",
+      title: "Titulo",
+      resumo: "Resumo.",
+      palavrasChave: "palavras; chave",
+    };
+    const blob = await generateDocxBlob({
+      fields,
+      editorText: "[EQ] \\frac{a}{b} + \\sqrt{x} + x^2 (3.1)\n\nIntroducao normal.",
+    });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const docXml = (await zip.file("word/document.xml")?.async("string")) ?? "";
+    expect(docXml).toContain("<m:f>");
+    expect(docXml).toContain("<m:rad>");
+    expect(docXml).toContain("<m:sSup>");
+    expect(docXml).toContain("<m:num>");
+    expect(docXml).toContain("<m:den>");
+    expect(docXml).toContain("<m:t>a</m:t>");
+    expect(docXml).toContain("<m:t>b</m:t>");
   });
 
   it("round-trip: estrutura matematica avancada (fracao m:f) do OMML cru e preservada", async () => {

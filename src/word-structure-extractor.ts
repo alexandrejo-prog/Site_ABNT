@@ -2,6 +2,8 @@
 
 export type ImportedSectionKind = "pre-textual" | "textual" | "post-textual";
 
+export type ImportedPageOrientation = "portrait" | "landscape";
+
 export interface ImportedTextRun {
   text: string;
   bold?: boolean;
@@ -24,6 +26,7 @@ export type ImportedBlock =
       style?: string;
       styleName?: string;
       section?: ImportedSectionKind;
+      orientation?: ImportedPageOrientation;
       footnoteRefs?: string[];
       hasMath?: boolean;
       ommlXml?: string;
@@ -41,6 +44,7 @@ export type ImportedBlock =
       style?: string;
       styleName?: string;
       section?: ImportedSectionKind;
+      orientation?: ImportedPageOrientation;
       footnoteRefs?: string[];
       hasMath?: boolean;
       bookmarks?: Array<{ id: string; start: boolean }>;
@@ -56,6 +60,7 @@ export type ImportedBlock =
       style?: string;
       styleName?: string;
       section?: ImportedSectionKind;
+      orientation?: ImportedPageOrientation;
       footnoteRefs?: string[];
       hasMath?: boolean;
       bookmarks?: Array<{ id: string; start: boolean }>;
@@ -69,6 +74,7 @@ export type ImportedBlock =
       caption?: string;
       source?: string;
       section?: ImportedSectionKind;
+      orientation?: ImportedPageOrientation;
       gridWidths?: number[];
       tableWidthTwips?: number;
       hasGridSpan?: boolean;
@@ -90,13 +96,14 @@ export type ImportedBlock =
       caption?: string;
       source?: string;
       section?: ImportedSectionKind;
+      orientation?: ImportedPageOrientation;
       isDecorative?: boolean;
       ommlXml?: string;
       commentIds?: string[];
       moveIds?: string[];
       permissionIds?: string[];
     }
-  | { type: "pageBreak"; commentIds?: string[]; moveIds?: string[]; permissionIds?: string[] };
+  | { type: "pageBreak"; section?: ImportedSectionKind; orientation?: ImportedPageOrientation; commentIds?: string[]; moveIds?: string[]; permissionIds?: string[] };
 
 export interface ImportedParagraph {
   index: number;
@@ -120,6 +127,7 @@ export interface ImportedParagraph {
   permissionIds?: string[];
   runs: ImportedTextRun[];
   section: ImportedSectionKind;
+  orientation?: ImportedPageOrientation;
   hasMath?: boolean;
   ommlXml?: string;
 }
@@ -140,6 +148,8 @@ export interface DocxStructure {
   relationships: Record<string, string>;
   styleNames: Record<string, string>;
   footnotes: Record<string, string>;
+  /** Comentários do Word (word/comments.xml): id → texto do comentário. */
+  comments: Record<string, string>;
   text: string;
   hasNumbering: boolean;
 }
@@ -200,6 +210,39 @@ function cleanText(value: string): string {
 
 function isPageBreakToken(token: string): boolean {
   return /<w:lastRenderedPageBreak\b/.test(token) || /<w:br\b[^>]*w:type="page"/.test(token);
+}
+
+/**
+ * Orientações das seções, na ordem de ocorrência no XML do corpo.
+ *
+ * Modelo OOXML (ECMA-376 §17.6.6.19): cada <w:sectPr> descreve a seção que
+ * TERMINA naquele ponto — o sectPr dentro do pPr de um parágrafo é o último
+ * parágrafo da seção; o sectPr filho direto de <w:body> descreve a última
+ * seção. Portanto a orientação de um bloco é a do PRIMEIRO sectPr com offset
+ * maior que o do bloco; se não houver, a do sectPr final do body.
+ */
+function extractSectionOrientations(bodyXml: string): Array<{ offset: number; orientation: ImportedPageOrientation }> {
+  const sections: Array<{ offset: number; orientation: ImportedPageOrientation }> = [];
+  let match: RegExpExecArray | null;
+  const SECTPR_PATTERN = /<w:sectPr\b[\s\S]*?<\/w:sectPr>/g;
+  while ((match = SECTPR_PATTERN.exec(bodyXml)) !== null) {
+    const orientation: ImportedPageOrientation = /<w:pgSz\b[^>]*w:orient="(portrait|landscape)"/.test(match[0])
+      ? "landscape"
+      : "portrait";
+    sections.push({ offset: match.index, orientation });
+  }
+  return sections;
+}
+
+/** Extrai os comentários do Word (word/comments.xml): id → texto. */
+export function extractCommentsFromXml(commentsXml: string): Record<string, string> {
+  const comments: Record<string, string> = {};
+  let match: RegExpExecArray | null;
+  const COMMENT_PATTERN = /<w:comment\b[^>]*w:id="([^"]+)"[^>]*>([\s\S]*?)<\/w:comment>/g;
+  while ((match = COMMENT_PATTERN.exec(commentsXml)) !== null) {
+    comments[match[1]] = extractPlainText(match[2]).replace(/\s+/g, " ").trim();
+  }
+  return comments;
 }
 
 const XREF_HYPERLINK_PATTERN = /<w:hyperlink\b[^>]*w:anchor="([^"]+)"[^>]*>([\s\S]*?)<\/w:hyperlink>/g;
@@ -880,6 +923,8 @@ export async function extractDocxStructure(
   const stylesXml = (await zip.file("word/styles.xml")?.async("string")) ?? "";
   const footnotesXml = (await zip.file("word/footnotes.xml")?.async("string")) ?? "";
   const footnotes = extractFootnotesFromXml(footnotesXml);
+  const commentsXml = (await zip.file("word/comments.xml")?.async("string")) ?? "";
+  const comments = extractCommentsFromXml(commentsXml);
   const relsXml =
     (await zip.file("word/_rels/document.xml.rels")?.async("string")) ?? "";
   const relationships = extractRelationships(relsXml);
@@ -887,17 +932,26 @@ export async function extractDocxStructure(
   const images = await extractImages(zip, relationships, Boolean(options.includeMediaData));
   const bodyXml =
     documentXml.match(/<w:body\b[^>]*>([\s\S]*?)<\/w:body>/)?.[1] ?? documentXml;
+  const sectionOrientations = extractSectionOrientations(bodyXml);
 
   const blocks: ImportedBlock[] = [];
   const paragraphs: ImportedParagraph[] = [];
   let currentSection: ImportedSectionKind = "pre-textual";
   let paragraphIndex = 0;
 
+  // Orientação da seção que contém o bloco: primeiro sectPr após o offset do
+  // bloco; se não houver, a do sectPr final do body (última seção).
+  const orientationForOffset = (offset: number): ImportedPageOrientation => {
+    const next = sectionOrientations.find((s) => s.offset > offset);
+    return next?.orientation ?? sectionOrientations.at(-1)?.orientation ?? "portrait";
+  };
+
   const bodyElementPattern = /<w:p\b[\s\S]*?<\/w:p>|<w:tbl\b[\s\S]*?<\/w:tbl>/g;
   let elementMatch: RegExpExecArray | null;
 
   while ((elementMatch = bodyElementPattern.exec(bodyXml)) !== null) {
     const xml = elementMatch[0];
+    const orientation = orientationForOffset(elementMatch.index);
 
     if (xml.startsWith("<w:tbl")) {
       const { rows, gridWidths, tableWidthTwips, hasGridSpan, hasVerticalMerge, cellWidths, cellMerges, headerRowIndices } = parseTableBlock(xml);
@@ -905,6 +959,7 @@ export async function extractDocxStructure(
         type: "table",
         rows,
         section: currentSection,
+        orientation,
         gridWidths,
         tableWidthTwips,
         hasGridSpan,
@@ -965,6 +1020,7 @@ export async function extractDocxStructure(
           footnoteRefs,
           bookmarks,
           section: currentSection,
+          orientation,
           ...(commentIds.length ? { commentIds } : {}),
           ...(moveIds.length ? { moveIds } : {}),
           ...(permissionIds.length ? { permissionIds } : {}),
@@ -978,6 +1034,7 @@ export async function extractDocxStructure(
         if (textBlock) {
           blocks.push({
             ...textBlock,
+            orientation,
             ...(footnoteRefs.length ? { footnoteRefs } : {}),
           });
         }
@@ -997,6 +1054,7 @@ export async function extractDocxStructure(
             relationshipId,
             target,
             section: currentSection,
+            orientation,
             isDecorative: true,
           });
           continue;
@@ -1007,6 +1065,7 @@ export async function extractDocxStructure(
           relationshipId,
           target,
           section: currentSection,
+          orientation,
         });
       }
 
@@ -1036,6 +1095,7 @@ export async function extractDocxStructure(
     relationships,
     styleNames,
     footnotes,
+    comments,
     text,
     hasNumbering: Boolean(zip.file("word/numbering.xml")),
   };

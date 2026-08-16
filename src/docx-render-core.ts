@@ -6,7 +6,11 @@ import {
   InternalHyperlink,
   IParagraphOptions,
   Math as DocxMath,
+  MathFraction,
+  MathRadical,
   MathRun,
+  MathSubScript,
+  MathSuperScript,
   Paragraph,
   TabStopType,
   Table,
@@ -15,6 +19,7 @@ import {
   TextRun,
   WidthType,
 } from "docx";
+import type { MathComponent } from "docx";
 import { UFLA_RULES, cmToTwip } from "./ufla-rules";
 
 export function cleanMojibakeText(value: string): string {
@@ -552,10 +557,120 @@ export function equationParagraph(text: string): Paragraph {
 }
 
 /**
+ * Parser LaTeX→OMML mínimo (fração, raiz, sobrescrito/subscrito) para equações
+ * digitadas no editor como `[EQ] \frac{a}{b} + \sqrt{x} + x^2 (1.1)`.
+ *
+ * Retorna `null` quando o corpo não contém estrutura LaTeX — nesse caso a
+ * equação permanece achatada (m:r/m:t), comportamento histórico preservado.
+ *
+ * Suporta: \frac{num}{den}, \sqrt[grau]{corpo} / \sqrt{corpo}, X^{sup} / X^c,
+ * X_{sub} / X_c, agrupamento por chaves e aninhamento (fração em fração etc.).
+ */
+export function parseLatexMath(latex: string): MathComponent[] | null {
+  if (!/\\frac|\\sqrt|\^|_/.test(latex)) return null;
+
+  let pos = 0;
+  const src = latex;
+
+  const skipSpace = (): void => {
+    while (pos < src.length && /\s/.test(src[pos])) pos += 1;
+  };
+
+  const parseGroup = (): MathComponent[] => {
+    // src[pos] === "{"
+    pos += 1;
+    const inner = parseComponents();
+    skipSpace();
+    if (src[pos] === "}") pos += 1;
+    if (inner.length === 1) return inner;
+    const text = inner.map((c) => (c instanceof MathRun ? (c as unknown as { text?: string }).text ?? "" : "")).join("");
+    return text ? [new MathRun(text)] : [inner[0]];
+  };
+
+  const parseAtom = (): MathComponent | null => {
+    skipSpace();
+    if (pos >= src.length) return null;
+    const ch = src[pos];
+    if (ch === "\\") {
+      const cmd = src.slice(pos + 1).match(/^[a-zA-Z]+/)?.[0] ?? "";
+      pos += 1;
+      if (cmd === "frac" || cmd === "sqrt") {
+        pos += cmd.length;
+        skipSpace();
+        const readArg = (): MathComponent[] => {
+          skipSpace();
+          if (src[pos] === "{") return parseGroup();
+          const single = src[pos] ?? "";
+          pos += 1;
+          return [new MathRun(single)];
+        };
+        if (cmd === "frac") {
+          const numerator = readArg();
+          const denominator = readArg();
+          return new MathFraction({ numerator, denominator });
+        }
+        // sqrt
+        skipSpace();
+        let degree: MathComponent[] | undefined;
+        if (src[pos] === "[") {
+          pos += 1;
+          degree = parseComponents();
+          skipSpace();
+          if (src[pos] === "]") pos += 1;
+        }
+        const body = readArg();
+        return new MathRadical({ children: body, ...(degree ? { degree } : {}) });
+      }
+      const text = cmd ? cmd : src[pos] ?? "";
+      pos += text.length;
+      return new MathRun(`\\${text}`);
+    }
+    if (ch === "{") return parseGroup()[0] ?? new MathRun("");
+    pos += 1;
+    return new MathRun(ch);
+  };
+
+  const parseComponents = (): MathComponent[] => {
+    const comps: MathComponent[] = [];
+    while (pos < src.length && src[pos] !== "}" && src[pos] !== "]") {
+      skipSpace();
+      if (pos >= src.length || src[pos] === "}" || src[pos] === "]") break;
+      if (src[pos] === "^" || src[pos] === "_") {
+        // script sem base — mantém como literal
+        comps.push(new MathRun(src[pos]));
+        pos += 1;
+        continue;
+      }
+      const atom = parseAtom();
+      if (atom === null) break;
+      comps.push(atom);
+      // script (sobrescrito/subscrito) anexado ao átomo anterior
+      skipSpace();
+      if (pos < src.length && (src[pos] === "^" || src[pos] === "_")) {
+        const script = src[pos];
+        pos += 1;
+        const last = comps.pop();
+        if (last === undefined) continue;
+        const arg = src[pos] === "{" ? parseGroup() : [new MathRun(src[pos] ?? "")];
+        if (src[pos] !== "{") pos += 1;
+        comps.push(
+          script === "^"
+            ? new MathSuperScript({ children: [last], superScript: arg })
+            : new MathSubScript({ children: [last], subScript: arg }),
+        );
+      }
+    }
+    return comps;
+  };
+
+  return parseComponents();
+}
+
+/**
  * Equação como OMML nativo (UFLA-023, Manual UFLA §3.2.8): emite `<m:oMath>`
  * real no DOCX em vez de texto corrido, mantendo centralização e numeração
- * à direita via tab stop. O corpo é montado como `m:r/m:t` — estrutura
- * matemática avançada (frações, raízes) é achatada para texto nesta fase.
+ * à direita via tab stop. O corpo é montado como `m:r/m:t`; se contiver LaTeX
+ * (\frac, \sqrt, ^, _), vira estrutura OMML real (m:f, m:rad, m:sSup, m:sSub).
  */
 export function ommlEquationParagraph(text: string): Paragraph {
   const equationText = cleanMojibakeText(text);
@@ -564,8 +679,10 @@ export function ommlEquationParagraph(text: string): Paragraph {
   const number = numberMatch ? `(${numberMatch[1]})` : "";
   const font = UFLA_RULES.typography.fontFamily;
   const size = UFLA_RULES.typography.bodyFontSizePt * 2;
+  const parsed = parseLatexMath(body);
+  const mathChildren: MathComponent[] = parsed ?? [new MathRun(body)];
   const children: Array<TextRun | DocxMath> = [
-    new DocxMath({ children: [new MathRun(body)] }),
+    new DocxMath({ children: mathChildren }),
   ];
   if (number) {
     children.push(new TextRun({ text: "\t", font, size, color: "000000" }));

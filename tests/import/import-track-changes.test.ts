@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import JSZip from "jszip";
 import { extractDocxStructure } from "../../src/word-structure-extractor";
+import { importDocumentFile } from "../../src/import-docx";
 
-function buildDocx(bodyXml: string): Promise<ArrayBuffer> {
+function buildDocx(bodyXml: string, extraFiles: Array<[string, string]> = []): Promise<ArrayBuffer> {
   const zip = new JSZip();
   zip.file(
     "[Content_Types].xml",
@@ -20,6 +21,7 @@ function buildDocx(bodyXml: string): Promise<ArrayBuffer> {
   <w:body>${bodyXml}<w:sectPr/></w:body>
 </w:document>`,
   );
+  for (const [path, content] of extraFiles) zip.file(path, content);
   return zip.generateAsync({ type: "arraybuffer" });
 }
 
@@ -76,6 +78,49 @@ describe("importDocx track changes/comments/bookmarks/vMerge", () => {
         : [];
     expect(merges).toContainEqual({ row: 0, col: 0, type: "vMerge-restart" });
     expect(merges).toContainEqual({ row: 1, col: 0, type: "vMerge-continue" });
+  });
+
+  it("extrai word/comments.xml (id → texto) na estrutura", async () => {
+    const buffer = await buildDocx(
+      `<w:p>
+        <w:commentRangeStart w:id="3"/>
+        <w:r><w:t>Texto com comentário</w:t></w:r>
+        <w:commentRangeEnd w:id="3"/>
+      </w:p>`,
+      [["word/comments.xml", `<?xml version="1.0" encoding="UTF-8"?>
+<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:comment w:id="3" w:author="Orientador" w:date="2026-08-01T00:00:00Z">
+    <w:p><w:r><w:t>Reformular este parágrafo.</w:t></w:r></w:p>
+  </w:comment>
+</w:comments>`]],
+    );
+
+    const structure = await extractDocxStructure(buffer);
+    expect(structure.comments["3"]).toBe("Reformular este parágrafo.");
+  });
+
+  it("alerta explicitamente que comentários/revisões não são reemitidos no round-trip", async () => {
+    const buffer = await buildDocx(
+      `<w:p>
+        <w:commentRangeStart w:id="3"/>
+        <w:ins w:id="1" w:author="Revisor" w:date="2026-01-01T00:00:00Z">
+          <w:r><w:t>Inserido</w:t></w:r>
+        </w:ins>
+        <w:commentRangeEnd w:id="3"/>
+      </w:p>`,
+      [["word/comments.xml", `<?xml version="1.0" encoding="UTF-8"?>
+<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:comment w:id="3" w:author="Orientador"><w:p><w:r><w:t>Comentário de revisão.</w:t></w:r></w:p></w:comment>
+</w:comments>`]],
+    );
+
+    const file = new File([buffer], "revisado.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    const result = await importDocumentFile(file);
+
+    const joined = result.messages.join(" ");
+    expect(joined).toContain("comentário");
+    expect(joined).toContain("não são reemitidos");
+    expect(joined.toLocaleLowerCase()).toContain("marcações");
   });
 
   it("retorna estrutura com arrays vazios quando não há marcação", async () => {

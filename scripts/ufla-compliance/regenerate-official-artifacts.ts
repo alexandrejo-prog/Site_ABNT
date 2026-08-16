@@ -25,6 +25,7 @@ import { auditFormatsCross } from "./audit-formats-cross.js";
 import { runPerTypePhysical } from "./analyze-per-type-pdfs.js";
 import { runPreviewDocxCompare } from "./compare-preview-docx.js";
 import { buildPreviewSnapshot, writePreviewSnapshot, snapshotPath, readCommittedPreviewSnapshot, classifyPdfChange } from "./check-preview-snapshot.js";
+import { sourceFingerprint } from "./freshness.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -50,6 +51,10 @@ const META = {
   sourceHash: "49929de3…ca66 (ver manual/manual-ufla-source.md)",
   generator: "scripts/ufla-compliance/regenerate-official-artifacts.ts",
   status: "current",
+  // WORKSLOP-003: impressão digital da fonte que gera o DOCX/preview — quem lê
+  // o artefato valida o hash contra a fonte atual; fonte mudada sem re-auditoria
+  // torna o artefato DESATUALIZADO (nunca aprova estado falso).
+  sourceFingerprint: sourceFingerprint(),
 } as const;
 
 function sha256(path: string): string {
@@ -94,8 +99,19 @@ function runTestSummary(): { status: "passed" | "failed"; evidence: string } {
     timeout: 600000,
     shell: process.platform === "win32" ? "cmd.exe" : "/bin/sh",
     stdio: ["ignore", "pipe", "pipe"],
+    // Teste interno da REGENERAÇÃO: a checagem de frescor (WORKSLOP-003) lê os
+    // artefatos da rodada ANTERIOR (a regeneração ainda não gravou os novos) —
+    // pular aqui evita a transição de 2 rodadas; o VERIFY externo do ufla:audit
+    // valida o frescor com os artefatos JÁ escritos pela regeneração.
+    env: { ...process.env, UFLA_REGEN_INTERNAL_TEST: "1" },
   });
   const out = `${res.stdout ?? ""}${res.stderr ?? ""}`;
+  if (res.error && !res.stdout && !res.stderr) {
+    return {
+      status: "failed",
+      evidence: `npm test: falhou ao executar (${String(res.error).slice(0, 300)}) — ${new Date().toISOString().slice(0, 10)}`,
+    };
+  }
   // Vitest omite o segmento "N failed" quando a suíte passa, então cada
   // contador é extraído individualmente da linha "Tests ..." / "Test Files ...".
   const testsLine = out.match(/Tests\s+([\s\S]*?)\s*\(\d+\)/);
@@ -348,6 +364,11 @@ function buildCanonicalReport(gates: Record<string, { status: string; evidence: 
     conclusion,
     approved ? "CONFORMIDADE UFLA APROVADA." : "Conformidade UFLA NÃO declarada nesta rodada (nem todos os gates passed).",
     "```",
+    "",
+    "---",
+    "",
+    `_Evidência regenerada em ${now}. Impressão digital da fonte: \`${META.sourceFingerprint}\` — ` +
+      "se a fonte (src/, scripts/) mudar sem nova auditoria, este relatório fica DESATUALIZADO (WORKSLOP-003)._",
     "",
   ].join("\n");
 }

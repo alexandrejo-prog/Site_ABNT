@@ -46,17 +46,20 @@ function renderPdf(docxPath: string, pdfPath: string): void {
   );
 }
 
-async function analyzePdf(pdfPath: string): Promise<{ pages: number; images: number; tables: number; pageNumbers: number[]; pageSize: { width: number; height: number } | null }> {
+async function analyzePdf(pdfPath: string): Promise<{ pages: number; images: number; tables: number; pageNumbers: number[]; pageSize: { width: number; height: number } | null; landscapePages: number }> {
   const doc = await pdfjsLib.getDocument({ data: new Uint8Array(readFileSync(pdfPath)) }).promise;
   const pageNumbers: number[] = [];
   let images = 0;
   let tableRegions = 0;
   let pageSize: { width: number; height: number } | null = null;
+  let landscapePages = 0;
 
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
     const vp = page.getViewport({ scale: 1 });
     if (!pageSize) pageSize = { width: vp.width, height: vp.height };
+    // A4 paisagem: w/h trocados (841.92 × 595.32 pt) — validação física do gap P0.
+    if (Math.abs(vp.width - 841.92) < 2 && Math.abs(vp.height - 595.32) < 2) landscapePages += 1;
 
     // Imagens: opList — contagem de ops paintImageXObject (técnica DECISION-009).
     const OPS = pdfjsLib.OPS;
@@ -99,7 +102,7 @@ async function analyzePdf(pdfPath: string): Promise<{ pages: number; images: num
     if (nonMarginCols.length >= 2 && rowsWith2Cols >= 3) tableRegions += 1;
   }
 
-  return { pages: doc.numPages, images, tables: tableRegions, pageNumbers, pageSize };
+  return { pages: doc.numPages, images, tables: tableRegions, pageNumbers, pageSize, landscapePages };
 }
 
 export async function runPerTypePhysical(): Promise<{ rendered: Record<string, unknown>; passed: boolean; failures: string[]; wordAvailable: boolean }> {
@@ -127,11 +130,15 @@ export async function runPerTypePhysical(): Promise<{ rendered: Record<string, u
         entry.pages = physical.pages;
         entry.imagesDetected = physical.images;
         entry.tablesDetected = physical.tables;
-        // Papel A4 (595.32 × 841.92 pt) — checagem física real do layout.
+        entry.landscapePages = physical.landscapePages;
+        // Papel A4 (595.32 × 841.92 pt) ou A4 paisagem (841.92 × 595.32 pt) —
+        // checagem física real do layout; toda página deve ser A4 em qualquer
+        // orientação (gap P0: tabela larga → seção paisagem).
         const ps = physical.pageSize;
         entry.pageSize = ps;
-        const a4 = ps && Math.abs(ps.width - 595.32) < 2 && Math.abs(ps.height - 841.92) < 2;
-        if (ps && !a4) failures.push(`${file}: papel ${ps.width.toFixed(1)}×${ps.height.toFixed(1)}pt ≠ A4`);
+        const a4Portrait = ps && Math.abs(ps.width - 595.32) < 2 && Math.abs(ps.height - 841.92) < 2;
+        const a4Landscape = ps && Math.abs(ps.width - 841.92) < 2 && Math.abs(ps.height - 595.32) < 2;
+        if (ps && !a4Portrait && !a4Landscape) failures.push(`${file}: papel ${ps.width.toFixed(1)}×${ps.height.toFixed(1)}pt ≠ A4 (retrato ou paisagem)`);
         // Alinhamento OOXML ↔ PDF (DECISION-010)
         const pagination = await validatePagination(docxPath, pdfPath, entryTypeFor(file));
         entry.pagination = {

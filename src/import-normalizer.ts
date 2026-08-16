@@ -537,6 +537,7 @@ export function normalizePlainAcademicText(text: string): ImportNormalizationRes
       relationships: {},
       styleNames: {},
       footnotes: {},
+      comments: {},
       text: normalizedText,
       hasNumbering: false,
     },

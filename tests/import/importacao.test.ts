@@ -33,6 +33,7 @@ function structureFromBlocks(blocks: ImportedBlock[]): DocxStructure {
         return [block.text];
       })
       .join("\n"),
+    comments: {},
     hasNumbering: false,
   };
 }

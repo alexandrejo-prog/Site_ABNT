@@ -23,7 +23,7 @@ import {
   TextRun,
   WidthType,
 } from "docx";
-import type { IParagraphOptions } from "docx";
+import type { IParagraphOptions, ISectionOptions } from "docx";
 import "./docx-toc-field-patch";
 import { pageMargins, ibgeTable, BODY_SIZE, SINGLE_LINE, ONE_AND_HALF_LINE, BLACK, AUTHOR_SIZE as COVER_AUTHOR_SIZE, TITLE_SIZE as COVER_TITLE_SIZE, unnumberedTitle } from "./docx-shared";
 import { DOCUMENT_STYLES } from "./docx-styles";
@@ -1363,6 +1363,48 @@ export function importedTableParagraph(table: ImportedTable | undefined): Array<
   }
 
   return result;
+}
+
+/** Largura útil do retrato A4 (11906 − margem esq. 1701 − dir. 1134 twips). */
+const PORTRAIT_CONTENT_TWIP = UFLA_RULES.page.widthTwip - 1701 - 1134;
+const LANDSCAPE_MIN_COLUMNS = 6;
+
+function editorTableColumnCount(block: EditorBlock): number {
+  if (block.type === "markdownTable") {
+    let max = 0;
+    for (const line of block.text.split(/\n+/)) {
+      const trimmed = line.trim();
+      if (!trimmed.includes("|")) continue;
+      if (isMarkdownTableSeparator(trimmed)) continue;
+      const cells = trimmed.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|");
+      if (cells.length >= 2) max = Math.max(max, cells.length);
+    }
+    return max;
+  }
+  if (block.type === "tabbedTable") {
+    const detected = detectTabbedTableBlock(block.text);
+    if (detected) return Math.max(...detected.rows.map((r) => r.length), 1);
+  }
+  return 1;
+}
+
+/**
+ * Decide se um bloco exige seção paisagem (tabela larga): tabela importada de
+ * seção landscape na origem, largura OOXML maior que o retrato útil, ou tabela
+ * do editor com 6+ colunas (Manual/NBR 14724: elementos extensos em paisagem).
+ */
+export function tableNeedsLandscape(block: EditorBlock, importedTables: ImportedTable[] = []): boolean {
+  if (block.type === "importedTable") {
+    const table = importedTables.find((item) => item.id === block.text);
+    if (!table) return false;
+    if (table.orientation === "landscape") return true;
+    if (table.tableWidthTwips && table.tableWidthTwips > PORTRAIT_CONTENT_TWIP) return true;
+    return table.columnCount >= LANDSCAPE_MIN_COLUMNS;
+  }
+  if (block.type === "markdownTable" || block.type === "tabbedTable") {
+    return editorTableColumnCount(block) >= LANDSCAPE_MIN_COLUMNS;
+  }
+  return false;
 }
 
 function blockToParagraph(
@@ -2747,10 +2789,31 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   const hasAnexos = Boolean(fields.anexos?.trim());
   const showReferences = fields.referencesPlacement !== "footnote";
 
-  const textualAndPostTextualChildren: Array<Paragraph | Table> = [
-    ...bodyBlocksWithoutReferences.flatMap((block, index) => blockToParagraph(block, index === 0, input.importedImages ?? [], input.importedTables ?? [])),
-    ...(showReferences ? [pageBreak()] : []),
-    ...(showReferences &&
+  // Runs de seção: tabelas largas exigem seção paisagem própria (gap P0). Cada
+  // run contíguo de mesma orientação vira uma seção; o restante permanece
+  // retrato, preservando a numeração (folha de rosto = 1, DECISION-010).
+  interface SectionRun {
+    landscape: boolean;
+    children: Array<Paragraph | Table>;
+  }
+  const sectionRuns: SectionRun[] = [];
+  const pushRun = (children: Array<Paragraph | Table>, landscape: boolean): void => {
+    if (!children.length) return;
+    const last = sectionRuns[sectionRuns.length - 1];
+    if (last && last.landscape === landscape) last.children.push(...children);
+    else sectionRuns.push({ landscape, children: [...children] });
+  };
+
+  bodyBlocksWithoutReferences.forEach((block, index) => {
+    pushRun(
+      blockToParagraph(block, index === 0, input.importedImages ?? [], input.importedTables ?? []),
+      tableNeedsLandscape(block, input.importedTables ?? []),
+    );
+  });
+
+  pushRun(showReferences ? [pageBreak()] : [], false);
+  pushRun(
+    showReferences &&
     (hasEditorHeading(bodyBlocksWithoutReferences, "REFERÊNCIAS") ||
       bodyBlocksWithoutReferences.some((b) =>
         ["REFERENCIAS", "REFERENCIAS BIBLIOGRAFICAS", "BIBLIOGRAFICAS"].includes(
@@ -2758,15 +2821,22 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
         ),
       ))
       ? []
-      : [sectionTitle("Referências")]),
-    ...(showReferences ? buildReferences(references) : []),
-    ...(hasApendices
+      : [sectionTitle("Referências")],
+    false,
+  );
+  pushRun(showReferences ? buildReferences(references) : [], false);
+  pushRun(
+    hasApendices
       ? [pageBreak(), sectionTitle(appendixTitle(fields), "ufla_apendice_titulo"), ...buildSimpleParagraphs(fields.apendices)]
-      : []),
-    ...(hasAnexos
+      : [],
+    false,
+  );
+  pushRun(
+    hasAnexos
       ? [pageBreak(), sectionTitle("Anexos", "ufla_anexo_titulo"), ...buildSimpleParagraphs(fields.anexos)]
-      : []),
-  ];
+      : [],
+    false,
+  );
 
   const pageNumberHeader = new Header({
     children: [
@@ -2787,6 +2857,46 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   const footnotes = buildFootnotes(allFootnoteDefinitions, footnoteIdMap);
   currentFootnoteIdMap = null;
 
+  const portraitPage = {
+    size: {
+      orientation: PageOrientation.PORTRAIT,
+      width: UFLA_RULES.page.widthTwip,
+      height: UFLA_RULES.page.heightTwip,
+    },
+    margin: pageMargins(),
+  };
+  // A lib docx troca w/h automaticamente quando orientation = LANDSCAPE
+  // (PageSize constrói w:w=height, w:h=width); passamos as dimensões retrato.
+  const landscapePage = {
+    size: {
+      orientation: PageOrientation.LANDSCAPE,
+      width: UFLA_RULES.page.widthTwip,
+      height: UFLA_RULES.page.heightTwip,
+    },
+    margin: pageMargins(),
+  };
+
+  const sections: ISectionOptions[] = [
+    {
+      properties: { page: portraitPage },
+      children: preTextualChildrenList,
+    },
+  ];
+
+  sectionRuns.forEach((run, index) => {
+    const isFirstTextual = index === 0;
+    sections.push({
+      properties: {
+        page: {
+          ...(run.landscape ? landscapePage : portraitPage),
+          ...(isFirstTextual ? { pageNumbers: { start: textualStartPage } } : {}),
+        },
+      },
+      ...(isFirstTextual ? { headers: { default: pageNumberHeader } } : {}),
+      children: run.children,
+    });
+  });
+
   const document = new Document({
     creator: "UFLA DOCX Acadêmico",
     title: fields.title || "Trabalho acadêmico",
@@ -2796,40 +2906,7 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
     },
     styles: DOCUMENT_STYLES,
     footnotes,
-    sections: [
-      {
-        properties: {
-          page: {
-            size: {
-              orientation: PageOrientation.PORTRAIT,
-              width: UFLA_RULES.page.widthTwip,
-              height: UFLA_RULES.page.heightTwip,
-            },
-            margin: pageMargins(),
-          },
-        },
-        children: preTextualChildrenList,
-      },
-      {
-        properties: {
-          page: {
-            size: {
-              orientation: PageOrientation.PORTRAIT,
-              width: UFLA_RULES.page.widthTwip,
-              height: UFLA_RULES.page.heightTwip,
-            },
-            margin: pageMargins(),
-            pageNumbers: {
-              start: textualStartPage,
-            },
-          },
-        },
-        headers: {
-          default: pageNumberHeader,
-        },
-        children: textualAndPostTextualChildren,
-      },
-    ],
+    sections,
   });
   clearXrefRegistry();
   return document;

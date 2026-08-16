@@ -174,12 +174,19 @@ function collectChangeWarnings(structure: DocxStructure): string[] {
       if (run.changeKind === "deletion") deletions += 1;
     }
   }
+  const commentCount = Object.keys(structure.comments).length;
   const warnings: string[] = [];
-  if (insertions > 0) {
-    warnings.push(`Documento contém ${insertions} marcação(ões) de inserção (revisão do Word).`);
+  if (insertions > 0 || deletions > 0) {
+    warnings.push(
+      `Documento contém ${insertions} inserção(ões) e ${deletions} exclusão(ões) com controle de alterações (revisão do Word). ` +
+        "As alterações de texto são incorporadas, mas as MARCAÇÕES de revisão (w:ins/w:del) não são reemitidas no DOCX gerado — a versão exportada sai sem o histórico de revisão.",
+    );
   }
-  if (deletions > 0) {
-    warnings.push(`Documento contém ${deletions} marcação(ões) de exclusão (revisão do Word).`);
+  if (commentCount > 0) {
+    warnings.push(
+      `Documento contém ${commentCount} comentário(s) do Word. Os comentários não são reemitidos no DOCX gerado — ` +
+        "resolva-os no original antes de importar ou revise o texto exportado no Word.",
+    );
   }
   return warnings;
 }
@@ -548,6 +555,7 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
       source: source || undefined,
       position: index,
       origin: "docx-table",
+      orientation: block.orientation,
       status: hasLayoutWarning ? "preserved-with-layout-warning" : "preserved",
       estimatedColumnWidths,
       originalGridWidths: block.gridWidths,

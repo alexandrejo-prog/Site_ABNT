@@ -143,7 +143,10 @@ export function runOoxmlChecks(parts: DocxParts): ComplianceIssue[] {
       const left = parseInt(sect.match(/w:pgMar[^>]*w:left="(\d+)"/)?.[1] ?? "-1", 10);
       const right = parseInt(sect.match(/w:pgMar[^>]*w:right="(\d+)"/)?.[1] ?? "-1", 10);
       const label = `seção ${i + 1}`;
-      if (w !== A4_W || h !== A4_H) issues.push(issue("page-a4", `A4 ausente na ${label} (w=${w} h=${h}).`, "error", "Manual UFLA 4.1", label));
+      // Seção paisagem (tabela larga) troca w/h e declara w:orient="landscape".
+      const isLandscape = sect.includes('w:orient="landscape"');
+      const a4 = isLandscape ? w === A4_H && h === A4_W : w === A4_W && h === A4_H;
+      if (!a4) issues.push(issue("page-a4", `A4 ausente na ${label} (w=${w} h=${h}${isLandscape ? ", paisagem" : ""}).`, "error", "Manual UFLA 4.1", label));
       if (top !== CM_3_TWIP) issues.push(issue("margin-top", `Margem superior ${top} twips (esperado 1701) na ${label}.`, "error", "Manual UFLA 4.2", label));
       if (left !== CM_3_TWIP) issues.push(issue("margin-left", `Margem esquerda ${left} twips (esperado 1701) na ${label}.`, "error", "Manual UFLA 4.2", label));
       if (bottom !== CM_2_TWIP) issues.push(issue("margin-bottom", `Margem inferior ${bottom} twips (esperado 1134) na ${label}.`, "error", "Manual UFLA 4.2", label));
