@@ -5,9 +5,9 @@
 
 ## Última Atualização
 - Data: 2026-08-16
-- Hora: ~15:10 (Índice remissivo implementado — último elemento opcional do Manual UFLA §3.1.2.4.4 / NBR 6034; decisão DECISION-012; auditoria 141s com 11 gates)
-- Branch: `feat/indice-remissivo`
-- Evidência: `npm run ufla:audit` completo — lint + typecheck:scripts + regenerate (Word COM + PDF físico + **11 gates**) all passed em **141s** (suíte 1× + re-render da referência pulado quando o digest do DOCX não muda); overall=passed (FULL COMPLIANCE GATE APROVADO); `npm run e2e` 13/13 passed; lint 0/0; `sourceFingerprint` `06090a55…`
+- Hora: ~18:47 (otimização de bundle para o gate Lighthouse: JS crítico 773→187 KB (−76%), preload inicial 1.36→0.34 MB; commit `281ebd4` em `main`; CI Lighthouse **performance 82, tries 1** — antes falhava 65 < 70 por contenção)
+- Branch: `main`
+- Evidência: `npm run ufla:audit` completo — lint + typecheck:scripts + regenerate (Word COM + PDF físico + **11 gates**) all passed (FULL COMPLIANCE GATE APROVADO); `npm run e2e` 13/13; `npm run verify` 210/1688 green; lint 0/0; CIs `Verify` e `E2E e Lighthouse` **success no push** de `281ebd4`; `sourceFingerprint` `9f7798a7…`
 
 ## Suíte de Testes
 - Passed: 1688
@@ -28,7 +28,7 @@
 - perTypeGate: 15/15 PASSED (4 padrão + 3 rascunhos editáveis + 8 formatos da Coleção)
 - perTypePhysicalGate: PASSED (15/15 renderizados via Word COM: A4 + paginação OOXML↔PDF; skipped-no-word sem Word)
 - E2E (Playwright): PASSED (fluxo real do app: artigo da Coleção → DOCX → preview)
-- Lighthouse: PASSED (a11y 100 ≥ 90, performance 86, best-practices 92)
+- Lighthouse: PASSED (a11y 100 ≥ 90, performance 82 no CI [tries 1] / 99 local, best-practices 92 ≥ 80) — otimização de bundle em `281ebd4`
 
 ## Pendências Resolvidas (2026-08-15)
 1. [x] **Equações avançadas (OMML cru re-injetado)** — o `<m:oMathPara>` original da origem é capturado na extração, viaja no rascunho como token invisível `\uF001OMML:<base64>\uF001`, e é re-injetado no XML final pelo patch pós-Packer (frações/raízes preservadas — teste `ufla-equations` round-trip m:f)
@@ -136,6 +136,7 @@
 - Preservação: content-preservation.json RECOMPUTADO — imagens 11/11 (F-007 encerrado), tabelas 35/35, referências 138/138
 - Auditoria: suíte 1× por rodada (frescor ativo); renders per-type paralelos (pool 3); re-render da referência pulado quando o digest do DOCX não muda — **141s** (11/11 gates, `sourceFingerprint` `06090a55…`)
 - Índice remissivo (16/08): campo `indice` novo (ufla-rules.ts, default `""`; fora de `ACADEMIC_FIELD_KEYS` como `glossario`); DOCX `sectionTitle("Índice")` após anexos + sumário; preview página pós-textual; sanitizado em artigo/CPG; `tests/unit/indice-remissivo.test.ts` (4); DECISION-012 em `docs/decisions/012-indice-remissivo-opcional.md`
+- Otimização de bundle (16/08, commit `281ebd4`): `main.tsx` sem `docx-toc-field-patch` estático (docx+jszip 428 KB fora do preload); `ImportBlock` com `await import("../import-docx")` (mammoth ~490 KB lazy); `cleanMojibakeText` extraído para `src/text-utils.ts` (módulo puro, corta `docx-render-core` do caminho eager via `references-normalizer`); `vite.config` `manualChunks` em FUNÇÃO por prefixo de pacote (mammoth/mammoth.browser antes não casava com o chunk nomeado — caía no index.js). Resultado: **index.js 773→187 KB (−76%)**, preload `index+react-vendor+icons` 0.34 MB (antes +docx-libs = 1.36 MB). Sem mudança de comportamento: 1688 testes, 13 e2e, lint 0/0, `ufla:audit` 11/11.
 - Fechamento WIP (16/08): 5 commits `de96890` (OMML→LaTeX preview), `2c5457e` (conciliação página-a-página + margem inferior), `41b568c` (evidência no gate + snapshot), `0eab8e8` (axe no e2e), `93254ac` (DECISION-010 stub histórico); `null` (0 bytes) removido; `update-fingerprints.ts` arquivado (redundante)
 
 ## Regras para IAs
