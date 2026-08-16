@@ -46,13 +46,32 @@ function renderPdf(docxPath: string, pdfPath: string): void {
   );
 }
 
-async function analyzePdf(pdfPath: string): Promise<{ pages: number; images: number; tables: number; pageNumbers: number[]; pageSize: { width: number; height: number } | null; landscapePages: number }> {
+async function analyzePdf(pdfPath: string): Promise<{
+  pages: number;
+  images: number;
+  tables: number;
+  pageNumbers: number[];
+  pageSize: { width: number; height: number } | null;
+  landscapePages: number;
+  /** Páginas com conteúdo invadindo a margem inferior (área do rodapé). */
+  bottomMarginViolations: number[];
+  /** Coordenadas do 1º número de página visível (cabeçalho corrente) — evidência de posição. */
+  headerNumber: { page: number; value: number; x: number; yTop: number } | null;
+}> {
   const doc = await pdfjsLib.getDocument({ data: new Uint8Array(readFileSync(pdfPath)) }).promise;
   const pageNumbers: number[] = [];
   let images = 0;
   let tableRegions = 0;
   let pageSize: { width: number; height: number } | null = null;
   let landscapePages = 0;
+  const bottomMarginViolations: number[] = [];
+  let headerNumber: { page: number; value: number; x: number; yTop: number } | null = null;
+
+  // Margem inferior ABNT = 2 cm = 56.7 pt. Conteúdo abaixo de (PAGE_H - 40) pt
+  // (1.4 cm — folga de 0.6 cm para o que o Word renderiza perto da margem)
+  // invade a área do rodapé: o cabeçalho corrente deve ser a ÚNICA coisa no
+  // canto superior direito e a margem inferior deve ficar limpa (DECISION-010).
+  const BOTTOM_MARGIN_PT = 40;
 
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
@@ -74,7 +93,18 @@ async function analyzePdf(pdfPath: string): Promise<{ pages: number; images: num
       yTop: PAGE_H - it.transform[5],
     }));
     const nums = items.filter((it) => /^\d{1,3}$/.test(it.t) && it.yTop < 70 && it.x > PAGE_W * 0.7).map((it) => parseInt(it.t, 10));
-    if (nums.length > 0) pageNumbers.push(nums[0]);
+    if (nums.length > 0) {
+      pageNumbers.push(nums[0]);
+      if (!headerNumber) {
+        const first = items.find((it) => /^\d{1,3}$/.test(it.t) && it.yTop < 70 && it.x > PAGE_W * 0.7);
+        if (first) headerNumber = { page: p, value: parseInt(first.t, 10), x: first.x, yTop: first.yTop };
+      }
+    }
+
+    // Margem inferior: qualquer item de texto abaixo da área útil = violação.
+    const pageH = vp.height;
+    const bottomOverflow = items.filter((it) => it.t && it.yTop > pageH - BOTTOM_MARGIN_PT);
+    if (bottomOverflow.length > 0) bottomMarginViolations.push(p);
 
     // Tabelas: linhas com >= 2 colunas alinhadas persistentes (heurística compacta).
     const lines = new Map<number, number[]>();
@@ -102,7 +132,16 @@ async function analyzePdf(pdfPath: string): Promise<{ pages: number; images: num
     if (nonMarginCols.length >= 2 && rowsWith2Cols >= 3) tableRegions += 1;
   }
 
-  return { pages: doc.numPages, images, tables: tableRegions, pageNumbers, pageSize, landscapePages };
+  return {
+    pages: doc.numPages,
+    images,
+    tables: tableRegions,
+    pageNumbers,
+    pageSize,
+    landscapePages,
+    bottomMarginViolations,
+    headerNumber,
+  };
 }
 
 export async function runPerTypePhysical(): Promise<{ rendered: Record<string, unknown>; passed: boolean; failures: string[]; wordAvailable: boolean }> {
@@ -135,6 +174,13 @@ export async function runPerTypePhysical(): Promise<{ rendered: Record<string, u
         entry.imagesDetected = physical.images;
         entry.tablesDetected = physical.tables;
         entry.landscapePages = physical.landscapePages;
+        // Cabeçalho corrente (DECISION-010): posição exata do 1º número visível
+        // (canto superior direito, yTop < 70 pt) + margem inferior limpa.
+        entry.headerNumber = physical.headerNumber;
+        entry.bottomMarginViolations = physical.bottomMarginViolations;
+        if (physical.bottomMarginViolations.length > 0) {
+          failures.push(`${file}: conteúdo na margem inferior (área do rodapé) nas páginas ${physical.bottomMarginViolations.join(", ")} — yTop > altura - 40pt`);
+        }
         // Papel A4 (595.32 × 841.92 pt) ou A4 paisagem (841.92 × 595.32 pt) —
         // checagem física real do layout; toda página deve ser A4 em qualquer
         // orientação (gap P0: tabela larga → seção paisagem).

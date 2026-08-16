@@ -35,8 +35,8 @@ const OUT = join(ROOT, "artifacts", "ufla-compliance", "coverage-docx-pdf.json")
 // Limiares (documentados no JSON): tabelas casadas textualmente >= 90% das
 // tabelas OOXML; razão total físico/OOXML em banda [0.7, 1.8] (a detecção
 // física pode dividir uma tabela longa em 2 regiões — heurística conhecida);
-// imagens: físico >= 40% do OOXML (as 7 imagens de cabeçalho/ficha do baseline
-// não são re-exportadas — gap documentado F-007, corpo 6/6 preservado);
+// imagens: físico >= 40% do OOXML (round-trip atual preserva 11/11 —
+// compare-preservation.ts recomputa a cada rodada);
 // equações: OOXML > 0 exige detecção física > 0 (glifos matemáticos).
 const TABLE_MATCH_MIN = 0.9;
 const TABLE_RATIO_MIN = 0.7;
@@ -166,7 +166,11 @@ export async function computeCoverage(): Promise<{
     total: number;
     ratio: number;
     unmatched: Array<{ index: number; rows: number; signature: string }>;
+    /** Conciliação página-a-página: página física onde cada tabela OOXML foi renderizada (null = não casada). */
+    pageMap: Array<{ index: number; page: number | null }>;
   };
+  /** Conciliação reversa: página física → índices das tabelas OOXML casadas nela. */
+  pageMapping: Record<number, number[]>;
   tableRatio: number;
   imageRatio: number;
   equationCoverage: number;
@@ -178,7 +182,8 @@ export async function computeCoverage(): Promise<{
       failures: ["coverage-docx-pdf: DOCX de referência ou análise física ausentes — skip"],
       ooxml: { tables: 0, images: 0, equations: 0 },
       physical: { tables: 0, images: 0, equations: 0 },
-      tables: { matched: 0, total: 0, ratio: 0, unmatched: [] },
+      tables: { matched: 0, total: 0, ratio: 0, unmatched: [], pageMap: [] },
+      pageMapping: {},
       tableRatio: 0,
       imageRatio: 0,
       equationCoverage: 1,
@@ -201,6 +206,8 @@ export async function computeCoverage(): Promise<{
   const failures: string[] = [];
   let matched = 0;
   const unmatched: Array<{ index: number; rows: number; signature: string }> = [];
+  const pageMap: Array<{ index: number; page: number | null }> = [];
+  const pageMapping: Record<number, number[]> = {};
 
   const pdfPages = existsSync(PDF) ? await extractPdfPageTexts(PDF) : [];
 
@@ -212,10 +219,19 @@ export async function computeCoverage(): Promise<{
       : undefined;
     if (hit) {
       matched++;
+      pageMap.push({ index: table.index, page: hit.page });
+      (pageMapping[hit.page] ??= []).push(table.index);
     } else {
       unmatched.push({ index: table.index, rows: table.rows, signature: table.signature.slice(0, 60) });
+      pageMap.push({ index: table.index, page: null });
     }
   }
+
+  // Conciliação página-a-página: evidência de LAYOUT (que tabela OOXML caiu em
+  // qual folha física), não só de presença. Uma tabela por página de layout
+  // (não dividida) produz pageMap com páginas distintas; tabelas longas
+  // divididas em duas regiões físicas aparecem na página da PRIMEIRA região.
+  const physicalPagesWithTables = Object.keys(pageMapping).map(Number).sort((a, b) => a - b);
 
   const tableMatchRatio = ooxmlTables.length > 0 ? matched / ooxmlTables.length : 1;
   const tableRatio = ooxmlTables.length > 0 ? physicalTables / ooxmlTables.length : 1;
@@ -235,7 +251,7 @@ export async function computeCoverage(): Promise<{
   }
   if (ooxmlImages > 0 && imageRatio < IMAGE_RATIO_MIN) {
     failures.push(
-      `imagens: ${physicalImages}/${ooxmlImages} detectadas fisicamente (${(imageRatio * 100).toFixed(0)}% < ${IMAGE_RATIO_MIN * 100}% — cabeçalho/ficha do baseline não são re-exportados, F-007)`,
+      `imagens: ${physicalImages}/${ooxmlImages} detectadas fisicamente (${(imageRatio * 100).toFixed(0)}% < ${IMAGE_RATIO_MIN * 100}% — round-trip abaixo do esperado; conferir compare-preservation.json)`,
     );
   }
   if (ooxmlEquations > 0 && physicalEquations === 0) {
@@ -244,12 +260,23 @@ export async function computeCoverage(): Promise<{
     );
   }
 
+  // Conciliação página-a-página como evidência de LAYOUT (que tabela OOXML
+  // caiu em qual folha física) — consumida pelo regenerate na evidência do
+  // coverageDocxPdfGate e exposta aqui para inspeção manual rápida.
+  if (physicalPagesWithTables.length > 0) {
+    console.log(
+      `Conciliação página-a-página: ${physicalPagesWithTables.length} páginas físicas com tabelas — ` +
+        physicalPagesWithTables.map((p) => `${p}:[${pageMapping[p].join(",")}]`).join(" "),
+    );
+  }
+
   return {
     passed: failures.length === 0,
     failures,
     ooxml: { tables: ooxmlTables.length, images: ooxmlImages, equations: ooxmlEquations },
     physical: { tables: physicalTables, images: physicalImages, equations: physicalEquations },
-    tables: { matched, total: ooxmlTables.length, ratio: tableMatchRatio, unmatched },
+    tables: { matched, total: ooxmlTables.length, ratio: tableMatchRatio, unmatched, pageMap },
+    pageMapping,
     tableRatio,
     imageRatio,
     equationCoverage,

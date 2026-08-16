@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describeWithArtifacts } from "../test-utils/artifact-guard";
 import { analyzePdf } from "../../scripts/ufla-compliance/analyze-pdf-physical";
+import { computeCoverage } from "../../scripts/ufla-compliance/coverage-docx-pdf";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const root = join(__dirname, "..", "..");
@@ -62,6 +63,44 @@ describeWithArtifacts(
       // fração (\frac) e raiz (\sqrt) geram runs matemáticos distintos
       const joined = eqElements.map((e) => e.text).join(" ");
       expect(joined).toMatch(/Equação renderizada/);
+    });
+  },
+);
+
+describeWithArtifacts(
+  "rendering: conciliação DOCX→PDF página-a-página (coverage-docx-pdf)",
+  [
+    "ufla-compliance/normalized-dissertacao.docx",
+    "ufla-compliance/pdf-physical-analysis.json",
+  ],
+  () => {
+    it("pageMap associa cada tabela OOXML a uma página física", async () => {
+      const coverage = await computeCoverage();
+      expect(coverage.passed).toBe(true);
+      expect(coverage.tables.total).toBeGreaterThan(0);
+      expect(coverage.tables.matched).toBe(coverage.tables.total);
+      expect(coverage.tables.pageMap).toHaveLength(coverage.tables.total);
+      const unmatched = coverage.tables.pageMap.filter((p) => p.page === null);
+      expect(unmatched).toHaveLength(0);
+    });
+
+    it("pageMapping é a visão reversa (página física → índices das tabelas)", async () => {
+      const coverage = await computeCoverage();
+      const pageIndices = new Set<number>();
+      for (const indices of Object.values(coverage.pageMapping)) {
+        for (const idx of indices) {
+          expect(idx).toBeGreaterThan(0);
+          expect(idx).toBeLessThanOrEqual(coverage.tables.total);
+          pageIndices.add(idx);
+        }
+      }
+      expect(pageIndices.size).toBe(coverage.tables.matched);
+    });
+
+    it("razão físico/OOXML de tabelas fica na banda esperada", async () => {
+      const coverage = await computeCoverage();
+      expect(coverage.tableRatio).toBeGreaterThanOrEqual(0.7);
+      expect(coverage.tableRatio).toBeLessThanOrEqual(1.8);
     });
   },
 );
