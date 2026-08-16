@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildPreviewHtml } from "../../src/preview-html";
+import { calculateTextualStartPage } from "../../src/export-docx";
+import { parseEditorContent } from "../../src/export-docx";
 import { emptyAcademicFields, type AcademicFields } from "../../src/ufla-rules";
 
 function baseFields(overrides: Partial<AcademicFields> = {}): AcademicFields {
@@ -145,7 +147,7 @@ describe("buildPreviewHtml - fidelidade estrutural", () => {
     expect(resultados - intro).toBeGreaterThan(1);
   });
 
-  it("Header simulado fiel à DECISION-010: pré-textuais sem número; corpo inicia em pré-textuais + 1", () => {
+  it("Header simulado fiel à DECISION-010: pré-textuais sem número; corpo inicia no VALOR CONTADO (calculateTextualStartPage, folha de rosto=1)", () => {
     const html = previewFor();
     const sections = [...html.matchAll(/<section class="preview-page([^"]*)">([\s\S]*?)<\/section>/g)].map((m) => ({
       cls: m[1],
@@ -154,15 +156,27 @@ describe("buildPreviewHtml - fidelidade estrutural", () => {
     const bodyIndex = sections.findIndex((s) => s.cls.includes("preview-body-flow"));
     expect(bodyIndex).toBeGreaterThan(3);
 
+    // Mesmo cálculo do DOCX (w:start): folha de rosto = 1; capa e ficha no verso não contam.
+    const fields = baseFields();
+    const blocks = parseEditorContent(EDITOR_TEXT);
+    const bodyBlocks = blocks.filter((b) => b.type !== "reference");
+    const countedStart = calculateTextualStartPage(fields, true, bodyBlocks, [], []);
+    expect(countedStart).toBeGreaterThan(3); // folha=1 + aprovação + resumo/abstract + …
+
+    let previousNumber = countedStart;
     sections.forEach((s, i) => {
       if (i < bodyIndex) {
         expect(s.content, `página pré-textual ${i}`).not.toContain("preview-page-number");
       } else if (i === bodyIndex) {
-        // Primeira página textual: número = pré-textuais contadas + 1.
-        expect(s.content).toContain(`aria-label="Página ${bodyIndex + 1}"`);
+        // Primeira página textual: número = pré-textuais contadas + 1 (folha de rosto = 1).
+        expect(s.content).toContain(`aria-label="Página ${countedStart}"`);
       } else {
-        // Pós-textuais continuam a numeração (referências = corpo + 1).
-        expect(s.content).toContain(`aria-label="Página ${i + 1}"`);
+        // Pós-textuais continuam a numeração após as páginas reais do corpo.
+        const match = s.content.match(/aria-label="Página (\d+)"/);
+        expect(match, `página pós-textual ${i}`).not.toBeNull();
+        const number = Number(match![1]);
+        expect(number).toBeGreaterThan(previousNumber);
+        previousNumber = number;
       }
     });
   });

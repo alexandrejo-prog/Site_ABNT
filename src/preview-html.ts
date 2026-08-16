@@ -5,6 +5,7 @@ import {
 } from "./docx-render-core";
 import { escapeHtml, inlineMarkupToHtml } from "./editor-markup";
 import {
+  calculateTextualStartPage,
   extractReferencesSection,
   parseEditorContent,
   type DocxGenerationInput,
@@ -794,35 +795,37 @@ function generalPreview(input: DocxGenerationInput): string {
   pushPre(optionalFrontPage("Lista de abreviaturas", fields.listaAbreviaturas));
   pushPre(optionalFrontPage("Lista de símbolos", fields.listaSimbolos));
   pushPre(optionalFrontPage("Glossário", fields.glossario));
-  // Contagem real de páginas pré-textuais (DECISION-010): entradas podem conter
-  // 0 (optionalFrontPage vazio), 1 ou 2 páginas (resumo+abstract); contamos as
-  // seções <section class="preview-page" de fato geradas.
-  const preTextualHtml = preTextual.filter(Boolean).join("");
-  let realPreTextualPages = (preTextualHtml.match(/<section class="preview-page/g) ?? []).length;
+  // As entradas do sumário listam a página do corpo: pré-textuais (já
+  // incluindo a própria página do sumário) + 1. O Word/baseline UFLA lista
+  // o próprio SUMÁRIO no TOC (estilo de título com outline level).
   if (hasSummary) {
-    // As entradas do sumário listam a página do corpo: pré-textuais (já
-    // incluindo a própria página do sumário) + 1. O Word/baseline UFLA lista
-    // o próprio SUMÁRIO no TOC (estilo de título com outline level).
     tocPre.push({ title: "SUMÁRIO", page: prePageCount + 1 });
-    preTextual.push(page(summaryHtml(bodyBlocks, references, fields.apendices, fields.anexos, realPreTextualPages + 2, importedImages, importedTables, tocPre)));
-    realPreTextualPages += 1;
+    preTextual.push(page(summaryHtml(bodyBlocks, references, fields.apendices, fields.anexos, calculateTextualStartPage(fields, hasSummary, bodyBlocks, importedImages, importedTables), importedImages, importedTables, tocPre)));
   }
 
-  // Numeração visível inicia na primeira página textual com o valor contado.
-  const bodyStartPage = realPreTextualPages + 1;
+  // Numeração visível inicia na primeira página textual com o VALOR CONTADO
+  // (DECISION-010 / calculateTextualStartPage: folha de rosto = 1; capa e ficha
+  // no verso não contam). Antes o preview usava a contagem física (corpo em 8
+  // para a monografia) enquanto o DOCX usava w:start=6 — alinhado agora.
+  const bodyStartPage = calculateTextualStartPage(fields, hasSummary, bodyBlocks, importedImages, importedTables);
+  // Referências/apêndices/anexos continuam a numeração após as páginas reais do
+  // corpo (mesmo cálculo do sumário — calculateRealPages), como o Word faz.
+  const postPages = calculateRealPages(bodyBlocks, references, fields.apendices, fields.anexos, importedImages, importedTables, bodyStartPage);
+  const refsPage = postPages.get(normalizeForDetection("REFERÊNCIAS")) ?? bodyStartPage + 1;
+  const appendixPage = postPages.get(normalizeForDetection("APÊNDICE A")) ?? refsPage + 1;
+  const anexosPage = postPages.get(normalizeForDetection("ANEXOS")) ?? appendixPage + 1;
   const postTextual: string[] = [];
   postTextual.push(
     page(
-      pageNumberHeader(bodyStartPage + 1) + unnumberedTitle("Referências") + referencesHtml(references),
+      pageNumberHeader(refsPage) + unnumberedTitle("Referências") + referencesHtml(references),
       "preview-references",
     ),
   );
-  let appendixPage = bodyStartPage + 2;
   if (hasText(fields.apendices)) {
-    postTextual.push(page(pageNumberHeader(appendixPage++) + unnumberedTitle("Apêndice A") + simpleParagraph(fields.apendices)));
+    postTextual.push(page(pageNumberHeader(appendixPage) + unnumberedTitle("Apêndice A") + simpleParagraph(fields.apendices)));
   }
   if (hasText(fields.anexos)) {
-    postTextual.push(page(pageNumberHeader(appendixPage++) + unnumberedTitle("Anexos") + simpleParagraph(fields.anexos)));
+    postTextual.push(page(pageNumberHeader(anexosPage) + unnumberedTitle("Anexos") + simpleParagraph(fields.anexos)));
   }
 
   return [

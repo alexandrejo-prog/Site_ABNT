@@ -121,6 +121,14 @@ function runTestSummary(): { status: "passed" | "failed"; evidence: string } {
   }
 }
 
+// Snapshot preview+digest (Word-free) gravado ANTES do teste interno: o npm test
+// valida o snapshot já atualizado, evitando o deadlock de transição em que uma
+// mudança intencional de preview/paginação faria o codeGate regredir por snapshot
+// pendente. O lado PDF do Word é mesclado depois do compare (previewDiff).
+const previewSnapEarly = await buildPreviewSnapshot();
+writePreviewSnapshot(previewSnapEarly as never);
+console.log("OK:", snapshotPath(), "(preview+digest, PDF pendente)");
+
 const testSummary = runTestSummary();
 const renderedPages: number | string =
   manifest.pagesAfterToc ?? manifest.pagesAfterFields ?? manifest.pagesBeforeFields ?? "?";
@@ -202,7 +210,7 @@ const previewDiffPassed = previewDiff.passed;
     };
   }
   writePreviewSnapshot(merged as never);
-  console.log("OK:", snapshotPath());
+  console.log("OK:", snapshotPath(), "(com referência do PDF do Word)");
 }
 const previewDiffEvidence = previewDiff.wordAvailable
   ? (() => {

@@ -1,6 +1,6 @@
 {
   "schema": "ufla-audit/preview-snapshot/v1",
-  "generatedAt": "2026-08-15T23:46:07.360Z",
+  "generatedAt": "2026-08-16T00:04:17.327Z",
   "templates": {
     "monografia": {
       "previewPages": 9,
@@ -12,8 +12,8 @@
         null,
         null,
         null,
-        8,
-        9
+        6,
+        7
       ],
       "signatures": [
         "7aa674e1430460a9",
@@ -22,9 +22,9 @@
         "a6138010c7496fd0",
         "2ab9f50b6b481b8f",
         "8358f5ac0c184de8",
-        "b0c439e77113481c",
-        "7c3c29b0560907b0",
-        "e4bf37a6a504162f"
+        "c34fe2a51968f2fa",
+        "2ed3ae95d06023e5",
+        "e3cb32a5633963ed"
       ],
       "docxDigest": "445b2058f59dfadb",
       "pdfPages": 10,
@@ -52,7 +52,7 @@
         7,
         8
       ],
-      "similarity": 0.963,
+      "similarity": 0.962,
       "pageDelta": 1
     },
     "dissertacao": {
@@ -66,8 +66,8 @@
         null,
         null,
         null,
-        9,
-        10
+        7,
+        8
       ],
       "signatures": [
         "7aa674e1430460a9",
@@ -77,9 +77,9 @@
         "2ab9f50b6b481b8f",
         "8358f5ac0c184de8",
         "32ad7e18326045f7",
-        "d4940edcc46940b7",
-        "dd24dd602aad5b81",
-        "87a63636efc3feec"
+        "18adcb0da652ab99",
+        "5b91e34ad967ed51",
+        "9da051400c58b0ce"
       ],
       "docxDigest": "a85e8a03e563fe98",
       "pdfPages": 11,
@@ -109,7 +109,7 @@
         8,
         9
       ],
-      "similarity": 0.968,
+      "similarity": 0.978,
       "pageDelta": 1
     },
     "tese": {
@@ -123,8 +123,8 @@
         null,
         null,
         null,
-        9,
-        10
+        7,
+        8
       ],
       "signatures": [
         "7aa674e1430460a9",
@@ -134,9 +134,9 @@
         "2ab9f50b6b481b8f",
         "8358f5ac0c184de8",
         "32ad7e18326045f7",
-        "d4940edcc46940b7",
-        "dd24dd602aad5b81",
-        "87a63636efc3feec"
+        "18adcb0da652ab99",
+        "5b91e34ad967ed51",
+        "9da051400c58b0ce"
       ],
       "docxDigest": "1f6ae822062bc454",
       "pdfPages": 11,
