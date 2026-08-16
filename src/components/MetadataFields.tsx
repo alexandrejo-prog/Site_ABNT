@@ -3,7 +3,8 @@ import { CONFIDENCE_LABELS, isCpgWork, isResearchProject, isUflaCollectionWork }
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "../academic-production-types";
 import { UFLA_PPG_PROGRAMS } from "../ufla-ppg-programs";
 import { draftWorkTypeSupportsIndicators } from "../draft-builder";
-import { FileCheck2, ImagePlus, Trash2, Upload } from "lucide-react";
+import { FileCheck2, FilePlus2, ImagePlus, Trash2, Upload } from "lucide-react";
+import { generateCatalogCard } from "../catalog-card";
 import { FIELD_LABELS, ASSISTED_FIELD_KEYS, LONG_FIELDS, IMPACT_KEYS, rowsForField, visibleField, courseFieldLabel } from "../app-constants";
 
 export interface FichaCatalograficaImageAsset {
@@ -118,6 +119,23 @@ export default function MetadataFields({ fields, confidence, updateField, assist
           <input id={key} value={(fields as any)[key]} onChange={(e) => updateField(key as any, e.target.value)} list="ufla-ppg-programs" />
         ) : (
           <input id={key} value={(fields as any)[key]} onChange={(e) => updateField(key as any, e.target.value)} />
+        )}
+        {key === "fichaCatalografica" && (
+          <div className="ficha-generate-row">
+            <button
+              className="secondary-action"
+              type="button"
+              disabled={!fields.author.trim() || !fields.title.trim()}
+              title={!fields.author.trim() || !fields.title.trim() ? "Preencha autor e título para gerar a ficha" : "Gera ficha provisória com Cutter-Sanborn calculado (confirme com a Biblioteca)"}
+              onClick={() => {
+                const card = generateCatalogCard(fields);
+                if (card) updateField("fichaCatalografica", card);
+              }}
+            >
+              <FilePlus2 size={14} aria-hidden="true" /> Gerar ficha provisória
+            </button>
+            <span className="field-note ficha-generate-note">Calcula o Cutter do sobrenome (ex.: S586f) e monta o texto no formato da Biblioteca Universitária. Confirme Cutter/CDU com a Biblioteca antes da versão final.</span>
+          </div>
         )}
         {key === "referencias" && <div className="field-note" id="referencias-note"><p>Para editar com mais espaço, use o botão <strong>Referências</strong> no painel central.</p><p>Use uma referência por linha.</p></div>}
       </div>

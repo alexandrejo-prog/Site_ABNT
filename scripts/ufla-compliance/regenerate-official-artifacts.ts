@@ -371,6 +371,15 @@ const previewDiffEvidence = previewDiff.wordAvailable
       return `Fidelidade preview↔DOCX por template (Word COM + pdfjs + Playwright): 6/6 templates — monografia, dissertação, tese, artigo, resumo expandido CPG, projeto de pesquisa — com similaridade ≥ 0.65 e Δpáginas ≤ 3 (${perTemplate}); screenshots lado a lado por página com diffRatio (evidência visual em preview-diff/*.png); snapshot commitado com digest do DOCX (pgNumType/estrutura — verificável no CI) e referência do PDF do Word (páginas + numeração visível + assinaturas por página).`;
     })()
   : `Fidelidade preview↔DOCX: Word INDISPONÍVEL — comparação saltada (skipped-no-word), gate considerado passed.`;
+// Razão de cobertura DOCX→PDF (casa tabelas/imagens/equações OOXML com a
+// detecção física — ver DECISION-009). Evidência em coverage-docx-pdf.json.
+const { computeCoverage } = await import(pathToFileURL(join(ROOT, "scripts", "ufla-compliance", "coverage-docx-pdf.ts")).href);
+const coverageDocxPdf = await computeCoverage();
+writeJson("artifacts/ufla-compliance/coverage-docx-pdf.json", coverageDocxPdf);
+const coverageDocxPdfPassed = coverageDocxPdf.passed;
+const coverageDocxPdfEvidence = coverageDocxPdf.wordAvailable
+  ? `Cobertura DOCX→PDF: ${coverageDocxPdf.tables.matched}/${coverageDocxPdf.tables.total} tabelas OOXML casadas textualmente com regiões físicas detectadas (razão físico/OOXML ${coverageDocxPdf.tableRatio.toFixed(2)} na banda [0.7, 1.8]); imagens ${coverageDocxPdf.physical.images}/${coverageDocxPdf.ooxml.images} (${coverageDocxPdf.imageRatio.toFixed(2)}); equações ${coverageDocxPdf.ooxml.equations}→${coverageDocxPdf.physical.equations}.`
+  : `Cobertura DOCX→PDF: PDF/artefato de referência indisponível — gate considerado passed (evidência em coverage-docx-pdf.json).`;
 const overallStatus =
   testSummary.status === "passed" &&
   fullComplianceStatus === "passed" &&
@@ -378,7 +387,8 @@ const overallStatus =
   formatsCrossPassed &&
   perTypePhysicalPassed &&
   previewDiffPassed &&
-  previewPdfReferenceStatus === "passed"
+  previewPdfReferenceStatus === "passed" &&
+  coverageDocxPdfPassed
     ? "passed"
     : "failed";
 
@@ -487,6 +497,14 @@ const gates = {
         previewPdfReferenceStatus === "failed"
           ? "Regressão de renderização do Word sem mudança de preview/DOCX — referência commitada preservada; investigar versão do Word/fontes/pipeline."
           : undefined,
+    },
+    coverageDocxPdfGate: {
+      status: coverageDocxPdfPassed ? "passed" : "failed",
+      evidence: coverageDocxPdfEvidence,
+      finding:
+        coverageDocxPdfPassed
+          ? undefined
+          : `Cobertura DOCX→PDF abaixo do limiar — ${coverageDocxPdf.failures.join("; ")}`,
     },
   },
   overall: overallStatus,

@@ -326,3 +326,104 @@ describe("UFLA-023 checagem OOXML (ooxml-checks)", () => {
     expect(issues.some((i) => i.code === "equation-format")).toBe(false);
   });
 });
+
+describe("UFLA-023 equações avançadas: N-ÁRIO ∫/∑/∏, lim e símbolos (Manual §3.2.8)", () => {
+  it("converte int_0^1 x dx em m:nary com limites (MathIntegral)", async () => {
+    const parsed = parseLatexMath("\\int_0^1 x \\, dx");
+    expect(parsed).not.toBeNull();
+    const { Packer, Paragraph, Document, Math: DMath } = await import("docx");
+    const doc = new Document({ sections: [{ children: [new Paragraph({ children: [new DMath({ children: parsed! })] })] }] });
+    const buf = await Packer.toBuffer(doc);
+    const zipped = await JSZip.loadAsync(buf);
+    const xml = await zipped.file("word/document.xml")!.async("string");
+    expect(xml).toContain("<m:nary>");
+    expect(xml).toContain("<m:sub>");
+    expect(xml).toContain("<m:sup>");
+  });
+
+  it("converte sum_{i=1}^{n} i em m:nary com m:chr ∑", async () => {
+    const parsed = parseLatexMath("\\sum_{i=1}^{n} i");
+    expect(parsed).not.toBeNull();
+    const { Packer, Paragraph, Document, Math: DMath } = await import("docx");
+    const doc = new Document({ sections: [{ children: [new Paragraph({ children: [new DMath({ children: parsed! })] })] }] });
+    const buf = await Packer.toBuffer(doc);
+    const zipped = await JSZip.loadAsync(buf);
+    const xml = await zipped.file("word/document.xml")!.async("string");
+    expect(xml).toContain('m:chr m:val="∑"');
+    expect(xml).toContain("<m:sub>");
+    expect(xml).toContain("<m:sup>");
+  });
+
+  it("converte prod_{k=1}^{m} k em m:nary com m:chr ∏ (MathNary genérico)", async () => {
+    const parsed = parseLatexMath("\\prod_{k=1}^{m} k");
+    expect(parsed).not.toBeNull();
+    const { Packer, Paragraph, Document, Math: DMath } = await import("docx");
+    const doc = new Document({ sections: [{ children: [new Paragraph({ children: [new DMath({ children: parsed! })] })] }] });
+    const buf = await Packer.toBuffer(doc);
+    const zipped = await JSZip.loadAsync(buf);
+    const xml = await zipped.file("word/document.xml")!.async("string");
+    expect(xml).toContain('m:chr m:val="∏"');
+    expect(xml).toContain("<m:sub>");
+    expect(xml).toContain("<m:sup>");
+  });
+
+  it("converte lim_{x to 0} em m:func com nome lim e símbolo →", async () => {
+    const parsed = parseLatexMath("\\lim_{x \\to 0} f(x)");
+    expect(parsed).not.toBeNull();
+    const { Packer, Paragraph, Document, Math: DMath } = await import("docx");
+    const doc = new Document({ sections: [{ children: [new Paragraph({ children: [new DMath({ children: parsed! })] })] }] });
+    const buf = await Packer.toBuffer(doc);
+    const zipped = await JSZip.loadAsync(buf);
+    const xml = await zipped.file("word/document.xml")!.async("string");
+    expect(xml).toContain("<m:func>");
+    expect(xml).toContain("<m:t>lim</m:t>");
+    expect(xml).toContain("x→0");
+  });
+
+  it("converte símbolos comuns (pi, infty, approx) em glifos Unicode", async () => {
+    const parsed = parseLatexMath("\\pi \\approx 3.14, \\infty");
+    expect(parsed).not.toBeNull();
+    const { Packer, Paragraph, Document, Math: DMath } = await import("docx");
+    const doc = new Document({ sections: [{ children: [new Paragraph({ children: [new DMath({ children: parsed! })] })] }] });
+    const buf = await Packer.toBuffer(doc);
+    const zipped = await JSZip.loadAsync(buf);
+    const xml = await zipped.file("word/document.xml")!.async("string");
+    expect(xml).toContain("<m:t>π</m:t>");
+    expect(xml).toContain("<m:t>≈</m:t>");
+    expect(xml).toContain("<m:t>∞</m:t>");
+  });
+
+  it("DOCX real do editor: equação com sum recebe m:nary e numeração por seção", async () => {
+    const blob = await generateDocxBlob({
+      fields: {
+        ...emptyAcademicFields(),
+        workType: "monografia" as const,
+        author: "SILVA, J.",
+        title: "Titulo",
+        resumo: "Resumo.",
+        palavrasChave: "palavras; chave",
+      },
+      editorText: "# 2 Revisão de Literatura\n\n[EQ] \\sum_{i=1}^{n} i = n(n+1)/2 (2.1)\n\nProsa.",
+    });
+    const { loadDocxPartsFromBytes, runOoxmlChecks } = await import("../../scripts/ufla-compliance/ooxml-checks");
+    const parts = await loadDocxPartsFromBytes(await blob.arrayBuffer());
+    const xml = parts.documentXml;
+    expect(xml).toContain('m:chr m:val="∑"');
+    // numeração por seção presente no documento (o corpo da equação não contém "(2.1)")
+    expect(xml).toContain("(2.1)");
+    const issues = runOoxmlChecks(parts);
+    expect(issues.some((i) => i.code === "equation-format")).toBe(false);
+  });
+
+  it("text{...} vira run de texto plano dentro da equação", async () => {
+    const parsed = parseLatexMath("x > 0 \\text{ se } x \\in \\mathbb{R}");
+    expect(parsed).not.toBeNull();
+    const { Packer, Paragraph, Document, Math: DMath } = await import("docx");
+    const doc = new Document({ sections: [{ children: [new Paragraph({ children: [new DMath({ children: parsed! })] })] }] });
+    const buf = await Packer.toBuffer(doc);
+    const zipped = await JSZip.loadAsync(buf);
+    const xml = await zipped.file("word/document.xml")!.async("string");
+    expect(xml).toContain("<m:t>se</m:t>");
+    expect(xml).toContain("<m:t>∈</m:t>");
+  });
+});

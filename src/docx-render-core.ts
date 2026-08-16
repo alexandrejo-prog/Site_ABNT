@@ -6,11 +6,18 @@ import {
   InternalHyperlink,
   IParagraphOptions,
   Math as DocxMath,
+  MathBase,
   MathFraction,
+  MathFunction,
+  MathIntegral,
+  MathNAryProperties,
   MathRadical,
   MathRun,
   MathSubScript,
+  MathSubScriptElement,
+  MathSum,
   MathSuperScript,
+  MathSuperScriptElement,
   Paragraph,
   TabStopType,
   Table,
@@ -18,9 +25,18 @@ import {
   TableRow,
   TextRun,
   WidthType,
+  XmlComponent,
 } from "docx";
 import type { MathComponent } from "docx";
 import { UFLA_RULES, cmToTwip } from "./ufla-rules";
+
+/** Texto de um MathRun da lib docx: o run guarda em root[0] = { rootKey: "m:t", root: [texto] }. */
+function mathRunText(c: unknown): string {
+  const root = (c as { root?: Array<{ root?: unknown[] }> }).root;
+  const t = root?.[0];
+  const val = (t as { root?: unknown[] } | undefined)?.root?.[0];
+  return typeof val === "string" ? val : "";
+}
 
 export function cleanMojibakeText(value: string): string {
   return value
@@ -557,20 +573,109 @@ export function equationParagraph(text: string): Paragraph {
 }
 
 /**
- * Parser LaTeX→OMML mínimo (fração, raiz, sobrescrito/subscrito) para equações
- * digitadas no editor como `[EQ] \frac{a}{b} + \sqrt{x} + x^2 (1.1)`.
+/** N-ário OMML genérico (`m:nary` com m:chr arbitrário) — a lib docx só expõe
+ * MathIntegral (∫) e MathSum (∑); com XmlComponent + MathNAryProperties
+ * compomos ∏ (e qualquer operador) com limites acima/abaixo (undOvr). */
+export class MathNary extends XmlComponent {
+  constructor(
+    chr: string,
+    options: {
+      children: MathComponent[];
+      subScript?: MathComponent[];
+      superScript?: MathComponent[];
+    },
+  ) {
+    super("m:nary");
+    this.root.push(new MathNAryProperties(chr, !!options.superScript, !!options.subScript));
+    if (options.subScript) this.root.push(new MathSubScriptElement(options.subScript));
+    if (options.superScript) this.root.push(new MathSuperScriptElement(options.superScript));
+    this.root.push(new MathBase(options.children));
+  }
+}
+
+/** Símbolos LaTeX comuns → glifos Unicode (para \lim_{x \to 0}, \cdot, \pi etc.). */
+const MATH_SYMBOLS: Record<string, string> = {
+  to: "→",
+  rightarrow: "→",
+  leftarrow: "←",
+  leftrightarrow: "↔",
+  gets: "←",
+  cdot: "·",
+  times: "×",
+  pm: "±",
+  mp: "∓",
+  div: "÷",
+  infty: "∞",
+  pi: "π",
+  alpha: "α",
+  beta: "β",
+  gamma: "γ",
+  delta: "δ",
+  theta: "θ",
+  lambda: "λ",
+  mu: "μ",
+  sigma: "σ",
+  omega: "ω",
+  phi: "φ",
+  epsilon: "ε",
+  rho: "ρ",
+  tau: "τ",
+  psi: "ψ",
+  Delta: "Δ",
+  Gamma: "Γ",
+  Lambda: "Λ",
+  Omega: "Ω",
+  Sigma: "Σ",
+  Theta: "Θ",
+  partial: "∂",
+  nabla: "∇",
+  geq: "≥",
+  leq: "≤",
+  neq: "≠",
+  approx: "≈",
+  equiv: "≡",
+  sim: "∼",
+  in: "∈",
+  notin: "∉",
+  subset: "⊂",
+  supset: "⊃",
+  cup: "∪",
+  cap: "∩",
+  forall: "∀",
+  exists: "∃",
+  neg: "¬",
+  quad: " ",
+  qquad: "  ",
+};
+
+/**
+ * Parser LaTeX→OMML (fração, raiz, sobrescrito/subscrito, N-ÁRIO ∫/∑/∏ com
+ * limites, \lim e símbolos) para equações digitadas no editor como
+ * `[EQ] \int_0^1 x dx + \sum_{i=1}^n i (2.1)`.
  *
  * Retorna `null` quando o corpo não contém estrutura LaTeX — nesse caso a
  * equação permanece achatada (m:r/m:t), comportamento histórico preservado.
  *
  * Suporta: \frac{num}{den}, \sqrt[grau]{corpo} / \sqrt{corpo}, X^{sup} / X^c,
- * X_{sub} / X_c, agrupamento por chaves e aninhamento (fração em fração etc.).
+ * X_{sub} / X_c, \int_a^b, \sum_{i=1}^{n}, \prod, \lim_{x \to 0}, símbolos
+ * comuns (\to, \cdot, \pi, \infty...), agrupamento por chaves e aninhamento.
  */
 export function parseLatexMath(latex: string): MathComponent[] | null {
-  if (!/\\frac|\\sqrt|\^|_/.test(latex)) return null;
+  if (!/\\[a-zA-Z]+|\^|_/.test(latex)) return null;
 
   let pos = 0;
   const src = latex;
+
+  const readScriptArg = (kind: "_" | "^"): MathComponent[] | undefined => {
+    skipSpace();
+    if (src[pos] !== kind) return undefined;
+    pos += 1;
+    skipSpace();
+    if (src[pos] === "{") return parseGroup();
+    const single = src[pos] ?? "";
+    pos += 1;
+    return [new MathRun(single)];
+  };
 
   const skipSpace = (): void => {
     while (pos < src.length && /\s/.test(src[pos])) pos += 1;
@@ -583,7 +688,7 @@ export function parseLatexMath(latex: string): MathComponent[] | null {
     skipSpace();
     if (src[pos] === "}") pos += 1;
     if (inner.length === 1) return inner;
-    const text = inner.map((c) => (c instanceof MathRun ? (c as unknown as { text?: string }).text ?? "" : "")).join("");
+    const text = inner.map((c) => mathRunText(c)).join("");
     return text ? [new MathRun(text)] : [inner[0]];
   };
 
@@ -621,9 +726,43 @@ export function parseLatexMath(latex: string): MathComponent[] | null {
         const body = readArg();
         return new MathRadical({ children: body, ...(degree ? { degree } : {}) });
       }
-      const text = cmd ? cmd : src[pos] ?? "";
-      pos += text.length;
-      return new MathRun(`\\${text}`);
+      if (cmd === "text") {
+        // \text{...} → run de texto plano (não estrutura)
+        pos += 4;
+        skipSpace();
+        if (src[pos] === "{") {
+          const inner = parseGroup();
+          const text = inner.map((c) => mathRunText(c)).join("");
+          return new MathRun(text);
+        }
+        return new MathRun("");
+      }
+      // N-ÁRIO: \int, \sum, \prod (com limites _ ^) e \lim — o integrando/
+      // argumento é o restante do grupo atual (parseComponents para em } / ] / fim).
+      if (cmd === "int" || cmd === "sum" || cmd === "prod" || cmd === "lim") {
+        pos += cmd.length;
+        const sub = readScriptArg("_");
+        const sup = readScriptArg("^");
+        const children = parseComponents();
+        if (cmd === "lim") {
+          const name = sub
+            ? [new MathSubScript({ children: [new MathRun("lim")], subScript: sub })]
+            : [new MathRun("lim")];
+          return new MathFunction({ name, children });
+        }
+        const options = {
+          children,
+          ...(sub ? { subScript: sub } : {}),
+          ...(sup ? { superScript: sup } : {}),
+        };
+        if (cmd === "int") return new MathIntegral(options);
+        if (cmd === "sum") return new MathSum(options);
+        return new MathNary("∏", options);
+      }
+      const symbol = MATH_SYMBOLS[cmd];
+      const text = symbol ?? (cmd ? cmd : src[pos] ?? "");
+      pos += cmd.length;
+      return new MathRun(symbol ?? `\\${text}`);
     }
     if (ch === "{") return parseGroup()[0] ?? new MathRun("");
     pos += 1;

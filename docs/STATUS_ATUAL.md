@@ -5,15 +5,15 @@
 
 ## Última Atualização
 - Data: 2026-08-16
-- Hora: ~07:30 (editor de equações com numeração por seção; Cutter bloqueante no app; tabelas de 2 linhas por bordas desenhadas no PDF; typecheck de scripts no CI)
+- Hora: ~08:05 (equações avançadas OMML ∫/∑/lim com numeração; ficha catalográfica gerada automaticamente com Cutter; razão de cobertura DOCX→PDF com gate; runner self-hosted do Word documentado)
 - Branch: `feat/ufla-render-validation`
-- Evidência: `npm run ufla:audit` completo — lint + typecheck:scripts + regenerate (Word COM + PDF físico + 10 gates) all passed; overall=passed (FULL COMPLIANCE GATE APROVADO); `npx tsx ci-checks.ts` PASSED (18 formatos × 15 tipos + frescor estrito); `npm run e2e` 13/13 passed; lint 0/0
+- Evidência: `npm run ufla:audit` completo — lint + typecheck:scripts + regenerate (Word COM + PDF físico + **11 gates**) all passed; overall=passed (FULL COMPLIANCE GATE APROVADO); `npx tsx ci-checks.ts` PASSED (18 formatos × 15 tipos + frescor estrito); `npm run e2e` 13/13 passed; lint 0/0
 
 ## Suíte de Testes
-- Passed: 1643
+- Passed: 1659
 - Failed: 0
 - Skipped: 10
-- Arquivos: 207
+- Arquivos: 208
 - Build: OK (tsc + vite)
 - tsc --noEmit: 0 erros (src + tests)
 - typecheck:scripts: 0 erros (tsconfig.scripts.json checa scripts/ufla-compliance — antes fora do include e só parcialmente checado por imports de testes)
@@ -22,6 +22,7 @@
 ## Gates (scripts/ufla-compliance)
 - GATE DE CÓDIGO: PASSED (npm test + lint + build)
 - runExpandedComplianceGate: PASSED no DOCX real — 10/10 categorias (pré-textuais, textuais, pós-textuais, referências, citações, figuras, seções, tabelas, equações, paginação)
+- coverageDocxPdfGate: **PASSED (novo)** — 35/35 tabelas OOXML casadas textualmente com regiões físicas do PDF (razão 1.29 na banda [0.7, 1.8]); imagens 11/11; equações OOXML↔PDF consistentes
 - FULL_COMPLIANCE_GATE: **APROVADO** (gates.json overall=passed; report.md declara CONFORMIDADE UFLA APROVADA)
 - perTypeGate: 15/15 PASSED (4 padrão + 3 rascunhos editáveis + 8 formatos da Coleção)
 - perTypePhysicalGate: PASSED (15/15 renderizados via Word COM: A4 + paginação OOXML↔PDF; skipped-no-word sem Word)
@@ -85,6 +86,11 @@
 23u. [x] **Tabelas de 2 linhas no PDF: detecção complementar por BORDAS DESENHADAS (fecha os falsos negativos da grade de texto)** — descoberta empírica: o Word exporta cada aresta de célula de tabela como um RETÂNGULO FINO PREENCHIDO (`re` em constructPath seguido de `eoFill` standalone — ~2·C·R retângulos horizontais e ~2·C·R verticais por grid C×R, com posições x/y consistentes; os clips de texto do Word também são `re` mas seguidos de `eoClip`, não contam). `detectBorderedTableRegions` (opList + CTM manual com save/restore — o `Util.transform` do pdf.js retorna NaN sem DOMMatrix) recupera o grid por colunas/linhas das linhas de borda (≥2 colunas × ≥2 linhas, H≥4 e V≥4) e é MESCLADO com a grade de texto (interseção 30%): a detecção passou de ~7 páginas com tabelas para **40 páginas** — tabelas de questionário (8 col × 16 linhas), Likert, lista de abreviaturas e as de 2 linhas (header + 1 linha) agora são detectadas fisicamente, sem falsos positivos nas páginas de texto corrido (19/50/51/225/232 continuam limpas). 5 testes novos do detector (grid 2×2, clips não contam, caixa única não conta, poucas linhas não conta, CTM com save/restore) + artefato real atualizado.
 23v. [x] **Typecheck de scripts/ufla-compliance no CI (tsconfig próprio + npm script + wiring)** — o `tsconfig.json` principal inclui só src+tests: scripts standalone escapavam da checagem (erros de tipo latentes — implicit any, `TextMarkedContent` sem transform, Buffer→BlobPart, import.meta.env, JSZipObject sem size — só apareciam quando um teste importava o arquivo). Criado `tsconfig.scripts.json` (extends base, `types: [node, vite/client]`, noUnused* relaxados para scripts operacionais; exclui `analyze-word.ts` que é PowerShell com extensão .ts), script `typecheck:scripts` e passo **TYPECHECK (scripts/ufla-compliance)** no `ufla:audit` entre LINT e REGENERATE. Todos os erros latentes corrigidos (7 arquivos).
 
+23w. [x] **Equações avançadas no OOXML real: \int/\sum/\prod/\lim (m:nary/m:func nativos, não mais texto)** — classe `MathNaryGeneric` (XmlComponent) gera `m:nary` com `m:naryPr` (chr ∫/∏/∑, sub sup) e `MathFunction` para `\lim`; `parseLatexMath` agora cobre `\int_{a}^{b}`, `\sum_{i=1}^{n}`, `\prod`, `\lim_{x\to 0}` (todos os índices como `m:sub`/`m:sup` reais). A numeração automática por seção (23s) continua; 28 testes OOXML. Durante o trabalho, corrigido o merge de grupos do parser: `MathRun` do docx guarda o texto em `root[0].root[0]` (não em `.text`) — subscritos compostos (`x \to 0`) agora sobrevivem ao parse.
+23x. [x] **Ficha catalográfica GERADA automaticamente (Cutter-Sanborn calculado)** — `generateCatalogCard(fields)` em `catalog-card.ts`: tabela Cutter-Sanborn com valores das fichas da UFLA (Silva→S586, Santos→S237, Oliveira→O48, Souza/Sousa→S729, …) + fallback determinístico `[A-Z]\d{2}` com hash; `cutterNumberFromSurname` acrescenta a letra inicial do título (S586p); o texto gerado segue o formato da Biblioteca (cabeçalho, Cutter, autor/sobrenome, título, natureza do trabalho com curso/programa, orientador, descritores das palavras-chave, "I. Título."). Botão **"Gerar ficha provisória"** na UI (MetadataFields, desabilitado sem autor+título; nota para confirmar Cutter/CDU com a Biblioteca). A ficha gerada satisfaz `hasCutterNumber` → desbloqueia a versão final (23t) sem colar texto. 9 testes novos.
+23y. [x] **Razão de cobertura DOCX→PDF com gate (evidência física casada por tabela)** — `coverage-docx-pdf.ts`: extrai as 35 `w:tbl` do DOCX de referência (assinaturas da 1ª linha, janelas prefixo/meio/sufixo de cada célula, comparação sem pontuação — o Word renderiza hífens/sublinhados/quebras em posições que não coincidem com o OOXML), procura o texto na página do PDF via pdfjs e exige página com região de tabela detectada fisicamente (grade+bordas, DECISION-009). Resultado: **35/35 tabelas casadas** (razão físico/OOXML 1.29 na banda [0.7,1.8]), imagens 11/11 (limiar 0.4 documentado — cabeçalho/ficha do baseline não são re-exportados, F-007), equações OOXML↔PDF consistentes. Gate **coverageDocxPdfGate** no `ufla:audit` (11º gate; falha com a lista das tabelas não casadas). Evidência: `artifacts/ufla-compliance/coverage-docx-pdf.json`.
+23z. [x] **Runner self-hosted do Word documentado (operação do gate de regressão PDF)** — `docs/RUNNER_WORD.md`: passo a passo para registrar o runner Windows com Word (`config.cmd --labels self-hosted,windows,word` + serviço), validação local (`ufla:pdfref`/`ufla:pdfref:refresh`), configuração do segredo `PAT_PDF_REFERENCE` (sem ele a PR do refresh abre mas não dispara os workflows de PR) e uso dos dois workflows (`pdf-regression.yml` falha em regressão de renderização; `pdf-reference-refresh.yml` regenera a referência intencional). Os 4 workflows YAML validados sintaticamente.
+
 ## Resolução UFLA-AMBIGUOUS-1
 - **Decisão (DECISION-010, complementa DECISION_003):** contagem contínua a partir da folha de rosto (folha de rosto = 1); pré-textuais contadas sem número visível; numeração visível inicia na Introdução com o **valor contado** (pré-textuais + 1) — **nunca reinício em 1**; "(1, 2, 3, ...)" do Manual = sistema de numeração arábico, não reinício
 - **Base:** Manual UFLA § paginação; ABNT NBR 14724; evidência do documento real (pgNumType start=13 ↔ PDF físico folha 18 = 13)
@@ -95,14 +101,15 @@
 2. FATIA 3: Rodapés + paginação (FINDING-FOOTER-001..008; UFLA-AMBIGUOUS-1) — CONCLUÍDA
 3. FATIA 6: Regenerar artefatos oficiais e declarar conformidade — **CONCLUÍDA** (FULL COMPLIANCE GATE APROVADO, report.md declara CONFORMIDADE UFLA APROVADA)
 
-## Evidências (2026-08-16 ~07:30)
+## Evidências (2026-08-16 ~08:05)
 - DOCX: `artifacts/ufla-compliance/normalized-dissertacao.docx`
-- PDF: `artifacts/ufla-compliance/rendered/normalized-dissertacao.pdf` (238 p., re-renderizado na auditoria)
+- PDF: `artifacts/ufla-compliance/rendered/normalized-dissertacao.pdf` (re-renderizado na auditoria)
 - OOXML: 35 tabelas (w:tblHeader semântico nas declaráveis), 39 bookmarks/31 PAGEREF, 0 alvos ausentes, 0 mojibake
 - Física PDF: 0 overlaps/cutoffs/blank; **11 imagens (opList/CTM) e 45 regiões de tabela em 40 páginas (grade de texto + BORDAS desenhadas re+eoFill — tabelas de 2 linhas/questiónário incluídas); equações 0 no doc de referência (física OMML validada na fixture eq-fixture)**
+- Cobertura DOCX→PDF: `artifacts/ufla-compliance/coverage-docx-pdf.json` — **35/35 tabelas OOXML casadas com regiões físicas** (razão 1.29), imagens 11/11, equações consistentes
 - Report: `artifacts/ufla-compliance/report.md` (canônico, mesma rodada; declara CONFORMIDADE UFLA APROVADA)
-- Gates: `artifacts/ufla-audit/gates.json` (overall=passed; 10/10 gates; meta `generatedAt` da rodada de 2026-08-16)
-- Testes: 1643 passed, 0 failed, 10 skipped (207 arquivos); e2e 13/13; ci-checks PASSED
+- Gates: `artifacts/ufla-audit/gates.json` (overall=passed; **11/11 gates** incluindo coverageDocxPdfGate; meta `generatedAt` da rodada de 2026-08-16)
+- Testes: 1659 passed, 0 failed, 10 skipped (208 arquivos); e2e 13/13; ci-checks PASSED; lint 0/0
 
 ## Regras para IAs
 1. Nunca editar números de evidência à mão: rodar `scripts/ufla-compliance/regenerate-official-artifacts.ts` (computa tudo da mesma rodada).

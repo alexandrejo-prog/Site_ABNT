@@ -822,6 +822,26 @@ label,
   margin-top: 2px;
 }
 
+.ficha-generate-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.ficha-generate-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--ink-500);
+}
+
+.ficha-generate-row .secondary-action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .ficha-upload-label {
   display: inline-flex;
   align-items: center;
