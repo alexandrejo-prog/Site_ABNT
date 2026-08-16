@@ -5,9 +5,9 @@
 
 ## Última Atualização
 - Data: 2026-08-16
-- Hora: ~08:55 (preservação dos embeds recomputada 11/11; equações no preview com KaTeX; renders per-type paralelos + skip do re-render por digest)
+- Hora: ~09:15 (paisagem de seção confirmada coberta end-to-end; UFLA-equacoes sem gap stale; auditoria em 135s com skip por digest)
 - Branch: `feat/ufla-render-validation`
-- Evidência: `npm run ufla:audit` completo — lint + typecheck:scripts + regenerate (Word COM + PDF físico + **11 gates**) all passed (suíte 1× por auditoria com frescor ativo); overall=passed (FULL COMPLIANCE GATE APROVADO); `npx tsx ci-checks.ts` PASSED (18 formatos × 15 tipos + frescor estrito); `npm run e2e` 13/13 passed; lint 0/0
+- Evidência: `npm run ufla:audit` completo — lint + typecheck:scripts + regenerate (Word COM + PDF físico + **11 gates**) all passed em **135s** (suíte 1× + re-render da referência pulado quando o digest do DOCX não muda); overall=passed (FULL COMPLIANCE GATE APROVADO); `npx tsx ci-checks.ts` PASSED (18 formatos × 15 tipos + frescor estrito); `npm run e2e` 13/13 passed; lint 0/0
 
 ## Suíte de Testes
 - Passed: 1665
@@ -102,6 +102,9 @@
 25c. [x] **Auditoria mais rápida: renders per-type PARALELOS (pool 3) + skip do re-render da referência por digest** — (a) `analyze-per-type-pdfs.ts` processa os 15 DOCX com um pool de concorrência 3 (cada render abre sua própria instância do Word COM — seguro) em vez de sequencial; (b) a regeneração registra `docxSha256` no word-manifest e PULA o re-render do PDF de referência quando o DOCX não mudou desde a última rodada (anti-stale preservado — o PDF já é do DOCX atual). Primeira rodada registra o digest (re-render + re-medida); rodadas seguintes pulam.
 25d. [x] **Equações no preview com KaTeX (§3.2.8 visual alinhado ao Word)** — o LaTeX dos blocos `[EQ]` é renderizado por `katex.renderToString` (frações `\frac`, raízes, `\sum_{i=1}^{n}`, `\int`, `\lim` com índices reais — estruturas `mfrac`/`mop`, não texto achatado com glifos); fallback para o texto com glifos quando o corpo não é LaTeX ou o KaTeX falha. CSS do KaTeX importado no app; `preview-styles.css` ajusta `.katex-display`. 2 testes novos (fração e somatório com numeração).
 
+26a. [x] **Paisagem/rotação de seção CONFIRMADA coberta end-to-end (evidência física A4-paisagem)** — a análise anterior apontava "tabela larga → seção paisagem" como único gap de correção do DOCX; a investigação desta rodada confirmou que a cadeia COMPLETA já está implementada e testada: importação extrai orientação/largura do sectPr (`word-structure-extractor` → `ImportedTable.orientation/tableWidthTwips`), `tableNeedsLandscape` decide por orientação de origem / largura OOXML > retrato útil / 6+ colunas (LANDSCAPE_MIN_COLUMNS), a exportação quebra o corpo em seções (`sectionRuns` + `landscapePage` com w/h trocadas) e o checker OOXML aceita A4-paisagem. **Validação física real nesta rodada**: monografia com tabela de 7 colunas renderizada pelo Word produziu a página **9 em A4-paisagem (842×595 pt)** com todas as demais em A4-retrato — confirmado no PDF via pdfjs (o perTypePhysicalGate já aceita retrato OU paisagem). Testes: `landscape-sections.test.ts` 4/4 (export, checker, tabela estreita não vira paisagem, import extrai orientação).
+26b. [x] **UFLA-equacoes sem gap stale no manual** — o `manual-ufla-requirements.json` marcava UFLA-equacoes como covered mas carregava o gap histórico "estrutura matemática avançada achatada em texto"; com OMML n-ário nativo (∫/∑/∏/lim, 23w), numeração por campo SEQ (24a) e preview KaTeX (25d), o regenerate agora limpa o gap (undefined) — a evidência e o checklist ficam coerentes com a implementação.
+
 ## Resolução UFLA-AMBIGUOUS-1
 - **Decisão (DECISION-010, complementa DECISION_003):** contagem contínua a partir da folha de rosto (folha de rosto = 1); pré-textuais contadas sem número visível; numeração visível inicia na Introdução com o **valor contado** (pré-textuais + 1) — **nunca reinício em 1**; "(1, 2, 3, ...)" do Manual = sistema de numeração arábico, não reinício
 - **Base:** Manual UFLA § paginação; ABNT NBR 14724; evidência do documento real (pgNumType start=13 ↔ PDF físico folha 18 = 13)
@@ -122,7 +125,8 @@
 - Gates: `artifacts/ufla-audit/gates.json` (overall=passed; **11/11 gates** incluindo coverageDocxPdfGate; meta `generatedAt` da rodada de 2026-08-16)
 - Testes: 1665 passed, 0 failed, 10 skipped (208 arquivos); e2e 13/13; ci-checks PASSED; lint 0/0
 - Preservação: content-preservation.json RECOMPUTADO — imagens 11/11 (F-007 encerrado), tabelas 35/35, referências 138/138
-- Auditoria: suíte 1× por rodada (frescor ativo); renders per-type paralelos (pool 3); re-render da referência pulado quando o digest do DOCX não muda
+- Auditoria: suíte 1× por rodada (frescor ativo); renders per-type paralelos (pool 3); re-render da referência pulado quando o digest do DOCX não muda — **135s**
+- Paisagem: confirmada end-to-end — tabela de 7 colunas → página 9 em A4-paisagem (842×595) no PDF real do Word; UFLA-equacoes covered sem gap stale
 
 ## Regras para IAs
 1. Nunca editar números de evidência à mão: rodar `scripts/ufla-compliance/regenerate-official-artifacts.ts` (computa tudo da mesma rodada).

@@ -817,7 +817,10 @@ for (const r of req.requisitos as Array<{ id: string; status: string; evidencia?
   if (u) {
     r.status = u.status;
     r.evidencia = u.evidence;
-    if (r.id === "UFLA-equacoes") r.gap = "estrutura matemática avançada (frações/raízes) achatada em texto — injeção do OMML cru de origem é melhoria futura";
+    // UFLA-equacoes: covered desde o OMML cru re-injetado; com OMML n-ário
+    // nativo (∫/∑/∏/lim), numeração por campo SEQ e preview KaTeX (24a/25d),
+    // o gap histórico "estrutura achatada em texto" não se aplica mais.
+    if (r.id === "UFLA-equacoes") r.gap = undefined;
   }
 }
 const count = (s: string) => (req.requisitos as Array<{ status: string }>).filter((r) => r.status === s).length;
