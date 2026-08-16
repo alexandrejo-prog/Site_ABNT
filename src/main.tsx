@@ -10,6 +10,7 @@ import "./app-design.css";
 import "./editor-enhancer.css";
 import "./word-toolbar.css";
 import "./preview-styles.css";
+import "katex/dist/katex.min.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

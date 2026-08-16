@@ -115,7 +115,11 @@ export async function runPerTypePhysical(): Promise<{ rendered: Record<string, u
   }
 
   const docxes = readdirSync(PER_TYPE_DIR).filter((f) => f.endsWith(".docx"));
-  for (const file of docxes) {
+
+  // Cada render abre sua PRÓPRIA instância do Word COM (render-docx-to-pdf.ps1
+  // cria/derruba o WINWORD por chamada), então os renders podem rodar em
+  // paralelo com um pool de concorrência — corta minutos por auditoria.
+  const processDocx = async (file: string): Promise<[string, Record<string, unknown>]> => {
     const docxPath = join(PER_TYPE_DIR, file);
     const pdfPath = join(PER_TYPE_DIR, file.replace(/\.docx$/, ".pdf"));
     const entry: Record<string, unknown> = { docx: file };
@@ -157,9 +161,20 @@ export async function runPerTypePhysical(): Promise<{ rendered: Record<string, u
       entry.error = err instanceof Error ? err.message : String(err);
       failures.push(`${file}: ${entry.error}`);
     }
-    rendered[file] = entry;
     console.log(`${file}: ${entry.status}${entry.pages ? ` (${entry.pages} págs, ${entry.imagesDetected} imagens, ${entry.tablesDetected} tabelas, ${entry.pagination ? "pag OK" : "pag -"})` : ""}`);
-  }
+    return [file, entry];
+  };
+
+  const CONCURRENCY = 3; // Word COM: 3 instâncias paralelas é seguro e acelera ~3× o render
+  const queue = [...docxes];
+  const workers = Array.from({ length: Math.min(CONCURRENCY, docxes.length) }, async () => {
+    while (queue.length > 0) {
+      const file = queue.shift()!;
+      const [name, entry] = await processDocx(file);
+      rendered[name] = entry;
+    }
+  });
+  await Promise.all(workers);
 
   return { rendered, passed: failures.length === 0, failures, wordAvailable };
 }

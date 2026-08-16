@@ -5,12 +5,12 @@
 
 ## Última Atualização
 - Data: 2026-08-16
-- Hora: ~08:35 (precisão física de capa/aprovação/ficha por coordenadas; numeração SEQ real no OOXML; auditoria com suíte única 1×; ficha no verso com banca física)
+- Hora: ~08:55 (preservação dos embeds recomputada 11/11; equações no preview com KaTeX; renders per-type paralelos + skip do re-render por digest)
 - Branch: `feat/ufla-render-validation`
-- Evidência: `npm run ufla:audit` completo — lint + typecheck:scripts + regenerate (Word COM + PDF físico + **11 gates**) all passed em **160s** (suíte executada 1× por auditoria, com frescor ativo contra artefatos recém-escritos); overall=passed (FULL COMPLIANCE GATE APROVADO); `npx tsx ci-checks.ts` PASSED (18 formatos × 15 tipos + frescor estrito); `npm run e2e` 13/13 passed; lint 0/0
+- Evidência: `npm run ufla:audit` completo — lint + typecheck:scripts + regenerate (Word COM + PDF físico + **11 gates**) all passed (suíte 1× por auditoria com frescor ativo); overall=passed (FULL COMPLIANCE GATE APROVADO); `npx tsx ci-checks.ts` PASSED (18 formatos × 15 tipos + frescor estrito); `npm run e2e` 13/13 passed; lint 0/0
 
 ## Suíte de Testes
-- Passed: 1663
+- Passed: 1665
 - Failed: 0
 - Skipped: 10
 - Arquivos: 208
@@ -97,6 +97,11 @@
 24c. [x] **Ficha no verso com Cutter real na metade inferior + grade física da banca precisa** — (a) **ficha**: quando o verso da folha de rosto contém Cutter real (ficha oficial colada/gerada), o cartão deve começar ≥ 40% da página (erro) / ≥ 50% (aviso) — Manual §3.1.3 posiciona o cartão na metade inferior; placeholder e ficha por imagem não disparam falso positivo; (b) **banca**: além das ≥3 linhas, a grade agora rejeita linhas sobrepostas (gap < 8pt), linha final dentro da margem inferior e sinaliza coluna de nomes desalinhada (variação de x > 60pt). 3 testes novos de precisão.
 24d. [x] **Auditoria com suíte ÚNICA (1× npm test por rodada, -~25s)** — a suíte deixou de rodar 2× (teste interno da regeneração + VERIFY): a regeneração agora escreve TODOS os artefatos, roda `npm test` UMA vez na fase final (sem o skip `UFLA_REGEN_INTERNAL_TEST` — a checagem de frescor WORKSLOP-003 valida os artefatos RECÉM-ESCRITOS, exatamente o que o VERIFY fazia) e REGRAVA gates.json/report.md/rendered-analysis.json com o testSummary real (placeholder marcado em caso de crash no meio). O `ufla:audit` VERIFY detecta gates.json desta rodada (generatedAt ≥ início) e executa só `npm run build`; cai para `npm run verify` completo se o gates.json for antigo (runner antigo/falha parcial). Tempo: 181s → **160s** (11 gates, evidência idêntica).
 
+25a. [x] **Preservação dos embeds: recomputada 11/11 — F-007 encerrado (anti-stale do content-preservation.json)** — investigação mostrou que o gap F-007 ("7 imagens em cabeçalho/ficha") era de um estado ANTERIOR do baseline: o baseline atual tem TODAS as 12 imagens no corpo (13 embeds, image12 deduplicada; 0 headers com imagem) e o round-trip importa/re-exporta **11/11** (a capa media/image1.png é reconstruída pelo template UFLA — zero perda real). O problema real era o artefato `content-preservation.json` **relido** pela regeneração (mostrava 6/6 de uma rodada velha). `compare-preservation.ts` agora exporta `comparePreservation()` (main protegido) e o regenerate o EXECUTA a cada rodada, gravando evidência fresca (11/11 imagens, 35/35 tabelas, 138/138 referências); a evidência do contentPreservationGate passou a ser DINÂMICA com os números recomputados.
+25b. [x] **Fidelidade do preview do projeto de pesquisa (confirmada ≥ 0.9)** — o `preview-docx-diff.json` atual registra `projeto_pesquisa` com **similaridade 0.967** (≥ 0.9, gate passa; estava < 0.9 numa rodada anterior e já foi refinado nos trabalhos 23v/24b — sumário real, campos próprios, natureza do projeto). Nenhuma ação adicional necessária nesta rodada.
+25c. [x] **Auditoria mais rápida: renders per-type PARALELOS (pool 3) + skip do re-render da referência por digest** — (a) `analyze-per-type-pdfs.ts` processa os 15 DOCX com um pool de concorrência 3 (cada render abre sua própria instância do Word COM — seguro) em vez de sequencial; (b) a regeneração registra `docxSha256` no word-manifest e PULA o re-render do PDF de referência quando o DOCX não mudou desde a última rodada (anti-stale preservado — o PDF já é do DOCX atual). Primeira rodada registra o digest (re-render + re-medida); rodadas seguintes pulam.
+25d. [x] **Equações no preview com KaTeX (§3.2.8 visual alinhado ao Word)** — o LaTeX dos blocos `[EQ]` é renderizado por `katex.renderToString` (frações `\frac`, raízes, `\sum_{i=1}^{n}`, `\int`, `\lim` com índices reais — estruturas `mfrac`/`mop`, não texto achatado com glifos); fallback para o texto com glifos quando o corpo não é LaTeX ou o KaTeX falha. CSS do KaTeX importado no app; `preview-styles.css` ajusta `.katex-display`. 2 testes novos (fração e somatório com numeração).
+
 ## Resolução UFLA-AMBIGUOUS-1
 - **Decisão (DECISION-010, complementa DECISION_003):** contagem contínua a partir da folha de rosto (folha de rosto = 1); pré-textuais contadas sem número visível; numeração visível inicia na Introdução com o **valor contado** (pré-textuais + 1) — **nunca reinício em 1**; "(1, 2, 3, ...)" do Manual = sistema de numeração arábico, não reinício
 - **Base:** Manual UFLA § paginação; ABNT NBR 14724; evidência do documento real (pgNumType start=13 ↔ PDF físico folha 18 = 13)
@@ -107,7 +112,7 @@
 2. FATIA 3: Rodapés + paginação (FINDING-FOOTER-001..008; UFLA-AMBIGUOUS-1) — CONCLUÍDA
 3. FATIA 6: Regenerar artefatos oficiais e declarar conformidade — **CONCLUÍDA** (FULL COMPLIANCE GATE APROVADO, report.md declara CONFORMIDADE UFLA APROVADA)
 
-## Evidências (2026-08-16 ~08:35)
+## Evidências (2026-08-16 ~08:55)
 - DOCX: `artifacts/ufla-compliance/normalized-dissertacao.docx`
 - PDF: `artifacts/ufla-compliance/rendered/normalized-dissertacao.pdf` (re-renderizado na auditoria)
 - OOXML: 35 tabelas (w:tblHeader semântico nas declaráveis), 39 bookmarks/31 PAGEREF, 0 alvos ausentes, 0 mojibake
@@ -115,8 +120,9 @@
 - Cobertura DOCX→PDF: `artifacts/ufla-compliance/coverage-docx-pdf.json` — **35/35 tabelas OOXML casadas com regiões físicas** (razão 1.29), imagens 11/11, equações consistentes
 - Report: `artifacts/ufla-compliance/report.md` (canônico, mesma rodada; declara CONFORMIDADE UFLA APROVADA)
 - Gates: `artifacts/ufla-audit/gates.json` (overall=passed; **11/11 gates** incluindo coverageDocxPdfGate; meta `generatedAt` da rodada de 2026-08-16)
-- Testes: 1663 passed, 0 failed, 10 skipped (208 arquivos); e2e 13/13; ci-checks PASSED; lint 0/0
-- Auditoria: suíte executada 1× por rodada (fase final da regeneração, frescor ativo); ufla:audit em **160s**
+- Testes: 1665 passed, 0 failed, 10 skipped (208 arquivos); e2e 13/13; ci-checks PASSED; lint 0/0
+- Preservação: content-preservation.json RECOMPUTADO — imagens 11/11 (F-007 encerrado), tabelas 35/35, referências 138/138
+- Auditoria: suíte 1× por rodada (frescor ativo); renders per-type paralelos (pool 3); re-render da referência pulado quando o digest do DOCX não muda
 
 ## Regras para IAs
 1. Nunca editar números de evidência à mão: rodar `scripts/ufla-compliance/regenerate-official-artifacts.ts` (computa tudo da mesma rodada).

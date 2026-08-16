@@ -390,4 +390,26 @@ describe("buildPreviewHtml - regressões dos bugs corrigidos", () => {
     expect(captionRuns.length).toBe(1);
     expect(sourceRuns.length).toBe(1);
   });
+
+  it("equação [EQ] é renderizada com KaTeX (fração com numerador/denominador — §3.2.8)", () => {
+    const html = buildPreviewHtml({
+      fields: baseFields(),
+      editorText: "# 1 Introducao\n\n[EQ] \\frac{a}{b} (1.1)\n\nProsa.",
+    });
+    // KaTeX emite a fração como estrutura frac (não texto achatado "a/b")
+    expect(html).toContain('class="katex"');
+    expect(html).toContain('class="mfrac"');
+    expect(html).toContain('class="preview-equation-number"');
+    expect(html).toContain("(1.1)");
+  });
+
+  it("equação com somatório recebe o n-ário do KaTeX (∑ com índices)", () => {
+    const html = buildPreviewHtml({
+      fields: baseFields(),
+      editorText: "# 1 Introducao\n\n[EQ] \\sum_{i=1}^{n} i (1.2)\n\nProsa.",
+    });
+    expect(html).toContain('class="katex"');
+    expect(html).toContain('mop');
+    expect(html).toContain("(1.2)");
+  });
 });

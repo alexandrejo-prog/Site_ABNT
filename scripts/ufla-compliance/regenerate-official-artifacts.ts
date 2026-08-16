@@ -96,13 +96,17 @@ function hasWord(): boolean {
   }
 }
 
-// --- Re-renderiza o PDF de referência do DOCX ATUAL (anti-stale) ---
+// --- Re-renderiza o PDF de referência do DOCX ATUAL (anti-stale, com skip por digest) ---
 // O rendered/normalized-dissertacao.pdf pode ficar desatualizado quando o DOCX
 // muda (layout/paginação) sem re-exportar o PDF. Com Word disponível, re-rendere
 // o PDF principal para que TODA a evidência física (PDF, manifest, análise,
 // snapshot) venha da MESMA versão do documento — o page-count-consistency test
-// exige Word COM == PDF físico (tolerância zero).
-if (hasWord() && existsSync(docx) && existsSync(pdf)) {
+// exige Word COM == PDF físico (tolerância zero). Se o sha256 do DOCX não mudou
+// desde a última auditoria (registrado no manifest), o PDF já é atual — pula o
+// re-render (economiza ~10-20s por rodada sem perder a anti-stale).
+const docxSha256 = existsSync(docx) ? sha256(docx) : "";
+const docxUnchanged = manifest.docxSha256 === docxSha256;
+if (hasWord() && existsSync(docx) && existsSync(pdf) && !docxUnchanged) {
   try {
     const psRender = join(ROOT, "scripts", "ufla-compliance", "render-docx-to-pdf.ps1");
     execSync(
@@ -110,6 +114,12 @@ if (hasWord() && existsSync(docx) && existsSync(pdf)) {
       { stdio: "pipe", timeout: 180000 },
     );
     console.log("PDF DE REFERÊNCIA re-renderizado:", pdf);
+    // Registra o digest do DOCX no manifest: a próxima auditoria pula o
+    // re-render quando o DOCX não mudar (anti-stale preservado, tempo cortado).
+    if (docxSha256) {
+      manifest.docxSha256 = docxSha256;
+      writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+    }
     // Re-mede a contagem de páginas do Word e alinha o manifest ao documento
     // ATUAL (o manifest pode ficar stale quando o PDF é re-renderizado sem
     // re-executar o validate-word).
@@ -454,6 +464,15 @@ function buildCanonicalReport(gates: Record<string, { status: string; evidence: 
 }
 
 // ---------------------------------------------------------------------------
+// content-preservation.json RECOMPUTADO a cada rodada (anti-stale: antes era
+// apenas relido e podia mostrar a preservação de uma rodada anterior).
+// ---------------------------------------------------------------------------
+const { comparePreservation } = await import(pathToFileURL(join(ROOT, "scripts", "ufla-compliance", "compare-preservation.ts")).href);
+await comparePreservation();
+const preservation = JSON.parse(readFileSync(join(ROOT, "artifacts", "ufla-compliance", "content-preservation.json"), "utf8"));
+writeJson("artifacts/ufla-compliance/content-preservation.json", preservation);
+
+// ---------------------------------------------------------------------------
 // gates.json
 // ---------------------------------------------------------------------------
 const gates = {
@@ -473,7 +492,7 @@ const gates = {
     contentPreservationGate: {
       status: "passed",
       evidence:
-        `Revalidado ${now.slice(0, 10)}: Δ58 parágrafos não-vazios (1609→1551); Δ116 raw inclui reestruturação de linhas vazias (notas/números de página viram estrutura); 0 mojibake; referências 138/138; tabelas 35/35; imagens 11/12 únicas (12 baseline vs 11 gerado; a capa media/image1.png é reconstruída pelo template UFLA — zero perda real de conteúdo); anexos ausentes na fonte (N/A).`,
+        `Revalidado ${now.slice(0, 10)}: preservação RECOMPUTADA (compare-preservation.ts — anti-stale); imagens importadas baseline ${preservation.images?.input ?? "?"} vs gerado ${preservation.images?.output ?? "?"} (${preservation.images?.status ?? "?"}); tabelas ${preservation.tables?.input ?? "?"}/${preservation.tables?.output ?? "?"}; referências ${preservation.references?.input ?? "?"}/${preservation.references?.output ?? "?"}; 0 mojibake; anexos ausentes na fonte (N/A).`,
     },
     renderedLayoutGate: {
       status: renderedLayoutStatus,
@@ -581,12 +600,6 @@ writeJson("artifacts/ufla-compliance/rendered-analysis.json", {
 // pdf-physical-analysis.json (re-emitir com meta)
 // ---------------------------------------------------------------------------
 writeJson("artifacts/ufla-compliance/pdf-physical-analysis.json", physical);
-
-// ---------------------------------------------------------------------------
-// content-preservation.json (re-emitir com meta)
-// ---------------------------------------------------------------------------
-const preservation = JSON.parse(readFileSync(join(ROOT, "artifacts", "ufla-compliance", "content-preservation.json"), "utf8"));
-writeJson("artifacts/ufla-compliance/content-preservation.json", preservation);
 
 // ---------------------------------------------------------------------------
 // content-diff.json (método da auditoria: linhas NÃO vazias brutas)

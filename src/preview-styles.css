@@ -240,6 +240,12 @@
   text-align: justify;
 }
 
+/* KaTeX (equações no preview — §3.2.8): o LaTeX dos blocos [EQ] é renderizado
+   com a tipografia matemática do KaTeX, aproximando o visual do OMML do Word. */
+.preview-equation .katex-display {
+  margin: 0;
+}
+
 .preview-equation {
   text-align: center;
   margin: 0.5em 0;

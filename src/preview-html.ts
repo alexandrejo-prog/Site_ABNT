@@ -4,6 +4,7 @@ import {
   detectTabbedTableBlock,
 } from "./docx-render-core";
 import { escapeHtml, inlineMarkupToHtml } from "./editor-markup";
+import katex from "katex";
 import {
   calculateTextualStartPage,
   extractReferencesSection,
@@ -256,7 +257,20 @@ function equationHtml(text: string): string {
   const numberMatch = cleaned.match(/\s*\((\d+(?:\.\d+)?)\)\s*$/);
   const body = numberMatch ? cleaned.slice(0, numberMatch.index).trim() : cleaned;
   const number = numberMatch ? `(${numberMatch[1]})` : "";
-  const bodyHtml = `<span class="preview-equation-body">${inlineMarkupToHtml(body || " ")}</span>`;
+  // Renderiza o LaTeX do bloco [EQ] com KaTeX (o Word renderiza OMML; o KaTeX
+  // é a aproximação web mais fiel — frações, raízes, ∑/∫/lim com índices).
+  // Fallback: texto com glifos quando o KaTeX falha ou o corpo não é LaTeX.
+  let bodyHtml: string;
+  try {
+    bodyHtml = katex.renderToString(body || " ", {
+      displayMode: false,
+      throwOnError: false,
+      strict: false,
+      output: "html",
+    });
+  } catch {
+    bodyHtml = `<span class="preview-equation-body">${inlineMarkupToHtml(body || " ")}</span>`;
+  }
   const numberHtml = number ? `<span class="preview-equation-number">${escapeHtml(number)}</span>` : "";
   return `<p class="preview-equation">${bodyHtml}${numberHtml}</p>`;
 }

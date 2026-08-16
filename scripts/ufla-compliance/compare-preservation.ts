@@ -19,6 +19,12 @@ const outputFile = new File([outputBuffer], "normalized.docx", { type: "applicat
 const { importDocumentFile } = await import(pathToFileURL(join(root, "src", "import-docx.ts")).href);
 const { normalizeReferences } = await import(pathToFileURL(join(root, "src", "references-normalizer.ts")).href);
 
+/**
+ * RECOMPUTA a preservação de conteúdo baseline→gerado e grava
+ * content-preservation.json. Exportado para o regenerate rodar a evidência
+ * FRESCA (anti-stale — antes o artefato era relido da rodada anterior).
+ */
+export async function comparePreservation(): Promise<void> {
 const [baselineImport, outputImport] = await Promise.all([
   importDocumentFile(baselineFile),
   importDocumentFile(outputFile),
@@ -137,4 +143,11 @@ const comparison = {
 };
 
 writeFileSync(reportPath, JSON.stringify(comparison, null, 2));
-console.log(JSON.stringify(comparison, null, 2));
+}
+
+// Execução standalone (o regenerate importa comparePreservation)
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
+  await comparePreservation();
+  console.log("OK:", "artifacts/ufla-compliance/content-preservation.json");
+}
