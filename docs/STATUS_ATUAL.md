@@ -5,12 +5,12 @@
 
 ## Última Atualização
 - Data: 2026-08-16
-- Hora: ~08:05 (equações avançadas OMML ∫/∑/lim com numeração; ficha catalográfica gerada automaticamente com Cutter; razão de cobertura DOCX→PDF com gate; runner self-hosted do Word documentado)
+- Hora: ~08:35 (precisão física de capa/aprovação/ficha por coordenadas; numeração SEQ real no OOXML; auditoria com suíte única 1×; ficha no verso com banca física)
 - Branch: `feat/ufla-render-validation`
-- Evidência: `npm run ufla:audit` completo — lint + typecheck:scripts + regenerate (Word COM + PDF físico + **11 gates**) all passed; overall=passed (FULL COMPLIANCE GATE APROVADO); `npx tsx ci-checks.ts` PASSED (18 formatos × 15 tipos + frescor estrito); `npm run e2e` 13/13 passed; lint 0/0
+- Evidência: `npm run ufla:audit` completo — lint + typecheck:scripts + regenerate (Word COM + PDF físico + **11 gates**) all passed em **160s** (suíte executada 1× por auditoria, com frescor ativo contra artefatos recém-escritos); overall=passed (FULL COMPLIANCE GATE APROVADO); `npx tsx ci-checks.ts` PASSED (18 formatos × 15 tipos + frescor estrito); `npm run e2e` 13/13 passed; lint 0/0
 
 ## Suíte de Testes
-- Passed: 1659
+- Passed: 1663
 - Failed: 0
 - Skipped: 10
 - Arquivos: 208
@@ -22,7 +22,8 @@
 ## Gates (scripts/ufla-compliance)
 - GATE DE CÓDIGO: PASSED (npm test + lint + build)
 - runExpandedComplianceGate: PASSED no DOCX real — 10/10 categorias (pré-textuais, textuais, pós-textuais, referências, citações, figuras, seções, tabelas, equações, paginação)
-- coverageDocxPdfGate: **PASSED (novo)** — 35/35 tabelas OOXML casadas textualmente com regiões físicas do PDF (razão 1.29 na banda [0.7, 1.8]); imagens 11/11; equações OOXML↔PDF consistentes
+- coverageDocxPdfGate: **PASSED** — 35/35 tabelas OOXML casadas textualmente com regiões físicas do PDF (razão 1.29 na banda [0.7, 1.8]); imagens 11/11; equações OOXML↔PDF consistentes
+- Verificação física de capa/folha de rosto/aprovação/ficha (validate-cover-layout): **PASSED** com os novos checks de precisão (ordem vertical e gaps dos blocos da capa; grade da banca sem sobreposição e dentro da área útil; cartão da ficha na metade inferior quando há Cutter real)
 - FULL_COMPLIANCE_GATE: **APROVADO** (gates.json overall=passed; report.md declara CONFORMIDADE UFLA APROVADA)
 - perTypeGate: 15/15 PASSED (4 padrão + 3 rascunhos editáveis + 8 formatos da Coleção)
 - perTypePhysicalGate: PASSED (15/15 renderizados via Word COM: A4 + paginação OOXML↔PDF; skipped-no-word sem Word)
@@ -91,6 +92,11 @@
 23y. [x] **Razão de cobertura DOCX→PDF com gate (evidência física casada por tabela)** — `coverage-docx-pdf.ts`: extrai as 35 `w:tbl` do DOCX de referência (assinaturas da 1ª linha, janelas prefixo/meio/sufixo de cada célula, comparação sem pontuação — o Word renderiza hífens/sublinhados/quebras em posições que não coincidem com o OOXML), procura o texto na página do PDF via pdfjs e exige página com região de tabela detectada fisicamente (grade+bordas, DECISION-009). Resultado: **35/35 tabelas casadas** (razão físico/OOXML 1.29 na banda [0.7,1.8]), imagens 11/11 (limiar 0.4 documentado — cabeçalho/ficha do baseline não são re-exportados, F-007), equações OOXML↔PDF consistentes. Gate **coverageDocxPdfGate** no `ufla:audit` (11º gate; falha com a lista das tabelas não casadas). Evidência: `artifacts/ufla-compliance/coverage-docx-pdf.json`.
 23z. [x] **Runner self-hosted do Word documentado (operação do gate de regressão PDF)** — `docs/RUNNER_WORD.md`: passo a passo para registrar o runner Windows com Word (`config.cmd --labels self-hosted,windows,word` + serviço), validação local (`ufla:pdfref`/`ufla:pdfref:refresh`), configuração do segredo `PAT_PDF_REFERENCE` (sem ele a PR do refresh abre mas não dispara os workflows de PR) e uso dos dois workflows (`pdf-regression.yml` falha em regressão de renderização; `pdf-reference-refresh.yml` regenera a referência intencional). Os 4 workflows YAML validados sintaticamente.
 
+24a. [x] **Numeração de equações como campo SEQ real no OOXML (§3.2.8, fecha por completo)** — o número "(2.1)" deixou de ser texto do parágrafo: `equationSeqInstruction` gera a instrução (` SEQ Eq \s 1 \* ARABIC ` para número por seção — switch \s usa o heading nível N; ` SEQ Eq \* ARABIC ` para sequência simples) e o número sai como **campo Word** — `w:fldSimple` no caminho achatado (equações digitadas, via `SimpleField` do docx) e fldChar/instrText/separate/end no patch do OMML cru importado. O Word recalcula ao abrir (updateFields=true) e a tabulação à direita (tab stop 9072 twips) alinha o número com a margem. Preview continua com o número calculado por texto. 2 testes novos (SEQ por seção + SEQ simples).
+24b. [x] **Precisão física da capa por coordenadas (ordem vertical e distâncias entre blocos)** — `validate-cover-layout.ts` agora valida que os blocos da capa seguem a ordem estrita do Manual §3.1.1 (identificação institucional → autor → título → local/ano) com gaps em banda [10, 350]pt, sem sobreposição, todos dentro da área útil, e que o local/ano (metade inferior, para não confundir com o "UNIVERSIDADE FEDERAL DE LAVRAS" do topo) vem após o fim do título. Antes validava apenas presença/zona — agora pega regressões grosseiras de layout (blocos invertidos, colados, fora da área).
+24c. [x] **Ficha no verso com Cutter real na metade inferior + grade física da banca precisa** — (a) **ficha**: quando o verso da folha de rosto contém Cutter real (ficha oficial colada/gerada), o cartão deve começar ≥ 40% da página (erro) / ≥ 50% (aviso) — Manual §3.1.3 posiciona o cartão na metade inferior; placeholder e ficha por imagem não disparam falso positivo; (b) **banca**: além das ≥3 linhas, a grade agora rejeita linhas sobrepostas (gap < 8pt), linha final dentro da margem inferior e sinaliza coluna de nomes desalinhada (variação de x > 60pt). 3 testes novos de precisão.
+24d. [x] **Auditoria com suíte ÚNICA (1× npm test por rodada, -~25s)** — a suíte deixou de rodar 2× (teste interno da regeneração + VERIFY): a regeneração agora escreve TODOS os artefatos, roda `npm test` UMA vez na fase final (sem o skip `UFLA_REGEN_INTERNAL_TEST` — a checagem de frescor WORKSLOP-003 valida os artefatos RECÉM-ESCRITOS, exatamente o que o VERIFY fazia) e REGRAVA gates.json/report.md/rendered-analysis.json com o testSummary real (placeholder marcado em caso de crash no meio). O `ufla:audit` VERIFY detecta gates.json desta rodada (generatedAt ≥ início) e executa só `npm run build`; cai para `npm run verify` completo se o gates.json for antigo (runner antigo/falha parcial). Tempo: 181s → **160s** (11 gates, evidência idêntica).
+
 ## Resolução UFLA-AMBIGUOUS-1
 - **Decisão (DECISION-010, complementa DECISION_003):** contagem contínua a partir da folha de rosto (folha de rosto = 1); pré-textuais contadas sem número visível; numeração visível inicia na Introdução com o **valor contado** (pré-textuais + 1) — **nunca reinício em 1**; "(1, 2, 3, ...)" do Manual = sistema de numeração arábico, não reinício
 - **Base:** Manual UFLA § paginação; ABNT NBR 14724; evidência do documento real (pgNumType start=13 ↔ PDF físico folha 18 = 13)
@@ -101,7 +107,7 @@
 2. FATIA 3: Rodapés + paginação (FINDING-FOOTER-001..008; UFLA-AMBIGUOUS-1) — CONCLUÍDA
 3. FATIA 6: Regenerar artefatos oficiais e declarar conformidade — **CONCLUÍDA** (FULL COMPLIANCE GATE APROVADO, report.md declara CONFORMIDADE UFLA APROVADA)
 
-## Evidências (2026-08-16 ~08:05)
+## Evidências (2026-08-16 ~08:35)
 - DOCX: `artifacts/ufla-compliance/normalized-dissertacao.docx`
 - PDF: `artifacts/ufla-compliance/rendered/normalized-dissertacao.pdf` (re-renderizado na auditoria)
 - OOXML: 35 tabelas (w:tblHeader semântico nas declaráveis), 39 bookmarks/31 PAGEREF, 0 alvos ausentes, 0 mojibake
@@ -109,7 +115,8 @@
 - Cobertura DOCX→PDF: `artifacts/ufla-compliance/coverage-docx-pdf.json` — **35/35 tabelas OOXML casadas com regiões físicas** (razão 1.29), imagens 11/11, equações consistentes
 - Report: `artifacts/ufla-compliance/report.md` (canônico, mesma rodada; declara CONFORMIDADE UFLA APROVADA)
 - Gates: `artifacts/ufla-audit/gates.json` (overall=passed; **11/11 gates** incluindo coverageDocxPdfGate; meta `generatedAt` da rodada de 2026-08-16)
-- Testes: 1659 passed, 0 failed, 10 skipped (208 arquivos); e2e 13/13; ci-checks PASSED; lint 0/0
+- Testes: 1663 passed, 0 failed, 10 skipped (208 arquivos); e2e 13/13; ci-checks PASSED; lint 0/0
+- Auditoria: suíte executada 1× por rodada (fase final da regeneração, frescor ativo); ufla:audit em **160s**
 
 ## Regras para IAs
 1. Nunca editar números de evidência à mão: rodar `scripts/ufla-compliance/regenerate-official-artifacts.ts` (computa tudo da mesma rodada).

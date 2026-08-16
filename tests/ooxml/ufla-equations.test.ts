@@ -409,10 +409,33 @@ describe("UFLA-023 equações avançadas: N-ÁRIO ∫/∑/∏, lim e símbolos (
     const parts = await loadDocxPartsFromBytes(await blob.arrayBuffer());
     const xml = parts.documentXml;
     expect(xml).toContain('m:chr m:val="∑"');
-    // numeração por seção presente no documento (o corpo da equação não contém "(2.1)")
+    // numeração REAL como campo SEQ (§3.2.8): w:fldSimple com a instrução
+    // por seção (\s 1 → heading nível 1 "2" + seq) e o resultado em cache
+    // "(2.1)" — o Word recalcula ao abrir (updateFields=true)
+    expect(xml).toContain('SEQ Eq \\s 1 \\* ARABIC');
+    expect(xml).toContain("<w:fldSimple w:instr=\" SEQ Eq \\s 1 \\* ARABIC \">");
     expect(xml).toContain("(2.1)");
     const issues = runOoxmlChecks(parts);
     expect(issues.some((i) => i.code === "equation-format")).toBe(false);
+  });
+
+  it("equacao sem secao usa SEQ simples (sem switch \\s)", async () => {
+    const blob = await generateDocxBlob({
+      fields: {
+        ...emptyAcademicFields(),
+        workType: "monografia" as const,
+        author: "SILVA, J.",
+        title: "Titulo",
+        resumo: "Resumo.",
+        palavrasChave: "palavras; chave",
+      },
+      editorText: "[EQ] x = y (1)\n\nProsa.",
+    });
+    const { loadDocxPartsFromBytes } = await import("../../scripts/ufla-compliance/ooxml-checks");
+    const parts = await loadDocxPartsFromBytes(await blob.arrayBuffer());
+    expect(parts.documentXml).toContain("SEQ Eq \\* ARABIC");
+    expect(parts.documentXml).not.toContain("SEQ Eq \\s");
+    expect(parts.documentXml).toContain("<w:t xml:space=\"preserve\">(1)</w:t>");
   });
 
   it("text{...} vira run de texto plano dentro da equação", async () => {

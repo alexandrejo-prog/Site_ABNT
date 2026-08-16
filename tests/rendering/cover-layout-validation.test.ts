@@ -24,6 +24,33 @@ describeWithArtifacts("rendering: validação física de capa e folha de rosto",
     expect(joined).not.toMatch(/Folha de aprovação .* não detectada/);
   });
 
+  it("precisão física da capa: blocos em ordem vertical, com folga e dentro da área útil", async () => {
+    const result = await validateCoverLayout(pdfPath);
+    expect(result.passed).toBe(true);
+    const joined = [...result.errors, ...result.warnings].join(" ");
+    expect(joined).not.toMatch(/fora de ordem vertical/);
+    expect(joined).not.toMatch(/sobrepostos\/colados/);
+    expect(joined).not.toMatch(/fora da área útil/);
+    expect(joined).not.toMatch(/ordem invertida entre título e local\/ano/);
+  });
+
+  it("precisão da banca: linhas distintas sem sobreposição e dentro da área útil", async () => {
+    const result = await validateCoverLayout(pdfPath);
+    expect(result.passed).toBe(true);
+    const joined = [...result.errors, ...result.warnings].join(" ");
+    expect(joined).not.toMatch(/Linhas da banca sobrepostas/);
+    expect(joined).not.toMatch(/Linha final da banca invadiu a margem inferior/);
+  });
+
+  it("ficha com Cutter real seria validada na posição (verso) — placeholder do reference não dispara", async () => {
+    const result = await validateCoverLayout(pdfPath);
+    expect(result.passed).toBe(true);
+    // o documento de referência tem ficha placeholder (sem Cutter): a checagem
+    // de posição do cartão só atua quando há Cutter real — sem falso positivo
+    const joined = [...result.errors, ...result.warnings].join(" ");
+    expect(joined).not.toMatch(/Cartão da ficha catalográfica/);
+  });
+
   it("reporta erro quando o PDF não existe (contrato do validador)", async () => {
     const result = await validateCoverLayout(join(root, "artifacts", "ufla-compliance", "rendered", "nao-existe.pdf"));
     expect(result.passed).toBe(false);

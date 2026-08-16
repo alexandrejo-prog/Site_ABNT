@@ -158,11 +158,12 @@ function runTestSummary(): { status: "passed" | "failed"; evidence: string } {
     timeout: 600000,
     shell: process.platform === "win32" ? "cmd.exe" : "/bin/sh",
     stdio: ["ignore", "pipe", "pipe"],
-    // Teste interno da REGENERAÇÃO: a checagem de frescor (WORKSLOP-003) lê os
-    // artefatos da rodada ANTERIOR (a regeneração ainda não gravou os novos) —
-    // pular aqui evita a transição de 2 rodadas; o VERIFY externo do ufla:audit
-    // valida o frescor com os artefatos JÁ escritos pela regeneração.
-    env: { ...process.env, UFLA_REGEN_INTERNAL_TEST: "1" },
+    // Execução ÚNICA da suíte, na FASE FINAL da regeneração: os artefatos já
+    // foram escritos (inclusive gates.json/report.md/rendered-analysis com o
+    // placeholder), então a checagem de frescor (WORKSLOP-003) roda ATIVA e
+    // valida os artefatos RECÉM-ESCRITOS — substitui a validação que antes
+    // acontecia na segunda execução (VERIFY) e corta 1× npm test por auditoria.
+    // Sem UFLA_REGEN_INTERNAL_TEST: a suíte é a MESMA do CI.
   });
   const out = `${res.stdout ?? ""}${res.stderr ?? ""}`;
   if (res.error && !res.stdout && !res.stderr) {
@@ -194,7 +195,7 @@ function runTestSummary(): { status: "passed" | "failed"; evidence: string } {
       : "";
   return {
     status,
-    evidence: `${base}${failedDetail}; npm run lint e npm run build validados na etapa VERIFY do ufla:audit; npm test interno da regeneração: ${status === "passed" ? "verde" : "com falhas (artefato gravado CONSISTENTE — codeGate/fullComplianceGate failed até o código passar)"}.`,
+    evidence: `${base}${failedDetail}; npm run lint e npm run build validados na etapa VERIFY do ufla:audit (testes NÃO re-executados lá — a suíte roda UMA vez por auditoria, na fase final da regeneração, com os artefatos já escritos e a checagem de frescor ativa); npm test: ${status === "passed" ? "verde" : "com falhas (artefato gravado CONSISTENTE — codeGate/fullComplianceGate failed até o código passar)"}.`,
   };
 }
 
@@ -228,7 +229,16 @@ const previewSnapEarly = await buildPreviewSnapshot();
 }
 console.log("OK:", snapshotPath(), "(preview+digest, referência PDF commitada preservada)");
 
-const testSummary = runTestSummary();
+// A suíte roda UMA vez por auditoria, na FASE FINAL (após TODOS os artefatos
+// escritos) — ver bloco no fim do arquivo. Até lá, usa-se um placeholder
+// consistente que é SUBSTITUÍDO na regravação final de gates.json/report.md/
+// rendered-analysis.json. Rodar 1× em vez de 2× corta minutos por auditoria;
+// a checagem de frescor (WORKSLOP-003) roda na execução única contra os
+// artefatos recém-escritos (não mais a rodada anterior).
+let testSummary: { status: "passed" | "failed"; evidence: string } = {
+  status: "passed",
+  evidence: "Suíte executada na fase final da regeneração (1×) — resultado real em gates.json.",
+};
 const renderedPages: number | string =
   manifest.pagesAfterToc ?? manifest.pagesAfterFields ?? manifest.pagesBeforeFields ?? "?";
 const { tables: tableCount, headers: tableHeaderCount } = (() => {
@@ -264,7 +274,7 @@ const fullCompliance = await runFullComplianceGate(docx, pdf);
 // CONFORMIDADE UFLA APROVADA exige a suíte verde. Com o teste interno falhando,
 // o artefato fica CONSISTENTE (codeGate failed → fullComplianceGate failed),
 // eliminando o deadlock de artefato stale que travava o próximo ufla:audit.
-const fullComplianceStatus =
+let fullComplianceStatus: "passed" | "failed" =
   fullCompliance.passed && testSummary.status === "passed" ? "passed" : "failed";
 // Gate por tipo de trabalho (artigo, TCC/monografia, CPG, projeto de pesquisa):
 // os auditores respeitam a matriz de tipos (elementos não aplicáveis ao tipo não
@@ -380,7 +390,7 @@ const coverageDocxPdfPassed = coverageDocxPdf.passed;
 const coverageDocxPdfEvidence = coverageDocxPdf.wordAvailable
   ? `Cobertura DOCX→PDF: ${coverageDocxPdf.tables.matched}/${coverageDocxPdf.tables.total} tabelas OOXML casadas textualmente com regiões físicas detectadas (razão físico/OOXML ${coverageDocxPdf.tableRatio.toFixed(2)} na banda [0.7, 1.8]); imagens ${coverageDocxPdf.physical.images}/${coverageDocxPdf.ooxml.images} (${coverageDocxPdf.imageRatio.toFixed(2)}); equações ${coverageDocxPdf.ooxml.equations}→${coverageDocxPdf.physical.equations}.`
   : `Cobertura DOCX→PDF: PDF/artefato de referência indisponível — gate considerado passed (evidência em coverage-docx-pdf.json).`;
-const overallStatus =
+let overallStatus: "passed" | "failed" =
   testSummary.status === "passed" &&
   fullComplianceStatus === "passed" &&
   renderedLayoutStatus === "passed" &&
@@ -395,12 +405,12 @@ const overallStatus =
 const renderedLayoutEvidence =
   `Renderização EXECUTADA com sucesso (Word COM: abriu sem reparo, campos+TOC atualizados, ${renderedPages} páginas, 0 overlaps, 0 cutoffs, 0 páginas em branco; PAGEREF resolvido no PDF: FIGURA 1→23, GRÁFICO 1→77, FIGURA 2→83; SUMÁRIO populado; notas de rodapé detectadas no PDF com status passed). Análise física real via pdfjs-dist: ${physical.summary.totalImages} imagens e ${physical.summary.totalTables} tabelas detectadas no PDF (imagens do DOCX re-exportadas; ${physical.summary.totalTables} regiões físicas vs ${tableCount} no OOXML; equações renderizadas: ${physical.summary.totalEquations}; máscaras: ${physical.summary.maskedImages}; contagens por página em imagesByPage/tablesByPage/equationsByPage). Cobertura: ${coverageGaps.length === 0 ? "completa — nenhum item crítico not-detected/failed" : `parcial: ${coverageGaps.join(", ")}`}. ${tblHeaderSummary}.`;
 
-const fullComplianceEvidence =
+let fullComplianceEvidence =
   fullComplianceStatus === "passed"
     ? `Gate expandido executado com evidência atual: pré-textuais, textuais, pós-textuais, referências/citações ABNT, figuras, seções, tabelas (w:tblHeader), equações (OMML nativo), paginação e física PDF (imagens e tabelas detectadas) — 0 gaps. Rodapés condicionais (FINDING-FOOTER-001..008) covered; UFLA-023 covered; ${tblHeaderSummary}. CONFORMIDADE UFLA APROVADA.`
     : `Gate expandido: ${testSummary.status === "failed" ? `suíte de testes com falhas (codeGate failed) — conformidade NÃO declarada. ${testSummary.evidence}` : `Gaps atuais: ${fullCompliance.gaps.join("; ")}.`} ${tblHeaderSummary}; UFLA-AMBIGUOUS-1 (paginação: contínua vs reinício em 1). Equações com OMML nativo (m:oMath) — UFLA-023 coberto. Rodapés condicionais implementados e validados (FINDING-FOOTER-001..008 covered). Conformidade UFLA NÃO declarada.`;
 
-const conclusion = fullComplianceStatus === "passed" && renderedLayoutStatus === "passed"
+let conclusion = fullComplianceStatus === "passed" && renderedLayoutStatus === "passed"
   ? `Renderização, preservação, OOXML e análise física revalidados com evidência atual (Word + PDF + OOXML). FULL COMPLIANCE GATE APROVADO — DOCX gerado conforme o Manual de Normalização da UFLA: pré-textuais, textuais, pós-textuais, referências/citações, figuras, seções, tabelas com w:tblHeader, equações OMML nativas, paginação e física PDF com detecção real de imagens (${physical.summary.totalImages}), tabelas (${physical.summary.totalTables}) e equações (${physical.summary.totalEquations}; física OMML validada na fixture eq-fixture).`
   : `Renderização, preservação e OOXML revalidados com evidência atual (Word + PDF + OOXML). Conformidade UFLA NÃO CONCLUÍDA: ${fullCompliance.gaps.join("; ")}. Rodapés condicionais (FINDING-FOOTER-001..008) cobertos.`;
 
@@ -807,4 +817,60 @@ req.resumoStatus = {
   rendering: count("rendering"),
 };
 writeJson("artifacts/ufla-audit/manual/manual-ufla-requirements.json", req);
+
+// ===========================================================================
+// FASE FINAL — execução ÚNICA da suíte + regravação dos artefatos que embutem
+// o testSummary (gates.json, report.md, rendered-analysis.json). Roda DEPOIS
+// de TODOS os artefatos escritos: a checagem de frescor (WORKSLOP-003) valida
+// os artefatos RECÉM-ESCRITOS (não a rodada anterior) e o resultado real
+// alimenta os três arquivos — 1× npm test por auditoria (antes eram 2×:
+// teste interno da regeneração + VERIFY), cortando minutos por rodada.
+// ===========================================================================
+console.log("[regenerate] Fase final: executando a suíte de testes UMA vez (artefatos já escritos — frescor ativo)...");
+testSummary = runTestSummary();
+fullComplianceStatus = fullCompliance.passed && testSummary.status === "passed" ? "passed" : "failed";
+overallStatus =
+  testSummary.status === "passed" &&
+  fullComplianceStatus === "passed" &&
+  renderedLayoutStatus === "passed" &&
+  formatsCrossPassed &&
+  perTypePhysicalPassed &&
+  previewDiffPassed &&
+  previewPdfReferenceStatus === "passed" &&
+  coverageDocxPdfPassed
+    ? "passed"
+    : "failed";
+fullComplianceEvidence =
+  fullComplianceStatus === "passed"
+    ? `Gate expandido executado com evidência atual: pré-textuais, textuais, pós-textuais, referências/citações ABNT, figuras, seções, tabelas (w:tblHeader), equações (OMML nativo), paginação e física PDF (imagens e tabelas detectadas) — 0 gaps. Rodapés condicionais (FINDING-FOOTER-001..008) covered; UFLA-023 covered; ${tblHeaderSummary}. CONFORMIDADE UFLA APROVADA.`
+    : `Gate expandido: ${testSummary.status === "failed" ? `suíte de testes com falhas (codeGate failed) — conformidade NÃO declarada. ${testSummary.evidence}` : `Gaps atuais: ${fullCompliance.gaps.join("; ")}.`} ${tblHeaderSummary}; UFLA-AMBIGUOUS-1 (paginação: contínua vs reinício em 1). Equações com OMML nativo (m:oMath) — UFLA-023 coberto. Rodapés condicionais implementados e validados (FINDING-FOOTER-001..008 covered). Conformidade UFLA NÃO declarada.`;
+conclusion =
+  fullComplianceStatus === "passed" && renderedLayoutStatus === "passed"
+    ? `Renderização, preservação, OOXML e análise física revalidados com evidência atual (Word + PDF + OOXML). FULL COMPLIANCE GATE APROVADO — DOCX gerado conforme o Manual de Normalização da UFLA: pré-textuais, textuais, pós-textuais, referências/citações, figuras, seções, tabelas com w:tblHeader, equações OMML nativas, paginação e física PDF com detecção real de imagens (${physical.summary.totalImages}), tabelas (${physical.summary.totalTables}) e equações (${physical.summary.totalEquations}; física OMML validada na fixture eq-fixture).`
+    : `Renderização, preservação e OOXML revalidados com evidência atual (Word + PDF + OOXML). Conformidade UFLA NÃO CONCLUÍDA: ${fullCompliance.gaps.join("; ")}. Rodapés condicionais (FINDING-FOOTER-001..008) cobertos.`;
+
+const gatesFinal = {
+  ...gates,
+  gates: {
+    ...gates.gates,
+    codeGate: { status: testSummary.status, evidence: testSummary.evidence },
+    fullComplianceGate: { status: fullComplianceStatus, evidence: fullComplianceEvidence },
+  },
+  overall: overallStatus,
+  conclusion,
+};
+writeJson("artifacts/ufla-audit/gates.json", gatesFinal);
+writeFileSync(
+  join(ROOT, "artifacts", "ufla-compliance", "report.md"),
+  buildCanonicalReport(gatesFinal.gates, gatesFinal.overall, gatesFinal.conclusion),
+  "utf8",
+);
+// rendered-analysis.json: regrava codeGate/fullComplianceGate com o resultado real
+const renderedAnalysisJson = JSON.parse(
+  readFileSync(join(ROOT, "artifacts", "ufla-compliance", "rendered-analysis.json"), "utf8"),
+);
+renderedAnalysisJson.gates.codeGate = { status: testSummary.status, evidence: testSummary.evidence };
+renderedAnalysisJson.gates.fullComplianceGate = { status: fullComplianceStatus, evidence: fullComplianceEvidence };
+writeJson("artifacts/ufla-compliance/rendered-analysis.json", renderedAnalysisJson);
+console.log("OK: gates.json/report.md/rendered-analysis.json regravados com o testSummary da execução única.");
 console.log("resumoStatus:", JSON.stringify(req.resumoStatus));

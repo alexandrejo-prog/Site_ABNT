@@ -19,6 +19,7 @@ import {
   MathSuperScript,
   MathSuperScriptElement,
   Paragraph,
+  SimpleField,
   TabStopType,
   Table,
   TableCell,
@@ -811,6 +812,20 @@ export function parseLatexMath(latex: string): MathComponent[] | null {
  * à direita via tab stop. O corpo é montado como `m:r/m:t`; se contiver LaTeX
  * (\frac, \sqrt, ^, _), vira estrutura OMML real (m:f, m:rad, m:sSup, m:sSub).
  */
+/**
+ * Instrução do campo SEQ a partir do número da equação (Manual UFLA §3.2.8).
+ * "2.1" → ` SEQ Eq \s 1 \* ARABIC ` (switch \s usa o heading nível 1);
+ * "1" → ` SEQ Eq \* ARABIC ` (sequência simples); sem número → "".
+ */
+export function equationSeqInstruction(number: string | undefined): string {
+  if (!number) return "";
+  const match = /^\((\d+(?:\.\d+)?)\)$/.exec(number.trim());
+  if (!match) return "";
+  const parts = match[1].split(".");
+  if (parts.length === 1) return " SEQ Eq \\* ARABIC ";
+  return ` SEQ Eq \\s ${parts.length - 1} \\* ARABIC `;
+}
+
 export function ommlEquationParagraph(text: string): Paragraph {
   const equationText = cleanMojibakeText(text);
   const numberMatch = equationText.match(/\s*\((\d+(?:\.\d+)?)\)\s*$/);
@@ -820,12 +835,19 @@ export function ommlEquationParagraph(text: string): Paragraph {
   const size = UFLA_RULES.typography.bodyFontSizePt * 2;
   const parsed = parseLatexMath(body);
   const mathChildren: MathComponent[] = parsed ?? [new MathRun(body)];
-  const children: Array<TextRun | DocxMath> = [
+  const children: Array<TextRun | DocxMath | SimpleField> = [
     new DocxMath({ children: mathChildren }),
   ];
   if (number) {
     children.push(new TextRun({ text: "\t", font, size, color: "000000" }));
-    children.push(new TextRun({ text: number, font, size, color: "000000" }));
+    // Campo SEQ real (fldSimple): o Word recalcula ao abrir (updateFields=true);
+    // o texto do número fica como resultado em cache até a atualização.
+    const seqInstr = equationSeqInstruction(number);
+    children.push(
+      seqInstr
+        ? new SimpleField(seqInstr, number)
+        : new TextRun({ text: number, font, size, color: "000000" }),
+    );
   }
   return new Paragraph({
     alignment: AlignmentType.CENTER,
@@ -848,7 +870,13 @@ export interface ImportedEquation {
 }
 
 const RAW_OMML_MARKER = "\uF000UFLAOMML";
-const rawOmmlRegistry = new Map<string, { ommlXml: string; number: string }>();
+interface RawOmmlEntry {
+  ommlXml: string;
+  number: string;
+  /** Instrução do campo SEQ (ex.: ` SEQ Eq \s 1 \* ARABIC `) — numeração real no OOXML. */
+  seqInstr: string;
+}
+const rawOmmlRegistry = new Map<string, RawOmmlEntry>();
 let rawOmmlSeq = 0;
 
 export function clearRawOmmlRegistry(): void {
@@ -870,8 +898,12 @@ export function rawOmmlMarkerParagraph(
   const equationText = cleanMojibakeText(text);
   const numberMatch = equationText.match(/\s*\((\d+(?:\.\d+)?)\)\s*$/);
   const number = numberMatch ? `(${numberMatch[1]})` : "";
+  // Campo SEQ real no OOXML (Manual UFLA §3.2.8): o número da equação passa a
+  // ser um campo Word calculado com o resultado em cache — o Word recalcula ao
+  // abrir (updateFields=true). Instrução compartilhada com o caminho achatado.
+  const seqInstr = equationSeqInstruction(number);
   const markerId = String(++rawOmmlSeq);
-  rawOmmlRegistry.set(markerId, { ommlXml, number });
+  rawOmmlRegistry.set(markerId, { ommlXml, number, seqInstr });
   return new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { line: 360, before: 120, after: 120 },
@@ -881,7 +913,7 @@ export function rawOmmlMarkerParagraph(
 }
 
 /** Localiza o OMML cru registrado pelo marcador (usado pelo patch pós-Packer). */
-export function rawOmmlForMarker(markerId: string): { ommlXml: string; number: string } | undefined {
+export function rawOmmlForMarker(markerId: string): RawOmmlEntry | undefined {
   return rawOmmlRegistry.get(markerId);
 }
 

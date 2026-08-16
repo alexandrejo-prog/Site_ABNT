@@ -108,8 +108,9 @@ export async function validateCoverLayout(pdfPath: string): Promise<CoverLayoutR
       warnings.push("Alguns itens do título não estão centralizados (±12% da largura útil) — verificar visualmente.");
     }
 
-    // 3. local + ano no 3º terço inferior, dentro da área útil
-    const localItems = coverItems.filter((it) => /LAVRAS|MG/i.test(it.str));
+    // 3. local + ano no 3º terço inferior, dentro da área útil (restrito à
+    // metade inferior — "UNIVERSIDADE FEDERAL DE LAVRAS" do topo não conta)
+    const localItems = coverItems.filter((it) => /LAVRAS|MG/i.test(it.str) && it.y >= PAGE_H * 0.5);
     if (localItems.length) {
       const localY = Math.max(...localItems.map((it) => it.y));
       if (localY < PAGE_H * (2 / 3)) {
@@ -120,6 +121,62 @@ export async function validateCoverLayout(pdfPath: string): Promise<CoverLayoutR
       }
     } else {
       warnings.push("Local/ano ('LAVRAS - MG') não detectado na capa — verificar visualmente.");
+    }
+
+    // --- PRECISÃO VERTICAL: ordenação e distâncias entre os blocos da capa ---
+    // Manual UFLA §3.1.1: identificação institucional → autor → título →
+    // local/ano, em ordem vertical estrita, com folga entre blocos e todos
+    // dentro da área útil. Pega regressões grosseiras (blocos sobrepostos,
+    // fora da área, ordem invertida) sem depender de posições exatas.
+    const instY = instItems.length ? Math.min(...instItems.map((it) => it.y)) : null;
+    const titleTopY = titleItems.length ? Math.min(...titleItems.map((it) => it.y)) : null;
+    const titleBottomY = titleItems.length ? Math.max(...titleItems.map((it) => it.y)) : null;
+    const localTopY = localItems.length ? Math.min(...localItems.map((it) => it.y)) : null;
+    const instFs = coverItems.find((it) => /UNIVERSIDADE FEDERAL DE LAVRAS/i.test(it.str))?.fs ?? 14;
+    const authorItems = coverItems.filter(
+      (it) =>
+        it.fs === instFs &&
+        !/UNIVERSIDADE|LAVRAS|MG/i.test(it.str) &&
+        it.str.trim().length > 3 &&
+        it.y > (instY ?? 0) &&
+        it.y < (titleTopY ?? PAGE_H),
+    );
+    const authorY = authorItems.length ? Math.min(...authorItems.map((it) => it.y)) : null;
+    const coverBlocks: Array<[string, number | null]> = [
+      ["identificação institucional", instY],
+      ["autor", authorY],
+      ["título", titleTopY],
+      ["local/ano", localTopY],
+    ];
+    const present = coverBlocks.filter(([, y]) => y != null) as Array<[string, number]>;
+    for (let i = 1; i < present.length; i++) {
+      if (present[i][1] <= present[i - 1][1]) {
+        errors.push(
+          `Blocos da capa fora de ordem vertical: ${present[i - 1][0]} (y=${Math.round(present[i - 1][1])}) deve vir antes de ${present[i][0]} (y=${Math.round(present[i][1])}).`,
+        );
+      }
+      const gap = present[i][1] - present[i - 1][1];
+      if (gap < 10) {
+        errors.push(
+          `Blocos da capa sobrepostos/colados: ${present[i - 1][0]} e ${present[i][0]} com gap de ${Math.round(gap)}pt (< 10pt).`,
+        );
+      } else if (gap > 350) {
+        warnings.push(
+          `Gap grande entre ${present[i - 1][0]} e ${present[i][0]} na capa (${Math.round(gap)}pt) — verificar visualmente.`,
+        );
+      }
+    }
+    const USEFUL_MIN_Y = MARGIN_TOP - 20;
+    const USEFUL_MAX_Y = PAGE_H - MARGIN_BOTTOM + 20;
+    for (const [name, y] of present) {
+      if (y < USEFUL_MIN_Y || y > USEFUL_MAX_Y) {
+        errors.push(
+          `${name} da capa fora da área útil (y=${Math.round(y)}pt; área ${Math.round(USEFUL_MIN_Y)}-${Math.round(USEFUL_MAX_Y)}pt).`,
+        );
+      }
+    }
+    if (titleBottomY != null && localTopY != null && localTopY < titleBottomY) {
+      errors.push("Local/ano da capa acima do fim do título — ordem invertida entre título e local/ano.");
     }
 
     // --- folha de rosto: natureza do trabalho na página seguinte ---
@@ -155,6 +212,30 @@ export async function validateCoverLayout(pdfPath: string): Promise<CoverLayoutR
       const nextText = normalize((tcNext.items as any[]).map((it) => it.str).join(" "));
       if (!/FICHA CATALOGRAFICA/.test(nextText)) {
         errors.push("Ficha catalográfica fora do verso da folha de rosto: a página imediatamente seguinte à folha de rosto não contém 'FICHA CATALOGRÁFICA'.");
+      } else {
+        // POSIÇÃO do cartão da ficha (Manual UFLA §3.1.3): com conteúdo REAL
+        // (número de Cutter-Sanborn/classificação CDU — ficha oficial colada ou
+        // gerada), o cartão ocupa a metade inferior do verso. Placeholder
+        // ("detectada no arquivo importado") e ficha por imagem não disparam.
+        const nextItems = (tcNext.items as any[])
+          .map((it) => ({
+            y: PAGE_H - it.transform[5],
+            str: it.str || "",
+          }))
+          .filter((it) => it.str.trim().length > 1);
+        const cutterLines = nextItems.filter((it) => /\b[A-Z]\d{1,4}[a-z]?\b/i.test(normalize(it.str)) || /\bCDU\s*\d/i.test(normalize(it.str)));
+        if (cutterLines.length > 0) {
+          const cardTop = Math.min(...cutterLines.map((it) => it.y));
+          if (cardTop < PAGE_H * 0.4) {
+            errors.push(
+              `Cartão da ficha catalográfica (com Cutter) acima do esperado no verso: y=${Math.round(cardTop)}pt (< 40% da página) — o Manual UFLA §3.1.3 posiciona o cartão na metade inferior.`,
+            );
+          } else if (cardTop < PAGE_H * 0.5) {
+            warnings.push(
+              `Cartão da ficha catalográfica levemente acima do centro do verso (y=${Math.round(cardTop)}pt) — verificar visualmente.`,
+            );
+          }
+        }
       }
       // --- folha de aprovação: grade física da banca ---
       // Busca a folha de aprovação nas páginas seguintes e valida que os membros
@@ -186,6 +267,23 @@ export async function validateCoverLayout(pdfPath: string): Promise<CoverLayoutR
           }
           if (minMemberY < PAGE_H / 3) {
             warnings.push(`Primeira linha da banca acima do 1º terço (y=${Math.round(minMemberY)}pt) — verificar visualmente a posição da grade.`);
+          }
+          // PRECISÃO da grade: linhas não sobrepostas (gap mínimo), dentro da
+          // área útil e coluna de nomes alinhada horizontalmente (grade C×R do
+          // Manual UFLA §3.1.4 — os nomes formam uma coluna à esquerda).
+          for (let i = 1; i < ys.length; i++) {
+            const gap = ys[i] - ys[i - 1];
+            if (gap < 8) {
+              errors.push(`Linhas da banca sobrepostas na folha de aprovação (gap ${gap}pt entre y=${ys[i - 1]} e y=${ys[i]}) — grade colapsada.`);
+            }
+          }
+          if (maxMemberY > PAGE_H - MARGIN_BOTTOM + 20) {
+            errors.push(`Linha final da banca invadiu a margem inferior (y=${Math.round(maxMemberY)}pt > ${Math.round(PAGE_H - MARGIN_BOTTOM + 20)}pt).`);
+          }
+          const memberXs = memberItems.map((it) => it.x);
+          const xSpread = Math.max(...memberXs) - Math.min(...memberXs);
+          if (xSpread > 60) {
+            warnings.push(`Posições x iniciais dos nomes da banca variam muito (${Math.round(xSpread)}pt) — grade horizontal possivelmente desalinhada.`);
           }
         }
         break;

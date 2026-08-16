@@ -60,9 +60,22 @@ function patchRawOmml(xml: string): { xml: string; changed: boolean } {
     const entry = rawOmmlForMarker(markerId);
     if (!entry) return fullRun;
     changed = true;
-    const numberRun = entry.number
-      ? `<w:r><w:tab/><w:t xml:space="preserve">${entry.number}</w:t></w:r>`
-      : "";
+    // Numeração real como CAMPO SEQ (Manual UFLA §3.2.8): o Word recalcula ao
+    // abrir (updateFields=true) e a tabulação à direita alinha o número com a
+    // margem direita. Sem SEQ (equação sem número), cai no comportamento
+    // anterior (tab + texto) ou nada.
+    let numberRun = "";
+    if (entry.seqInstr) {
+      numberRun =
+        `<w:r><w:tab/></w:r>` +
+        `<w:r><w:fldChar w:fldCharType="begin"/>` +
+        `<w:instrText xml:space="preserve">${entry.seqInstr}</w:instrText>` +
+        `<w:fldChar w:fldCharType="separate"/>` +
+        `<w:t xml:space="preserve">${entry.number}</w:t>` +
+        `<w:fldChar w:fldCharType="end"/></w:r>`;
+    } else if (entry.number) {
+      numberRun = `<w:r><w:tab/><w:t xml:space="preserve">${entry.number}</w:t></w:r>`;
+    }
     return `${entry.ommlXml}${numberRun}`;
   });
   return { xml: patchedXml, changed };

@@ -69,9 +69,25 @@ async function main(): Promise<void> {
       ["LINT", "npm run lint"],
       ["TYPECHECK (scripts/ufla-compliance)", "npm run typecheck:scripts"],
       ["REGENERATE (Word COM + PDF físico + gates + artefatos)", "npx tsx scripts/ufla-compliance/regenerate-official-artifacts.ts"],
-      ["VERIFY (testes + build)", "npm run verify"],
     ];
     for (const [name, cmd] of steps) runStep(name, cmd);
+
+    // VERIFY (build): a suíte de testes já rodou UMA vez, na fase final da
+    // regeneração, com os artefatos recém-escritos (frescor WORKSLOP-003 ativo).
+    // Só re-executa npm test se o gates.json não for desta rodada (ex.: runner
+    // antigo ou regenerate falhou antes da fase final).
+    const gatesJson = JSON.parse(
+      readFileSync(join(ROOT, "artifacts", "ufla-audit", "gates.json"), "utf8"),
+    );
+    const generatedAt = new Date(gatesJson.generatedAt ?? 0).getTime();
+    if (Number.isFinite(generatedAt) && generatedAt >= started - 10_000) {
+      runStep("VERIFY (build; testes executados na regeneração — 1× por auditoria)", "npm run build");
+    } else {
+      console.warn(
+        "[ufla:audit] gates.json não é desta rodada (generatedAt antigo) — VERIFY executando npm test + build para garantir consistência.",
+      );
+      runStep("VERIFY (testes + build)", "npm run verify");
+    }
 
     const gates = JSON.parse(readFileSync(join(ROOT, "artifacts", "ufla-audit", "gates.json"), "utf8"));
     const elapsed = Math.round((Date.now() - started) / 1000);
