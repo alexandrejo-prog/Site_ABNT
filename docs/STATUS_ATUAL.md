@@ -1,6 +1,7 @@
 ﻿# STATUS ATUAL — Site ABNT / UFLA
 
-> Único documento de status. Resultados históricos: `checkpoint/workslop-assessment.md`.
+> Único documento de status. Resultados históricos: `docs/historico/checkpoint/workslop-assessment.md`.
+> Mapa da documentação (o que ler por tarefa): `docs/README.md`.
 > Conformidade completa: `artifacts/ufla-compliance/report.md` (canônico).
 
 ## Última Atualização
@@ -124,20 +125,21 @@
 3. FATIA 6: Regenerar artefatos oficiais e declarar conformidade — **CONCLUÍDA** (FULL COMPLIANCE GATE APROVADO, report.md declara CONFORMIDADE UFLA APROVADA)
 4. Elementos opcionais do Manual — **CONCLUÍDO** (16/08): faltava apenas o **Índice remissivo §3.1.2.4.4 / NBR 6034** (DECISION-012); os demais opcionais já existiam (errata, dedicatória, agradecimentos, epígrafe, listas, glossário, apêndices/anexos, lombada física)
 
-## Evidências (2026-08-16 ~13:30, HEAD `93254ac`)
+## Evidências (2026-08-16 ~19:46, HEAD `6eae987`, branch `docs/housekeeping-reorg`)
 - DOCX: `artifacts/ufla-compliance/normalized-dissertacao.docx`
 - PDF: `artifacts/ufla-compliance/rendered/normalized-dissertacao.pdf` (re-renderizado na auditoria)
 - OOXML: 35 tabelas (w:tblHeader semântico nas declaráveis), 39 bookmarks/31 PAGEREF, 0 alvos ausentes, 0 mojibake
-- Física PDF: 0 overlaps/cutoffs/blank; **11 imagens (opList/CTM) e 45 regiões de tabela em 40 páginas (grade de texto + BORDAS desenhadas re+eoFill — tabelas de 2 linhas/questiónário incluídas); equações 0 no doc de referência (física OMML validada na fixture eq-fixture)**
+- Física PDF: **238 páginas** (Word: pagesBefore/AfterFields e AfterToc = 238), 0 overlaps/cutoffs/blank; **11 imagens (opList/CTM) e 45 regiões de tabela em 40 páginas (grade de texto + BORDAS desenhadas re+eoFill — tabelas de 2 linhas/questiónário incluídas); equações 0 no doc de referência (física OMML validada na fixture eq-fixture)**
 - Cobertura DOCX→PDF: `artifacts/ufla-compliance/coverage-docx-pdf.json` — **35/35 tabelas OOXML casadas com regiões físicas** (razão 1.29), imagens 11/11, equações consistentes; **conciliação página-a-página** (`tables.pageMap`/`pageMapping`): 20 páginas físicas com tabelas (ex.: 67:[1,3,21,22,23,24,28,29], 14:[33]) — evidência de LAYOUT, não só presença
 - Report: `artifacts/ufla-compliance/report.md` (canônico, mesma rodada; declara CONFORMIDADE UFLA APROVADA)
-- Gates: `artifacts/ufla-audit/gates.json` (overall=passed; **11/11 gates** incluindo coverageDocxPdfGate; meta `generatedAt` da rodada de 2026-08-16 ~13:30)
-- Testes: 1684 passed, 0 failed, 10 skipped (209 arquivos); e2e 13/13 (axe no navegador real); ci-checks PASSED; lint 0/0
+- Gates: `artifacts/ufla-audit/gates.json` (overall=passed; **11/11 gates** incluindo coverageDocxPdfGate; meta `generatedAt` da rodada de 2026-08-16 ~19:46)
+- Testes: 1688 passed, 0 failed, 10 skipped (210 arquivos); e2e 13/13 (axe no navegador real); ci-checks PASSED; lint 0/0
 - Preservação: content-preservation.json RECOMPUTADO — imagens 11/11 (F-007 encerrado), tabelas 35/35, referências 138/138
-- Auditoria: suíte 1× por rodada (frescor ativo); renders per-type paralelos (pool 3); re-render da referência pulado quando o digest do DOCX não muda — **141s** (11/11 gates, `sourceFingerprint` `06090a55…`)
+- Auditoria: suíte 1× por rodada (frescor ativo); renders per-type paralelos (pool 3); re-render da referência pulado quando o digest do DOCX não muda — **147s** (11/11 gates, `sourceFingerprint` `9f7798a7…`)
 - Índice remissivo (16/08): campo `indice` novo (ufla-rules.ts, default `""`; fora de `ACADEMIC_FIELD_KEYS` como `glossario`); DOCX `sectionTitle("Índice")` após anexos + sumário; preview página pós-textual; sanitizado em artigo/CPG; `tests/unit/indice-remissivo.test.ts` (4); DECISION-012 em `docs/decisions/012-indice-remissivo-opcional.md`
 - Otimização de bundle (16/08, commit `281ebd4`): `main.tsx` sem `docx-toc-field-patch` estático (docx+jszip 428 KB fora do preload); `ImportBlock` com `await import("../import-docx")` (mammoth ~490 KB lazy); `cleanMojibakeText` extraído para `src/text-utils.ts` (módulo puro, corta `docx-render-core` do caminho eager via `references-normalizer`); `vite.config` `manualChunks` em FUNÇÃO por prefixo de pacote (mammoth/mammoth.browser antes não casava com o chunk nomeado — caía no index.js). Resultado: **index.js 773→187 KB (−76%)**, preload `index+react-vendor+icons` 0.34 MB (antes +docx-libs = 1.36 MB). Sem mudança de comportamento: 1688 testes, 13 e2e, lint 0/0, `ufla:audit` 11/11.
 - Fechamento WIP (16/08): 5 commits `de96890` (OMML→LaTeX preview), `2c5457e` (conciliação página-a-página + margem inferior), `41b568c` (evidência no gate + snapshot), `0eab8e8` (axe no e2e), `93254ac` (DECISION-010 stub histórico); `null` (0 bytes) removido; `update-fingerprints.ts` arquivado (redundante)
+- Reorganização da documentação (PR #22, `docs/housekeeping-reorg`): `docs/README.md` (mapa central — o que ler por tarefa); **23 arquivos movidos para `docs/historico/`** (auditoria 14/08, checklists, stubs de decisão, checkpoint, manuais avulsos); skills reais criadas em `.agents/skills/` (site_abnt_ufla, ufla_docx_rules, abnt_latest_rules, ufla_docx_compliance) + `.agents/AGENTS.md`; referências quebradas corrigidas (SKILL.md/context.md/STATUS_ATUAL.md); teste `tests/meta/checklist.test.ts` ajustado para `docs/historico/CHECKLIST.md` + canônico; DECISION-010 consolidada no canônico `docs/decisions/010` (stub histórico aponta para lá)
 
 ## Regras para IAs
 1. Nunca editar números de evidência à mão: rodar `scripts/ufla-compliance/regenerate-official-artifacts.ts` (computa tudo da mesma rodada).
