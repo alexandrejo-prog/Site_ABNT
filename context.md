@@ -13,7 +13,7 @@ description: Desenvolvimento do Site_ABNT - editor e normalizador acadêmico con
 
 Editor/normalizador acadêmico que exporta DOCX em **conformidade plena com o Manual de Normalização da UFLA (6ª ed.)** e ABNT vigente — diretiva principal (§8, regra 9). Página padrão: **A4** (outros tamanhos cancelados por ora — pendência opcional futura).
 
-- **Números (16/08):** 212 arquivos, 1699 testes (10 skipped), lint 0/0, auditoria **11/11 gates**, `sourceFingerprint 715e5401…`. Canônico: `docs/STATUS_ATUAL.md` (números); evidência: `artifacts/ufla-compliance/report.md`.
+- **Números (16/08):** 217 arquivos, 1731 testes (10 skipped), lint 0/0, e2e 13/13, auditoria **11/11 gates**, `sourceFingerprint 3bd3c7f7…`. Canônico: `docs/STATUS_ATUAL.md` (números); evidência: `artifacts/ufla-compliance/report.md`.
 - **Como ler (TOC):** §1 visão · §2 estrutura de diretórios · §3 tipos de trabalho · §4 regras UFLA/ABNT · §5 ferramenta de conformidade · §6 pendências + rodadas recentes (6q–6w) · §7 comandos · §8 regras para a IA.
 - **Histórico de rodadas 6a–6p (01/08–15/08):** arquivado — ler somente sob demanda em `docs/historico/contexto-rodadas/contexto-6a-6p.md`.
 
@@ -214,6 +214,21 @@ Implementadas as 2 correções prioritárias do `docs/checklist-14-correcoes.md`
 3. **Decisão de folha (cancelada por ora)** — NÃO implementar outros tamanhos de folha: **A4 é o padrão brasileiro e o default** (`UFLA_RULES.page` 11906×16838 twips retrato; paisagem só para tabelas largas, DECISION-009). Registrado como **pendência opcional futura** em `docs/checklist-14-correcoes.md` (seção "Fora de escopo (cancelado)"). Diretiva principal documentada em AGENTS.md, SKILL.md, `ufla_docx_rules`, `docs/README.md`, context.md §8 (regra 9) e STATUS_ATUAL (Regras para IAs, regra 5): **o DOCX gerado deve atender plenamente ao Manual de Normalização da UFLA**.
 4. **Testes** — `tests/regression/import-formatting-placeholder.test.ts` (4): A2 positivo (DOCX com `w:b`/`w:i`/`w:u` → aviso; texto preservado) e negativo (sem formatação → sem aviso); A3 (marcador com id inexistente → placeholder no DOCX, sem o marcador cru; sem marcador → sem placeholder).
 5. **Próximo** — B5 (dead code em `references-normalizer.detect()`) e B6 (`ooxmlGate` computado de verdade) seguem abertos no checklist-14; A1–A4 marcados `[x]`.
+
+## 6x. CHECKLIST-14 100% CONCLUÍDO — B5–B7 + C8–C14 (16/08/2026)
+Todas as 14 correções do `docs/checklist-14-correcoes.md` implementadas, testadas e marcadas `[x]`. `npm test` **217 arquivos, 1731 testes (10 skipped)**, lint 0/0, `npm run e2e` **13/13**, auditoria **142s, 11/11 gates**, `sourceFingerprint 3bd3c7f7…`, FULL COMPLIANCE APROVADO. **32 testes novos** nesta rodada.
+
+1. **B5 — dead code** — duplicata de `researchDataMatch` removida em `references-normalizer.detect()` (todos os `detectedType` seguem alcançáveis).
+2. **B6 — ooxmlGate computado** — `regenerate-official-artifacts.ts` invoca `runOoxmlChecks` na mesma rodada; `evaluateOoxmlGate` falha se `openedByRepair=true` ou achado estrutural (error); `toc-style` virou warning quando o campo TOC existe (falso positivo do gerador — TOC1-3 populados no update). Testes: `tests/ufla-compliance/ooxml-gate.test.ts` (5).
+3. **B7 — tab direito unificado** — `UFLA_RULES.page.tabRightTwip` (9072) usado em listas ilustrações/tabelas (leader de pontos) e equações; grep 9071 = 0.
+4. **C8 — exportadores deduplicados** — `referenceRunToTextRun(run, font?, size?)` parametrizado, `getAuthorKey`/`dedupeReferences`/`sortReferencesByAuthorKey` em `docx-shared.ts`; `pageNumberHeader` do shared no export-docx/article; `splitParagraphs` do core no export-docx; research-project ordena pela chave ABNT (igual export-docx). Saída preservada: snapshot de paginação e física 11/11 inalterados.
+5. **C9 — layout consolidado** — `UFLA_RULES.spacing.referenceHangingCm/Twip` (0,5 cm) nos 3 hanging; `PORTRAIT_CONTENT_TWIP` via margens; capa do artigo via `coverTitle/AuthorFontSizePt`; `paragraphFirstLineTwip` no artigo.
+6. **C10 — ficha validada** — `src/image-asset-utils.ts`: `isValidImageBytes` (magic PNG/JPEG/WebP), `readImageDimensions` (IHDR/SOF — fallback sem distorção), limite 10 MB; upload recusa com erro amigável; export cai p/ texto se os bytes não forem imagem. Testes: `image-asset-utils` (6) + `ficha-upload-validation` (3).
+7. **C11 — citação sem falso-positivo** — `(IBGE)`, `(Tabela 2)`, `(2020)` sozinhos não geram warning; `SILVA (2024)` não gera `citation-author-missing`; `(SILVA, p. 15)` ainda acusa ano ausente. `tests/unit/citation-locator.test.ts` 13 testes.
+8. **C12 — importação limitada** — 60 MB de arquivo + teto de descompressão 500 MB medido no diretório central SEM descomprimir (`assertReasonableUncompressedSize`), antes do mammoth e no `extractDocxStructure`. `tests/import/import-limits.test.ts` (5).
+9. **C13 — foco do modal** — `PreviewModal` devolve o foco ao elemento que abriu o modal ao fechar (WCAG 2.4.3); teste jsdom novo.
+10. **C14 — rascunhos corrompidos visíveis** — `draftCorruptionIssues` detecta JSON inválido/shape errado sem apagar; banner `role="alert"` no gerenciador com "Descartar dados corrompidos" (decisão explícita). `tests/editor/draft-corruption.test.ts` (6).
+11. **Próximo** — sem pendências do checklist-14; fechar o `e2e`/`verify` já rodou 13/13 e 1731; próximas frentes naturais: documentação da rodada e novos itens de robustez.
 
 ---
 
