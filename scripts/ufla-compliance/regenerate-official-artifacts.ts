@@ -8,7 +8,7 @@
  * findings/open-findings.json, manual-ufla-requirements.json, audit-report.md.
  * Todos os artefatos JSON carregam o bloco "meta" com status "current".
  */
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, dirname } from "node:path";
@@ -24,7 +24,7 @@ import {
 import { auditFormatsCross } from "./audit-formats-cross.js";
 import { runPerTypePhysical } from "./analyze-per-type-pdfs.js";
 import { runPreviewDocxCompare } from "./compare-preview-docx.js";
-import { buildPreviewSnapshot, writePreviewSnapshot, snapshotPath } from "./check-preview-snapshot.js";
+import { buildPreviewSnapshot, writePreviewSnapshot, snapshotPath, readCommittedPreviewSnapshot, classifyPdfChange } from "./check-preview-snapshot.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -85,49 +85,73 @@ const physical = JSON.parse(readFileSync(physicalPath, "utf8"));
 // anteriores — cada regeneração computa a evidência do estado atual).
 // ---------------------------------------------------------------------------
 function runTestSummary(): { status: "passed" | "failed"; evidence: string } {
-  try {
-    const out = execSync("npm test -- --reporter=dot", {
-      cwd: ROOT,
-      encoding: "utf8",
-      timeout: 600000,
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    // Vitest omite o segmento "N failed" quando a suíte passa, então cada
-    // contador é extraído individualmente da linha "Tests ..." / "Test Files ...".
-    const testsLine = out.match(/Tests\s+([\s\S]*?)\s*\(\d+\)/);
-    const filesLine = out.match(/Test Files\s+([\s\S]*?)\s*\(\d+\)/);
-    const filesTotalMatch = out.match(/Test Files\s+[\s\S]*?\s*\((\d+)\)/);
-    const num = (segment: string | undefined, re: RegExp): number => {
-      const m = segment?.match(re);
-      return m ? Number(m[1]) : 0;
-    };
-    const failed = num(testsLine?.[1], /(\d+)\s+failed/);
-    const passed = num(testsLine?.[1], /(\d+)\s+passed/);
-    const skipped = num(testsLine?.[1], /(\d+)\s+skipped/);
-    const failedFiles = num(filesLine?.[1], /(\d+)\s+failed/);
-    const totalFiles = filesTotalMatch ? Number(filesTotalMatch[1]) : 0;
-    const files = totalFiles ? `${totalFiles} arquivos` : "?";
-    const base = `npm test: ${passed} passed, ${skipped} skipped, ${failed} failed (${files}) — ${new Date().toISOString().slice(0, 10)}`;
-    const status = failed > 0 || failedFiles > 0 ? "failed" : "passed";
-    return {
-      status,
-      evidence: `${base}; npm run lint: 0 warnings; npm run build: ok; npm run verify: ${status === "passed" ? "ok" : "não concluído"}.`,
-    };
-  } catch {
-    return {
-      status: "failed",
-      evidence: `npm test: não executado dentro da regeneração (executar 'npm test' antes e revalidar) — ${new Date().toISOString().slice(0, 10)}.`,
-    };
-  }
+  // spawnSync (não lança em exit != 0) e captura stderr: se a suíte falhar, o
+  // artefato ainda é escrito com codeGate failed CONSISTENTE (evidência real com
+  // os nomes dos testes falhos) — sem deadlock de artefato stale no próximo run.
+  const res = spawnSync("npm", ["test", "--", "--reporter=dot"], {
+    cwd: ROOT,
+    encoding: "utf8",
+    timeout: 600000,
+    shell: process.platform === "win32" ? "cmd.exe" : "/bin/sh",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const out = `${res.stdout ?? ""}${res.stderr ?? ""}`;
+  // Vitest omite o segmento "N failed" quando a suíte passa, então cada
+  // contador é extraído individualmente da linha "Tests ..." / "Test Files ...".
+  const testsLine = out.match(/Tests\s+([\s\S]*?)\s*\(\d+\)/);
+  const filesLine = out.match(/Test Files\s+([\s\S]*?)\s*\(\d+\)/);
+  const filesTotalMatch = out.match(/Test Files\s+[\s\S]*?\s*\((\d+)\)/);
+  const num = (segment: string | undefined, re: RegExp): number => {
+    const m = segment?.match(re);
+    return m ? Number(m[1]) : 0;
+  };
+  const failed = num(testsLine?.[1], /(\d+)\s+failed/);
+  const passed = num(testsLine?.[1], /(\d+)\s+passed/);
+  const skipped = num(testsLine?.[1], /(\d+)\s+skipped/);
+  const failedFiles = num(filesLine?.[1], /(\d+)\s+failed/);
+  const totalFiles = filesTotalMatch ? Number(filesTotalMatch[1]) : 0;
+  const files = totalFiles ? `${totalFiles} arquivos` : "?";
+  const base = `npm test: ${passed} passed, ${skipped} skipped, ${failed} failed (${files}) — ${new Date().toISOString().slice(0, 10)}`;
+  const status = failed > 0 || failedFiles > 0 ? "failed" : "passed";
+  const failedDetail =
+    failed > 0 || failedFiles > 0
+      ? ` Falhas: ${(res.stderr ?? "").split(/\r?\n/).filter((l) => l.includes("FAIL ") || l.includes("❯") || l.includes("×")).slice(0, 5).join(" | ")}.`
+      : "";
+  return {
+    status,
+    evidence: `${base}${failedDetail}; npm run lint e npm run build validados na etapa VERIFY do ufla:audit; npm test interno da regeneração: ${status === "passed" ? "verde" : "com falhas (artefato gravado CONSISTENTE — codeGate/fullComplianceGate failed até o código passar)"}.`,
+  };
 }
+
+// Referência commitada do snapshot lida ANTES da escrita precoce (que troca o
+// arquivo em disco): o gate do lado PDF (previewPdfReferenceGate) compara a
+// renderização atual do Word com esta referência e falha se divergir sem mudança
+// de preview/digest (regressão), preservando a referência commitada.
+const committedSnapshotRef = readCommittedPreviewSnapshot();
 
 // Snapshot preview+digest (Word-free) gravado ANTES do teste interno: o npm test
 // valida o snapshot já atualizado, evitando o deadlock de transição em que uma
 // mudança intencional de preview/paginação faria o codeGate regredir por snapshot
-// pendente. O lado PDF do Word é mesclado depois do compare (previewDiff).
+// pendente. A referência do PDF COMMITADA é PRESERVADA nesta escrita precoce (o
+// compare com Word ainda não rodou): o snapshot em disco nunca fica sem o lado
+// PDF entre a escrita precoce e a mesclagem final — e o teste interno continua
+// vendo a referência commitada.
 const previewSnapEarly = await buildPreviewSnapshot();
-writePreviewSnapshot(previewSnapEarly as never);
-console.log("OK:", snapshotPath(), "(preview+digest, PDF pendente)");
+{
+  const mergedEarly: Record<string, unknown> = {};
+  for (const [id, entry] of Object.entries(previewSnapEarly)) {
+    mergedEarly[id] = {
+      ...entry,
+      pdfPages: committedSnapshotRef?.[id]?.pdfPages ?? null,
+      pdfSignatures: committedSnapshotRef?.[id]?.pdfSignatures ?? null,
+      pdfPageNumbers: committedSnapshotRef?.[id]?.pdfPageNumbers ?? null,
+      similarity: committedSnapshotRef?.[id]?.similarity ?? null,
+      pageDelta: committedSnapshotRef?.[id]?.pageDelta ?? null,
+    };
+  }
+  writePreviewSnapshot(mergedEarly as never);
+}
+console.log("OK:", snapshotPath(), "(preview+digest, referência PDF commitada preservada)");
 
 const testSummary = runTestSummary();
 const renderedPages: number | string =
@@ -161,7 +185,12 @@ const renderedLayoutStatus = coverageGaps.length > 0 ? "failed" : "passed";
 const { runFullComplianceGate } = await import(pathToFileURL(join(ROOT, "scripts", "ufla-compliance", "gate.ts")).href);
 const { runPerTypeGates } = await import(pathToFileURL(join(ROOT, "scripts", "ufla-compliance", "run-gate-per-type.ts")).href);
 const fullCompliance = await runFullComplianceGate(docx, pdf);
-const fullComplianceStatus = fullCompliance.passed ? "passed" : "failed";
+// fullComplianceStatus é amarrado ao estado dos testes: uma declaração de
+// CONFORMIDADE UFLA APROVADA exige a suíte verde. Com o teste interno falhando,
+// o artefato fica CONSISTENTE (codeGate failed → fullComplianceGate failed),
+// eliminando o deadlock de artefato stale que travava o próximo ufla:audit.
+const fullComplianceStatus =
+  fullCompliance.passed && testSummary.status === "passed" ? "passed" : "failed";
 // Gate por tipo de trabalho (artigo, TCC/monografia, CPG, projeto de pesquisa):
 // os auditores respeitam a matriz de tipos (elementos não aplicáveis ao tipo não
 // geram falso positivo) e o resultado é registrado no gates.json.
@@ -194,13 +223,20 @@ writeJson("artifacts/ufla-compliance/preview-docx-diff.json", previewDiff.result
 const previewDiffPassed = previewDiff.passed;
 // Snapshot de paginação (commitado): o lado preview + digest do DOCX são
 // Word-free e revalidados no CI por check-preview-snapshot; o lado PDF
-// (páginas/assinaturas renderizadas pelo Word) entra como referência.
-{
+// (páginas/assinaturas renderizadas pelo Word) é a REFERÊNCIA validada pelo
+// previewPdfReferenceGate: se a renderização atual divergir da referência
+// commitada sem mudança de preview/digest, é regressão → gate FALHA e a
+// referência commitada é preservada; se divergir junto com preview/digest,
+// é mudança intencional → referência atualizada.
+let previewPdfReferenceStatus = "passed";
+let previewPdfReferenceEvidence =
+  "Referência do PDF do Word não computada (Word indisponível) — gate considerado passed; o digest do DOCX cobre o lado gerado.";
+if (previewDiff.wordAvailable) {
   const snap = await buildPreviewSnapshot();
   const cmp = previewDiff.result.templates as Record<string, { pdfPages?: number; pdfSignatures?: Array<string>; pdfPageNumbers?: Array<number | null>; similarity?: number; pageDelta?: number }>;
-  const merged: Record<string, unknown> = {};
+  const fresh: Record<string, unknown> = {};
   for (const [id, entry] of Object.entries(snap)) {
-    merged[id] = {
+    fresh[id] = {
       ...entry,
       pdfPages: cmp[id]?.pdfPages ?? null,
       pdfSignatures: cmp[id]?.pdfSignatures ?? null,
@@ -209,8 +245,48 @@ const previewDiffPassed = previewDiff.passed;
       pageDelta: cmp[id]?.pageDelta ?? null,
     };
   }
+  const committed = committedSnapshotRef ?? (fresh as never);
+  const { pdfFailures, previewOrDocxChanged, action } = classifyPdfChange(committed, fresh as never);
+  if (!committedSnapshotRef) {
+    // Primeira rodada: cria a referência.
+    writePreviewSnapshot(fresh as never);
+    previewPdfReferenceStatus = "passed";
+    previewPdfReferenceEvidence =
+      "Primeira rodada: snapshot criado com a referência do PDF do Word (páginas, numeração visível e assinaturas por página para os 6 templates).";
+  } else if (action === "match") {
+    writePreviewSnapshot(fresh as never);
+    previewPdfReferenceStatus = "passed";
+    previewPdfReferenceEvidence =
+      "Referência do PDF do Word EM SINCRONIA com o snapshot commitado: páginas, numeração visível e assinaturas por página idênticos nos 6 templates (Word COM + pdfjs).";
+  } else if (action === "update") {
+    writePreviewSnapshot(fresh as never);
+    previewPdfReferenceStatus = "passed";
+    previewPdfReferenceEvidence =
+      `Snapshot atualizado: o lado PDF do Word mudou JUNTO com o preview/digest do DOCX (mudança intencional de template/geração) — referência regenerada (${pdfFailures.length} divergências absorvidas: ${pdfFailures[0] ?? ""}).`;
+  } else {
+    // Regressão: renderização do Word divergiu sem mudança de preview/digest.
+    // Preserva a referência commitada (restaura o snapshot lido no início).
+    writePreviewSnapshot(committedSnapshotRef as never);
+    previewPdfReferenceStatus = "failed";
+    previewPdfReferenceEvidence =
+      `REGRESSÃO PDF SEM MUDANÇA DE PREVIEW/DOCX: ${pdfFailures.join("; ")} — o preview e o digest do DOCX não mudaram, mas a renderização do Word divergiu (versão do Word, fontes, impressoras ou regressão do pipeline de renderização). Snapshot NÃO atualizado (referência commitada preservada). Se a mudança é esperada, confirme e rode o regenerate novamente após ajustar o pipeline.`;
+  }
+  console.log("OK:", snapshotPath(), `(previewPdfReferenceGate: ${previewPdfReferenceStatus})`);
+} else {
+  // Sem Word: preserva a referência commitada do PDF (não zera com nulls).
+  const snap = await buildPreviewSnapshot();
+  const merged: Record<string, unknown> = {};
+  for (const [id, entry] of Object.entries(snap)) {
+    merged[id] = {
+      ...entry,
+      pdfPages: committedSnapshotRef?.[id]?.pdfPages ?? null,
+      pdfSignatures: committedSnapshotRef?.[id]?.pdfSignatures ?? null,
+      pdfPageNumbers: committedSnapshotRef?.[id]?.pdfPageNumbers ?? null,
+      similarity: committedSnapshotRef?.[id]?.similarity ?? null,
+      pageDelta: committedSnapshotRef?.[id]?.pageDelta ?? null,
+    };
+  }
   writePreviewSnapshot(merged as never);
-  console.log("OK:", snapshotPath(), "(com referência do PDF do Word)");
 }
 const previewDiffEvidence = previewDiff.wordAvailable
   ? (() => {
@@ -225,20 +301,56 @@ const overallStatus =
   renderedLayoutStatus === "passed" &&
   formatsCrossPassed &&
   perTypePhysicalPassed &&
-  previewDiffPassed
+  previewDiffPassed &&
+  previewPdfReferenceStatus === "passed"
     ? "passed"
     : "failed";
 
 const renderedLayoutEvidence =
   `Renderização EXECUTADA com sucesso (Word COM: abriu sem reparo, campos+TOC atualizados, ${renderedPages} páginas, 0 overlaps, 0 cutoffs, 0 páginas em branco; PAGEREF resolvido no PDF: FIGURA 1→23, GRÁFICO 1→77, FIGURA 2→83; SUMÁRIO populado; notas de rodapé detectadas no PDF com status passed). Análise física real via pdfjs-dist: ${physical.summary.totalImages} imagens e ${physical.summary.totalTables} tabelas detectadas no PDF (imagens do DOCX re-exportadas; tabelas 37 regiões físicas vs 35 no OOXML). Cobertura: ${coverageGaps.length === 0 ? "completa — nenhum item crítico not-detected/failed" : `parcial: ${coverageGaps.join(", ")}`}. ${tblHeaderSummary}.`;
 
-const fullComplianceEvidence = fullCompliance.passed
-  ? `Gate expandido executado com evidência atual: pré-textuais, textuais, pós-textuais, referências/citações ABNT, figuras, seções, tabelas (w:tblHeader), equações (OMML nativo), paginação e física PDF (imagens e tabelas detectadas) — 0 gaps. Rodapés condicionais (FINDING-FOOTER-001..008) covered; UFLA-023 covered; ${tblHeaderSummary}. CONFORMIDADE UFLA APROVADA.`
-  : `Gaps atuais: ${fullCompliance.gaps.join("; ")}. ${tblHeaderSummary}; UFLA-AMBIGUOUS-1 (paginação: contínua vs reinício em 1). Equações com OMML nativo (m:oMath) — UFLA-023 coberto. Rodapés condicionais implementados e validados (FINDING-FOOTER-001..008 covered). Conformidade UFLA NÃO declarada.`;
+const fullComplianceEvidence =
+  fullComplianceStatus === "passed"
+    ? `Gate expandido executado com evidência atual: pré-textuais, textuais, pós-textuais, referências/citações ABNT, figuras, seções, tabelas (w:tblHeader), equações (OMML nativo), paginação e física PDF (imagens e tabelas detectadas) — 0 gaps. Rodapés condicionais (FINDING-FOOTER-001..008) covered; UFLA-023 covered; ${tblHeaderSummary}. CONFORMIDADE UFLA APROVADA.`
+    : `Gate expandido: ${testSummary.status === "failed" ? `suíte de testes com falhas (codeGate failed) — conformidade NÃO declarada. ${testSummary.evidence}` : `Gaps atuais: ${fullCompliance.gaps.join("; ")}.`} ${tblHeaderSummary}; UFLA-AMBIGUOUS-1 (paginação: contínua vs reinício em 1). Equações com OMML nativo (m:oMath) — UFLA-023 coberto. Rodapés condicionais implementados e validados (FINDING-FOOTER-001..008 covered). Conformidade UFLA NÃO declarada.`;
 
-const conclusion = fullCompliance.passed && renderedLayoutStatus === "passed"
+const conclusion = fullComplianceStatus === "passed" && renderedLayoutStatus === "passed"
   ? "Renderização, preservação, OOXML e análise física revalidados com evidência atual (Word + PDF + OOXML). FULL COMPLIANCE GATE APROVADO — DOCX gerado conforme o Manual de Normalização da UFLA: pré-textuais, textuais, pós-textuais, referências/citações, figuras, seções, tabelas com w:tblHeader, equações OMML nativas, paginação e física PDF com detecção real de imagens (6) e tabelas (37)."
   : `Renderização, preservação e OOXML revalidados com evidência atual (Word + PDF + OOXML). Conformidade UFLA NÃO CONCLUÍDA: ${fullCompliance.gaps.join("; ")}. Rodapés condicionais (FINDING-FOOTER-001..008) cobertos.`;
+
+// ---------------------------------------------------------------------------
+// report.md canônico — REGENERADO da mesma evidência (anti-workslop: nunca
+// stale nem inconsistente com o fullComplianceGate da rodada). A frase
+// "CONFORMIDADE UFLA APROVADA" só aparece quando o gate está passed.
+// ---------------------------------------------------------------------------
+function buildCanonicalReport(gates: Record<string, { status: string; evidence: string }>, overall: string, conclusion: string): string {
+  const lines = Object.entries(gates).map(([name, g]) => {
+    const ev = (g.evidence ?? "").split(";")[0];
+    return `${name.padEnd(30)} ${g.status.toUpperCase().padEnd(8)} (${ev})`;
+  });
+  const approved = gates.fullComplianceGate?.status === "passed";
+  return [
+    `# RELATÓRIO FINAL DE AUDITORIA — SITE_ABNT / UFLA (regenerado ${now.slice(0, 10)})`,
+    "",
+    "> Gerado automaticamente por scripts/ufla-compliance/regenerate-official-artifacts.ts na",
+    "> MESMA rodada de evidência (números nunca stale). Commit de referência: " + META.commit + ".",
+    "",
+    "## Gates (evidência atual)",
+    "",
+    "```text",
+    ...lines,
+    "".padEnd(30) + " overall: " + overall.toUpperCase(),
+    "```",
+    "",
+    "## Conclusão",
+    "",
+    "```text",
+    conclusion,
+    approved ? "CONFORMIDADE UFLA APROVADA." : "Conformidade UFLA NÃO declarada nesta rodada (nem todos os gates passed).",
+    "```",
+    "",
+  ].join("\n");
+}
 
 // ---------------------------------------------------------------------------
 // gates.json
@@ -287,11 +399,25 @@ const gates = {
       status: previewDiffPassed ? "passed" : "failed",
       evidence: previewDiffEvidence,
     },
+    previewPdfReferenceGate: {
+      status: previewPdfReferenceStatus,
+      evidence: previewPdfReferenceEvidence,
+      finding:
+        previewPdfReferenceStatus === "failed"
+          ? "Regressão de renderização do Word sem mudança de preview/DOCX — referência commitada preservada; investigar versão do Word/fontes/pipeline."
+          : undefined,
+    },
   },
   overall: overallStatus,
   conclusion,
 };
 writeJson("artifacts/ufla-audit/gates.json", gates);
+writeFileSync(
+  join(ROOT, "artifacts", "ufla-compliance", "report.md"),
+  buildCanonicalReport(gates.gates, gates.overall, gates.conclusion),
+  "utf8",
+);
+console.log("OK:", "artifacts/ufla-compliance/report.md (regenerado da mesma rodada)");
 
 // ---------------------------------------------------------------------------
 // rendered-analysis.json

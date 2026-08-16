@@ -12,6 +12,13 @@
  * do preview contra o snapshot: qualquer mudança de paginação ou de conteúdo por
  * página entre releases falha o gate.
  *
+ * Gate do lado PDF (referência do Word): o regenerate compara a renderização
+ * atual (páginas, numeração visível, assinaturas por página) com a referência
+ * COMMITADA. Se o PDF divergir SEM mudança de preview/digest do DOCX, é uma
+ * regressão (versão do Word, fontes, pipeline) e o gate FALHA preservando a
+ * referência; se divergir JUNTO com preview/digest, é mudança intencional e a
+ * referência é atualizada.
+ *
  * Uso: npx tsx scripts/ufla-compliance/check-preview-snapshot.ts
  */
 import { createHash } from "node:crypto";
@@ -174,6 +181,72 @@ export function compareSnapshots(committed: PreviewSnapshot, current: PreviewSna
     }
   }
   return failures;
+}
+
+/** Compara o lado PDF (referência do Word renderizado) entre dois snapshots. */
+export function comparePdfReference(committed: PreviewSnapshot, current: PreviewSnapshot): string[] {
+  const failures: string[] = [];
+  const allIds = [...new Set([...Object.keys(committed), ...Object.keys(current)])];
+  for (const id of allIds) {
+    const exp = committed[id];
+    const got = current[id];
+    if (!exp || !got) continue; // template novo/removido é coberto por compareSnapshots
+    // Sem referência commitada ou sem renderização atual (CI/sem Word): nada a comparar.
+    if (exp.pdfPages === null || got.pdfPages === null) continue;
+    if (exp.pdfPages !== got.pdfPages) {
+      failures.push(`REGRESSÃO PDF ${id}: páginas renderizadas pelo Word ${exp.pdfPages} → ${got.pdfPages} (referência commitada exige ${exp.pdfPages}).`);
+      continue;
+    }
+    for (let i = 0; i < exp.pdfPages; i++) {
+      if (exp.pdfPageNumbers?.[i] !== got.pdfPageNumbers?.[i]) {
+        failures.push(`REGRESSÃO PDF ${id} página ${i + 1}: numeração visível ${exp.pdfPageNumbers?.[i] ?? "sem número"} → ${got.pdfPageNumbers?.[i] ?? "sem número"}.`);
+      }
+      if (exp.pdfSignatures?.[i] !== got.pdfSignatures?.[i]) {
+        failures.push(`REGRESSÃO PDF ${id} página ${i + 1}: conteúdo renderizado pelo Word mudou (assinatura ${exp.pdfSignatures?.[i]} → ${got.pdfSignatures?.[i]}).`);
+      }
+    }
+  }
+  return failures;
+}
+
+export interface PdfDivergence {
+  /** Divergências específicas do lado PDF (páginas, numeração, assinaturas). */
+  pdfFailures: string[];
+  /** true se o preview OU o digest do DOCX também mudou (mudança intencional). */
+  previewOrDocxChanged: boolean;
+  /** Decisão: "match" (em sincronia), "update" (intencional — atualizar referência) ou "fail" (regressão). */
+  action: "match" | "update" | "fail";
+}
+
+/** Classifica uma divergência do lado PDF: atualização intencional vs regressão. */
+export function classifyPdfChange(committed: PreviewSnapshot, current: PreviewSnapshot): PdfDivergence {
+  const pdfFailures = comparePdfReference(committed, current);
+  const previewOrDocxChanged = Object.keys(current).some((id) => {
+    const exp = committed[id];
+    const got = current[id];
+    if (!exp || !got) return false;
+    return (
+      exp.previewPages !== got.previewPages ||
+      exp.docxDigest !== got.docxDigest ||
+      (exp.pageNumbers ?? []).some((n, i) => got.pageNumbers?.[i] !== n) ||
+      (exp.signatures ?? []).some((s, i) => got.signatures?.[i] !== s)
+    );
+  });
+  return {
+    pdfFailures,
+    previewOrDocxChanged,
+    action: pdfFailures.length === 0 ? "match" : previewOrDocxChanged ? "update" : "fail",
+  };
+}
+
+/** Lê o snapshot commitado do disco (null se ainda não existe ou é inválido). */
+export function readCommittedPreviewSnapshot(): PreviewSnapshot | null {
+  if (!existsSync(SNAPSHOT_PATH)) return null;
+  try {
+    return JSON.parse(readFileSync(SNAPSHOT_PATH, "utf8")).templates as PreviewSnapshot;
+  } catch {
+    return null;
+  }
 }
 
 /** Valida o preview atual contra o snapshot commitado. Sem Word: só o lado preview. */

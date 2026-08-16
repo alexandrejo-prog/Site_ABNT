@@ -3,9 +3,16 @@
  *
  * Orquestra, com LOCK e falha rápida, o pipeline inteiro de conformidade:
  *  1. lint
- *  2. verify (testes + build)
- *  3. regenerate-official-artifacts (Word COM + PDF físico + gate expandido +
- *     gate por tipo + auditoria cruzada de formatos + artefatos/traceability)
+ *  2. regenerate-official-artifacts (Word COM + PDF físico + gate expandido +
+ *     gate por tipo + auditoria cruzada de formatos + artefatos/traceability;
+ *     roda o npm test interno com spawnSync — não lança, grava artefatos
+ *     CONSISTENTES mesmo com testes falhando)
+ *  3. verify (testes + build) — valida os artefatos FRESCOS do regenerate
+ *
+ * Ordem regenerate → verify: o verify valida os artefatos recém-gerados em vez
+ * de artefatos stale de uma rodada anterior falha — se uma rodada falha, o
+ * artefato fica consistente (codeGate/fullComplianceGate failed) e a próxima
+ * auditoria se auto-cura quando o código voltar a passar.
  *
  * Lock: artifacts/ufla-audit/.audit.lock contém o PID; uma segunda execução
  * concorrente aborta imediatamente. Locks órfãos (processo morto) são
@@ -60,8 +67,8 @@ async function main(): Promise<void> {
   try {
     const steps: Array<[string, string]> = [
       ["LINT", "npm run lint"],
-      ["VERIFY (testes + build)", "npm run verify"],
       ["REGENERATE (Word COM + PDF físico + gates + artefatos)", "npx tsx scripts/ufla-compliance/regenerate-official-artifacts.ts"],
+      ["VERIFY (testes + build)", "npm run verify"],
     ];
     for (const [name, cmd] of steps) runStep(name, cmd);
 

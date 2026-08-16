@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { auditFormatsCross } from "./audit-formats-cross";
 import { runPerTypeGates } from "./run-gate-per-type";
 import { runPerTypePhysical } from "./analyze-per-type-pdfs";
-import { runPreviewSnapshotCheck } from "./check-preview-snapshot";
+import { runPreviewSnapshotCheck, readCommittedPreviewSnapshot } from "./check-preview-snapshot";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -63,6 +63,23 @@ async function main(): Promise<void> {
   const previewSnapshot = await runPreviewSnapshotCheck();
   if (!previewSnapshot.passed) failures.push(`Snapshot de preview: ${previewSnapshot.failures.join("; ")}`);
 
+  // 5) Referência do PDF do Word (previewPdfReferenceGate): sem Word o CI não
+  //    re-renderiza — o gate roda na máquina com Word (regenerate). Aqui valida-se
+  //    a COERÊNCIA da referência commitada (páginas × numeração × assinaturas).
+  const committedSnap = readCommittedPreviewSnapshot();
+  const pdfCoherenceFailures: string[] = [];
+  if (committedSnap) {
+    for (const [id, t] of Object.entries(committedSnap)) {
+      if (t.pdfPages === null) continue;
+      if (t.pdfSignatures?.length !== t.pdfPages || t.pdfPageNumbers?.length !== t.pdfPages) {
+        pdfCoherenceFailures.push(`referência PDF de ${id} incoerente: ${t.pdfPages} páginas vs ${t.pdfSignatures?.length} assinaturas / ${t.pdfPageNumbers?.length} numerações.`);
+      }
+    }
+  } else {
+    pdfCoherenceFailures.push("snapshot de paginação não encontrado — rode o regenerate local com Word para criá-lo.");
+  }
+  if (pdfCoherenceFailures.length > 0) failures.push(`Referência PDF commitada: ${pdfCoherenceFailures.join("; ")}`);
+
   const summary = {
     schema: "ufla-audit/ci-checks/v1",
     generatedAt: new Date().toISOString(),
@@ -77,6 +94,12 @@ async function main(): Promise<void> {
       passed: perTypePhysical.passed,
     },
     previewSnapshot: { passed: previewSnapshot.passed },
+    previewPdfReference: {
+      status: "skipped-no-word",
+      evidence:
+        "Referência do PDF do Word não re-verificável no CI (sem Word) — o gate roda na máquina com Word (regenerate) comparando a renderização atual com a referência commitada; aqui valida-se apenas a coerência da referência (páginas × numeração × assinaturas) e o digest do DOCX cobre o lado gerado.",
+      coherent: pdfCoherenceFailures.length === 0,
+    },
     passed: failures.length === 0,
     failures,
   };

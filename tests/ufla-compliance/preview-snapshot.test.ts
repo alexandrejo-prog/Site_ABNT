@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { describeWithArtifacts } from "../test-utils/artifact-guard";
 import {
   buildPreviewSnapshot,
+  classifyPdfChange,
+  comparePdfReference,
   compareSnapshots,
   docxDigestFor,
   type PreviewSnapshot,
@@ -94,6 +96,74 @@ describeWithArtifacts(
       tpl.signatures[0] = "ffffffffffffffff";
       const failures = compareSnapshots(committed, withContentChange);
       expect(failures.some((f) => f.includes("REGRESSÃO DE CONTEÚDO artigo página 1"))).toBe(true);
+    });
+
+    it("detecta regressão do lado PDF: página a mais renderizada pelo Word", async () => {
+      const committed = JSON.parse(readFileSync(SNAPSHOT, "utf8")).templates as PreviewSnapshot;
+      const committedMono = committed.monografia as PreviewSnapshotTemplate;
+      // A referência commitada precisa ter o lado PDF (rodada local com Word).
+      expect(committedMono.pdfPages, "monografia deve ter referência PDF commitada").not.toBeNull();
+      const withMorePages: PreviewSnapshot = structuredClone(committed);
+      const tpl = withMorePages.monografia as PreviewSnapshotTemplate;
+      tpl.pdfPages = (tpl.pdfPages ?? 0) + 1;
+      tpl.pdfSignatures = [...(tpl.pdfSignatures ?? []), "0000000000000000"];
+      tpl.pdfPageNumbers = [...(tpl.pdfPageNumbers ?? []), 99];
+      const failures = comparePdfReference(committed, withMorePages);
+      expect(failures.some((f) => f.includes("REGRESSÃO PDF monografia"))).toBe(true);
+      // Mesma mudança não é regressão de preview (compareSnapshots não olha o PDF).
+      expect(compareSnapshots(committed, withMorePages)).toEqual([]);
+    });
+
+    it("detecta regressão do lado PDF: numeração visível alterada", async () => {
+      const committed = JSON.parse(readFileSync(SNAPSHOT, "utf8")).templates as PreviewSnapshot;
+      const withNum: PreviewSnapshot = structuredClone(committed);
+      const tpl = withNum.dissertacao as PreviewSnapshotTemplate;
+      tpl.pdfPageNumbers = [...(tpl.pdfPageNumbers ?? [])];
+      tpl.pdfPageNumbers[0] = 999;
+      const failures = comparePdfReference(committed, withNum);
+      expect(failures.some((f) => f.includes("REGRESSÃO PDF dissertacao página 1") && f.includes("numeração"))).toBe(true);
+    });
+
+    it("detecta regressão do lado PDF: conteúdo renderizado pelo Word mudou", async () => {
+      const committed = JSON.parse(readFileSync(SNAPSHOT, "utf8")).templates as PreviewSnapshot;
+      const withSig: PreviewSnapshot = structuredClone(committed);
+      const tpl = withSig.tese as PreviewSnapshotTemplate;
+      tpl.pdfSignatures = [...(tpl.pdfSignatures ?? [])];
+      tpl.pdfSignatures[0] = "ffffffffffffffff";
+      const failures = comparePdfReference(committed, withSig);
+      expect(failures.some((f) => f.includes("REGRESSÃO PDF tese página 1") && f.includes("assinatura"))).toBe(true);
+    });
+
+    it("classifica: PDF divergiu sem mudança de preview/digest → regressão (fail)", async () => {
+      const committed = JSON.parse(readFileSync(SNAPSHOT, "utf8")).templates as PreviewSnapshot;
+      const withOnlyPdfChange: PreviewSnapshot = structuredClone(committed);
+      const tpl = withOnlyPdfChange.monografia as PreviewSnapshotTemplate;
+      tpl.pdfPageNumbers = [...(tpl.pdfPageNumbers ?? [])];
+      tpl.pdfPageNumbers[0] = 42;
+      const d = classifyPdfChange(committed, withOnlyPdfChange);
+      expect(d.pdfFailures.length).toBeGreaterThan(0);
+      expect(d.previewOrDocxChanged).toBe(false);
+      expect(d.action).toBe("fail");
+    });
+
+    it("classifica: PDF divergiu junto com preview/digest → atualização intencional (update)", async () => {
+      const committed = JSON.parse(readFileSync(SNAPSHOT, "utf8")).templates as PreviewSnapshot;
+      const withBoth: PreviewSnapshot = structuredClone(committed);
+      const tpl = withBoth.monografia as PreviewSnapshotTemplate;
+      tpl.pdfPageNumbers = [...(tpl.pdfPageNumbers ?? [])];
+      tpl.pdfPageNumbers[0] = 42;
+      tpl.docxDigest = "abcdef0123456789";
+      const d = classifyPdfChange(committed, withBoth);
+      expect(d.pdfFailures.length).toBeGreaterThan(0);
+      expect(d.previewOrDocxChanged).toBe(true);
+      expect(d.action).toBe("update");
+    });
+
+    it("classifica: PDF em sincronia → match", async () => {
+      const committed = JSON.parse(readFileSync(SNAPSHOT, "utf8")).templates as PreviewSnapshot;
+      const d = classifyPdfChange(committed, structuredClone(committed));
+      expect(d.pdfFailures).toEqual([]);
+      expect(d.action).toBe("match");
     });
   },
 );

@@ -14,8 +14,20 @@ describeWithArtifacts("gates de conformidade física", ["ufla-compliance/rendere
     physicalAnalysis = JSON.parse(readFileSync(physicalAnalysisPath, "utf-8"));
   });
 
-  it("codeGate deve estar passed", () => {
-    expect(renderedAnalysis.gates.codeGate.status).toBe("passed");
+  it("codeGate deve ser CONSISTENTE com a evidência do npm test (anti-workslop: nunca passed com falhas, nunca failed sem falhas)", () => {
+    const gate = renderedAnalysis.gates.codeGate;
+    const evidence = String(gate.evidence ?? "");
+    const failedCount = Number(evidence.match(/(\d+)\s+failed/)?.[1] ?? 0);
+    const hasFailures = failedCount > 0 || evidence.includes("com falhas") || evidence.includes("não executado");
+    // Consistência: status failed implica evidência com falhas; status passed
+    // implica suíte verde na evidência. Não exige "passed" fixo — um artefato
+    // CONSISTENTE-failed (rodada anterior com teste quebrado) não bloqueia a
+    // próxima auditoria (o regenerate a auto-cura na rodada seguinte).
+    if (gate.status === "passed") {
+      expect(hasFailures, `codeGate passed mas evidência indica falhas: ${evidence}`).toBe(false);
+    } else {
+      expect(hasFailures, `codeGate failed mas evidência não indica falhas: ${evidence}`).toBe(true);
+    }
   });
 
   it("ooxmlGate deve estar passed", () => {
