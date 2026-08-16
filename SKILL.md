@@ -25,6 +25,8 @@ Ao atualizar ou corrigir os exportadores DOCX, siga a seguinte precedência de r
 
 Se uma regra não constar no manual da UFLA, **aplique a norma ABNT mais recente**. Nunca improvise regras visuais sem amparo normativo.
 
+**DIRETIVA PRINCIPAL:** o DOCX gerado deve atender **plenamente** ao Manual de Normalização da UFLA — página sempre **A4** (11906×16838 twips retrato; paisagem apenas para tabelas largas, DECISION-009). Confira `UFLA_RULES.page` a cada mudança nos exportadores e valide com `npm run ufla:audit` (`perTypePhysicalGate` confere A4 físico 595.32×841.92 pt nos 15 tipos).
+
 ---
 
 ## Escopo Técnico e Operacional

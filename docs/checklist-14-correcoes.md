@@ -116,3 +116,14 @@ npm run ufla:audit  # 11/11 gates ao final de mudanças em exportadores/validado
 Após todos os 14: rodar `npm run verify`, `npm run lint`, `npm run e2e` e
 `npm run ufla:audit`; atualizar `docs/STATUS_ATUAL.md` e `context.md` (seções 6* ) com
 a rodada (números da auditoria — nunca à mão).
+
+---
+
+## Fora de escopo (cancelado) — outros tamanhos de folha além de A4
+
+- [ ] **Decisão (16/08/2026):** NÃO implementar suporte a outros tamanhos de folha
+  (carta, ofício, etc.) por ora — **A4 é o padrão brasileiro e o default do gerador**
+  (11906×16838 twips retrato via `UFLA_RULES.page`; paisagem apenas para tabelas
+  largas, DECISION-009). Se um dia for necessário, revisitar como **pendência
+  opcional futura** (não bloqueia conformidade: a diretiva é o DOCX atender
+  plenamente ao Manual UFLA, e o Manual pressupõe A4).

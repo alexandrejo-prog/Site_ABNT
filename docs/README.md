@@ -14,6 +14,7 @@
 | **Como validar um DOCX / rodar a auditoria** | skill `ufla_docx_compliance` |
 | **Decisões normativas/técnicas** | `docs/decisions/NNN-*.md` (001–012) |
 | **Operação do runner Word self-hosted** | `docs/RUNNER_WORD.md` |
+| **Garantia de conformidade (A4, margens, fontes)** | **Diretiva principal:** DOCX sempre conforme o Manual UFLA, página **A4** (11906×16838 twips retrato) via `UFLA_RULES.page` — validar com `npm run ufla:audit` (11 gates, física A4) |
 
 ## Estrutura
 

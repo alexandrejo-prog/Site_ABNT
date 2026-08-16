@@ -15,3 +15,7 @@
 5. **Evidência:** não edite números de evidência à mão — rode `npm run ufla:audit`.
 6. **Fique curto:** a cada rodada NÃO é preciso reler todo o sistema; use o mapa
    em `docs/README.md` para saber apenas o que ler conforme a tarefa.
+7. **Diretiva principal:** o DOCX gerado deve atender PLENAMENTE ao Manual de
+   Normalização da UFLA — página sempre **A4** (11906×16838 twips retrato;
+   paisagem só para tabelas largas, DECISION-009). Confira `UFLA_RULES.page` a
+   cada mudança nos exportadores e valide com `npm run ufla:audit`.

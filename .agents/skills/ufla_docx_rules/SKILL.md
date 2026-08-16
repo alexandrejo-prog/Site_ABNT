@@ -12,6 +12,9 @@ Fonte normativa: **Manual UFLA 6ª ed. (2025)** — `MANUAL_NORMALIZACAO_2024.md
 
 ## Constantes Obrigatórias (src/ufla-rules.ts)
 
+- **Página:** SEMPRE **A4 retrato** (210×297 mm — 11906×16838 twips) via
+  `UFLA_RULES.page`; paisagem apenas para tabelas largas (DECISION-009).
+  Diretiva principal: o DOCX deve atender plenamente ao Manual UFLA.
 - **Margens:** superior 3 cm, esquerda 3 cm, inferior 2 cm, direita 2 cm (A4).
 - **Tipografia:** Times New Roman preta (`#000000`). Corpo 12 pt; citação longa /
   legenda / fonte 11 pt; paginação 10 pt.

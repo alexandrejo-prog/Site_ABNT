@@ -393,6 +393,15 @@ Implementadas as 2 correções prioritárias do `docs/checklist-14-correcoes.md`
 3. **Testes** — `tests/regression/omml-token-robustness.test.ts` (7): A1 round-trip válido, decode inválido→`""`+aviso, `[EQ]` corrompido sem throw (bloco achatado), DOCX sem marcador vazando; A4 `Promise.all` de 2 `generateDocxBlob` com OMML distintos (a/b vs c/d) e monografia×artigo — cada DOCX só com o OMML próprio, `rawOmmlRegistrySize()===0`.
 4. **Próximo** — A2 (aviso de perda de formatação na importação) e A3 (placeholder de imagem inválida) seguem abertos no checklist-14; A1/A4 marcados `[x]`.
 
+## 6w. CHECKLIST-14: A2 (PERDA DE FORMATAÇÃO NA IMPORTAÇÃO) + A3 (PLACEHOLDER DE IMAGEM) (16/08/2026)
+`npm test` **212 arquivos, 1699 testes (10 skipped)**, lint 0/0, auditoria 11/11 gates, `sourceFingerprint` `715e5401…`.
+
+1. **A2 — importação avisa perda de formatação** — `collectFormattingLossWarning` (`import-docx.ts`, padrão do `collectChangeWarnings`): varre os runs da estrutura OOXML; se houver `bold/italic/underline`, o resultado de importação ganha aviso informativo — "O rascunho preserva o texto, mas NÃO a formatação de caracteres — revise o destaque no documento final". O extrator (`word-structure-extractor.ts`) já detectava os flags; faltava avisar.
+2. **A3 — imagem com id inválido não some** — `importedImageParagraph` (`export-docx.ts`): id inválido/stale agora emite placeholder visível `[Imagem importada: dados originais indisponíveis (id: …)]` (o preview já tinha fallback; o DOCX sumia com a linha). O artigo já tinha fallback próprio.
+3. **Decisão de folha (cancelada por ora)** — NÃO implementar outros tamanhos de folha: **A4 é o padrão brasileiro e o default** (`UFLA_RULES.page` 11906×16838 twips retrato; paisagem só para tabelas largas, DECISION-009). Registrado como **pendência opcional futura** em `docs/checklist-14-correcoes.md` (seção "Fora de escopo (cancelado)"). Diretiva principal documentada em AGENTS.md, SKILL.md, `ufla_docx_rules`, `docs/README.md`, context.md §8 (regra 9) e STATUS_ATUAL (Regras para IAs, regra 5): **o DOCX gerado deve atender plenamente ao Manual de Normalização da UFLA**.
+4. **Testes** — `tests/regression/import-formatting-placeholder.test.ts` (4): A2 positivo (DOCX com `w:b`/`w:i`/`w:u` → aviso; texto preservado) e negativo (sem formatação → sem aviso); A3 (marcador com id inexistente → placeholder no DOCX, sem o marcador cru; sem marcador → sem placeholder).
+5. **Próximo** — B5 (dead code em `references-normalizer.detect()`) e B6 (`ooxmlGate` computado de verdade) seguem abertos no checklist-14; A1–A4 marcados `[x]`.
+
 ---
 
 ## 7. COMANDOS ÚTEIS
@@ -418,3 +427,4 @@ npm run skill:validate   # Valida um DOCX; use --type para classificar itens est
 6. **DECISÕES** — registrar toda decisão normativa/técnica em `docs/decisions/NNN-*.md` (não criar resumos avulsos em `docs/DECISION_*`; esses devem apontar para `docs/decisions/`).
 7. **EVIDÊNCIA** — nunca editar números de evidência à mão: rodar `npm run ufla:audit` (regenera artefatos/gates/report da mesma rodada).
 8. **TABELAS** — antes de mudar a heurística de cabeçalho, ler `docs/decisions/001` e `002` (regressão do Quadro 2).
+9. **DIRETIVA PRINCIPAL** — o DOCX gerado deve atender **plenamente** ao Manual de Normalização da UFLA; página sempre **A4** (11906×16838 twips retrato; paisagem só para tabelas largas, DECISION-009). Confira `UFLA_RULES.page` a cada mudança nos exportadores e valide com `npm run ufla:audit` (perTypePhysicalGate confere A4 físico 595.32×841.92 pt nos 15 tipos).
