@@ -339,6 +339,17 @@ Sincronização do manual de bordo com o canônico `docs/STATUS_ATUAL.md`. **209
 4. **Higiene** — arquivo acidental `null` (0 bytes) removido; `scripts/update-fingerprints.ts` (utilitário avulso, redundante — `regenerate` já computa `sourceFingerprint`) arquivado/removido; DECISION-010: `docs/DECISION_010_PAGINATION.md` virou stub histórico apontando para o canônico `docs/decisions/010-paginacao-contagem-folha-rosto.md`.
 5. **Commits granulares** — 5 commits: `de96890` (OMML→LaTeX preview), `2c5457e` (conciliação página-a-página + margem inferior), `41b568c` (evidência da conciliação no gate + snapshot), `0eab8e8` (axe no e2e), `93254ac` (stub histórico DECISION-010).
 
+## 6r. FECHAMENTO DE PRÓXIMOS PASSOS + GOVERNAÇA GIT/CI (16/08/2026)
+Sete passos executados. **Merge do PR #20 (RAMO-20) em `main` (`6cd1e73`), proteção de branch ativada, bundle KaTeX enxuto, DECISION-011.**
+
+1. **PR #20 mergeado + main verde** — checks `verify` + `e2e` (Lighthouse via mediana, `3759246`) passaram; merge `6cd1e73`; **Verify success + E2E/Lighthouse success** no main; Vercel Production deploy success. `pdf-reference-refresh` continua falhando em 0s por falta do runner self-hosted com Word (esperado — gate Word-free já roda no `verify.yml`).
+2. **Proteção de branch em `main`** — exige PR + status checks `verify` e `e2e` (strict=true), review obrigatório (1), `enforce_admins=false` (dono pode mergear). `pdf-reference` NÃO é check obrigatório (runner self-hosted ausente bloquearia PRs).
+3. **DECISION-011** — `docs/decisions/011-validacao-ao-vivo-baseline-artefato.md`: a validação `skill:validate` sobre o baseline de auditoria (65/75 ok) tem 10 "falhas" que são **características do baseline** (sem orientador/curso, refs fora de ordem, sem `wp:extent` de logo) — **não são regressões do gerador**; o gate canônico `ufla:audit` (11/11) não passa por `skill:validate`. Menção curta no `STATUS_ATUAL.md`.
+4. **Campo SEQ verificado empiricamente no Word** — DOCX com 3 equações + `updateFields` via COM → números `1`, `2`, `3` recalculados pelo campo `SEQ Eq \s 1 \* ARABIC` (evidência da plataforma alvo). LibreOffice não-instalado aqui: o `SimpleField(seqInstr, number)` embute **resultado em cache**, então o LO exibe o número correto mesmo sem recalcular (risco residual não-bloqueante).
+5. **Bundle KaTeX enxuto (perf)** — CSS do KaTeX movido de `main.tsx` (caminho crítico) para `PreviewModal.tsx` (chunk lazy): **CSS principal 111.2 kB → 81.0 kB (−30 kB, −27%)**; CSS do KaTeX (30 kB) baixa junto com o modal, só quando o preview abre. `npm test` 1684 passed, lint 0/0, auditoria re-regenerada (11/11 gates).
+6. **Limpeza de branches** — **80 branches merged deletadas** (front/*, sug/*, wt-* antigas, nomes aleatórios). 29 não-merged **avaliadas e preservadas**: todas têm +1 commit redundante (markers de worktree ou conteúdo já no main — confirmado `wt-alias-vitest`, `validate-omml.test.ts` existem no main). 10 worktrees ativas intactas.
+7. **`docs/CHECKLIST.md` marcado HISTÓRICO** — aponta para `docs/STATUS_ATUAL.md` (canônico) e `artifacts/ufla-compliance/report.md`; números 15/08 preservados sem edição à mão (regra 5 da IA).
+
 ---
 
 ## 7. COMANDOS ÚTEIS

@@ -6,6 +6,7 @@ import { editorMarkupToHtml, editorHtmlToMarkup } from "../editor-markup";
 import { editorCommandAdapter } from "../editor-command-adapter";
 import type { DocxGenerationInput } from "../export-docx";
 import type { AcademicFieldKey, AcademicFields } from "../ufla-rules";
+import "katex/dist/katex.min.css";
 
 export interface PreviewModalProps {
   input: DocxGenerationInput;

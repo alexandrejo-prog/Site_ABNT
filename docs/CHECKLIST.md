@@ -1,5 +1,10 @@
 # CHECKLIST UFLA — Status das Fatias
 
+> **⚠️ HISTÓRICO (16/08/2026).** Este documento reflete o estado de **15/08** (195 arquivos,
+> 1515 testes). O estado **atual** está sempre em `docs/STATUS_ATUAL.md` (canônico —
+> **209 arquivos, 1684 testes**, 11/11 gates) e em `artifacts/ufla-compliance/report.md`.
+> Não atualize os números daqui à mão; consulte o canônico.
+
 **Data:** 2026-08-15
 **Branch:** feat/ufla-render-validation
 **Commit base:** 2f4ea4d
