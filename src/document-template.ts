@@ -2,6 +2,7 @@ import type { DocxGenerationInput } from "./export-docx";
 import { isCpgWork, isResearchProject, type WorkTypeValue } from "./ufla-rules";
 import { isLongFormAcademicWork } from "./graduate-draft-guidance";
 import { normalizeWorkType } from "./work-type-resolver";
+import { ACADEMIC_PRODUCTION_TYPE_IDS } from "./academic-production-types";
 
 export interface DocumentTemplate {
   id: string;
@@ -15,7 +16,14 @@ export const generalTemplate: DocumentTemplate = {
   label: "Modelo geral",
   supports: (workType) => {
     const normalizedWorkType = normalizeWorkType(workType);
-    return !normalizedWorkType || (!isCpgWork(normalizedWorkType as WorkTypeValue) && !isResearchProject(normalizedWorkType as WorkTypeValue) && !isLongFormAcademicWork(normalizedWorkType) && normalizedWorkType !== "artigo" && normalizedWorkType !== "artigo_cientifico_ufla");
+    return (
+      !normalizedWorkType ||
+      (!isCpgWork(normalizedWorkType as WorkTypeValue) &&
+        !isResearchProject(normalizedWorkType as WorkTypeValue) &&
+        !isLongFormAcademicWork(normalizedWorkType) &&
+        normalizedWorkType !== "artigo" &&
+        !(ACADEMIC_PRODUCTION_TYPE_IDS as readonly string[]).includes(normalizedWorkType))
+    );
   },
   async generate(input) {
     const { generateDocxBlob } = await import("./export-docx");
@@ -38,7 +46,10 @@ export const articleTemplate: DocumentTemplate = {
   label: "Artigo",
   supports: (workType) => {
     const n = normalizeWorkType(workType);
-    return n === "artigo" || n === "artigo_cientifico_ufla";
+    // Todos os formatos da Coleção Produção Acadêmica UFLA (TCCs estruturados
+    // como artigo: sem capa/folha de rosto/ficha/aprovação) seguem a estrutura
+    // do artigo — conforme DOCUMENT_TYPE_MATRIX (UFLA-formatos-20).
+    return n === "artigo" || (ACADEMIC_PRODUCTION_TYPE_IDS as readonly string[]).includes(n);
   },
   async generate(input) {
     const { generateArticleDocxBlob } = await import("./export-article-docx");

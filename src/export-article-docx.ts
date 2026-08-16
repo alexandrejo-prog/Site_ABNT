@@ -3,6 +3,7 @@ import {
   Document,
   Header,
   HeadingLevel,
+  InternalHyperlink,
   Packer,
   PageNumber,
   PageOrientation,
@@ -11,12 +12,14 @@ import {
   TextRun,
 } from "docx";
 import type { IParagraphOptions } from "docx";
-import { parseEditorContent, importedTableParagraph, importedImageParagraph, type DocxGenerationInput, type EditorBlock } from "./export-docx";
+import { parseEditorContent, importedTableParagraph, importedImageParagraph, buildFootnoteIdMap, buildFootnotes, textRunsWithFootnotes, buildReferenceFootnoteDefinitions, appendFootnoteMarkers, buildXrefResolver, type DocxGenerationInput, type EditorBlock } from "./export-docx";
+import { registerXrefResolver, clearXrefRegistry } from "./docx-render-core";
 import type { ImportedTable } from "./imported-tables";
+import { DOCUMENT_STYLES } from "./docx-styles";
 import type { ImportedDocumentImage } from "./imported-images";
 import { UFLA_RULES, cmToTwip } from "./ufla-rules";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
-import { cleanMojibakeText, longQuoteParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, tabbedTableBlock } from "./docx-render-core";
+import { cleanMojibakeText, clearRawOmmlRegistry, longQuoteParagraph, rawOmmlMarkerParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, tabbedTableBlock } from "./docx-render-core";
 
 const BLACK = "000000";
 const BODY_SIZE = UFLA_RULES.typography.bodyFontSizePt * 2;
@@ -95,7 +98,7 @@ function run(text: string, options: RunOptions = {}): TextRun {
   });
 }
 
-function textRunsFromMarkup(text: string): TextRun[] {
+function textRunsFromMarkup(text: string): Array<TextRun | InternalHyperlink> {
   return coreTextRunsFromMarkup(cleanMojibakeText(text || " "), BODY_SIZE, UFLA_RULES.typography.fontFamily, BLACK);
 }
 
@@ -119,6 +122,7 @@ function centered(text: string, bold = false, size = BODY_SIZE): Paragraph {
 
 function simpleParagraph(text: string): Paragraph {
   return new Paragraph({
+    style: "ufla_corpo_texto",
     alignment: AlignmentType.LEFT,
     spacing: { line: SINGLE_LINE, after: UFLA_RULES.spacing.afterParagraphTwip },
     indent: {},
@@ -128,8 +132,9 @@ function simpleParagraph(text: string): Paragraph {
 
 function sectionTitle(text: string, level: DocxHeadingLevel = HeadingLevel.HEADING_1): Paragraph {
   const displayText = level === HeadingLevel.HEADING_1 ? text.toUpperCase() : text;
+  const style = level === HeadingLevel.HEADING_1 ? "ufla_titulo_primario" : level === HeadingLevel.HEADING_2 ? "ufla_titulo_secundario" : "ufla_titulo_terciario";
   return new Paragraph({
-    heading: level,
+    style,
     alignment: AlignmentType.LEFT,
     spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
     children: [run(displayText, { bold: level !== HeadingLevel.HEADING_3 })],
@@ -149,7 +154,12 @@ function labeledSection(label: string, value: string): Paragraph[] {
   ];
 }
 
-function blockToParagraph(block: EditorBlock, importedImages: ImportedDocumentImage[] = [], importedTables: ImportedTable[] = []): ArticleChild[] {
+function blockToParagraph(
+  block: EditorBlock,
+  importedImages: ImportedDocumentImage[] = [],
+  importedTables: ImportedTable[] = [],
+  footnoteIdMap: ReadonlyMap<number, number> | null = null,
+): ArticleChild[] {
   if (block.type === "heading1") return [sectionTitle(block.text, HeadingLevel.HEADING_1)];
   if (block.type === "heading2") return [sectionTitle(block.text, HeadingLevel.HEADING_2)];
   if (block.type === "heading3") return [sectionTitle(block.text, HeadingLevel.HEADING_3)];
@@ -171,8 +181,12 @@ function blockToParagraph(block: EditorBlock, importedImages: ImportedDocumentIm
   if (block.type === "source") {
     return [sourceParagraph(block.text)];
   }
+  if (block.type === "equation") {
+    return [rawOmmlMarkerParagraph(block.text, block.ommlXml)];
+  }
   if (block.type === "reference" || normalizeComparable(block.text) === "REFERENCIAS") return [];
-  return [paragraph(block.text)];
+  const runs = textRunsWithFootnotes(block.text, footnoteIdMap, BODY_SIZE);
+  return [new Paragraph({ style: "ufla_corpo_texto", alignment: AlignmentType.BOTH, spacing: { line: ONE_AND_HALF_LINE, after: UFLA_RULES.spacing.afterParagraphTwip }, indent: { firstLine: cmToTwip(1.25) }, children: runs })];
 }
 
 function stripTrailingReferenceSection(blocks: EditorBlock[]): EditorBlock[] {
@@ -196,6 +210,7 @@ function referenceParagraphs(references: string[]): (Paragraph | Table)[] {
   const children: Array<Paragraph | Table> = [];
   children.push(
     new Paragraph({
+      style: "ufla_titulo_sem_indicativo",
       alignment: AlignmentType.CENTER,
       spacing: { before: UFLA_RULES.spacing.beforePrimaryTitleTwip, after: UFLA_RULES.spacing.afterPrimaryTitleTwip, line: ONE_AND_HALF_LINE },
       children: [run("REFERÊNCIAS".toUpperCase(), { bold: true })],
@@ -217,6 +232,7 @@ function referenceParagraphs(references: string[]): (Paragraph | Table)[] {
       .map(
         (reference) =>
           new Paragraph({
+            style: "ufla_referencia",
             alignment: AlignmentType.LEFT,
             spacing: { line: SINGLE_LINE, after: UFLA_RULES.spacing.afterPrimaryTitleTwip },
             indent: { left: cmToTwip(0.5), hanging: cmToTwip(0.5) },
@@ -235,7 +251,26 @@ function createArticleDocument(input: DocxGenerationInput): Document {
     stripLeadingArticleMetadataBlocks(blocks, input),
   );
   const refBlocks = blocks.filter((block) => block.type === "reference").map((block) => block.text);
-  const references = refBlocks.length ? refBlocks : splitParagraphs(input.fields.referencias);
+  let references = refBlocks.length ? refBlocks : splitParagraphs(input.fields.referencias);
+
+  let articleFootnoteDefinitions: EditorBlock[] = [];
+
+  if (input.fields.referencesPlacement === "footnote" && references.length > 0) {
+    articleFootnoteDefinitions = buildReferenceFootnoteDefinitions(references);
+    const editorTextWithMarkers = appendFootnoteMarkers(input.editorText, references.length);
+    const blocksWithMarkers = parseEditorContent(editorTextWithMarkers);
+    const bodyBlocksWithMarkers = stripTrailingReferenceSection(
+      stripLeadingArticleMetadataBlocks(blocksWithMarkers, input),
+    );
+    bodyBlocks.length = 0;
+    bodyBlocks.push(...bodyBlocksWithMarkers);
+    references = [];
+  }
+
+  const footnoteIdMap = buildFootnoteIdMap(articleFootnoteDefinitions);
+  const footnotes = buildFootnotes(articleFootnoteDefinitions, footnoteIdMap);
+
+  registerXrefResolver(buildXrefResolver(bodyBlocks, input.importedImages ?? [], input.importedTables ?? []));
 
   const pageNumberHeader = new Header({
     children: [
@@ -253,11 +288,12 @@ function createArticleDocument(input: DocxGenerationInput): Document {
     ],
   });
 
-  return new Document({
+  const document = new Document({
     creator: "UFLA DOCX Academico",
     title: input.fields.title || "Artigo academico",
     description: "Artigo academico simples sem estrutura pre-textual de monografia.",
     features: { updateFields: true },
+    styles: DOCUMENT_STYLES,
     sections: [
       {
         properties: {
@@ -288,6 +324,7 @@ function createArticleDocument(input: DocxGenerationInput): Document {
           ...(hasText(input.fields.palavrasChave)
             ? [
                 new Paragraph({
+                  style: "ufla_palavras_chave",
                   alignment: AlignmentType.BOTH,
                   spacing: { line: SINGLE_LINE, after: UFLA_RULES.spacing.afterParagraphTwip },
                   indent: { firstLine: 0 },
@@ -302,6 +339,7 @@ function createArticleDocument(input: DocxGenerationInput): Document {
           ...(hasText(input.fields.keywords)
             ? [
                 new Paragraph({
+                  style: "ufla_keywords",
                   alignment: AlignmentType.BOTH,
                   spacing: { line: SINGLE_LINE, after: UFLA_RULES.spacing.afterParagraphTwip },
                   indent: { firstLine: 0 },
@@ -312,14 +350,18 @@ function createArticleDocument(input: DocxGenerationInput): Document {
                 }),
               ]
             : []),
-          ...bodyBlocks.flatMap((block) => blockToParagraph(block, input.importedImages ?? [], input.importedTables ?? [])),
+          ...bodyBlocks.flatMap((block) => blockToParagraph(block, input.importedImages ?? [], input.importedTables ?? [], footnoteIdMap)),
           ...referenceParagraphs(references),
         ],
       },
     ],
+    footnotes,
   });
+  clearXrefRegistry();
+  return document;
 }
 
 export async function generateArticleDocxBlob(input: DocxGenerationInput): Promise<Blob> {
+  clearRawOmmlRegistry();
   return Packer.toBlob(createArticleDocument(input));
 }

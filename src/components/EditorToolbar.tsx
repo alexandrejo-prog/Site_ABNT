@@ -1,6 +1,7 @@
 
 import { editorCommandAdapter } from "../editor-command-adapter";
-import { ToolButton, runEditorCommand } from "./ToolButton";
+import { FontSelector, ToolButton, insertEditorText, runEditorCommand } from "./ToolButton";
+import { isTiptapExperimentalEditor } from "../editor-feature-flags";
 import { EDITOR_DESCRIPTION_ID } from "../app-constants";
 import type { EditorMode } from "../hooks/useEditor";
 
@@ -22,6 +23,26 @@ function wrapSelection(style: string): void {
   span.className = `fmt-${style}`;
   try { range.surroundContents(span); } catch { document.execCommand("styleWithCSS", false); }
   sel.removeAllRanges();
+}
+
+/**
+ * Insere uma chamada `[^N]` na posição do cursor e anexa a definição `[^N]: `
+ * ao fim do corpo, com numeração sequencial automática (Manual UFLA §21).
+ */
+function insertFootnote(editorRef: React.RefObject<HTMLDivElement | null>, handleEditorInput: () => void): void {
+  if (isTiptapExperimentalEditor()) return;
+  const editor = editorRef.current;
+  if (!editor) return;
+  const text = editor.innerText || "";
+  const existing = [...text.matchAll(/\[\^(\d+)\]/g)].map((m) => parseInt(m[1], 10));
+  const next = (existing.length ? Math.max(...existing) : 0) + 1;
+  const marker = `[^${next}]`;
+  insertEditorText(marker);
+  const block = document.createElement("div");
+  block.textContent = `[^${next}]: `;
+  editor.appendChild(block);
+  block.scrollIntoView({ block: "nearest" });
+  setTimeout(() => requestAnimationFrame(handleEditorInput), 0);
 }
 
 export default function EditorToolbar({ editorMode, setEditorMode, isTiptapEditorEnabled, editorRef, handleEditorInput, runEditorAction, applyBlockStyle }: Props) {
@@ -46,6 +67,8 @@ export default function EditorToolbar({ editorMode, setEditorMode, isTiptapEdito
             <ToolButton title="Título 2" glyph="T2" onClick={() => runEditorAction("heading2", () => applyBlockStyle("## "))} />
             <ToolButton title="Citação" glyph="❝" onClick={() => runEditorAction("blockquote", () => applyBlockStyle("> "))} />
             <ToolButton title="Ref. ABNT" glyph="Ref" tooltip="Marca o parágrafo como referência bibliográfica para a seção REFERÊNCIAS do DOCX." onClick={() => runEditorAction("reference", () => applyBlockStyle("[REF] "))} />
+            <ToolButton title="Equação" glyph="ƒx" tooltip="Insere equação [EQ] no cursor — LaTeX: \\frac{a}{b}, \\sqrt[3]{x}, x^2, x_i. Numeração (seção.seq) automática no DOCX e no preview (Manual UFLA §3.2.8)." onClick={() => runEditorAction("equation", () => applyBlockStyle("[EQ] " ))} />
+            <ToolButton title="Nota de rodapé" glyph="¹" tooltip="Insere chamada [^N] no cursor e a definição [^N]: ao fim do corpo (Manual UFLA §21)." onClick={() => runEditorAction("footnote", () => insertFootnote(editorRef, handleEditorInput))} />
           </div></div>
           <div className="tiptap-toolbar-group"><span className="tiptap-toolbar-label">Listas</span><div className="tiptap-toolbar-row">
             <ToolButton title="Marcadores" glyph="•" onClick={() => runEditorAction("bulletList", () => runEditorCommand("insertUnorderedList"))} />
@@ -73,7 +96,12 @@ export default function EditorToolbar({ editorMode, setEditorMode, isTiptapEdito
             <ToolButton title="Título 2" glyph="T2" onClick={() => runEditorAction("heading2", () => applyBlockStyle("## "))} />
             <ToolButton title="Citação longa" glyph="❝" onClick={() => runEditorAction("blockquote", () => applyBlockStyle("> "))} />
             <ToolButton title="Marcar como referência bibliográfica" glyph="Ref. ABNT" className="tool-reference" tooltip="Marca o parágrafo como referência bibliográfica para a seção REFERÊNCIAS do DOCX." onClick={() => runEditorAction("reference", () => applyBlockStyle("[REF] "))} />
+            <ToolButton title="Equação" glyph="ƒx" tooltip="Marca o parágrafo como equação [EQ] — LaTeX: \\frac{a}{b}, \\sqrt[3]{x}, x^2, x_i. Numeração (seção.seq) automática no DOCX e no preview (Manual UFLA §3.2.8)." onClick={() => runEditorAction("equation", () => applyBlockStyle("[EQ] " ))} />
           </div><span className="word-tool-group-label">Estrutura</span></div>
+          <div className="word-tool-group" aria-label="Fonte e tamanho"><div className="word-tool-row">
+            <FontSelector title="Fonte padrão UFLA/ABNT: Times New Roman (definida no DOCX)">Times New Roman</FontSelector>
+            <span className="word-font-size" title="Tamanho padrão UFLA/ABNT: 12 pt (definido no DOCX)" aria-label="Tamanho 12 pt">12 pt</span>
+          </div><span className="word-tool-group-label">Fonte e tamanho</span></div>
           <div className="word-tool-group" data-group="Parágrafo" aria-label="Parágrafo"><div className="word-tool-row">
             <ToolButton title="Lista com marcadores" glyph="•" onClick={() => runEditorAction("bulletList", () => runEditorCommand("insertUnorderedList"))} />
             <ToolButton title="Lista numerada" glyph="1." onClick={() => runEditorAction("orderedList", () => runEditorCommand("insertOrderedList"))} />

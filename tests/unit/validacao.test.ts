@@ -1,0 +1,259 @@
+import { describe, expect, it } from "vitest";
+import { AcademicFields, emptyAcademicFields } from "../../src/ufla-rules";
+import { validateWork } from "../../src/validators";
+import { ACADEMIC_PRODUCTION_TYPE_IDS, academicProductionTypeFor } from "../../src/academic-production-types";
+
+function baseFields(overrides: Partial<AcademicFields> = {}): AcademicFields {
+  return {
+    ...emptyAcademicFields(),
+    workType: "artigo",
+    author: "Maria Silva",
+    title: "Qualidade do café no sul de Minas",
+    location: "Lavras - MG",
+    year: "2026",
+    resumo: "Resumo do trabalho.",
+    palavrasChave: "café; qualidade",
+    introducao: "Texto da introdução.",
+    referencias: "SILVA, M. Qualidade do café. Lavras: UFLA, 2024.",
+    ...overrides,
+  };
+}
+
+describe("validação normativa", () => {
+  it("alerta quando falta título em artigo simples", () => {
+    const issues = validateWork(baseFields({ title: "" }));
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "warning", code: "title-required" }),
+    );
+  });
+
+  it("mantem erro de titulo para monografia", () => {
+    const issues = validateWork(baseFields({ workType: "monografia", title: "" }));
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "error", code: "title-required" }),
+    );
+  });
+
+  it("acusa erro quando falta autor", () => {
+    const issues = validateWork(baseFields({ author: "" }));
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "error", code: "author-required" }),
+    );
+  });
+
+  it("alerta orientador ausente para monografia, dissertação e tese", () => {
+    const expected: Record<string, "warning" | "error"> = {
+      monografia: "warning",
+      dissertacao: "error",
+      tese: "error",
+    };
+    for (const workType of ["monografia", "dissertacao", "tese"] as const) {
+      const issues = validateWork(baseFields({ workType, advisor: "" }));
+      const advisorIssue = issues.find((issue) => issue.code === "advisor-required");
+      expect(advisorIssue).toBeDefined();
+      expect(advisorIssue?.severity).toBe(expected[workType]);
+    }
+  });
+
+  it("alerta quando referências e introdução estão ausentes em trabalho completo", () => {
+    const issues = validateWork(baseFields({ workType: "monografia", referencias: "", introducao: "" }));
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "warning", code: "references-required" }),
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "warning", code: "intro-required" }),
+    );
+  });
+
+  it("aceita artigo com campos mínimos", () => {
+    const issues = validateWork(baseFields());
+    expect(issues.filter((issue) => issue.severity === "error")).toHaveLength(0);
+  });
+
+  it("resume alertas repetidos de referências e não alerta normas destacadas automaticamente", () => {
+    const issues = validateWork(
+      baseFields({
+        referencias: [
+          "REFERENCIA AMBIGUA SEM TITULO IDENTIFICAVEL 2024",
+          "OUTRA REFERENCIA AMBIGUA SEM TITULO IDENTIFICAVEL 2025",
+          "TERCEIRA REFERENCIA AMBIGUA SEM TITULO IDENTIFICAVEL 2026",
+          "BRASIL. Lei nº 9.795, de 27 de abril de 1999. Dispõe sobre a educação ambiental. Brasília, DF, 1999.",
+          "MINAS GERAIS. Decreto nº 48.636, de 19 de junho de 2023. Regulamenta procedimentos administrativos. Belo Horizonte, MG, 2023.",
+        ].join("\n"),
+      }),
+    );
+
+    const highlightIssues = issues.filter((issue) => issue.code === "reference-highlight-missing");
+    const normativeIssues = issues.filter((issue) => issue.code === "reference-normative-preserved");
+    const repeatedStrongPhrase = issues.filter((issue) =>
+      issue.message.includes("Documento ainda não está plenamente conforme"),
+    );
+
+    expect(highlightIssues).toHaveLength(1);
+    expect(highlightIssues[0].message).toContain("Há 3 referência(s)");
+    expect(highlightIssues[0].message).toContain("Revise antes da versão final");
+    expect(normativeIssues).toHaveLength(0);
+    expect(repeatedStrongPhrase).toHaveLength(0);
+  });
+
+  it("mantém alerta de imagem como conferência informativa", () => {
+    const issues = validateWork(
+      baseFields({ imageWarnings: "1 imagem(ns) detectada(s)." }),
+    );
+    const imageIssues = issues.filter((issue) => issue.code === "imported-image-warning");
+
+    expect(imageIssues).toHaveLength(1);
+    expect(imageIssues[0].message).toContain("imagem(ns) detectada(s)");
+    expect(imageIssues[0].action).toContain("reinsira manualmente");
+    expect(imageIssues[0].action).toContain("legendas e fontes");
+    expect(imageIssues[0].message).not.toContain("Documento ainda não está plenamente conforme");
+  });
+
+  it("alerta PDF obrigatorio para todos os modos CPG", () => {
+    for (const workType of ["resumo_cpg", "resumo_expandido_cpg", "artigo_completo_cpg"] as const) {
+      const issues = validateWork(baseFields({ workType }), "Texto do corpo.");
+      expect(issues).toContainEqual(
+        expect.objectContaining({
+          severity: "warning",
+          code: "cpg-mode-selected",
+        }),
+      );
+      expect(issues.find((issue) => issue.code === "cpg-mode-selected")?.message).toContain("PDF");
+    }
+  });
+
+  it("alerta limite de 1 pagina para resumo CPG", () => {
+    const issues = validateWork(baseFields({ workType: "resumo_cpg" }), "Texto do resumo.");
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        severity: "warning",
+        code: "cpg-resumo-one-page",
+      }),
+    );
+  });
+
+  it("alerta faixa de 4 a 6 paginas para resumo expandido CPG", () => {
+    const issues = validateWork(baseFields({ workType: "resumo_expandido_cpg" }), "Texto curto.");
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        severity: "warning",
+        code: "cpg-expanded-pages",
+      }),
+    );
+  });
+
+  it("alerta faixa de 8 a 14 paginas para artigo completo CPG", () => {
+    const issues = validateWork(baseFields({ workType: "artigo_completo_cpg" }), "Texto curto.");
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        severity: "warning",
+        code: "cpg-full-pages",
+      }),
+    );
+  });
+
+  it("nao acusa incompatibilidade para dissertacao com PPGECA", () => {
+    const issues = validateWork(
+      baseFields({ workType: "dissertacao", program: "Educação Científica e Ambiental" }),
+    );
+    expect(issues).not.toContainEqual(
+      expect.objectContaining({ code: "program-degree-incompatible" }),
+    );
+  });
+
+  it("acusa incompatibilidade para tese com PPGECA", () => {
+    const issues = validateWork(
+      baseFields({ workType: "tese", program: "Educação Científica e Ambiental" }),
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "error", code: "program-degree-incompatible" }),
+    );
+  });
+
+  it("nao acusa incompatibilidade para tese com programa que tem doutorado", () => {
+    const issues = validateWork(
+      baseFields({ workType: "tese", program: "Administração" }),
+    );
+    expect(issues).not.toContainEqual(
+      expect.objectContaining({ code: "program-degree-incompatible" }),
+    );
+  });
+
+  it("alerta programa nao reconhecido sem bloquear dissertacao", () => {
+    const issues = validateWork(
+      baseFields({ workType: "dissertacao", program: "Programa Inventado" }),
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "warning", code: "program-not-recognized" }),
+    );
+    expect(issues).not.toContainEqual(
+      expect.objectContaining({ code: "program-degree-incompatible" }),
+    );
+  });
+
+  it("gera aviso de programa ambiguo para duplicidade sem contexto de trabalho", () => {
+    const issues = validateWork(
+      baseFields({ workType: "projeto_pesquisa", program: "Genética e Melhoramento de Plantas" }),
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "warning", code: "program-ambiguous" }),
+    );
+  });
+
+  it("nao escolhe silenciosamente o programa errado para tese duplicado", () => {
+    const issues = validateWork(
+      baseFields({ workType: "tese", program: "Genética e Melhoramento de Plantas" }),
+    );
+    expect(issues).not.toContainEqual(
+      expect.objectContaining({ code: "program-degree-incompatible" }),
+    );
+    expect(issues).not.toContainEqual(
+      expect.objectContaining({ code: "program-ambiguous" }),
+    );
+  });
+
+  it("usuflaCollectionIssues usa requiredFields de academic-production-types para cada tipo", () => {
+    for (const id of ACADEMIC_PRODUCTION_TYPE_IDS) {
+      const definition = academicProductionTypeFor(id);
+      expect(definition).toBeTruthy();
+      if (!definition) continue;
+
+      const emptyFields = { ...emptyAcademicFields(), workType: id };
+      const issues = validateWork(emptyFields);
+
+      for (const fieldKey of definition.requiredFields) {
+        expect(issues).toContainEqual(
+          expect.objectContaining({ code: `ufla-collection-${fieldKey}-required` }),
+        );
+      }
+    }
+  });
+
+  it("projeto de pesquisa sem resumo bloqueia geracao", () => {
+    const issues = validateWork(baseFields({ workType: "projeto_pesquisa", resumo: "" }));
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "error", code: "resumo-required" }),
+    );
+  });
+
+  it("projeto de pesquisa sem abstract bloqueia geracao", () => {
+    const issues = validateWork(baseFields({ workType: "projeto_pesquisa", abstractText: "" }));
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "error", code: "abstract-recommended" }),
+    );
+  });
+
+  it("projeto de pesquisa sem referencias bloqueia geracao", () => {
+    const issues = validateWork(baseFields({ workType: "projeto_pesquisa", referencias: "" }), "# INTRODUÇÃO\nTexto.");
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "error", code: "research-references-required" }),
+    );
+  });
+
+  it("projeto de pesquisa alerta sobre atualizacao do sumario", () => {
+    const issues = validateWork(baseFields({ workType: "projeto_pesquisa" }), "# INTRODUÇÃO\nTexto.");
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "info", code: "research-toc-update" }),
+    );
+  });
+});

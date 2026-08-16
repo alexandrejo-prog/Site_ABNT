@@ -1,0 +1,260 @@
+{
+  "schema": "ufla-audit/preview-snapshot/v1",
+  "generatedAt": "2026-08-16T15:25:00.513Z",
+  "templates": {
+    "monografia": {
+      "previewPages": 9,
+      "pageNumbers": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        6,
+        7
+      ],
+      "signatures": [
+        "7aa674e1430460a9",
+        "c51258c4f033b0ef",
+        "f54de725d2f0a174",
+        "a6138010c7496fd0",
+        "2ab9f50b6b481b8f",
+        "8358f5ac0c184de8",
+        "c34fe2a51968f2fa",
+        "2ed3ae95d06023e5",
+        "e3cb32a5633963ed"
+      ],
+      "docxDigest": "445b2058f59dfadb",
+      "pdfPages": 10,
+      "pdfSignatures": [
+        "92f58b989b70e122",
+        "c51258c4f033b0ef",
+        "ddbea74edc07ec08",
+        "c1353f670f295ae8",
+        "2ab9f50b6b481b8f",
+        "8358f5ac0c184de8",
+        "b9465548570f7168",
+        "96baa6c871b0f656",
+        "07a465606b796884",
+        "9da051400c58b0ce"
+      ],
+      "pdfPageNumbers": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        6,
+        7,
+        8
+      ],
+      "similarity": 0.962,
+      "pageDelta": 1
+    },
+    "dissertacao": {
+      "previewPages": 10,
+      "pageNumbers": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        7,
+        8
+      ],
+      "signatures": [
+        "7aa674e1430460a9",
+        "f4a817a6072cd616",
+        "8dbb50621b4c2fd3",
+        "a6138010c7496fd0",
+        "2ab9f50b6b481b8f",
+        "8358f5ac0c184de8",
+        "32ad7e18326045f7",
+        "18adcb0da652ab99",
+        "5b91e34ad967ed51",
+        "9da051400c58b0ce"
+      ],
+      "docxDigest": "a85e8a03e563fe98",
+      "pdfPages": 11,
+      "pdfSignatures": [
+        "92f58b989b70e122",
+        "f4a817a6072cd616",
+        "878b3dea4bf4e67d",
+        "87d5f1e3c2fdc1e4",
+        "2ab9f50b6b481b8f",
+        "8358f5ac0c184de8",
+        "32ad7e18326045f7",
+        "64b2f7f4eeda8328",
+        "a8ea7be41642767d",
+        "ae23afddcfc2aa8d",
+        "e4bf37a6a504162f"
+      ],
+      "pdfPageNumbers": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        7,
+        8,
+        9
+      ],
+      "similarity": 0.978,
+      "pageDelta": 1
+    },
+    "tese": {
+      "previewPages": 10,
+      "pageNumbers": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        7,
+        8
+      ],
+      "signatures": [
+        "7aa674e1430460a9",
+        "72e3c6956ff77dbb",
+        "8dbb50621b4c2fd3",
+        "a6138010c7496fd0",
+        "2ab9f50b6b481b8f",
+        "8358f5ac0c184de8",
+        "32ad7e18326045f7",
+        "18adcb0da652ab99",
+        "5b91e34ad967ed51",
+        "9da051400c58b0ce"
+      ],
+      "docxDigest": "1f6ae822062bc454",
+      "pdfPages": 11,
+      "pdfSignatures": [
+        "92f58b989b70e122",
+        "72e3c6956ff77dbb",
+        "77337046b47db471",
+        "264befffd0a3365e",
+        "2ab9f50b6b481b8f",
+        "8358f5ac0c184de8",
+        "32ad7e18326045f7",
+        "64b2f7f4eeda8328",
+        "a8ea7be41642767d",
+        "ae23afddcfc2aa8d",
+        "e4bf37a6a504162f"
+      ],
+      "pdfPageNumbers": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        7,
+        8,
+        9
+      ],
+      "similarity": 0.968,
+      "pageDelta": 1
+    },
+    "artigo": {
+      "previewPages": 2,
+      "pageNumbers": [
+        1,
+        2
+      ],
+      "signatures": [
+        "70576ebb794b4e49",
+        "54e94f7be60ffbbd"
+      ],
+      "docxDigest": "96877c48bad7c778",
+      "pdfPages": 1,
+      "pdfSignatures": [
+        "4859fe77758bb251"
+      ],
+      "pdfPageNumbers": [
+        1
+      ],
+      "similarity": 1,
+      "pageDelta": 1
+    },
+    "resumo_expandido_cpg": {
+      "previewPages": 2,
+      "pageNumbers": [
+        1,
+        2
+      ],
+      "signatures": [
+        "da037b6fce314d70",
+        "54e94f7be60ffbbd"
+      ],
+      "docxDigest": "5995e3d46cbfa705",
+      "pdfPages": 1,
+      "pdfSignatures": [
+        "7a04ab2e668e14c5"
+      ],
+      "pdfPageNumbers": [
+        1
+      ],
+      "similarity": 1,
+      "pageDelta": 1
+    },
+    "projeto_pesquisa": {
+      "previewPages": 7,
+      "pageNumbers": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        1,
+        2
+      ],
+      "signatures": [
+        "7aa674e1430460a9",
+        "48dcadd6d0c2a01c",
+        "2ab9f50b6b481b8f",
+        "8358f5ac0c184de8",
+        "00487d50c9c4f93a",
+        "3fd65c3e9e669da5",
+        "09f16bcf28d69609"
+      ],
+      "docxDigest": "34d878d59af3e8fa",
+      "pdfPages": 8,
+      "pdfSignatures": [
+        "92f58b989b70e122",
+        "48dcadd6d0c2a01c",
+        "2ab9f50b6b481b8f",
+        "8358f5ac0c184de8",
+        "00e4aed590300205",
+        "e061fb65610f6994",
+        "909a0ce6e0bfacaf",
+        "93b2ac1666a9e161"
+      ],
+      "pdfPageNumbers": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        1,
+        2,
+        3
+      ],
+      "similarity": 0.967,
+      "pageDelta": 1
+    }
+  }
+}

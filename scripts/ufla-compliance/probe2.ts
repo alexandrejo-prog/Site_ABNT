@@ -1,0 +1,42 @@
+import { join } from "node:path";
+import JSZip from "jszip";
+import { generateDocxBlob } from "../../src/export-docx";
+import { monografiaFixture } from "./fixtures";
+import type { ImportedTable } from "../../src/imported-tables";
+import type { ImportedDocumentImage } from "../../src/imported-images";
+
+const f = monografiaFixture();
+const blob = await generateDocxBlob({ fields: f.fields, editorText: f.editorText, importedImages: f.importedImages, importedTables: f.importedTables });
+const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+const doc = await zip.file("word/document.xml")?.async("string") || "";
+const h1 = await zip.file("word/header1.xml")?.async("string") || "";
+
+console.log("=== header1 PAGE field:", /\bPAGE\b/.test(h1));
+console.log(h1.match(/<w:instrText[^>]*>([\s\S]*?)<\/w:instrText>/g)?.join(" | ") || "no instr");
+
+const paras = [...doc.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)].map(m => m[0]);
+console.log("\nparagraph count:", paras.length);
+console.log("\n=== first para with firstLine:");
+const fl = paras.find(p => p.includes('w:firstLine'));
+console.log(fl?.slice(0, 500) || "NONE");
+console.log("\n=== line=360 paras:", paras.filter(p => p.includes('w:line="360"')).length);
+console.log("=== line=240 paras:", paras.filter(p => p.includes('w:line="240"')).length);
+console.log("=== jc=both:", paras.filter(p => p.includes('w:val="both"')).length);
+console.log("=== pageBreakBefore:", paras.filter(p => p.includes("w:pageBreakBefore")).length);
+console.log("=== heading1 paras:", paras.filter(p => p.includes('w:val="Heading1"')).length);
+console.log("=== long quote candidates (w:left + sz22):");
+const lq = paras.filter(p => p.includes('w:line="240"') && p.includes('w:sz w:val="22"') && /w:left="\d+"/.test(p));
+console.log(lq[0]?.slice(0, 800) || "NONE matched");
+console.log("\n=== tables:", (doc.match(/<w:tbl\b/g) || []).length);
+console.log("=== images:", (doc.match(/<w:drawing\b|<wp:inline|<wp:anchor/g) || []).length);
+console.log("=== bookmarks:", (doc.match(/<w:bookmarkStart/g) || []).length);
+console.log("=== PAGEREF:", (doc.match(/PAGEREF/g) || []).length);
+console.log("=== REFERENCIAS sections present:", /REFER.NCIAS/i.test(doc));
+const refIdx = [...doc.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)].map(m => m[0]).findIndex(p => /REFER.NCIAS/i.test(p.replace(/<[^>]*>/g, "")));
+console.log("REF head idx:", refIdx);
+const refParas = paras.slice(refIdx, refIdx + 8);
+for (const rp of refParas) console.log("REF PARA: ", rp.slice(0, 300).replace(/\s+/g, " "));
+console.log("\n=== ANEXO/APENDICE in text:", /ANEXO/i.test(doc), /AP.NDICE/i.test(doc));
+console.log("=== docProps core.xml:");
+const core = await zip.file("docProps/core.xml")?.async("string") || "";
+console.log(core.slice(0, 500));

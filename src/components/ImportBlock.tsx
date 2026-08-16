@@ -1,8 +1,12 @@
-import { useRef, useState } from "react";
+import { forwardRef, useImperativeHandle, useRef, useState, type ChangeEvent } from "react";
 import { Upload, XCircle } from "lucide-react";
 import { importDocumentFile } from "../import-docx";
 import type { ImportedDocumentImage } from "../imported-images";
 import { emptyAcademicFields, emptyConfidenceMap, WORK_TYPE_LABELS } from "../ufla-rules";
+
+export interface ImportBlockHandle {
+  open: () => void;
+}
 
 interface ImportBlockProps {
   onImport: (result: {
@@ -14,6 +18,7 @@ interface ImportBlockProps {
     importedImages?: ImportedDocumentImage[];
   }) => void;
   onRemove: () => void;
+  onNewDocument?: () => void;
   importedFileName: string | null;
   workType: string;
 }
@@ -22,60 +27,64 @@ function selectedWorkTypeLabel(workType: string): string {
   return workType ? WORK_TYPE_LABELS[workType as keyof typeof WORK_TYPE_LABELS] || workType : "Nenhum tipo selecionado";
 }
 
-export function ImportBlock({ onImport, onRemove, importedFileName, workType }: ImportBlockProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [status, setStatus] = useState<string | null>(null);
+export const ImportBlock = forwardRef<ImportBlockHandle, ImportBlockProps>(
+  function ImportBlock({ onImport, onRemove, onNewDocument, importedFileName, workType }: ImportBlockProps, ref) {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const [status, setStatus] = useState<string | null>(null);
 
-  async function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    try {
-      setStatus("Importando arquivo...");
-      const result = await importDocumentFile(file);
-      onImport({ ...result, fileName: file.name });
-      setStatus(`Arquivo importado: ${file.name}`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Falha ao importar.");
-    } finally {
-      event.target.value = "";
+    useImperativeHandle(ref, () => ({
+      open: () => inputRef.current?.click(),
+    }));
+
+    async function handleChange(event: ChangeEvent<HTMLInputElement>) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      try {
+        setStatus("Importando arquivo...");
+        const result = await importDocumentFile(file);
+        onImport({ ...result, fileName: file.name });
+        setStatus(`Arquivo importado: ${file.name}`);
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : "Falha ao importar.");
+      } finally {
+        event.target.value = "";
+      }
     }
-  }
 
-  return (
-    <div className="import-block">
-      <div className="import-header">
-        <div>
-          <h2>Importar arquivo existente</h2>
-          <p>Importe DOCX, TXT ou Markdown para extrair texto e metadados. Revise tudo antes de gerar.</p>
+    return (
+      <div className="import-block">
+        <h2 className="import-block-title sr-only">Importar arquivo existente</h2>
+        <p className="import-block-hint sr-only">Importe DOCX, TXT ou Markdown para extrair texto e metadados. Revise tudo antes de gerar.</p>
+        <div className="import-actions-row">
+          <label className="upload-button primary">
+            <Upload size={16} aria-hidden="true" />
+            <span>Importar arquivo</span>
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".docx,.txt,.md"
+              onChange={handleChange}
+              style={{ display: "none" }}
+            />
+          </label>
+          {onNewDocument && (
+            <button className="secondary-action" type="button" onClick={onNewDocument}>
+              Novo documento
+            </button>
+          )}
         </div>
-        <label className="upload-button primary">
-          <Upload size={18} aria-hidden="true" />
-          <span>Importar arquivo</span>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".docx,.txt,.md"
-            onChange={handleChange}
-            style={{ display: "none" }}
-          />
-        </label>
+        {importedFileName ? (
+          <div className="import-status">
+            <span className="import-file-name">Arquivo: {importedFileName}</span>
+            <span className="import-work-type">Tipo selecionado: {selectedWorkTypeLabel(workType)}</span>
+            <button className="secondary-action" type="button" onClick={onRemove} title={`Remover importação: ${importedFileName}`}>
+              <XCircle size={16} aria-hidden="true" />
+              <span>Remover importação</span>
+            </button>
+          </div>
+        ) : null}
+        {status && <p className="import-note" role="status" aria-live="polite">{status}</p>}
       </div>
-      {importedFileName ? (
-        <div className="import-status">
-          <span className="import-file-name">Arquivo: {importedFileName}</span>
-          <span className="import-work-type">Tipo selecionado: {selectedWorkTypeLabel(workType)}</span>
-          <p className="import-confirm">Confira se o tipo de trabalho selecionado está correto antes de gerar o DOCX.</p>
-          <button className="secondary-action" type="button" onClick={onRemove} title={`Remover importação: ${importedFileName}`}>
-            <XCircle size={18} aria-hidden="true" />
-            <span>Remover importação</span>
-          </button>
-        </div>
-      ) : (
-        <p className="import-disclaimer">
-          Importante: o tipo de trabalho não é alterado automaticamente pelo nome do arquivo. Confira se o modelo selecionado corresponde ao documento.
-        </p>
-      )}
-      {status && <p className="import-note" role="status" aria-live="polite">{status}</p>}
-    </div>
-  );
-}
+    );
+  },
+);

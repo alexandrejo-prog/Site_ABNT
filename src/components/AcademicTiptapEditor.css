@@ -7,6 +7,22 @@
   margin: 0 auto;
 }
 
+/* Assistência NBR 6023 no modo referências: referência online sem "Acesso em:". */
+.reference-access-suggestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 10px 14px;
+  border: 1px solid #f59e0b;
+  border-left-width: 4px;
+  background: #fffbeb;
+  color: #78350f;
+  font-size: 13px;
+  border-radius: 2px;
+}
+
 .tiptap-loading {
   display: grid;
   place-items: center;

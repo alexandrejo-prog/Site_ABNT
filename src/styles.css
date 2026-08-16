@@ -143,14 +143,111 @@
   --ufla-interface-font: "Segoe UI", Arial, sans-serif;
   --ufla-focus-ring: #1f7b69;
   --ufla-focus-ring-soft: rgba(31, 123, 105, 0.32);
+
+  /* ============================================================
+     DESIGN SYSTEM — Site_ABNT
+     Base clara e elegante, verde institucional como ação.
+     ============================================================ */
+
+  /* Cores */
+  --app-bg: #f2f5f8;
+  --app-surface: #ffffff;
+  --app-surface-subtle: #f8fafc;
+  --app-surface-hover: #eef2f6;
+  --app-surface-active: #e8eef3;
+
+  --ink-900: #0f1b2d;
+  --ink-700: #2a3a4d;
+  --ink-600: #475569;
+  --ink-500: #64748b;
+  --ink-400: #94a3b8;
+
+  --brand-700: #0d7a4f;
+  --brand-600: #12835a;
+  --brand-500: #1a9d6c;
+  --brand-100: #d9f2e6;
+  --brand-50: #edf9f3;
+
+  --info-700: #1d4ed8;
+  --info-600: #2563eb;
+  --info-100: #dbeafe;
+  --info-50: #eff6ff;
+
+  --amber-700: #9a6700;
+  --amber-600: #b45309;
+  --amber-100: #fdeecb;
+  --amber-50: #fffbeb;
+
+  --danger-700: #b91c1c;
+  --danger-600: #dc2626;
+  --danger-100: #fde1e1;
+  --danger-50: #fef2f2;
+
+  --border-soft: #e7ecf1;
+  --border: #d7e0e8;
+  --border-strong: #bcc8d4;
+
+  /* Raios */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 999px;
+
+  /* Sombras */
+  --shadow-sm: 0 1px 2px rgba(15, 27, 45, 0.06);
+  --shadow-md: 0 6px 18px rgba(15, 27, 45, 0.08);
+  --shadow-lg: 0 16px 44px rgba(15, 27, 45, 0.14);
+
+  /* Foco */
+  --focus-ring: rgba(13, 122, 79, 0.24);
+  --focus-ring-solid: #0d7a4f;
+
+  /* Estados */
+  --disabled-bg: #eef1f4;
+  --disabled-ink: #9aa7b4;
+  --loading-ink: var(--brand-700);
+
+  /* Transições */
+  --duration-fast: 150ms;
+  --duration: 200ms;
+  --duration-slow: 250ms;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* Tipografia (interface) */
+  --font-ui: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  --text-xs: 0.72rem;
+  --text-sm: 0.82rem;
+  --text-md: 0.94rem;
+  --text-lg: 1.05rem;
+
+  /* Espaçamentos */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+
+  /* Breakpoints */
+  --bp-lg: 1280px;
+  --bp-md: 1180px;
+  --bp-sm: 980px;
+  --bp-xs: 780px;
+  --bp-phone: 560px;
+  --bp-tiny: 400px;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   font-family: var(--ufla-interface-font);
-  color: #1f2933;
-  background: #f5f7f4;
+  color: var(--ink-900);
+  background: var(--app-bg);
+  -webkit-font-smoothing: antialiased;
 }
 
 button,
@@ -331,9 +428,9 @@ textarea:focus-visible,
 .upload-button:focus-within,
 .word-tool-button:focus-visible,
 .text-button:focus-visible {
-  outline: 3px solid var(--ufla-focus-ring-soft);
+  outline: 3px solid var(--focus-ring);
   outline-offset: 3px;
-  box-shadow: 0 0 0 1px var(--ufla-focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring-solid);
 }
 
 .confidence {

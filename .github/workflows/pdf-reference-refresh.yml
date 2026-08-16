@@ -1,0 +1,70 @@
+name: Manutenção da referência PDF (Word)
+
+# Workflow_dispatch manual para ATUALIZAR a referência commitada do PDF do Word
+# quando a renderização mudar de forma INTENCIONAL (mudança de layout/tipografia/
+# paginação no código). O gate de regressão (pdf-regression.yml) falha enquanto a
+# referência estiver desatualizada — este workflow regenera e abre uma PR com o
+# snapshot novo.
+#
+# Requer um runner SELF-HOSTED com Microsoft Word (labels: self-hosted, windows,
+# word) — o GitHub-hosted NÃO tem Word. Registre o runner com:
+#   ./config.cmd --url https://github.com/<org>/<repo> --labels self-hosted,windows,word
+#
+# Uso: Actions → "Manutenção da referência PDF (Word)" → Run workflow.
+# A PR aberta deve ser revisada (a mudança de renderização tem que ser
+# intencional e estar acompanhada do preview/digest atualizado — o gate de
+# regressão da PR valida a coerência).
+#
+# Nota: com GITHUB_TOKEN padrão a PR aberta NÃO dispara os workflows de PR do
+# repositório (que validariam a nova referência). Para dispará-los, defina um
+# segredo PAT (escopo repo) e troque `token` no passo de abertura da PR.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  refresh-pdf-reference:
+    runs-on: [self-hosted, windows, word]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Regenerar a referência do PDF (Word COM)
+        run: npm run ufla:pdfref:refresh
+
+      - name: Registrar evidência da run de referência
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-reference-check
+          path: artifacts/ufla-compliance/pdf-reference-check.json
+          if-no-files-found: warn
+
+      - name: Abrir PR com a referência atualizada
+        # Abre PR apenas quando o snapshot (scripts/ufla-compliance/snapshots/
+        # preview-docx-snapshot.json) mudou de fato; sem mudança, não cria PR.
+        uses: peter-evans/create-pull-request@v6
+        with:
+          # PAT com escopo repo (segredo PAT_PDF_REFERENCE) para a PR aberta
+          # disparar os workflows de PR do repositório; sem o segredo, use o
+          # GITHUB_TOKEN padrão (a PR abre, mas não valida os gates de PR).
+          token: ${{ secrets.PAT_PDF_REFERENCE }}
+          commit-message: "chore(ufla): regenera referência do PDF do Word (snapshot de paginação)"
+          branch: chore/pdf-reference-refresh
+          delete-branch: true
+          title: "chore(ufla): atualiza referência do PDF do Word"
+          body: |
+            Run de referência executada em runner com Word (`npm run ufla:pdfref:refresh`).
+
+            - A renderização atual do Word passou a divergir da referência commitada
+              **junto** com preview/digest do DOCX → mudança intencional; a referência
+              foi regenerada para o novo estado.
+            - Revise o diff do snapshot antes de mesclar. Se a mudança NÃO for
+              intencional (regressão de Word/fontes/pipeline), feche a PR e investigue
+              com `npm run ufla:pdfref` localmente.
+          labels:
+            - ufla-compliance

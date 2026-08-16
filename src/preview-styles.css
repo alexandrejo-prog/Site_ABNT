@@ -124,6 +124,7 @@
   width: 21cm;
   font-family: "Times New Roman", Times, serif;
   color: #000000;
+  counter-reset: page;
 }
 
 .preview-page {
@@ -136,6 +137,19 @@
   box-sizing: border-box;
   break-inside: avoid;
   page-break-inside: avoid;
+  position: relative;
+}
+
+/* Número de página explícito (DECISION-010): só nas páginas textuais/pós-
+ * textuais, no canto superior direito, 10 pt — pré-textuais não exibem número. */
+.preview-page-number {
+  position: absolute;
+  top: 1cm;
+  right: 0;
+  font-size: 10pt;
+  font-family: "Times New Roman", Times, serif;
+  color: #000000;
+  line-height: 1;
 }
 
 .preview-body {
@@ -144,6 +158,22 @@
   margin: 0;
   line-height: 1.5;
   font-size: 12pt;
+}
+
+[data-font-size="10pt"] {
+  font-size: 10pt;
+}
+
+[data-font-size="11pt"] {
+  font-size: 11pt;
+}
+
+[data-font-size="12pt"] {
+  font-size: 12pt;
+}
+
+[data-font-size="14pt"] {
+  font-size: 14pt;
 }
 
 .preview-simple {
@@ -208,6 +238,29 @@
   margin: 0 0 1em 4cm;
   text-indent: 0;
   text-align: justify;
+}
+
+/* KaTeX (equações no preview — §3.2.8): o LaTeX dos blocos [EQ] é renderizado
+   com a tipografia matemática do KaTeX, aproximando o visual do OMML do Word. */
+.preview-equation .katex-display {
+  margin: 0;
+}
+
+.preview-equation {
+  text-align: center;
+  margin: 0.5em 0;
+  line-height: 1.5;
+  font-size: 12pt;
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.preview-equation-body {
+  font-style: italic;
+}
+
+.preview-equation-number {
+  margin-left: 1em;
 }
 
 .preview-reference {
@@ -410,6 +463,13 @@
   padding: 4px 8px;
   font-size: 0.85rem;
   font-family: inherit;
+}
+
+[data-work-type="monografia"] .preview-abstract-break,
+[data-work-type="dissertacao"] .preview-abstract-break,
+[data-work-type="tese"] .preview-abstract-break {
+  break-before: page;
+  page-break-before: always;
 }
 
 @media print {

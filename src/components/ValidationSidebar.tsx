@@ -53,22 +53,23 @@ export function ValidationSidebar({
       <details className="quick-guide">
         <summary>Guia rápido de uso</summary>
         <ol>
-          <li>Escolha o <strong>Tipo de trabalho</strong> e preencha os campos de dados.</li>
-          <li>Escreva ou importe o texto no <strong>editor central</strong> e as referências em <strong>Referências</strong>.</li>
-          <li>Clique em <strong>Validar trabalho</strong> e corrija os erros marcados com <em>Corrigir</em>.</li>
-          <li>Visualize o resultado e clique em <strong>Gerar DOCX editável</strong>.</li>
-          <li>No Word/LibreOffice: selecione tudo e pressione <strong>F9</strong> (Word) ou <strong>Atualizar tudo</strong> (LibreOffice) para preencher o sumário; confira paginação e exporte o PDF.</li>
+          <li>Escolha o <strong>Tipo de trabalho</strong>.</li>
+          <li>Preencha os dados e escreva ou importe o texto no editor.</li>
+          <li>Clique em <strong>Validar trabalho</strong> e use <em>Corrigir</em> nos destaques.</li>
+          <li>Use <strong>Visualizar</strong> para conferir o resultado.</li>
+          <li>Clique em <strong>Gerar DOCX editável</strong> e atualize o sumário no Word/LibreOffice (F9 / Atualizar tudo).</li>
         </ol>
       </details>
-      <div className="post-generation-note">
-        <strong>Após gerar o DOCX:</strong> o arquivo é um rascunho editável. Erros essenciais impedem a geração. Alertas não impedem. Pendências de versão final permitem rascunho, mas impedem submissão final. Abra no Word ou LibreOffice, atualize campos dinâmicos e o sumário (tecle F9), confira paginação e exporte para PDF para submissão.
+      <details className="post-generation-note">
+        <summary>Após gerar o DOCX:</summary>
+        <p>o arquivo é um rascunho editável. Erros essenciais impedem a geração. Alertas não impedem. Pendências de versão final permitem rascunho, mas impedem submissão final. Abra no Word ou LibreOffice, atualize campos dinâmicos e o sumário (tecle F9), confira paginação e exporte para PDF para submissão.</p>
         <ul className="conformance-report">
           <li>Pontos que ainda exigem revisão manual</li>
           <li>Alertas de referências</li>
           <li>Alertas de metadados</li>
           <li>Alertas de coerência textual</li>
         </ul>
-      </div>
+      </details>
       {showFinalPending && (
         <div className="issue-list" role="region" aria-label="Pendencias de versao final">
           <h2>Pendencias de versao final</h2>
@@ -84,15 +85,23 @@ export function ValidationSidebar({
         <input type="checkbox" checked={generateAnyway} onChange={(event) => onToggleGenerateAnyway(event.target.checked)} />
         <span>Gerar rascunho mesmo com pendências</span>
       </label>
-      <TextDiagnosticPanel fields={fields} editorText={editorText} />
+      <details className="diagnostic-panel-details">
+        <summary>Análise do texto</summary>
+        <TextDiagnosticPanel fields={fields} editorText={editorText} />
+      </details>
       <div className="issue-list" role="region" aria-label="Erros de validação">
         <h2>Erros</h2>
         {errors.length ? errors.map((issue) => (
           <div className="issue error" key={issue.code} role="alert">
             <p className="issue-message">{issue.message}</p>
-            {issue.what && <p className="issue-detail"><strong>O que é:</strong> {issue.what}</p>}
-            {issue.why && <p className="issue-detail"><strong>Por que importa:</strong> {issue.why}</p>}
-            {issue.action && <p className="issue-detail"><strong>Ação:</strong> {issue.action}</p>}
+            {(issue.what || issue.why || issue.action) && (
+              <details className="issue-details">
+                <summary>Ver detalhes</summary>
+                {issue.what && <p className="issue-detail"><strong>O que é:</strong> {issue.what}</p>}
+                {issue.why && <p className="issue-detail"><strong>Por que importa:</strong> {issue.why}</p>}
+                {issue.action && <p className="issue-detail"><strong>Ação:</strong> {issue.action}</p>}
+              </details>
+            )}
             <IssueAction fieldKey={issue.fieldKey} label="Corrigir" onNavigateToField={onNavigateToField} />
           </div>
         )) : <p className="empty-state" role="status">Nenhum erro essencial.</p>}
@@ -102,9 +111,14 @@ export function ValidationSidebar({
         {warnings.length ? warnings.map((issue) => (
           <div className="issue warning" key={issue.code} role="status">
             <p className="issue-message">{issue.message}</p>
-            {issue.what && <p className="issue-detail"><strong>O que é:</strong> {issue.what}</p>}
-            {issue.why && <p className="issue-detail"><strong>Por que importa:</strong> {issue.why}</p>}
-            {issue.action && <p className="issue-detail"><strong>Ação:</strong> {issue.action}</p>}
+            {(issue.what || issue.why || issue.action) && (
+              <details className="issue-details">
+                <summary>Ver detalhes</summary>
+                {issue.what && <p className="issue-detail"><strong>O que é:</strong> {issue.what}</p>}
+                {issue.why && <p className="issue-detail"><strong>Por que importa:</strong> {issue.why}</p>}
+                {issue.action && <p className="issue-detail"><strong>Ação:</strong> {issue.action}</p>}
+              </details>
+            )}
             <IssueAction fieldKey={issue.fieldKey} label="Corrigir" onNavigateToField={onNavigateToField} />
           </div>
         )) : <p className="empty-state" role="status">Nenhum alerta registrado.</p>}

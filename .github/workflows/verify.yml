@@ -17,3 +17,5 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      - name: Conformidade UFLA sem Word (15 tipos + formatos)
+        run: npx tsx scripts/ufla-compliance/ci-checks.ts

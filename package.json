@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "test": "vitest run --environment node",
@@ -12,10 +15,17 @@
     "acceptance:word": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/validate-word.ps1",
     "acceptance:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run-docx-acceptance.ps1",
     "skill:validate": "npx tsx skills/ufla-docx-compliance/src/index.ts",
+    "ufla:audit": "npx tsx scripts/ufla-compliance/run-ufla-audit.ts",
+    "ufla:pdfref": "npx tsx scripts/ufla-compliance/check-pdf-reference.ts",
+    "ufla:pdfref:refresh": "npx tsx scripts/ufla-compliance/check-pdf-reference.ts --refresh",
+    "ufla:lh": "node scripts/audit-lighthouse.mjs",
+    "e2e": "playwright test",
+    "e2e:install": "playwright install chromium",
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" --fix",
     "format": "prettier --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,tsx}\"",
-    "format:fix": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,tsx}\""
+    "format:fix": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,tsx}\"",
+    "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json"
   },
   "dependencies": {
     "@tiptap/extension-text-align": "^3.27.3",
@@ -27,17 +37,21 @@
     "docx": "^8.5.0",
     "file-saver": "^2.0.5",
     "jszip": "^3.10.1",
+    "katex": "^0.18.4",
     "lucide-react": "^0.468.0",
     "mammoth": "^1.12.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "^1.0.6",
+    "@playwright/test": "^1.62.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/file-saver": "^2.0.7",
+    "@types/katex": "^0.16.8",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
@@ -47,6 +61,10 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "jest-axe": "^10.0.0",
     "jsdom": "^29.1.1",
+    "lighthouse": "^13.4.1",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^4.0.379",
+    "pixelmatch": "^7.2.0",
     "prettier": "^3.9.6",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.66.0",

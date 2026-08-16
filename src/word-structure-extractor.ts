@@ -2,6 +2,8 @@
 
 export type ImportedSectionKind = "pre-textual" | "textual" | "post-textual";
 
+export type ImportedPageOrientation = "portrait" | "landscape";
+
 export interface ImportedTextRun {
   text: string;
   bold?: boolean;
@@ -9,6 +11,10 @@ export interface ImportedTextRun {
   underline?: boolean;
   style?: string;
   inheritedStyle?: string;
+  changeKind?: "insertion" | "deletion";
+  commentId?: string;
+  moveId?: string;
+  permissionId?: string;
 }
 
 export type ImportedBlock =
@@ -20,6 +26,14 @@ export type ImportedBlock =
       style?: string;
       styleName?: string;
       section?: ImportedSectionKind;
+      orientation?: ImportedPageOrientation;
+      footnoteRefs?: string[];
+      hasMath?: boolean;
+      ommlXml?: string;
+      bookmarks?: Array<{ id: string; start: boolean }>;
+      commentIds?: string[];
+      moveIds?: string[];
+      permissionIds?: string[];
     }
   | {
       type: "heading";
@@ -30,6 +44,13 @@ export type ImportedBlock =
       style?: string;
       styleName?: string;
       section?: ImportedSectionKind;
+      orientation?: ImportedPageOrientation;
+      footnoteRefs?: string[];
+      hasMath?: boolean;
+      bookmarks?: Array<{ id: string; start: boolean }>;
+      commentIds?: string[];
+      moveIds?: string[];
+      permissionIds?: string[];
     }
   | {
       type: "longQuote";
@@ -39,6 +60,13 @@ export type ImportedBlock =
       style?: string;
       styleName?: string;
       section?: ImportedSectionKind;
+      orientation?: ImportedPageOrientation;
+      footnoteRefs?: string[];
+      hasMath?: boolean;
+      bookmarks?: Array<{ id: string; start: boolean }>;
+      commentIds?: string[];
+      moveIds?: string[];
+      permissionIds?: string[];
     }
   | {
       type: "table";
@@ -46,12 +74,17 @@ export type ImportedBlock =
       caption?: string;
       source?: string;
       section?: ImportedSectionKind;
+      orientation?: ImportedPageOrientation;
       gridWidths?: number[];
       tableWidthTwips?: number;
       hasGridSpan?: boolean;
       hasVerticalMerge?: boolean;
       cellWidths?: number[][];
       cellMerges?: Array<{ row: number; col: number; type: "vMerge-restart" | "vMerge-continue" | "gridSpan" }>;
+      headerRowIndices?: number[];
+      commentIds?: string[];
+      moveIds?: string[];
+      permissionIds?: string[];
     }
   | {
       type: "image";
@@ -63,9 +96,14 @@ export type ImportedBlock =
       caption?: string;
       source?: string;
       section?: ImportedSectionKind;
+      orientation?: ImportedPageOrientation;
       isDecorative?: boolean;
+      ommlXml?: string;
+      commentIds?: string[];
+      moveIds?: string[];
+      permissionIds?: string[];
     }
-  | { type: "pageBreak" };
+  | { type: "pageBreak"; section?: ImportedSectionKind; orientation?: ImportedPageOrientation; commentIds?: string[]; moveIds?: string[]; permissionIds?: string[] };
 
 export interface ImportedParagraph {
   index: number;
@@ -82,8 +120,16 @@ export interface ImportedParagraph {
   appearsTextual: boolean;
   appearsPostTextual: boolean;
   imageRelationshipIds: string[];
+  footnoteRefs: string[];
+  bookmarks?: Array<{ id: string; start: boolean }>;
+  commentIds?: string[];
+  moveIds?: string[];
+  permissionIds?: string[];
   runs: ImportedTextRun[];
   section: ImportedSectionKind;
+  orientation?: ImportedPageOrientation;
+  hasMath?: boolean;
+  ommlXml?: string;
 }
 
 export interface ImportedImageAsset {
@@ -101,6 +147,9 @@ export interface DocxStructure {
   images: ImportedImageAsset[];
   relationships: Record<string, string>;
   styleNames: Record<string, string>;
+  footnotes: Record<string, string>;
+  /** Comentários do Word (word/comments.xml): id → texto do comentário. */
+  comments: Record<string, string>;
   text: string;
   hasNumbering: boolean;
 }
@@ -110,7 +159,7 @@ export interface DocxStructureOptions {
 }
 
 const TEXT_TOKEN_PATTERN =
-  /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\b[^>]*\/>|<w:br\b[^>]*\/>|<w:lastRenderedPageBreak\b[^>]*\/>/g;
+  /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<m:t(?:\s[^>]*)?>([\s\S]*?)<\/m:t>|<w:tab\b[^>]*\/>|<w:br\b[^>]*\/>|<w:lastRenderedPageBreak\b[^>]*\/>/g;
 const PAGE_BREAK_PATTERN = /<w:br\b[^>]*w:type="page"[^>]*\/>|<w:lastRenderedPageBreak\b[^>]*\/>/g;
 
 const PRE_TEXTUAL_HEADINGS = new Set([
@@ -163,25 +212,103 @@ function isPageBreakToken(token: string): boolean {
   return /<w:lastRenderedPageBreak\b/.test(token) || /<w:br\b[^>]*w:type="page"/.test(token);
 }
 
-function extractTextFromXml(xml: string): { rawText: string; text: string } {
+/**
+ * Orientações das seções, na ordem de ocorrência no XML do corpo.
+ *
+ * Modelo OOXML (ECMA-376 §17.6.6.19): cada <w:sectPr> descreve a seção que
+ * TERMINA naquele ponto — o sectPr dentro do pPr de um parágrafo é o último
+ * parágrafo da seção; o sectPr filho direto de <w:body> descreve a última
+ * seção. Portanto a orientação de um bloco é a do PRIMEIRO sectPr com offset
+ * maior que o do bloco; se não houver, a do sectPr final do body.
+ */
+function extractSectionOrientations(bodyXml: string): Array<{ offset: number; orientation: ImportedPageOrientation }> {
+  const sections: Array<{ offset: number; orientation: ImportedPageOrientation }> = [];
+  let match: RegExpExecArray | null;
+  const SECTPR_PATTERN = /<w:sectPr\b[\s\S]*?<\/w:sectPr>/g;
+  while ((match = SECTPR_PATTERN.exec(bodyXml)) !== null) {
+    const orientation: ImportedPageOrientation = /<w:pgSz\b[^>]*w:orient="(portrait|landscape)"/.test(match[0])
+      ? "landscape"
+      : "portrait";
+    sections.push({ offset: match.index, orientation });
+  }
+  return sections;
+}
+
+/** Extrai os comentários do Word (word/comments.xml): id → texto. */
+export function extractCommentsFromXml(commentsXml: string): Record<string, string> {
+  const comments: Record<string, string> = {};
+  let match: RegExpExecArray | null;
+  const COMMENT_PATTERN = /<w:comment\b[^>]*w:id="([^"]+)"[^>]*>([\s\S]*?)<\/w:comment>/g;
+  while ((match = COMMENT_PATTERN.exec(commentsXml)) !== null) {
+    comments[match[1]] = extractPlainText(match[2]).replace(/\s+/g, " ").trim();
+  }
+  return comments;
+}
+
+const XREF_HYPERLINK_PATTERN = /<w:hyperlink\b[^>]*w:anchor="([^"]+)"[^>]*>([\s\S]*?)<\/w:hyperlink>/g;
+
+/**
+ * Extrai o texto plano de um fragmento XML (w:t/m:t), sem tokens de controle.
+ */
+function extractPlainText(xml: string): string {
   const parts: string[] = [];
   let match: RegExpExecArray | null;
-
   TEXT_TOKEN_PATTERN.lastIndex = 0;
   while ((match = TEXT_TOKEN_PATTERN.exec(xml)) !== null) {
     if (match[0].startsWith("<w:tab")) {
       parts.push(" ");
-    } else if (isPageBreakToken(match[0])) {
+    } else if (isPageBreakToken(match[0]) || match[0].startsWith("<w:br")) {
       continue;
-    } else if (match[0].startsWith("<w:br")) {
-      parts.push("\n");
     } else {
-      parts.push(decodeXml(match[1] ?? ""));
+      parts.push(decodeXml(match[1] ?? match[2] ?? ""));
     }
+  }
+  return parts.join("");
+}
+
+function extractTextFromXml(xml: string): { rawText: string; text: string } {
+  const parts: string[] = [];
+  let match: RegExpExecArray | null;
+  let tokenMatch: RegExpExecArray | null;
+  let cursor = 0;
+
+  // Religação de referências cruzadas: hiperlinks internos (w:hyperlink w:anchor)
+  // viram tokens [x:ANCHOR|texto visível] que sobrevivem ao round-trip e são
+  // reemitidos como hyperlink interno na exportação (ver docx-render-core/export).
+  XREF_HYPERLINK_PATTERN.lastIndex = 0;
+  while ((match = XREF_HYPERLINK_PATTERN.exec(xml)) !== null) {
+    const before = xml.slice(cursor, match.index);
+    TEXT_TOKEN_PATTERN.lastIndex = 0;
+    while ((tokenMatch = TEXT_TOKEN_PATTERN.exec(before)) !== null) {
+      pushTextToken(tokenMatch, parts);
+    }
+    const anchor = match[1];
+    const visible = extractPlainText(match[2]).replace(/\s+/g, " ").trim();
+    parts.push(visible ? `[x:${anchor}~${visible}]` : `[x:${anchor}]`);
+    cursor = XREF_HYPERLINK_PATTERN.lastIndex;
+  }
+
+  const tail = xml.slice(cursor);
+  TEXT_TOKEN_PATTERN.lastIndex = 0;
+  while ((tokenMatch = TEXT_TOKEN_PATTERN.exec(tail)) !== null) {
+    pushTextToken(tokenMatch, parts);
   }
 
   const rawText = parts.join("");
   return { rawText, text: cleanText(rawText) };
+}
+
+function pushTextToken(match: RegExpExecArray, parts: string[]): void {
+  if (match[0].startsWith("<w:tab")) {
+    parts.push(" ");
+  } else if (isPageBreakToken(match[0])) {
+    return;
+  } else if (match[0].startsWith("<w:br")) {
+    parts.push("\n");
+  } else {
+    // w:t e m:t têm o conteúdo no mesmo grupo de captura alternado.
+    parts.push(decodeXml(match[1] ?? match[2] ?? ""));
+  }
 }
 
 function splitParagraphXmlByPageBreak(xml: string): Array<{ xml: string; pageBreakAfter: boolean }> {
@@ -224,13 +351,121 @@ function hasUnderline(runXml: string): boolean {
   return !/\bw:val="(?:none|false|0)"/i.test(match[1]);
 }
 
+function extractBookmarks(paragraphXml: string): Array<{ id: string; start: boolean }> {
+  const bookmarks: Array<{ id: string; start: boolean }> = [];
+  const startPattern = /<w:bookmarkStart\b[^>]*w:id="([^"]+)"[^>]*>/g;
+  let match: RegExpExecArray | null;
+  while ((match = startPattern.exec(paragraphXml)) !== null) {
+    bookmarks.push({ id: match[1], start: true });
+  }
+  const endPattern = /<w:bookmarkEnd\b[^>]*w:id="([^"]+)"[^>]*>/g;
+  while ((match = endPattern.exec(paragraphXml)) !== null) {
+    bookmarks.push({ id: match[1], start: false });
+  }
+  return bookmarks;
+}
+
+function extractRunSourcesFromParagraphXml(
+  paragraphXml: string,
+): Array<{ xml: string; changeKind?: "insertion" | "deletion"; commentId?: string; moveId?: string; permissionId?: string }> {
+  const sources: Array<{ xml: string; changeKind?: "insertion" | "deletion"; commentId?: string; moveId?: string; permissionId?: string }> = [];
+  const ranges: Array<{ start: number; end: number; changeKind?: "insertion" | "deletion"; commentId?: string; moveId?: string; permissionId?: string }> = [];
+
+  const commentStartPattern = /<w:commentRangeStart\b[^>]*w:id="([^"]+)"[^>]*>/g;
+  const commentEndPattern = /<w:commentRangeEnd\b[^>]*w:id="([^"]+)"[^>]*>/g;
+  const moveRangePattern = /<w:moveRange\b[^>]*w:id="([^"]+)"[^>]*>/g;
+  const moveFromPattern = /<w:moveFrom\b[\s\S]*?<\/w:moveFrom>/g;
+  const moveToPattern = /<w:moveTo\b[\s\S]*?<\/w:moveTo>/g;
+  const permStartPattern = /<w:permStart\b[^>]*w:id="([^"]+)"[^>]*>/g;
+  const permEndPattern = /<w:permEnd\b[^>]*w:id="([^"]+)"[^>]*>/g;
+  const insDelPattern = /<w:ins\b[\s\S]*?<\/w:ins>|<w:del\b[\s\S]*?<\/w:del>/g;
+
+  const commentStarts = new Map<number, string>();
+  const commentEnds = new Set<number>();
+  const moveFromRanges: Array<{ start: number; end: number; moveId?: string }> = [];
+  const moveToRanges: Array<{ start: number; end: number; moveId?: string }> = [];
+  const permStarts = new Map<number, string>();
+  const permEnds = new Set<number>();
+
+  let match: RegExpExecArray | null;
+  commentStartPattern.lastIndex = 0;
+  while ((match = commentStartPattern.exec(paragraphXml)) !== null) {
+    commentStarts.set(match.index, match[1]);
+  }
+  commentEndPattern.lastIndex = 0;
+  while ((match = commentEndPattern.exec(paragraphXml)) !== null) {
+    commentEnds.add(match.index);
+  }
+  moveRangePattern.lastIndex = 0;
+  while ((match = moveRangePattern.exec(paragraphXml)) !== null) {
+    moveToRanges.push({ start: match.index, end: match.index + match[0].length, moveId: match[1] });
+  }
+  moveFromPattern.lastIndex = 0;
+  while ((match = moveFromPattern.exec(paragraphXml)) !== null) {
+    moveFromRanges.push({ start: match.index, end: match.index + match[0].length });
+  }
+  moveToPattern.lastIndex = 0;
+  while ((match = moveToPattern.exec(paragraphXml)) !== null) {
+    moveToRanges.push({ start: match.index, end: match.index + match[0].length });
+  }
+  permStartPattern.lastIndex = 0;
+  while ((match = permStartPattern.exec(paragraphXml)) !== null) {
+    permStarts.set(match.index, match[1]);
+  }
+  permEndPattern.lastIndex = 0;
+  while ((match = permEndPattern.exec(paragraphXml)) !== null) {
+    permEnds.add(match.index);
+  }
+
+  insDelPattern.lastIndex = 0;
+  while ((match = insDelPattern.exec(paragraphXml)) !== null) {
+    const changeKind = match[0].startsWith("<w:ins") ? "insertion" : "deletion";
+    ranges.push({ start: match.index, end: match.index + match[0].length, changeKind });
+  }
+
+  const runPattern = /<w:r\b[\s\S]*?<\/w:r>/g;
+  while ((match = runPattern.exec(paragraphXml)) !== null) {
+    const runStart = match.index;
+    const runEnd = match.index + match[0].length;
+    const changeKind = ranges.find((r) => runStart >= r.start && runEnd <= r.end)?.changeKind;
+
+    let commentId: string | undefined;
+    for (const [start, id] of commentStarts) {
+      if (runStart >= start) {
+        const endMatch = [...commentEnds].find((end) => end >= runEnd);
+        if (endMatch) commentId = id;
+      }
+    }
+
+    let moveId: string | undefined;
+    for (const range of moveFromRanges) {
+      if (runStart >= range.start && runEnd <= range.end) moveId = range.moveId;
+    }
+    for (const range of moveToRanges) {
+      if (runStart >= range.start && runEnd <= range.end) moveId = range.moveId;
+    }
+
+    let permissionId: string | undefined;
+    for (const [start, id] of permStarts) {
+      if (runStart >= start) {
+        const endMatch = [...permEnds].find((end) => end >= runEnd);
+        if (endMatch) permissionId = id;
+      }
+    }
+
+    sources.push({ xml: match[0], changeKind, commentId, moveId, permissionId });
+  }
+  return sources;
+}
+
 function extractRunsFromParagraphXml(
   paragraphXml: string,
   inheritedStyle?: string,
 ): ImportedTextRun[] {
-  const runs = [...paragraphXml.matchAll(/<w:r\b[\s\S]*?<\/w:r>/g)]
-    .map((match): ImportedTextRun | undefined => {
-      const runXml = match[0];
+  const sources = extractRunSourcesFromParagraphXml(paragraphXml);
+  const runs = sources
+    .map((source): ImportedTextRun | undefined => {
+      const runXml = source.xml;
       const { rawText, text } = extractTextFromXml(runXml);
       const style = runXml.match(/<w:rStyle\b[^>]*w:val="([^"]+)"/)?.[1];
       const runText = rawText || text;
@@ -246,6 +481,10 @@ function extractRunsFromParagraphXml(
         underline: hasUnderline(runXml) || undefined,
         style,
         inheritedStyle,
+        changeKind: source.changeKind,
+        ...(source.commentId ? { commentId: source.commentId } : {}),
+        ...(source.moveId ? { moveId: source.moveId } : {}),
+        ...(source.permissionId ? { permissionId: source.permissionId } : {}),
       };
     })
     .filter((run): run is ImportedTextRun => Boolean(run));
@@ -316,6 +555,12 @@ function headingLevelFromStyle(styleId = "", styleName = ""): number | undefined
     normalized.match(/\bTTULO\s*([1-9])\b/);
 
   if (!match) {
+    // Estilos nomeados UFLA-044 (§28.1 do Manual consolidado UFLA). Usa
+    // includes(): o identificador vem acompanhado do nome legível do estilo.
+    // normalizeForDetection preserva underscores do id (ex.: UFLA_TITULO_*).
+    if (normalized.includes("UFLA_TITULO_PRIMARIO") || normalized.includes("UFLA_TITULO_SEM_INDICATIVO")) return 1;
+    if (normalized.includes("UFLA_TITULO_SECUNDARIO")) return 2;
+    if (normalized.includes("UFLA_TITULO_TERCIARIO")) return 3;
     return undefined;
   }
 
@@ -324,12 +569,17 @@ function headingLevelFromStyle(styleId = "", styleName = ""): number | undefined
 
 function headingLevelFromText(text: string): number | undefined {
   const normalized = normalizeForDetection(text);
-  const numeric = normalized.match(/^(\d+(?:\.\d+)*)\s+\S+/);
+  // Indicativo numérico/misto ABNT: "1", "1.1", "1.1.A", "A.1", "1.A.2" —
+  // segmentos podem ser algarismos ou letras maiúsculas (numeração quinária).
+  // Letra inicial só conta com segmento posterior após ponto ("A.1"): evita
+  // tratar sentenças como "A Deus" ou "A pesquisa mostra" como título.
+  const prefixPattern = /^(?:(?:\d+(?:\.(?:\d+|[A-Z]))*)|(?:[A-Z]\.(?:\d+|[A-Z])(?:\.(?:\d+|[A-Z]))*))\s+\S+/;
+  const numeric = normalized.match(prefixPattern);
   if (numeric) {
-    return numeric[1].split(".").length;
+    return numeric[0].split(/\s+/)[0].split(".").length;
   }
 
-  const withoutNumber = normalized.replace(/^\d+(?:\.\d+)*\s*/, "");
+  const withoutNumber = normalized.replace(/^(?:\d+(?:\.(?:\d+|[A-Z]))*|[A-Z]\.(?:\d+|[A-Z])(?:\.(?:\d+|[A-Z]))*)\s*/, "");
   if (
     PRE_TEXTUAL_HEADINGS.has(withoutNumber) ||
     withoutNumber === "REFERENCIAS" ||
@@ -405,6 +655,12 @@ function paragraphBlockFromMetadata(paragraph: ImportedParagraph): ImportedBlock
     return undefined;
   }
 
+  const mathProp = paragraph.hasMath ? { hasMath: true } : {};
+  const ommlProp = paragraph.ommlXml ? { ommlXml: paragraph.ommlXml } : {};
+  const commentProp = paragraph.commentIds?.length ? { commentIds: paragraph.commentIds } : {};
+  const moveProp = paragraph.moveIds?.length ? { moveIds: paragraph.moveIds } : {};
+  const permissionProp = paragraph.permissionIds?.length ? { permissionIds: paragraph.permissionIds } : {};
+
   if (paragraph.isHeading) {
     return {
       type: "heading",
@@ -415,6 +671,12 @@ function paragraphBlockFromMetadata(paragraph: ImportedParagraph): ImportedBlock
       style: paragraph.styleId,
       styleName: paragraph.styleName,
       section: paragraph.section,
+      ...(paragraph.bookmarks?.length ? { bookmarks: paragraph.bookmarks } : {}),
+      ...commentProp,
+      ...moveProp,
+      ...permissionProp,
+      ...mathProp,
+      ...ommlProp,
     };
   }
 
@@ -427,6 +689,12 @@ function paragraphBlockFromMetadata(paragraph: ImportedParagraph): ImportedBlock
       style: paragraph.styleId,
       styleName: paragraph.styleName,
       section: paragraph.section,
+      ...(paragraph.bookmarks?.length ? { bookmarks: paragraph.bookmarks } : {}),
+      ...commentProp,
+      ...moveProp,
+      ...permissionProp,
+      ...mathProp,
+      ...ommlProp,
     };
   }
 
@@ -438,6 +706,12 @@ function paragraphBlockFromMetadata(paragraph: ImportedParagraph): ImportedBlock
     style: paragraph.styleId,
     styleName: paragraph.styleName,
     section: paragraph.section,
+    ...(paragraph.bookmarks?.length ? { bookmarks: paragraph.bookmarks } : {}),
+    ...commentProp,
+    ...moveProp,
+    ...permissionProp,
+    ...mathProp,
+    ...ommlProp,
   };
 }
 
@@ -449,6 +723,18 @@ function extractTableRows(tableXml: string): string[][] {
       ),
     )
     .filter((row) => row.some((cell) => cell.trim()));
+}
+
+function keptTableRowIndices(tableXml: string): number[] {
+  const indices: number[] = [];
+  const rows = [...tableXml.matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)];
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    const cells = [...rows[rowIndex][0].matchAll(/<w:tc\b[\s\S]*?<\/w:tc>/g)].map((cellMatch) =>
+      extractTextFromXml(cellMatch[0]).text,
+    );
+    if (cells.some((cell) => cell.trim())) indices.push(rowIndex);
+  }
+  return indices;
 }
 
 function twipValue(attrXml: string): number | undefined {
@@ -476,6 +762,24 @@ function extractTableWidthTwips(tableXml: string): number | undefined {
   const tblWMatch = tblPrMatch[1].match(/<w:tblW\b[^>]*>/i);
   if (!tblWMatch) return undefined;
   return twipValue(tblWMatch[0]);
+}
+
+function extractTableHeaderRows(tableXml: string): number[] {
+  const rows = [...tableXml.matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)];
+  const kept = keptTableRowIndices(tableXml);
+  const keptSet = new Set(kept);
+  const headerRows: number[] = [];
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    if (!keptSet.has(rowIndex)) continue;
+    const trPrMatch = rows[rowIndex][0].match(/<w:trPr\b[^>]*>([\s\S]*?)<\/w:trPr>/);
+    if (!trPrMatch) continue;
+    const tblHeaderMatch = trPrMatch[1].match(/<w:tblHeader\b[^>]*>/i);
+    if (!tblHeaderMatch) continue;
+    const val = tblHeaderMatch[0].match(/w:val="([^"]+)"/i)?.[1];
+    if (val !== undefined && val.toLowerCase() === "false") continue;
+    headerRows.push(kept.indexOf(rowIndex));
+  }
+  return headerRows;
 }
 
 function extractCellProperties(tableXml: string): { hasGridSpan: boolean; hasVerticalMerge: boolean; cellWidths: number[][]; cellMerges: Array<{ row: number; col: number; type: "vMerge-restart" | "vMerge-continue" | "gridSpan" }> } {
@@ -524,12 +828,14 @@ function parseTableBlock(tableXml: string): {
   hasVerticalMerge: boolean;
   cellWidths: number[][];
   cellMerges: Array<{ row: number; col: number; type: "vMerge-restart" | "vMerge-continue" | "gridSpan" }>;
+  headerRowIndices: number[];
 } {
   const rows = extractTableRows(tableXml);
   const gridWidths = extractTableGridWidths(tableXml);
   const tableWidthTwips = extractTableWidthTwips(tableXml);
   const { hasGridSpan, hasVerticalMerge, cellWidths, cellMerges } = extractCellProperties(tableXml);
-  return { rows, gridWidths, tableWidthTwips, hasGridSpan, hasVerticalMerge, cellWidths, cellMerges };
+  const headerRowIndices = extractTableHeaderRows(tableXml);
+  return { rows, gridWidths, tableWidthTwips, hasGridSpan, hasVerticalMerge, cellWidths, cellMerges, headerRowIndices };
 }
 
 async function extractImages(
@@ -573,6 +879,36 @@ async function extractImages(
   return [...imagesByTarget.values()];
 }
 
+const FOOTNOTE_REFERENCE_PATTERN = /<w:footnoteReference\b[^>]*w:id="(\d+)"/g;
+
+/**
+ * Extrai as notas de rodapé reais de word/footnotes.xml (id → texto), ignorando
+ * os separadores (w:type="separator" / "continuationSeparator"). O texto de
+ * cada nota é a concatenação dos parágrafos, preservando quebras de linha
+ * internas. Mecanismo distinto de "Fonte:" de tabelas/ilustrações, que vive em
+ * document.xml abaixo do elemento.
+ */
+export function extractFootnotesFromXml(footnotesXml: string): Record<string, string> {
+  const footnotes: Record<string, string> = {};
+  const footnotePattern = /<w:footnote\b([^>]*)>([\s\S]*?)<\/w:footnote>/g;
+  let match: RegExpExecArray | null;
+  while ((match = footnotePattern.exec(footnotesXml)) !== null) {
+    const attributes = match[1] ?? "";
+    if (/w:type="(?:separator|continuationSeparator)"/.test(attributes)) continue;
+    const idMatch = attributes.match(/w:id="(\d+)"/);
+    if (!idMatch) continue;
+    const body = match[2] ?? "";
+    const paragraphTexts = [...body.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)].map((paragraphMatch) =>
+      [...paragraphMatch[0].matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)]
+        .map((textMatch) => textMatch[1])
+        .join(""),
+    );
+    const text = paragraphTexts.filter(Boolean).join("\n").trim();
+    if (text) footnotes[idMatch[1]] = text;
+  }
+  return footnotes;
+}
+
 export async function extractDocxStructure(
   input: ArrayBuffer | Uint8Array,
   options: DocxStructureOptions = {},
@@ -585,6 +921,10 @@ export async function extractDocxStructure(
   }
 
   const stylesXml = (await zip.file("word/styles.xml")?.async("string")) ?? "";
+  const footnotesXml = (await zip.file("word/footnotes.xml")?.async("string")) ?? "";
+  const footnotes = extractFootnotesFromXml(footnotesXml);
+  const commentsXml = (await zip.file("word/comments.xml")?.async("string")) ?? "";
+  const comments = extractCommentsFromXml(commentsXml);
   const relsXml =
     (await zip.file("word/_rels/document.xml.rels")?.async("string")) ?? "";
   const relationships = extractRelationships(relsXml);
@@ -592,30 +932,41 @@ export async function extractDocxStructure(
   const images = await extractImages(zip, relationships, Boolean(options.includeMediaData));
   const bodyXml =
     documentXml.match(/<w:body\b[^>]*>([\s\S]*?)<\/w:body>/)?.[1] ?? documentXml;
+  const sectionOrientations = extractSectionOrientations(bodyXml);
 
   const blocks: ImportedBlock[] = [];
   const paragraphs: ImportedParagraph[] = [];
   let currentSection: ImportedSectionKind = "pre-textual";
   let paragraphIndex = 0;
 
+  // Orientação da seção que contém o bloco: primeiro sectPr após o offset do
+  // bloco; se não houver, a do sectPr final do body (última seção).
+  const orientationForOffset = (offset: number): ImportedPageOrientation => {
+    const next = sectionOrientations.find((s) => s.offset > offset);
+    return next?.orientation ?? sectionOrientations.at(-1)?.orientation ?? "portrait";
+  };
+
   const bodyElementPattern = /<w:p\b[\s\S]*?<\/w:p>|<w:tbl\b[\s\S]*?<\/w:tbl>/g;
   let elementMatch: RegExpExecArray | null;
 
   while ((elementMatch = bodyElementPattern.exec(bodyXml)) !== null) {
     const xml = elementMatch[0];
+    const orientation = orientationForOffset(elementMatch.index);
 
     if (xml.startsWith("<w:tbl")) {
-      const { rows, gridWidths, tableWidthTwips, hasGridSpan, hasVerticalMerge, cellWidths, cellMerges } = parseTableBlock(xml);
+      const { rows, gridWidths, tableWidthTwips, hasGridSpan, hasVerticalMerge, cellWidths, cellMerges, headerRowIndices } = parseTableBlock(xml);
       blocks.push({
         type: "table",
         rows,
         section: currentSection,
+        orientation,
         gridWidths,
         tableWidthTwips,
         hasGridSpan,
         hasVerticalMerge,
         cellWidths,
         cellMerges,
+        headerRowIndices,
       });
       continue;
     }
@@ -635,8 +986,21 @@ export async function extractDocxStructure(
       const imageRelationshipIds = extractImageRelationshipIds(segment.xml, relationships);
       const isLongQuote = !isHeading && isLongQuoteParagraph(xml, styleId, styleName);
       const runs = extractRunsFromParagraphXml(segment.xml, styleId);
+      const bookmarks = extractBookmarks(segment.xml);
+      const footnoteRefs: string[] = [];
+      let footnoteRefMatch: RegExpExecArray | null;
+      FOOTNOTE_REFERENCE_PATTERN.lastIndex = 0;
+      while ((footnoteRefMatch = FOOTNOTE_REFERENCE_PATTERN.exec(segment.xml)) !== null) {
+        footnoteRefs.push(footnoteRefMatch[1]);
+      }
 
       if (text || imageRelationshipIds.length) {
+        const hasMath = /<m:oMath(?:\s[^>]*)?>[\s\S]*<\/m:oMath>|<m:oMathPara\b/.test(segment.xml);
+        const ommlXml =
+          /<m:oMathPara\b[\s\S]*?<\/m:oMathPara>|<m:oMath\b[\s\S]*?<\/m:oMath>/.exec(segment.xml)?.[0];
+        const commentIds = [...new Set(runs.map((r) => r.commentId).filter((id): id is string => Boolean(id)))];
+        const moveIds = [...new Set(runs.map((r) => r.moveId).filter((id): id is string => Boolean(id)))];
+        const permissionIds = [...new Set(runs.map((r) => r.permissionId).filter((id): id is string => Boolean(id)))];
         const paragraph: ImportedParagraph = {
           index: paragraphIndex,
           text,
@@ -653,14 +1017,26 @@ export async function extractDocxStructure(
           appearsTextual: currentSection === "textual",
           appearsPostTextual: currentSection === "post-textual",
           imageRelationshipIds,
+          footnoteRefs,
+          bookmarks,
           section: currentSection,
+          orientation,
+          ...(commentIds.length ? { commentIds } : {}),
+          ...(moveIds.length ? { moveIds } : {}),
+          ...(permissionIds.length ? { permissionIds } : {}),
+          ...(hasMath ? { hasMath: true } : {}),
+          ...(ommlXml ? { ommlXml } : {}),
         };
 
         paragraphs.push(paragraph);
 
         const textBlock = paragraphBlockFromMetadata(paragraph);
         if (textBlock) {
-          blocks.push(textBlock);
+          blocks.push({
+            ...textBlock,
+            orientation,
+            ...(footnoteRefs.length ? { footnoteRefs } : {}),
+          });
         }
 
       for (const relationshipId of imageRelationshipIds) {
@@ -678,6 +1054,7 @@ export async function extractDocxStructure(
             relationshipId,
             target,
             section: currentSection,
+            orientation,
             isDecorative: true,
           });
           continue;
@@ -688,6 +1065,7 @@ export async function extractDocxStructure(
           relationshipId,
           target,
           section: currentSection,
+          orientation,
         });
       }
 
@@ -716,6 +1094,8 @@ export async function extractDocxStructure(
     images,
     relationships,
     styleNames,
+    footnotes,
+    comments,
     text,
     hasNumbering: Boolean(zip.file("word/numbering.xml")),
   };

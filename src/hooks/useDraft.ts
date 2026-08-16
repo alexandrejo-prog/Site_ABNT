@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AcademicFields } from "../ufla-rules";
 import { clearDraft, hasDraft, loadDraft, saveDraft } from "../draft-storage";
 import type { DraftStorageErrorKind } from "../draft-storage-error";
@@ -25,6 +25,7 @@ export type DraftStatusValue = "idle" | "saved" | "restored" | "cleared" | "erro
 
 export function useDraft(fields: AcademicFields, editorText: string) {
   const [draftStatus, setDraftStatus] = useState<DraftStatusValue>("idle");
+  const [draftSaving, setDraftSaving] = useState(false);
   const [hasStoredDraft, setHasStoredDraft] = useState(() => typeof window !== "undefined" && hasDraft(window.localStorage));
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearedRef = useRef(false);
@@ -65,6 +66,7 @@ export function useDraft(fields: AcademicFields, editorText: string) {
       clearDraft(window.localStorage);
       autosaveTimeoutRef.current = null;
       setHasStoredDraft(false);
+      setDraftSaving(false);
       return;
     }
     if (!hasDraftableContent(fields, editorText)) {
@@ -72,8 +74,10 @@ export function useDraft(fields: AcademicFields, editorText: string) {
       autosaveTimeoutRef.current = null;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- reflete limpeza do rascunho externo no mesmo tick
       setHasStoredDraft(false);
+      setDraftSaving(false);
       return;
     }
+    setDraftSaving(true);
     const timeout = setTimeout(() => {
       try {
         const result = saveDraft({
@@ -82,6 +86,7 @@ export function useDraft(fields: AcademicFields, editorText: string) {
           updatedAt: new Date().toISOString(),
         }, window.localStorage);
         autosaveTimeoutRef.current = null;
+        setDraftSaving(false);
         if (result.ok) {
           setHasStoredDraft(true);
           setDraftStatus("saved");
@@ -93,6 +98,7 @@ export function useDraft(fields: AcademicFields, editorText: string) {
         }
       } catch {
         autosaveTimeoutRef.current = null;
+        setDraftSaving(false);
         setDraftStatus("error");
         setDraftErrorKind("unknown");
       }
@@ -104,7 +110,7 @@ export function useDraft(fields: AcademicFields, editorText: string) {
     };
   }, [fields, editorText]);
 
-  function handleClearDraft() {
+  const handleClearDraft = useCallback(() => {
     if (autosaveTimeoutRef.current) {
       clearTimeout(autosaveTimeoutRef.current);
       autosaveTimeoutRef.current = null;
@@ -113,10 +119,11 @@ export function useDraft(fields: AcademicFields, editorText: string) {
     setRestoredDraft(null);
     clearDraft(window.localStorage);
     setHasStoredDraft(false);
+    setDraftSaving(false);
     setLastSavedAt(null);
     setDraftErrorKind(null);
     setDraftStatus("cleared");
-  }
+  }, []);
 
-  return { draftStatus, hasStoredDraft, handleClearDraft, restoredDraft, lastSavedAt, draftErrorKind };
+  return { draftStatus, draftSaving, hasStoredDraft, handleClearDraft, restoredDraft, lastSavedAt, draftErrorKind };
 }

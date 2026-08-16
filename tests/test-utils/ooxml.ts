@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { headingParagraphsAtLevel, type HeadingLevel } from "../../src/docx-heading-semantics";
 
 export interface DocxParts {
   documentXml: string;
@@ -239,6 +240,23 @@ export function hasHeadingWithText(documentXml: string, headingStyle: string, te
   return (documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? []).some(
     (paragraph) =>
       paragraph.includes(`w:val="${headingStyle}"`) && normalizeOoxmlText(paragraphRunsText(paragraph)) === target,
+  );
+}
+
+/**
+ * Título no nível semântico 1..3 (estilo aplicado + outlineLvl resolvido em
+ * styles.xml), com o texto informado. Substitui o contrato literal
+ * w:val="Heading1/2/3" usado pelo exportador antigo.
+ */
+export function hasHeadingAtLevel(
+  documentXml: string,
+  stylesXml: string,
+  level: HeadingLevel,
+  text: string,
+): boolean {
+  const target = normalizeOoxmlText(text);
+  return headingParagraphsAtLevel(documentXml, stylesXml, level).some(
+    (paragraph) => normalizeOoxmlText(paragraphRunsText(paragraph)) === target,
   );
 }
 

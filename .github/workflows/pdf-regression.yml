@@ -1,0 +1,44 @@
+name: Regressão PDF (Word)
+
+# Gate de regressão do PDF do Word contra a referência COMMITADA
+# (scripts/ufla-compliance/snapshots/preview-docx-snapshot.json).
+#
+# O GitHub-hosted NÃO tem Microsoft Word — este workflow roda apenas em um
+# runner SELF-HOSTED com Word instalado (labels: self-hosted, windows, word).
+# Registre o runner com:
+#   ./config.cmd --url https://github.com/<org>/<repo> --labels self-hosted,windows,word
+#
+# Sem o runner registrado o job fica "queued" (aguardando runner). O CI
+# Word-free de cada PR continua no verify.yml (preview + digest + coerência
+# OOXML↔PDF via ci-checks.ts). A run de referência é criada/atualizada na
+# máquina com Word:
+#   npm run ufla:pdfref:refresh   (cria a referência no commit atual)
+#   npm run ufla:pdfref           (gate: compara a renderização atual)
+#
+# Falha quando: a renderização do Word diverge da referência commitada sem
+# mudança de preview/digest do DOCX (regressão — Word/fontes/pipeline) ou o
+# snapshot está desatualizado (preview/digest mudaram — rode o refresh).
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pdf-reference:
+    runs-on: [self-hosted, windows, word]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Gate de regressão do PDF do Word (vs referência commitada)
+        run: npm run ufla:pdfref
+      - name: Registrar artefato do gate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-reference-check
+          path: artifacts/ufla-compliance/pdf-reference-check.json
+          if-no-files-found: warn

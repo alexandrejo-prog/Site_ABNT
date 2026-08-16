@@ -43,18 +43,6 @@ export function PreviewModal({
   const html = useMemo(() => buildPreviewHtml(input), [input]);
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = "";
-    };
-  }, [onClose]);
-
-  useEffect(() => {
     if (mode === "edit" && editableRef.current) {
       editableRef.current.innerHTML = editorMarkupToHtml(draftText);
     }
@@ -91,19 +79,74 @@ export function PreviewModal({
   };
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const titleId = "preview-modal-title";
 
-  const pages = useMemo(() => {
-    const count = (html.match(/<section class="preview-page/g) ?? []).length;
-    return count;
-  }, [html]);
+  const getFocusableElements = (): NodeListOf<Element> => {
+    const container = dialogRef.current;
+    if (!container) return document.querySelectorAll("");
+    return container.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+  };
+
+  useEffect(() => {
+    // Foco inicial inline para evitar dependência instável (ref é estável).
+    const container = dialogRef.current;
+    if (!container) return;
+    const focusable = container.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    if (focusable.length > 0) {
+      (focusable[0] as HTMLElement).focus();
+    }
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusable = getFocusableElements();
+      if (focusable.length === 0) return;
+
+      const first = focusable[0] as HTMLElement;
+      const last = focusable[focusable.length - 1] as HTMLElement;
+
+      if (event.shiftKey) {
+        if (document.activeElement === first || !dialogRef.current?.contains(document.activeElement)) {
+          event.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last || !dialogRef.current?.contains(document.activeElement)) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
 
   if (typeof document === "undefined") return null;
 
+  const pages = (html.match(/<section class="preview-page/g) ?? []).length;
+
   return createPortal(
-    <div className="preview-modal-backdrop" role="dialog" aria-modal="true" aria-label="Pré-visualização do documento">
-      <div className="preview-modal-shell">
+    <div className="preview-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby="preview-modal-desc">
+      <div className="preview-modal-shell" ref={dialogRef}>
         <header className="preview-modal-header">
-          <h2 className="preview-modal-title">Pré-visualização fiel ao DOCX</h2>
+          <h2 id={titleId} className="preview-modal-title">Pré-visualização fiel ao DOCX</h2>
+          <span id="preview-modal-desc" className="preview-scale-controls">{pages} página(s) simuladas</span>
           <div className="preview-modal-toolbar">
             <div className="preview-scale-controls" aria-label="Escala de zoom">
               <button className="preview-action" type="button" onClick={() => changeScale(-10)} aria-label="Diminuir zoom"><ZoomOut size={16} aria-hidden="true" /></button>
@@ -122,7 +165,6 @@ export function PreviewModal({
               <span>%</span>
               <button className="preview-action" type="button" onClick={() => changeScale(10)} aria-label="Aumentar zoom"><ZoomIn size={16} aria-hidden="true" /></button>
             </div>
-            <span className="preview-scale-controls">{pages} página(s) simuladas</span>
             <button className={`preview-action ${mode === "view" ? "active" : ""}`} type="button" onClick={() => { commitDraft(); setMode("view"); }}><Eye size={16} aria-hidden="true" />Visualizar</button>
             <button className={`preview-action ${mode === "edit" ? "active" : ""}`} type="button" onClick={() => { commitDraft(); setMode("edit"); }}><PencilLine size={16} aria-hidden="true" />Editar</button>
             <button className="preview-action primary" type="button" onClick={() => { commitDraft(); onGenerate(collectEditableFieldOverrides()); }}><FileDown size={16} aria-hidden="true" />Gerar DOCX</button>

@@ -5,6 +5,7 @@ import Underline from "@tiptap/extension-underline";
 import TextAlign from "@tiptap/extension-text-align";
 import { editorMarkupToTiptapHtml, tiptapHtmlToEditorMarkup } from "../tiptap-markup";
 import type { TiptapEditorCommand } from "../tiptap-command-bridge";
+import { appendAccessDatesToOnlineReferences, countOnlineReferencesMissingAccessDate, formatAccessDate } from "../references-normalizer";
 import "./AcademicTiptapEditor.css";
 
 export type AcademicTiptapEditorProps = {
@@ -42,6 +43,14 @@ export default function AcademicTiptapEditor({
       }),
     ],
     [],
+  );
+
+  // Assistência NBR 6023 no modo referências: quando há referência online sem
+  // "Acesso em:", oferece a correção automática (data de hoje) — resolve o erro
+  // reference-access-missing sem digitação manual.
+  const missingAccessDates = useMemo(
+    () => (editorMode === "references" ? countOnlineReferencesMissingAccessDate(value) : 0),
+    [editorMode, value],
   );
 
   const editor = useEditor({
@@ -96,6 +105,9 @@ export default function AcademicTiptapEditor({
       case "reference":
         chain.insertContent("[REF] ").run();
         break;
+      case "equation":
+        chain.insertContent("[EQ] \\frac{}{}").run();
+        break;
       case "bulletList":
         chain.toggleBulletList().run();
         break;
@@ -137,6 +149,23 @@ export default function AcademicTiptapEditor({
   return (
     <div className="tiptap-editor-shell">
       <EditorContent editor={editor} />
+      {editorMode === "references" && missingAccessDates > 0 && (
+        <div className="reference-access-suggestion" role="status">
+          <span>
+            {missingAccessDates} referência(s) online sem "Acesso em:" — o erro bloqueia a versão final (NBR 6023).
+          </span>
+          <button
+            type="button"
+            className="issue-navigate"
+            onClick={() => {
+              const fixed = appendAccessDatesToOnlineReferences(value);
+              if (fixed.fixed > 0) onChange(fixed.text);
+            }}
+          >
+            Inserir "Acesso em: {formatAccessDate(new Date())}" em {missingAccessDates} referência(s)
+          </button>
+        </div>
+      )}
     </div>
   );
 }

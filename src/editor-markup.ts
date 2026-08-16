@@ -8,13 +8,27 @@ function emEtAl(value: string): string {
 
 export function inlineMarkupToHtml(value: string): string {
   const parts: string[] = [];
-  const tokenPattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  const tokenPattern = /(\*\*[^*]+\*\*|\*[^*]+\*|\[x:[^\]]*\])/g;
   let cursor = 0;
   let match: RegExpExecArray | null;
   while ((match = tokenPattern.exec(value)) !== null) {
     if (match.index > cursor) parts.push(emEtAl(escapeHtml(value.slice(cursor, match.index))));
     const token = match[0];
-    parts.push(token.startsWith("**") ? `<strong>${escapeHtml(token.slice(2, -2))}</strong>` : `<em>${escapeHtml(token.slice(1, -1))}</em>`);
+    if (token.startsWith("**")) {
+      parts.push(`<strong>${escapeHtml(token.slice(2, -2))}</strong>`);
+    } else if (token.startsWith("*")) {
+      parts.push(`<em>${escapeHtml(token.slice(1, -1))}</em>`);
+    } else {
+      // referência cruzada [x:ANCHOR~texto] → link interno no preview
+      const xref = /^\[x:([^\]~]+)(?:~([^\]]*))?\]$/.exec(token);
+      if (xref) {
+        const anchor = xref[1].trim();
+        const visible = (xref[2] ?? "").trim();
+        parts.push(`<a href="#${escapeHtml(anchor)}" class="preview-xref">${escapeHtml(visible)}</a>`);
+      } else {
+        parts.push(escapeHtml(token));
+      }
+    }
     cursor = match.index + token.length;
   }
   if (cursor < value.length) parts.push(emEtAl(escapeHtml(value.slice(cursor))));

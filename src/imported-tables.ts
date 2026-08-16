@@ -30,6 +30,8 @@ export interface ImportedTable {
   id: string;
   caption?: string;
   source?: string;
+  /** Orientação da seção OOXML de origem (seção paisagem = tabela larga). */
+  orientation?: "portrait" | "landscape";
   rowCount: number;
   columnCount: number;
   rows: ImportedTableCell[][];
@@ -54,6 +56,8 @@ export interface ImportedTable {
   groupSpans?: Array<{ rowStart: number; rowEnd: number; text: string }>;
   hasReconstructedVerticalMerge?: boolean;
   cellMerges?: Array<{ row: number; col: number; type: "vMerge-restart" | "vMerge-continue" | "gridSpan" }>;
+  /** Índice da linha de cabeçalho nas linhas normalizadas (0 = primeira), quando confirmada. */
+  headerRowIndex?: number;
 }
 
 export const IMPORTED_TABLE_MARKER_PATTERN = /^\[\[Tabela importada preservada:\s*([a-z0-9-]+)\]\]$/i;

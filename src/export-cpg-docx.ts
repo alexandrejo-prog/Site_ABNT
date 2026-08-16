@@ -4,6 +4,7 @@ import {
   Document,
   Header,
   HeadingLevel,
+  InternalHyperlink,
   Packer,
   PageNumber,
   PageOrientation,
@@ -17,7 +18,8 @@ import {
 } from "docx";
 import type { IParagraphOptions } from "docx";
 import { BLACK as SHARED_BLACK } from "./docx-shared";
-import { cleanMojibakeText, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, hasText, detectCaption, tabbedTableBlock } from "./docx-render-core";
+import { DOCUMENT_STYLES } from "./docx-styles";
+import { cleanMojibakeText, clearRawOmmlRegistry, rawOmmlMarkerParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, hasText, detectCaption, tabbedTableBlock } from "./docx-render-core";
 import { parseEditorContent, importedTableParagraph, type DocxGenerationInput, type EditorBlock } from "./export-docx";
 import type { ImportedTable } from "./imported-tables";
 import { CPG_RULES, UFLA_RULES, cmToTwip } from "./ufla-rules";
@@ -87,7 +89,7 @@ function ensureTerminalPeriod(value: string): string {
   return /[.!?]$/.test(text) ? text : `${text}.`;
 }
 
-function textRunsFromMarkup(text: string, size = BODY_SIZE, font = CPG_RULES.typography.fontFamily): TextRun[] {
+function textRunsFromMarkup(text: string, size = BODY_SIZE, font = CPG_RULES.typography.fontFamily): Array<TextRun | InternalHyperlink> {
   return coreTextRunsFromMarkup(cleanMojibakeText(text), size, font);
 }
 
@@ -222,6 +224,7 @@ function tableFromBlock(block: EditorBlock): Table {
     },
     rows: rows.map((row, rowIndex) =>
       new TableRow({
+        ...(rowIndex === 0 ? { tableHeader: true } : {}),
         children: Array.from({ length: columnCount }, (_, cellIndex) =>
           new TableCell({
             width: { size: Math.floor(100 / columnCount), type: WidthType.PERCENTAGE },
@@ -269,6 +272,10 @@ function blockToParagraph(block: EditorBlock, firstParagraphInSection: boolean, 
 
   if (block.type === "source") {
     return [sourceParagraph(block.text)];
+  }
+
+  if (block.type === "equation") {
+    return [rawOmmlMarkerParagraph(block.text, block.ommlXml)];
   }
 
   const caption = isCaption(block.text);
@@ -465,6 +472,7 @@ function createCpgDocument(input: DocxGenerationInput): Document {
     features: {
       updateFields: true,
     },
+    styles: DOCUMENT_STYLES,
     sections: [
       {
         properties: {
@@ -492,5 +500,6 @@ function createCpgDocument(input: DocxGenerationInput): Document {
 }
 
 export async function generateCpgDocxBlob(input: DocxGenerationInput): Promise<Blob> {
+  clearRawOmmlRegistry();
   return Packer.toBlob(createCpgDocument(input));
 }

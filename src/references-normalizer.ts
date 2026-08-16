@@ -25,6 +25,18 @@ export interface NormalizedReference {
     | "documento-institucional"
     | "legislacao"
     | "site"
+    | "online"
+    | "patente"
+    | "jornal"
+    | "periodico"
+    | "correspondencia"
+    | "audiovisual"
+    | "sonoro"
+    | "partitura"
+    | "iconografico"
+    | "cartografico"
+    | "tridimensional"
+    | "dados-pesquisa"
     | "desconhecido";
 }
 
@@ -139,6 +151,50 @@ function isOrphanYearFragment(value: string): boolean {
   return isYearLeadingFragment(value) && value.length < 120 && !/\p{Lu}{2,}[,.;]/u.test(value);
 }
 
+// Uma linha parece inicio de uma nova referencia quando comeca com o padrao de
+// autor pessoal (SOBRENOME, A.), autor institucional (lista curta conhecida) ou
+// nome de evento. Tudo o que nao se encaixa e tratado como continuacao da
+// referencia anterior.
+function isReferenceStartLine(line: string): boolean {
+  const l = line.trim();
+  if (!l) return false;
+  if (/^[\p{Lu}A-ZÀ-Ú][\p{L}.\-' ]{1,60},\s*[\p{Lu}A-ZÀ-Ú][\p{L}.\-' ]{0,60}\./u.test(l)) return true;
+  if (/^[\p{Lu}A-ZÀ-Ú][\p{L}.\-' ]{1,60};\s/u.test(l)) return true;
+  if (/^(?:BRASIL|MINAS\s+GERAIS|LAVRAS|UNIVERSIDADE|INSTITUTO|MINISTERIO|ASSOCIACAO|FUNDACAO|CONSELHO|CAMARA|SECRETARIA|EUROPEAN|REGISTRY)\b/iu.test(l)) return true;
+  if (/^[A-ZÀ-Ú][\p{Lu}A-ZÀ-Ú -]{3,45},\s*\d+\.?\s*,\s*(?:19|20)\d{2}/u.test(l)) return true;
+  if (isAllCapsInstitutional(l)) return true;
+  // Linha inteiramente em caixa alta (titulo/referencia sem virgula de autor)
+    if (/^[\p{Lu}A-ZÀ-Ú0-9][\p{Lu}A-ZÀ-Ú0-9 .()&'/:-]{2,}[\p{Lu}A-ZÀ-Ú0-9.]$/u.test(l) && !/[a-zà-ú]/.test(l) && /\s/u.test(l)) return true;
+  return false;
+}
+
+// Autor institucional em caixa alta (ex.: "OPEN ACCESS INFRASTRUCTURE RESEARCH
+// FOR EUROPE. Open..."): prefixo com 2+ palavras sem minusculas antes de ponto,
+// dois-pontos, virgula ou abre parenteses.
+function isAllCapsInstitutional(line: string): boolean {
+  const match = line.trim().match(/^([A-ZÀ-Ú0-9][A-ZÀ-Ú0-9 .()&'/-]*?)(?:[.:,]\s|\s\()/u);
+  if (!match) return false;
+  const prefix = match[1].trim();
+  const words = prefix.split(/\s+/).filter(Boolean);
+  if (words.length < 2) return false;
+  return words.filter((word) => /[a-z]/.test(word)).length === 0;
+}
+
+// Rótulos que iniciam uma nova cláusula da referência: a linha seguinte não é
+// continuação de URL mesmo que o grupo anterior termine em URL.
+const URL_CLAUSE_START = /^(?:acesso\s+em\s*:|dispon[ií]vel\s+em\s*:|in\s*:|apud\s+)/iu;
+
+// Junta uma linha de continuacao ao grupo anterior, reconstruindo URLs quebradas
+// (sem inserir espaco quando o grupo termina no meio de uma URL, inclusive com
+// esquema quebrado http:/ https:/ ou www.).
+function appendContinuationLine(group: string, line: string): string {
+  const g = group.trimEnd();
+  const l = line.trim();
+  const endsInPartialUrl = /(?:https?:\/{1,2}[^\s]*|www\.[^\s]*)$/iu.test(g);
+  if (endsInPartialUrl && !/[.,;)\]]$/u.test(g) && !URL_CLAUSE_START.test(l)) return g + l;
+  return `${g} ${l}`;
+}
+
 function splitItems(value: string): string[] {
   const items = value
     .split(/\n+/)
@@ -159,13 +215,20 @@ function splitItems(value: string): string[] {
     if (
       previous &&
       isYearLeadingFragment(item) &&
-      item.length < 100 &&
       !/^[A-ZÀ-Ú]/.test(item)
     ) {
       merged[merged.length - 1] = mergeNormativeYearFragment(previous, item);
       continue;
     }
-    if (isOrphanYearFragment(item)) continue;
+    // Um fragmento que inicia com ano só é "órfão" (descartado) quando não há
+    // referência anterior para ser sua continuação. Com `previous`, ele é a
+    // continuação de uma referência (ex.: tese/dissertação: "2007. (Doutorado...)")
+    // e jamais deve ser truncado.
+    if (!previous && isOrphanYearFragment(item)) continue;
+    if (previous && !isReferenceStartLine(item)) {
+      merged[merged.length - 1] = appendContinuationLine(previous, item);
+      continue;
+    }
     merged.push(item);
   }
 
@@ -335,11 +398,166 @@ function eventHighlight(remainder: string): string | undefined {
   return m ? m[1].trim() : undefined;
 }
 
+// === Tipos adicionais do Manual UFLA §25.14 (modelos mínimos de referência) ===
+
+function patentMatch(value: string): boolean {
+  const text = fold(value);
+  return /\bpatente\b/.test(text) || /\bbr\s*\d{2}\s*\d{4,}/.test(text);
+}
+
+function newspaperMatch(value: string): boolean {
+  // Data de jornal: dia + mês por extenso + ano (ex.: "15 maio 2025").
+  const text = fold(value);
+  return /\b\d{1,2}\s+(?:jan(?:eiro)?|fev(?:ereiro)?|mar(?:co)?|abr(?:il)?|mai(?:o)?|jun(?:ho)?|jul(?:ho)?|ago(?:sto)?|set(?:embro)?|out(?:ubro)?|nov(?:embro)?|dez(?:embro)?)\s+\d{4}\b/.test(text);
+}
+
+function periodicalMatch(value: string): boolean {
+  const text = fold(value);
+  return /\bissn\b/.test(text) || /,\s*(?:19|20)\d{2}\s*[-–]\s*\.?\s*$/.test(text);
+}
+
+function correspondenceMatch(value: string): boolean {
+  const text = fold(value);
+  return /\b(correspondencia|carta\b|oficio\b|memorando\b)\b/.test(text);
+}
+
+function audiovisualMatch(value: string): boolean {
+  const text = fold(value);
+  return /\b(filme\b|documentario\b|documentário\b|video\b|vídeo\b|dvd\b|blu-?ray|serie\b|série\b|episodio\b|episódio\b|podcast\b)\b/.test(text);
+}
+
+function sonoroMatch(value: string): boolean {
+  const text = fold(value);
+  return /\b(disco sonoro|\bcd\b|album\b|álbum\b|musica\b|música\b|faixa\b|gravacao sonora|gravação sonora)\b/.test(text);
+}
+
+function sheetMusicMatch(value: string): boolean {
+  return /\bpartitura\b/iu.test(value);
+}
+
+function iconographicMatch(value: string): boolean {
+  const text = fold(value);
+  return /\b(fotografia\b|gravura\b|pintura\b|desenho\b|cartaz\b|icone\b|ícone\b|imagem\b|ilustracao\b|ilustração\b)\b/.test(text);
+}
+
+function cartographicMatch(value: string): boolean {
+  const text = fold(value);
+  return /\b(planta\b|mapa\b|carta geografica|carta geográfica|carta topografica|carta topográfica|atlas\b)\b/.test(text);
+}
+
+function tridimensionalMatch(value: string): boolean {
+  const text = fold(value);
+  return /\b(mapa em relevo|maquete\b|escultura\b|objeto tridimensional|modelo 3d)\b/.test(text);
+}
+
+function researchDataMatch(value: string): boolean {
+  const text = fold(value);
+  return /\b(dados de pesquisa|conjunto de dados|dataset\b|repositorio de dados|repositório de dados)\b/.test(text);
+}
+
+function genericTitle(remainder: string): string | undefined {
+  return bookTitle(remainder) ?? remainder.split(/\.\s+/u).map((p) => p.trim()).find((p) => p.length > 3);
+}
+
+function isOnlineReference(value: string): boolean {
+  const text = fold(value);
+  // NBR 6023: documento em meio eletrônico tem "Disponível em: <URL>" e
+  // (para material não-publicado) "Acesso em: <data>". URL avulsa (sem rótulo
+  // no original — vira "Disponível em:" só na limpeza) é site com confiança
+  // baixa; com rótulo explícito E conteúdo estruturado antes da URL (autor ou
+  // título institucional), é online dedicado.
+  const urlIndex = text.search(/\bhttps?:\/\//iu);
+  if (urlIndex <= 0) return false;
+  const beforeUrl = text.slice(0, urlIndex).trim();
+  return /\bdispon[ií]vel\s+em\s*:/iu.test(text) && /\bhttps?:\/\//iu.test(text) && beforeUrl.length > 15;
+}
+
+export function hasAccessDate(value: string): boolean {
+  const text = fold(value);
+  // "Acesso em:" com ou sem dois-pontos ("Acesso em 28 set. 2012") — o padrão
+  // com dois-pontos é o recomendado pela NBR 6023, mas o sem é frequente em
+  // conversões de PDF.
+  return /\bacesso\s+em\s*:?/iu.test(text) && /\b\d{1,2}\s+(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z.]*\s+\d{4}\b/iu.test(text);
+}
+
+/**
+ * Indica se a linha é uma referência ONLINE (URL ou "Disponível em:") que ainda
+ * não tem "Acesso em:" — o padrão é o mesmo do validator
+ * (reference-access-missing): URL presente e nenhuma menção a "acesso em".
+ */
+function isOnlineReferenceMissingAccessDate(line: string): boolean {
+  const text = fold(line);
+  if (!/https?:\/\/|dispon[ií]vel\s+em\s*:/iu.test(text)) return false;
+  if (/\bacesso\s+em\b/iu.test(text)) return false;
+  return true;
+}
+
+/** Formata a data de acesso no padrão NBR 6023: "10 jan. 2026". */
+export function formatAccessDate(date: Date): string {
+  const MONTHS = ["jan.", "fev.", "mar.", "abr.", "mai.", "jun.", "jul.", "ago.", "set.", "out.", "nov.", "dez."];
+  return `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+/**
+ * Quantas referências online (linhas) ainda estão sem "Acesso em:".
+ * Usado pelo editor de referências para sugerir a correção automática.
+ */
+export function countOnlineReferencesMissingAccessDate(references: string): number {
+  if (!references) return 0;
+  return references
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter(isOnlineReferenceMissingAccessDate).length;
+}
+
+/**
+ * Anexa "Acesso em: <data>" ao final de cada referência online sem data de
+ * acesso (NBR 6023) — assistência no editor de referências: resolve o erro
+ * reference-access-missing sem digitação manual. Preserva a formatação das
+ * linhas que já têm acesso ou não são online.
+ */
+export function appendAccessDatesToOnlineReferences(references: string, accessDate?: Date): { text: string; fixed: number } {
+  if (!references) return { text: references, fixed: 0 };
+  const date = formatAccessDate(accessDate ?? new Date());
+  let fixed = 0;
+  const text = references
+    .split(/\r?\n/)
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed || !isOnlineReferenceMissingAccessDate(trimmed)) return line;
+      fixed += 1;
+      // remove pontuação final e anexa a data de acesso
+      return `${trimmed.replace(/[.;\s]+$/u, "")}. Acesso em: ${date}.`;
+    })
+    .join("\n");
+  return { text, fixed };
+}
+
 function detect(value: string): { highlight?: string; confidence: ReferenceConfidence; detectedType: NormalizedReference["detectedType"] } {
   if (isLegislation(value)) return { highlight: legislationTitle(value), confidence: "media", detectedType: "legislacao" };
+  // Referência online explícita (Disponível em: URL) tem tipo dedicado — antes
+  // caía em "site" com confiança baixa mesmo para documentos formais online.
+  // Conjuntos de dados mantêm prioridade sobre o rótulo online (são online E
+  // dados de pesquisa; o tipo específico é mais informativo).
+  if (researchDataMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "dados-pesquisa" };
+  if (isOnlineReference(value)) {
+    return { highlight: genericTitle(value), confidence: "media", detectedType: "online" };
+  }
   const parsed = splitAuthor(value);
   if (!parsed) {
     if (/\bhttps?:\/\//iu.test(value)) return { confidence: "baixa", detectedType: "site" };
+    if (researchDataMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "dados-pesquisa" };
+    if (researchDataMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "dados-pesquisa" };
+    if (patentMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "patente" };
+    if (periodicalMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "periodico" };
+    if (correspondenceMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "correspondencia" };
+    if (audiovisualMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "audiovisual" };
+    if (sonoroMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "sonoro" };
+    if (sheetMusicMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "partitura" };
+    if (cartographicMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "cartografico" };
+    if (iconographicMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "iconografico" };
+    if (tridimensionalMatch(value)) return { highlight: genericTitle(value), confidence: "baixa", detectedType: "tridimensional" };
     if (isInstitutional(value)) {
       const highlight = institutionalTitle(value);
       return { highlight, confidence: highlight ? "media" : "baixa", detectedType: "documento-institucional" };
@@ -353,6 +571,17 @@ function detect(value: string): { highlight?: string; confidence: ReferenceConfi
   if (article) return { highlight: article, confidence: "media", detectedType: "artigo" };
   const academic = academicTitle(parsed.remainder);
   if (academic || /\b(dissertacao|tese|monografia)\b/u.test(fold(value))) return { highlight: academic, confidence: academic ? "media" : "baixa", detectedType: "tese-dissertacao" };
+  if (researchDataMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "dados-pesquisa" };
+  if (patentMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "patente" };
+  if (newspaperMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "jornal" };
+  if (periodicalMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "periodico" };
+  if (correspondenceMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "correspondencia" };
+  if (audiovisualMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "audiovisual" };
+  if (sonoroMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "sonoro" };
+  if (sheetMusicMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "partitura" };
+  if (cartographicMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "cartografico" };
+  if (iconographicMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "iconografico" };
+  if (tridimensionalMatch(value)) return { highlight: genericTitle(parsed.remainder), confidence: "baixa", detectedType: "tridimensional" };
   if (isInstitutional(value)) return { highlight: bookTitle(parsed.remainder) ?? institutionalTitle(value), confidence: "baixa", detectedType: "documento-institucional" };
   const book = bookTitle(parsed.remainder);
   if (book) return { highlight: book, confidence: "media", detectedType: "livro" };

@@ -2,7 +2,7 @@ RELATORIO DE CONFORMIDADE - DOCX vs MANUAL UFLA 6ED
 ==================================================
 
   1. Margens (3/3/2/2 cm)                  OK    
-  1. Espacamento 1,5 (360 twips)           OK    39 ocorrencias
+  1. Espacamento 1,5 (360 twips)           OK    30 ocorrencias
   1. Recuo primeira linha 1,25cm (709)     OK    11 ocorrencias
   1. Espaco antes titulo primario (240)    OK    
   2. Numeracao progressiva                 OK    
@@ -12,10 +12,10 @@ RELATORIO DE CONFORMIDADE - DOCX vs MANUAL UFLA 6ED
   3. Referencias - recuo deslocado         OK    284 twips
   4. Citacao longa - recuo 4cm (2268)      OK    
   4. Citacao longa - fonte 11pt (22)       OK    
-  6. Fonte Times New Roman                 OK    460 ocorrencias
+  6. Fonte Times New Roman                 OK    456 ocorrencias
   6. Tamanhos 12pt corpo, 11pt citacao/fonte/legenda OK    22,24,28,32
   7. Sumario com campo TOC \o 1-3          OK    
-  9. Heading1 numerado esquerda / pos-textuais centro OK    
+  9. Titulo primario numerado esquerda / sem-indicativo centro OK    
   9. Heading2 negrito via estilo / Heading3 negrito via run OK    
   10. Quadros com bordas completas         OK    
 

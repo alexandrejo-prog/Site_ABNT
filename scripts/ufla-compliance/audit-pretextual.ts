@@ -1,0 +1,321 @@
+import { readFileSync, existsSync } from "node:fs";
+import JSZip from "jszip";
+
+import type {
+  AuditGap,
+  PretextualAuditResult,
+  SectionAuditResult,
+  WorkType,
+} from "./audit-types.js";
+import { DOCUMENT_TYPE_MATRIX, type DocumentType } from "./document-type-matrix.js";
+
+/**
+ * Verifica se o requisito da matriz se aplica ao tipo de documento (required
+ * !== false e o tipo listado). Permite que artigo/CPG não exijam ficha,
+ * aprovação, sumário etc. — o Manual UFLA só os exige para tipos específicos.
+ */
+function appliesTo(documentType: DocumentType | undefined, validator: string): boolean {
+  if (!documentType) return true;
+  return DOCUMENT_TYPE_MATRIX.some(
+    (req) => req.validator === validator && req.documentTypes.includes(documentType) && req.required !== false,
+  );
+}
+
+async function extractParagraphs(docxPath: string): Promise<string[]> {
+  if (!existsSync(docxPath)) return [];
+  const buffer = readFileSync(docxPath);
+  const zip = await JSZip.loadAsync(buffer);
+  const xml = (await zip.file("word/document.xml")?.async("string")) ?? "";
+  return [...xml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)].map((m) => m[0]);
+}
+
+function containsText(paragraphs: string[], keyword: RegExp | string): boolean {
+  const re = typeof keyword === "string" ? new RegExp(keyword, "i") : keyword;
+  return paragraphs.some((p) => re.test(p));
+}
+
+function normalizeWorkType(docxPath: string): WorkType {
+  const name = docxPath.toLowerCase();
+  if (name.includes("tese")) return "tese";
+  if (name.includes("artigo")) return "artigo";
+  if (name.includes("tcc") || name.includes("monografia")) return "tcc";
+  if (name.includes("resumo-expandido") || name.includes("resumo_expandido")) return "resumo_expandido_cpg";
+  if (name.includes("resumo") && name.includes("cpg")) return "resumo_cpg";
+  if (name.includes("projeto")) return "projeto_pesquisa";
+  return "dissertacao";
+}
+
+function sectionResult(
+  overrides: Partial<SectionAuditResult> = {},
+): SectionAuditResult {
+  return {
+    passed: true,
+    score: 100,
+    itemsFound: [],
+    itemsMissing: [],
+    gaps: [],
+    ...overrides,
+  };
+}
+
+function gap(overrides: Partial<AuditGap>): AuditGap {
+  return {
+    section: "pretextual",
+    rule: "",
+    severity: "major",
+    description: "",
+    suggestion: "",
+    autoFixable: false,
+    ...overrides,
+  };
+}
+
+export async function auditPretextual(
+  docxPath: string,
+  documentType?: DocumentType,
+): Promise<PretextualAuditResult> {
+  const paragraphs = await extractParagraphs(docxPath).then((ps) => ps);
+  void normalizeWorkType(docxPath);
+
+  const cover = sectionResult({
+    passed: containsText(paragraphs, /Universidade Federal de Lavras|UFLA/i),
+    itemsFound: containsText(paragraphs, /Universidade Federal de Lavras|UFLA/i) ? ["capa"] : [],
+    itemsMissing: !containsText(paragraphs, /Universidade Federal de Lavras|UFLA/i) ? ["capa"] : [],
+    gaps: !containsText(paragraphs, /Universidade Federal de Lavras|UFLA/i)
+      ? [
+          gap({
+            section: "capa",
+            rule: "UFLA-010",
+            severity: "critical",
+            description: "Capa sem identificação institucional UFLA.",
+            suggestion: "Incluir logo/nome da UFLA na capa.",
+          }),
+        ]
+      : [],
+  });
+
+  // A folha de rosto não é rotulada com o próprio nome no documento: é
+  // identificada pelo estilo ufla_folha_rosto_* / ufla_natureza ou pelo texto
+  // da natureza do trabalho ("apresentada à Universidade...").
+  const titlePage = sectionResult({
+    passed: containsText(paragraphs, /folha de rosto|ufla_folha_rosto|ufla_natureza|apresentad[oa]\s+(à|ao|aos|ao)\s+(Universidade|Programa)|Monografia apresentada/i),
+    itemsFound: containsText(paragraphs, /folha de rosto|ufla_folha_rosto|ufla_natureza|apresentad[oa]\s+(à|ao|aos|ao)\s+(Universidade|Programa)|Monografia apresentada/i)
+      ? ["folha de rosto"]
+      : [],
+    itemsMissing: !containsText(paragraphs, /folha de rosto|ufla_folha_rosto|ufla_natureza|apresentad[oa]\s+(à|ao|aos|ao)\s+(Universidade|Programa)|Monografia apresentada/i)
+      ? ["folha de rosto"]
+      : [],
+    gaps: !containsText(paragraphs, /folha de rosto|ufla_folha_rosto|ufla_natureza|apresentad[oa]\s+(à|ao|aos|ao)\s+(Universidade|Programa)|Monografia apresentada/i)
+      ? [
+          gap({
+            section: "folha de rosto",
+            rule: "UFLA-011",
+            severity: "critical",
+            description: "Folha de rosto ausente.",
+            suggestion: "Gerar folha de rosto conforme Manual UFLA.",
+          }),
+        ]
+      : [],
+  });
+
+  const catalogCard = sectionResult({
+    passed: containsText(paragraphs, /FICHA CATALOGRÁFICA|FICHA CATALOGRAFICA/i),
+    itemsFound: containsText(paragraphs, /FICHA CATALOGRÁFICA|FICHA CATALOGRAFICA/i)
+      ? ["ficha catalográfica"]
+      : [],
+    itemsMissing: !containsText(paragraphs, /FICHA CATALOGRÁFICA|FICHA CATALOGRAFICA/i)
+      ? ["ficha catalográfica"]
+      : [],
+    gaps: !containsText(paragraphs, /FICHA CATALOGRÁFICA|FICHA CATALOGRAFICA/i)
+      ? [
+          gap({
+            section: "ficha catalográfica",
+            rule: "UFLA-012",
+            severity: "major",
+            description: "Ficha catalográfica ausente.",
+            suggestion: "Inserir ficha catalográfica para dissertação/tese.",
+          }),
+        ]
+      : [],
+  });
+
+  // A folha de aprovação também não é rotulada pelo próprio nome: o gerador
+  // emite "APROVADO EM" + linha de assinatura "Prof.(a) Dr.(a)".
+  const approvalPage = sectionResult({
+    passed: containsText(paragraphs, /folha de aprovação|folha de aprovacao|APROVAD[OA]\s+EM|Aprovad[oa]\s+em|Prof\.\(a\)\s+Dr\.\(a\)|Instituição:\s+_+/i),
+    itemsFound: containsText(paragraphs, /folha de aprovação|folha de aprovacao|APROVAD[OA]\s+EM|Aprovad[oa]\s+em|Prof\.\(a\)\s+Dr\.\(a\)|Instituição:\s+_+/i)
+      ? ["folha de aprovação"]
+      : [],
+    itemsMissing: !containsText(paragraphs, /folha de aprovação|folha de aprovacao|APROVAD[OA]\s+EM|Aprovad[oa]\s+em|Prof\.\(a\)\s+Dr\.\(a\)|Instituição:\s+_+/i)
+      ? ["folha de aprovação"]
+      : [],
+    gaps: !containsText(paragraphs, /folha de aprovação|folha de aprovacao|APROVAD[OA]\s+EM|Aprovad[oa]\s+em|Prof\.\(a\)\s+Dr\.\(a\)|Instituição:\s+_+/i)
+      ? [
+          gap({
+            section: "folha de aprovação",
+            rule: "UFLA-013",
+            severity: "major",
+            description: "Folha de aprovação ausente.",
+            suggestion: "Inserir folha de aprovação para dissertação/tese/TCC.",
+          }),
+        ]
+      : [],
+  });
+
+  const abstractPortuguese = containsText(paragraphs, /resumo/i);
+  const abstractEnglish = containsText(paragraphs, /abstract/i);
+  const abstract = sectionResult({
+    passed: abstractPortuguese && abstractEnglish,
+    itemsFound: [
+      ...(abstractPortuguese ? ["resumo"] : []),
+      ...(abstractEnglish ? ["abstract"] : []),
+    ],
+    itemsMissing: [
+      ...(!abstractPortuguese ? ["resumo"] : []),
+      ...(!abstractEnglish ? ["abstract"] : []),
+    ],
+    gaps: [
+      ...(!abstractPortuguese
+        ? [
+            gap({
+              section: "resumo",
+              rule: "UFLA-014",
+              severity: "critical",
+              description: "Resumo em português ausente.",
+              suggestion: "Inserir resumo (150-500 palavras).",
+            }),
+          ]
+        : []),
+      ...(!abstractEnglish
+        ? [
+            gap({
+              section: "abstract",
+              rule: "UFLA-015",
+              severity: "critical",
+              description: "Abstract em inglês ausente.",
+              suggestion: "Inserir abstract correspondente.",
+            }),
+          ]
+        : []),
+    ],
+  });
+
+  const hasIllustrations = containsText(paragraphs, /lista de ilustrações|lista de ilustracoes/i);
+  const hasTables = containsText(paragraphs, /lista de tabelas/i);
+  const hasAbbreviations = containsText(paragraphs, /lista de abreviaturas|lista de siglas/i);
+  const hasSymbols = containsText(paragraphs, /lista de símbolos|lista de simbolos/i);
+  const lists = sectionResult({
+    passed: true,
+    itemsFound: [
+      ...(hasIllustrations ? ["lista de ilustrações"] : []),
+      ...(hasTables ? ["lista de tabelas"] : []),
+      ...(hasAbbreviations ? ["lista de abreviaturas/siglas"] : []),
+      ...(hasSymbols ? ["lista de símbolos"] : []),
+    ],
+    itemsMissing: [
+      ...(!hasIllustrations ? ["lista de ilustrações"] : []),
+      ...(!hasTables ? ["lista de tabelas"] : []),
+      ...(!hasAbbreviations ? ["lista de abreviaturas/siglas"] : []),
+      ...(!hasSymbols ? ["lista de símbolos"] : []),
+    ],
+    gaps: [
+      ...(!hasIllustrations
+        ? [
+            gap({
+              section: "listas",
+              rule: "UFLA-016",
+              severity: "minor",
+              description: "Lista de ilustrações ausente.",
+              suggestion: "Inserir lista de ilustrações quando houver figuras/quadros.",
+            }),
+          ]
+        : []),
+      ...(!hasTables
+        ? [
+            gap({
+              section: "listas",
+              rule: "UFLA-017",
+              severity: "minor",
+              description: "Lista de tabelas ausente.",
+              suggestion: "Inserir lista de tabelas quando houver tabelas.",
+            }),
+          ]
+        : []),
+    ],
+  });
+
+  const summary = sectionResult({
+    passed: containsText(paragraphs, /sumário|SUMÁRIO/i),
+    itemsFound: containsText(paragraphs, /sumário|SUMÁRIO/i) ? ["sumário"] : [],
+    itemsMissing: !containsText(paragraphs, /sumário|SUMÁRIO/i) ? ["sumário"] : [],
+    gaps: !containsText(paragraphs, /sumário|SUMÁRIO/i)
+      ? [
+          gap({
+            section: "sumário",
+            rule: "UFLA-018",
+            severity: "critical",
+            description: "Sumário ausente.",
+            suggestion: "Inserir sumário com títulos e página.",
+          }),
+        ]
+      : [],
+  });
+
+  // Aplica a matriz de tipos: seções cujo requisito não se aplica ao tipo do
+  // documento entram como "não aplicável" (sem gap) em vez de falso positivo.
+  const na = (label: string): SectionAuditResult => sectionResult({ itemsFound: [`${label} (não aplicável ao tipo)`] });
+  const coverFinal = appliesTo(documentType, "validateCover") ? cover : na("capa");
+  const titlePageFinal = appliesTo(documentType, "validateTitlePage") ? titlePage : na("folha de rosto");
+  const catalogCardFinal = appliesTo(documentType, "validateCatalogCard") ? catalogCard : na("ficha catalográfica");
+  const approvalPageFinal = appliesTo(documentType, "validateApprovalPage") ? approvalPage : na("folha de aprovação");
+  const abstractFinal = appliesTo(documentType, "validateResumo") && appliesTo(documentType, "validateAbstract")
+    ? abstract
+    : na("resumo/abstract");
+  const listsFinal = appliesTo(documentType, "validateListOfIllustrations") || appliesTo(documentType, "validateListOfTables")
+    ? lists
+    : na("listas");
+  const summaryFinal = appliesTo(documentType, "validateToc") ? summary : na("sumário");
+
+  const allGaps = [
+    ...coverFinal.gaps,
+    ...titlePageFinal.gaps,
+    ...catalogCardFinal.gaps,
+    ...approvalPageFinal.gaps,
+    ...abstractFinal.gaps,
+    ...listsFinal.gaps,
+    ...summaryFinal.gaps,
+  ];
+  const passed = allGaps.filter((g) => g.severity === "critical").length === 0;
+  const score = allGaps.length === 0 ? 100 : Math.max(0, 100 - allGaps.length * 10);
+
+  return {
+    passed,
+    score,
+    itemsFound: [
+      ...coverFinal.itemsFound,
+      ...titlePageFinal.itemsFound,
+      ...catalogCardFinal.itemsFound,
+      ...approvalPageFinal.itemsFound,
+      ...abstractFinal.itemsFound,
+      ...listsFinal.itemsFound,
+      ...summaryFinal.itemsFound,
+    ],
+    itemsMissing: [
+      ...coverFinal.itemsMissing,
+      ...titlePageFinal.itemsMissing,
+      ...catalogCardFinal.itemsMissing,
+      ...approvalPageFinal.itemsMissing,
+      ...abstractFinal.itemsMissing,
+      ...listsFinal.itemsMissing,
+      ...summaryFinal.itemsMissing,
+    ],
+    gaps: allGaps,
+    cover: coverFinal,
+    titlePage: titlePageFinal,
+    catalogCard: catalogCardFinal,
+    approvalPage: approvalPageFinal,
+    abstract: abstractFinal,
+    lists: listsFinal,
+    summary: summaryFinal,
+  };
+}

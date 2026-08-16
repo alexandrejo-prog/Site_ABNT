@@ -12,9 +12,9 @@ description: Desenvolvimento do Site_ABNT - editor e normalizador acadêmico con
 ## 1. VISÃO GERAL
 - **Nome:** Site_ABNT
 - **Objetivo:** Editor e normalizador de trabalhos acadêmicos que exporta documentos DOCX em conformidade estrita com o Manual de Normalização da UFLA (6ª edição) e normas ABNT vigentes.
-- **Tecnologias:** React 18, TypeScript 5, Vite, biblioteca `docx`, Tiptap (editor rich-text), Vitest.
+- **Tecnologias:** React 18, TypeScript 5, Vite, biblioteca `docx`, Tiptap (editor rich-text), Vitest, KaTeX (equações no preview), Playwright (e2e), pdf.js (análise física de PDF), Word COM (renderização/PDF de referência).
 - **Deploy:** Vercel (SPA)
-- **Testes:** 122 arquivos de teste, 1033 testes (10 skipped), executados via `npm run verify` ou `npm test`.
+- **Testes:** 209 arquivos, 1684 testes (10 skipped) — `npm run verify`, `npm test`, `npm run e2e` (Playwright 13 fluxos), `npm run ufla:audit` (11 gates). Estado completo: `docs/STATUS_ATUAL.md` (canônico).
 
 ---
 
@@ -42,12 +42,33 @@ Site_ABNT/
 │   ├── export-research-project-docx.ts # Geração de Projeto de pesquisa (NBR 15287)
 │   ├── docx-render-core.ts           # Renderização e conversão markdown → DOCX runs
 │   ├── docx-shared.ts                # Utilitários compartilhados de parágrafos/runs
+│   ├── omml-to-latex.ts              # Conversor OMML → LaTeX para preview (eq. importadas)
 │   ├── ufla-rules.ts                 # Constantes de espaçamento e tamanho (regras UFLA)
 │   └── app-constants.ts              # Constantes de interface e traduções
-├── tests/                            # Suíte com mais de 120 arquivos de teste
+├── tests/                            # Suíte com mais de 200 arquivos de teste
+├── scripts/
+│   └── ufla-compliance/              # Auditoria e gates (Word COM + PDF físico + OOXML)
+│       ├── regenerate-official-artifacts.ts  # Comando único de regeneração (npm run ufla:audit)
+│       ├── run-ufla-audit.ts         # Orquestrador com lock + fail-fast
+│       ├── analyze-pdf-physical.ts   # Análise física do PDF (imagens/tabelas/equações por página)
+│       ├── analyze-per-type-pdfs.ts  # Física PDF por tipo de trabalho (A4, paginação, margem)
+│       ├── coverage-docx-pdf.ts      # Conciliação DOCX→PDF página-a-página (pageMap)
+│       ├── check-pdf-reference.ts    # Gate de regressão PDF vs referência fixa (ufla:pdfref)
+│       ├── ooxml-checks.ts           # Checagens OOXML (estrutura, paginação, equações)
+│       ├── validate-*.ts             # Validadores (pagination, cover-layout, equations, ...)
+│       ├── ci-checks.ts              # Checks de CI sem Word (18 formatos × 15 tipos)
+│       └── snapshots/preview-docx-snapshot.json  # Snapshot de paginação/DOCX/PDF commitado
 ├── skills/                           # Ferramentas auxiliares do projeto (fora .agents)
 │   └── ufla-docx-compliance/         # CLI/API de validação automática de DOCX
 │       └── SKILL.md
+├── artifacts/                        # Evidências geradas (git-ignored, regeneradas pela auditoria)
+│   ├── ufla-compliance/              # report.md canônico, PDFs, JSONs, content-preservation
+│   └── ufla-audit/                   # gates.json, rendered-analysis.json, findings
+├── docs/
+│   ├── STATUS_ATUAL.md               # Documento canônico de status (única fonte de verdade)
+│   ├── decisions/NNN-*.md            # Decisões registradas (001–010)
+│   ├── DECISION_*.md                 # Resumos históricos (apontam para decisions/)
+│   └── RUNNER_WORD.md                # Operação do runner self-hosted com Word
 ├── Regras/                           # PDFs do Manual da UFLA e guias de formatos específicos
 ├── CHECKLIST_SITE_UFLA_MANUAL.md     # Checklist técnico de conformidade
 ├── PRD.md                            # Requisitos de Produto
@@ -230,12 +251,105 @@ Fechamento da etapa de qualidade da CI, sem alterar lógica do projeto. Lint **0
 
 ---
 
+## 6i. UFLA-023 EQUAÇÕES E FÓRMULAS (§3.2.8 MANUAL UFLA) (14/08/2026)
+Implementação da regra UFLA-023: equações/fórmulas destacadas no texto, numeração em algarismos arábicos entre parênteses **alinhada à direita**, centralizadas, com espaçamento maior (1,5) para acomodar expoentes/índices; texto preservado e alerta quando a equação nativa (OMML) não puder ser recriada (§22 instruções consolidadas).
+
+1. **Causa raiz** — `TEXT_TOKEN_PATTERN` em `src/word-structure-extractor.ts` não capturava `<m:t>` (OMML), perdendo silenciosamente o texto de equações na importação. Agora o padrão inclui `<m:t(?:\s[^>]*)?>([\s\S]*?)<\/m:t>` com grupo alternado (`match[1] ?? match[2]`).
+2. **Detecção `hasMath`** — `ImportedParagraph`/`ImportedBlock` ganharam `hasMath?: boolean`; detecção via `/m:oMath.../` em `src/word-structure-extractor.ts` (linha 693); `paragraphBlockFromMetadata` propaga; `normalizeBlock`/`splitInlineAcademicText` em `src/import-normalizer.ts` propagam `hasMath` nos blocos reconstruídos (senão o marcador se perdia na normalização).
+3. **Marcador `[EQ]` no rascunho** — `src/import-docx.ts` prefixa `[EQ] ` em linhas com `hasMath` no `editorText`; `editorTextWithImageMarkers` agora não usa o fallback quando há blocos com matemática; contagem `mathBlocks` + alerta `mathMessages`: "N equação(ões)/fórmula(s) detectada(s)... texto preservado como '[EQ]', equação nativa (OMML) não é recriada automaticamente; verifique formatação centralizada com numeração à direita".
+4. **Renderização** — novo tipo `equation` em `EditorBlockType`/`parseEditorContent` (`src/export-docx.ts` detecta `[EQ] `); helper compartilhado `equationParagraph` em `src/docx-render-core.ts`: centralizado (`w:jc center`), tab stop direito em 9072 twips (16 cm), espaçamento 1,5 (`w:line=360`), itálico; número `(N.N)` extraído do fim e alinhado à direita. Aplicado em **todos** os exportadores: `export-docx.ts`, `export-article-docx.ts`, `export-cpg-docx.ts`, `export-research-project-docx.ts`.
+5. **Auditoria OOXML** — `scripts/ufla-compliance/ooxml-checks.ts` ganhou checagem `equation-format`: se houver OMML sem parágrafo centralizado com tab direito, emite falha (`error`, "Manual UFLA 3.2.8").
+6. **Testes** — novo `tests/ufla-equations.test.ts` (10): importação OMML (`m:oMath` e `m:oMathPara`) preserva texto como `[EQ]`, negativo sem alerta, `parseEditorContent` gera bloco `equation`, `equationParagraph` centraliza com tab direito (inspeção do root OOXML), serialização via `Packer`, e 2 testes de checagem `runOoxmlChecks` (sem falso positivo).
+7. **Verify** — `npm run lint` 0 erros, `npm run build` OK, `npm test` **184 arquivos, 1452 testes passed (10 skipped)**.
+
+---
+
+## 6j. ESTABILIZAÇÃO DA BRANCH + VALIDAÇÃO AMPLIADA (15/08/2026)
+Sequência executada para deixar `npm run verify` 100% verde e ampliar a cobertura do validador contra o Manual UFLA. **195 arquivos, 1515 testes (10 skipped), build OK, tsc limpo.**
+
+1. **Correções do trabalho em andamento (`feat/ufla-render-validation`)** — o alias `@scripts` no tsconfig puxou `scripts/ufla-compliance/` para o programa de tipos e expôs ~30 erros latentes, quebrando o build:
+   - `gate.ts` reescrito com tipagem correta: `checkTables` inteligente (linha única aceita — DECISION_002) usado no gate, gaps dos validadores mapeados com `section`, `technical` com os campos novos (omml, citationsValidator, referencesValidator, sectionsValidator, figuresValidator, tablesValidator); `runFullComplianceGate` preservado.
+   - `audit-all.ts`, `audit-references.ts`, `audit-citations.ts`, `audit-figures.ts`, `audit-pretextual.ts`, `audit-sections.ts`, `report.ts`, `document-type-matrix.ts`, `validate-document-structure.ts` (agora aceita `explicitType`), `validate-page-layout.ts` (usa `UFLA_RULES.page.widthTwip/heightTwip` e o recuo real), `validate-equations.ts`, `validate-pagination.ts` — tipos e imports limpos.
+   - `report.ts` refatorado para aceitar `ExpandedAuditResult` OU `UnifiedAuditResult` de forma defensiva (não lança com resultado vazio) e criar o diretório do relatório.
+2. **Track changes/comentários/bookmarks/vMerge completados** — `src/word-structure-extractor.ts` calculava `commentId`/`moveId`/`permissionId` mas não os propagava: agora `extractRunsFromParagraphXml` copia para os runs, o parágrafo agrega `commentIds`/`moveIds`/`permissionIds` e `paragraphBlockFromMetadata` os propaga aos blocos; corrigida a lógica de intervalo (fim do comentário vem depois do run — antes exigia `end <= runEnd`).
+3. **Testes novos corrigidos** — `tests/import/import-track-changes.test.ts` reescrito com DOCX mínimo real (JSZip) testando `w:ins`, comentário, bookmarks e vMerge; `tests/ufla-compliance/validate-omml.test.ts` gera DOCX real sem matemática para o caso de sucesso; `tests/ufla-compliance/report.test.ts` passa com o report defensivo.
+4. **Validador da skill ampliado (`skills/ufla-docx-compliance`)** — novos itens no `checklist-checker.ts`:
+   - **3.11–3.14 Capa**: autor 14 pt, título 16 pt, local/ano 14 pt e logo 7 × 2,85 cm (dimensões lidas de `wp:extent` no bloco da capa). Detecção corrigida: autor = primeiro parágrafo com texto que NÃO seja a linha institucional; título = primeiro negrito/centralizado/longo APÓS o autor (exclui instituição e autor); local = `LAVRAS – MG`.
+   - **15.7–15.10 Sumário semântico**: entradas TOC (estilos `TOC1-3`/`ufla_sumario_*`) não incluem pré-textuais, incluem referências, apêndices e anexos quando existem; com TOC ainda não atualizado pelo Word → `unchecked` (não falso-positivo).
+   - **18.2 Numeração quinária**: profundidade máxima de 5 níveis (ABNT NBR 6024 / Manual §18).
+   - 4 testes novos (40 no total do arquivo da skill).
+5. **Gate de scripts**: `validateSections` agora também verifica o limite quinário (máx. 5 níveis).
+6. **Validação ao vivo** no DOCX gerado: 65/75 itens OK; as falhas restantes são do artefato de auditoria (baseline sem orientador/curso/refs ordenadas e sem imagem de logo — não são bugs do gerador).
+
+---
+
+## 6k. CONFORMIDADE COMPLETA + GATES DE EVIDÊNCIA FÍSICA (14/08/2026)
+Estado documentado no canônico `docs/STATUS_ATUAL.md`. Branch `feat/ufla-render-validation`.
+
+1. **Fonte normativa registrada** — Manual UFLA 6ª ed. (10/03/2025), PDF oficial hash `49929de3…ca66`, 48 requisitos com fonte/seção/página em `artifacts/ufla-audit/manual/manual-ufla-requirements.json`.
+2. **FULL COMPLIANCE GATE APROVADO** — `npm run ufla:audit` orquestra lint → typecheck:scripts → regenerate (Word COM + PDF físico + gate expandido + gates) → verify; 11/11 gates passed; `artifacts/ufla-compliance/report.md` é o canônico (mesma rodada, sem stale).
+3. **Análise física do PDF implementada** — imagens via opList/CTM, tabelas via grade de colunas alinhadas + **bordas desenhadas** (`re`+`eoFill`, cobre tabelas de 2 linhas/questiónario), equações por glifos matemáticos Unicode; `analyze-pdf-physical.ts` emite contagens **por página**.
+4. **Conciliação DOCX→PDF página-a-página** — `coverage-docx-pdf.ts`: cada tabela OOXML registra a página física onde foi renderizada (`tables.pageMap`) + reverse map (`pageMapping`); gate `coverageDocxPdfGate` (35/35 tabelas casadas, razão 1.29 na banda [0.7,1.8]).
+5. **Paginação resolvida (UFLA-AMBIGUOUS-1, DECISION-010)** — contagem contínua a partir da folha de rosto (folha de rosto = 1); numeração visível inicia na Introdução com o valor contado (nunca reinício em 1); OOXML `pgNumType start=13` ↔ PDF físico folha 18=13.
+6. **Runner self-hosted do Word documentado** — `docs/RUNNER_WORD.md`; gate de regressão `ufla:pdfref` + workflow de refresh (`pdf-reference-refresh.yml`) abrindo PR com a nova referência.
+
+## 6l. EQUAÇÕES OMML NATIVAS (UFLA-023, §3.2.8) + PREVIEW FIEL
+1. **OMML cru re-injetado** — o `<m:oMathPara>` original viaja no rascunho como token `\uF001OMML:<base64>\uF001` e é re-injetado no XML pós-Packer (frações/raízes preservadas).
+2. **LaTeX→OMML no editor** — `parseLatexMath` cobre `\frac`, `\sqrt[n]`, `x^2`, `x_i`, `\int/\sum/\prod/\lim` (m:nary/m:func nativos) com aninhamento; botão **ƒx Equação** na toolbar + numeração automática por seção `(2.1)`.
+3. **Numeração como campo SEQ real** — `equationSeqInstruction` (`SEQ Eq \s 1 \* ARABIC`) via `w:fldSimple` (equações digitadas) ou fldChar (OMML cru importado); Word recalcula ao abrir; tabulação à direita 9072 twips.
+4. **Preview com KaTeX** — `omml-to-latex.ts` (novo, 16/08) converte OMML→LaTeX (tokenizador XML de pilha, sem DOM) e o KaTeX renderiza com a mesma fidelidade do Word; fallback gracioso para texto achatado.
+5. **Auditoria OOXML** — `ooxml-checks.ts` `equation-format`: OMML exige parágrafo centralizado com tab direito (Manual 3.2.8).
+
+## 6m. FICHA CATALOGRÁFICA, CAPA E APROVAÇÃO (FÍSICA)
+1. **Ficha §6.1 completa** — campo `fichaCatalografica` + upload de imagem; exportação prioriza imagem e cai para texto; estilo `ufla_ficha_catalografica` (espaço simples).
+2. **Ficha no VERSO da folha de rosto** — `validate-cover-layout.ts` verifica a página seguinte à folha de rosto contém "FICHA CATALOGRÁFICA" (Manual §3.1.3); cartão na metade inferior quando há Cutter real (≥40% erro / ≥50% aviso).
+3. **Cutter** — `catalog-card.ts`: `hasCutterNumber` (`[A-Z]\d{1,4}[a-z]?` ou CDU); Cutter ausente na ficha em TEXTO bloqueia a versão final (`catalog-card-cutter-missing`); **ficha gerada automaticamente** (`generateCatalogCard`: tabela Cutter-Sanborn Silva→S586 etc. + fallback `[A-Z]\d{2}`); botão "Gerar ficha provisória" na UI.
+4. **Capa por coordenadas** — ordem estrita institucional→autor→título→local/ano com gaps em banda [10,350]pt, sem sobreposição; autor 14 pt, título 16 pt, local/ano 14 pt, logo 7×2,85 cm.
+5. **Grade física da banca** — folha de aprovação: ≥3 linhas de membros em posições y distintas na metade inferior; linhas sobrepostas (gap<8pt) ou fora da margem rejeitadas.
+
+## 6n. TABELAS (w:tblHeader), PAISAGEM E ROUND-TRIP
+1. **Cabeçalho repetido (w:tblHeader)** — patch pós-Packer marca a primeira linha em trPr (Manual §23.3, NBR 17225); decisões `docs/decisions/001`/`002` (heurística de cabeçalho causou regressão do Quadro 2 — ler antes de mudar tabelas).
+2. **Traço duplo superior/inferior** — `ibgeTable` usa `BorderStyle.DOUBLE`; bordas laterais ausentes e `insideHorizontal` SINGLE.
+3. **Paisagem para tabelas largas** — tabelas 6+ colunas / importadas de seção landscape / largura OOXML > 8504 twips viram SEÇÃO PAISAGEM própria (16838×11906) com numeração continuada; validada no PDF físico (página A4-paisagem 842×595).
+4. **Preservação de embeds** — round-trip preserva 11/11 imagens (capa reconstruída pelo template, F-007 encerrado), 35/35 tabelas, 138/138 referências; `compare-preservation.ts` recomputa a cada rodada.
+5. **Listas de ilustrações/tabelas** — `collectListItems` detecta legendas na ordem do texto; páginas pré-textuais com título centralizado/maiúsculas/negrito + PAGEREF (página à direita, recuo deslocante 0,5 cm).
+
+## 6o. GATES POR TIPO, E2E E GOVERNANÇA
+1. **Gate por tipo** — 15 tipos (4 padrão + 3 drafts editáveis + 8 formatos da Coleção) — 15/15 PASSED; física PDF por tipo (A4, paginação OOXML↔PDF, margem inferior limpa); `formatsCrossGate` 18 formatos × 20 requisitos.
+2. **E2E Playwright 13 fluxos** — `tests/e2e/app-workflow.spec.ts` data-driven: 6 templates + 8 formatos da Coleção (patente, revisão sistemática, estudo de caso, software, cultivar, relatório de estágio, proposta de intervenção), cada um com requiredFields próprios; **axe no navegador real** (violações critical/serious = 0).
+3. **Lighthouse** — a11y 100, performance 86, best-practices 92 (orçamentos a11y ≥90, perf ≥70, BP ≥80, SEO ≥80).
+4. **CI** — `verify.yml` (Node 24 + lint + testes + build + ci-checks sem Word); `e2e.yml` (Playwright + Lighthouse); `pdf-regression.yml` (runner self-hosted com Word); `pdf-reference-refresh.yml` (workflow_dispatch + PAT_PDF_REFERENCE).
+5. **Freshness anti-stale** — `sourceFingerprint` (sha256 de src/+scripts/+package.json) embutido em todos os artefatos; `checkArtifactFreshness` valida; suíte única (1× npm test por rodada, −25s); renders per-type paralelos (pool 3) + skip de re-render por digest (auditoria em ~135–146s).
+
+## 6p. OUTROS FECHAMENTOS
+1. **Referências online NBR 6023** — tipo `online` com 'Disponível em:' e **'Acesso em:' BLOQUEANTE** (reference-access-missing vira erro); assistência no editor anexa "Acesso em: d mmm. aaaa".
+2. **Tipos de referência §25.14 ampliados** — patente, jornal, periódico, audiovisual, sonoro, partitura, iconográfico, cartográfico, tridimensional, dados de pesquisa, correspondência (50 testes).
+3. **Notas de rodapé** — validação 24.1–24.3 (footnotes.xml, fonte menor espaço simples, Times); botão na UI insere `[^N]` + definição ao fim.
+4. **Religação de referências cruzadas** — bookmarks/PAGEREF no round-trip: token `[x:ANCHOR~texto]` → `InternalHyperlink` + bookmark estável nos headings/legendas.
+5. **Comentários/track changes** — alerta explícito no round-trip: marcações de revisão (w:ins/w:del) e comentários NÃO são reemitidos (texto incorporado).
+6. **Snapshot de paginação p/ CI** — `snapshots/preview-docx-snapshot.json`: preview + digest determinístico do DOCX + referência PDF commitada; gates `previewDiffGate` (6 templates ≥0.963), `previewPdfReferenceGate`, `checkPdfReferenceGate`.
+7. **Preservação de imagens em grupo** — figura composta com legenda compartilhada importada como grupo; imagens de apêndice preservadas.
+
+## 6q. FECHAMENTO DO WIP + HIGIENE DE GOVERNANÇA (16/08/2026)
+Sincronização do manual de bordo com o canônico `docs/STATUS_ATUAL.md`. **209 arquivos, 1684 testes (10 skipped), build OK, lint 0/0, 11/11 gates.**
+
+1. **Preview de equações importadas igual ao Word** — `src/omml-to-latex.ts` (novo): conversor OMML→LaTeX (tokenizador XML de pilha, sem DOM/DOMParser) com cobertura de `m:f` (frac), `m:rad`, `m:sSup/sSub/sSubSup/sPre`, `m:nary` (∫/∑/∏), `m:limLow/limUpp`, `m:d` (delimitadores), `m:func`, `m:acc/m:bar`, `m:eqArr`; `preview-html.ts` usa `ommlToLatex` quando o bloco carrega o token `\uF001OMML:` → KaTeX renderiza a fração real do Word (não texto achatado). 15 testes do conversor + 1 de regressão do preview.
+2. **Conciliação física DOCX→PDF página-a-página** — `coverage-docx-pdf.ts` ganhou `tables.pageMap` (página física de cada tabela OOXML) e `pageMapping` (reverse map página→índices), evidenciando LAYOUT não só presença; `analyze-per-type-pdfs.ts` detecta conteúdo invadindo a margem inferior (área do rodapé, DECISION-010) e registra a posição exata do 1º número visível (`headerNumber`); 3 testes novos.
+3. **axe no e2e real** — `app-workflow.spec.ts` injeta axe-core no navegador real (app compilado) ao fim de cada um dos 13 fluxos, com preview aberto: violações critical/serious = 0.
+4. **Higiene** — arquivo acidental `null` (0 bytes) removido; `scripts/update-fingerprints.ts` (utilitário avulso, redundante — `regenerate` já computa `sourceFingerprint`) arquivado/removido; DECISION-010: `docs/DECISION_010_PAGINATION.md` virou stub histórico apontando para o canônico `docs/decisions/010-paginacao-contagem-folha-rosto.md`.
+5. **Commits granulares** — 5 commits: `de96890` (OMML→LaTeX preview), `2c5457e` (conciliação página-a-página + margem inferior), `41b568c` (evidência da conciliação no gate + snapshot), `0eab8e8` (axe no e2e), `93254ac` (stub histórico DECISION-010).
+
+---
+
 ## 7. COMANDOS ÚTEIS
 ```bash
 npm run dev              # Inicia o servidor de desenvolvimento SPA
 npm test                 # Executa testes unitários e de integração com Vitest
 npm run build            # Executa o build de produção (tsc build + vite compile)
 npm run verify           # Executa testes e build (validador oficial de PR)
+npm run e2e              # Playwright 13 fluxos no navegador real (axe incluído)
+npm run ufla:audit       # Auditoria completa UFLA (lint → typecheck → regenerate Word COM → gates; 11 gates)
+npm run ufla:pdfref      # Gate de regressão do PDF de referência (requer Word; runner self-hosted)
 npm run skill:validate   # Valida um DOCX; use --type para classificar itens estruturais: --type=artigo|resumo_cpg|projeto_pesquisa|...
 ```
 
@@ -246,3 +360,7 @@ npm run skill:validate   # Valida um DOCX; use --type para classificar itens est
 2. **NÃO** altere estilos sem confirmar conformidade no `CHECKLIST_SITE_UFLA_MANUAL.md`.  
 3. **MANTENHA** este arquivo atualizado conforme novas pendências ou mudanças de escopo.  
 4. **EXPLIQUE** termos técnicos em português nas interações com o usuário.
+5. **FONTE ÚNICA DE VERDADE** — status/gates/contagens vivem em `docs/STATUS_ATUAL.md` (canônico) e `artifacts/ufla-compliance/report.md`; nunca duplicar números em outro arquivo sem marcar como histórico (data + commit + apontar para o canônico).
+6. **DECISÕES** — registrar toda decisão normativa/técnica em `docs/decisions/NNN-*.md` (não criar resumos avulsos em `docs/DECISION_*`; esses devem apontar para `docs/decisions/`).
+7. **EVIDÊNCIA** — nunca editar números de evidência à mão: rodar `npm run ufla:audit` (regenera artefatos/gates/report da mesma rodada).
+8. **TABELAS** — antes de mudar a heurística de cabeçalho, ler `docs/decisions/001` e `002` (regressão do Quadro 2).

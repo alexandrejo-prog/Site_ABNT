@@ -95,15 +95,58 @@ export function normalizeAcademicTableText(value: string): string {
   return result.join("; ").replace(/\s+/g, " ").trim();
 }
 
-export function detectAcademicTableHeaders(table: ImportedTable): string[] {
+const HEADER_VOCABULARY_RE =
+  /(categoria|grupo|fase|fases|caracter[ií]sticas?|vantagens?|desvantagens?|pontos cr[ií]ticos|autores?|refer[eê]ncias?|fonte|ano|data|norma|indicador|perfil|quest[aã]o|resposta|frequ[eê]ncia|percentual|a[çc][ãa]o|atividade|respons[aá]vel|cronograma|unidade|contexto|avalia[çc][ãa]o|perguntas?|quest[õo]es|comunidades?|n[uú]mero)/i;
+
+/**
+ * Detecta a linha de cabeçalho APENAS por vocabulário de coluna acadêmica.
+ *
+ * Sem vocabulário (ex.: "Instituição | Tipo de Documento | De quando | De
+ * quem | Endereço eletrônico"), a primeira linha NÃO é tratada como cabeçalho:
+ * a tabela permanece editable-table e é preservada integralmente. Uma heurística
+ * de "rótulos curtos em todas as colunas" reclassificava tabelas como o
+ * Quadro 2 da dissertação como grouped-with-authors, descartando a linha de
+ * cabeçalho e embaralhando colunas no round-trip vivo (regressão 2026-08-14).
+ */
+/**
+ * Linhas-título que podem preceder a linha de cabeçalho real (tabelas
+ * convertidas de PDF: "Tema: ...", "Cronograma de ações..." na 1ª linha e os
+ * rótulos na 2ª).
+ */
+const TABLE_TITLE_LINE_PATTERNS = [
+  /^Tema\s*[:\\-–]/i,
+  /^Tema\s+geral\s*[:\\-–]/i,
+  /^Cronograma\s+de\s+a[çc][õo]es/i,
+  /^Avalia[çc][ãa]o\s+dos\s+reposit[óo]rios/i,
+  /^Pol[ií]tica\s+Institucional\s+de\s+Informa[çc][ãa]o/i,
+  /^Planejamento\s+para\s+a\s+implementa[çc][ãa]o/i,
+  /^Dados\s+estat[ií]sticos?\s+das?\s+comunidades/i,
+  /^Aspectos?\s+legais/i,
+];
+
+function looksLikeTableTitleLine(text: string): boolean {
+  return TABLE_TITLE_LINE_PATTERNS.some((p) => p.test(text));
+}
+
+export function detectAcademicTableHeader(table: ImportedTable): { headers: string[]; rowIndex: number } {
   const rows = nonEmptyRows(table);
-  if (!rows.length) return [];
-  const first = rows[0].map((text) => text.trim());
-  const meaningful = first.filter(Boolean);
-  const hasHeaderVocabulary = meaningful.some((text) =>
-    /(categoria|grupo|fase|fases|caracter[ií]sticas?|vantagens?|desvantagens?|pontos cr[ií]ticos|autores?|refer[eê]ncias?|fonte|ano|data|norma|indicador|perfil|quest[aã]o|resposta|frequ[eê]ncia|percentual)/i.test(text),
-  );
-  return hasHeaderVocabulary ? first : [];
+  if (!rows.length) return { headers: [], rowIndex: 0 };
+  // A linha de cabeçalho pode não ser a primeira: em tabelas convertidas de PDF
+  // a 1ª linha frequentemente é um título ("Tema: ...") e os rótulos vêm na
+  // linha seguinte. Procura nas 3 primeiras linhas não-vazias.
+  for (let offset = 0; offset < Math.min(3, rows.length); offset++) {
+    const candidate = rows[offset].map((text) => text.trim());
+    const meaningful = candidate.filter(Boolean);
+    if (!meaningful.length) continue;
+    if (looksLikeTableTitleLine(meaningful.join(" "))) continue;
+    const hasHeaderVocabulary = meaningful.some((text) => HEADER_VOCABULARY_RE.test(text));
+    if (hasHeaderVocabulary) return { headers: candidate, rowIndex: offset };
+  }
+  return { headers: [], rowIndex: 0 };
+}
+
+export function detectAcademicTableHeaders(table: ImportedTable): string[] {
+  return detectAcademicTableHeader(table).headers;
 }
 
 function columnValues(table: ImportedTable, columnIndex: number, skipHeader = true): string[] {
@@ -235,7 +278,8 @@ export function classifyAcademicTablePattern(table: ImportedTable): AcademicTabl
 }
 
 export function reconstructGroupedAcademicTable(table: ImportedTable): ReconstructedAcademicTable {
-  const headers = detectAcademicTableHeaders(table);
+  const { headers, rowIndex: headerRowIndex } = detectAcademicTableHeader(table);
+  const headerSourceRow = headers.length ? headerRowIndex : -1;
   const groupIndex = Math.max(0, detectGroupColumn(table));
   const authorsIndex = detectAuthorsColumn(table);
   const contentIndex = detectContentColumn(table);
@@ -243,7 +287,8 @@ export function reconstructGroupedAcademicTable(table: ImportedTable): Reconstru
   const rows: ReconstructedAcademicTableRow[] = [];
   let currentGroup = "";
 
-  for (let rowIndex = headers.length ? 1 : 0; rowIndex < table.rows.length; rowIndex += 1) {
+  for (let rowIndex = 0; rowIndex < table.rows.length; rowIndex += 1) {
+    if (rowIndex === headerSourceRow) continue;
     const row = table.rows[rowIndex];
     const group = cellText(row[groupIndex]);
     const content = cellText(row[contentIndex]);
@@ -270,7 +315,8 @@ export function reconstructGroupedAcademicTable(table: ImportedTable): Reconstru
 }
 
 export function reconstructGenericAcademicTable(table: ImportedTable): ReconstructedAcademicTable {
-  const headers = detectAcademicTableHeaders(table);
+  const { headers, rowIndex: headerRowIndex } = detectAcademicTableHeader(table);
+  const headerSourceRow = headers.length ? headerRowIndex : -1;
   const source = detectSourceText(table);
   const columnCount = Math.max(1, table.columnCount);
   const normalizedHeaders = Array.from({ length: columnCount }, (_, index) => {
@@ -279,7 +325,8 @@ export function reconstructGenericAcademicTable(table: ImportedTable): Reconstru
   });
   const rows: ReconstructedAcademicTableRow[] = [];
 
-  for (let rowIndex = headers.length ? 1 : 0; rowIndex < table.rows.length; rowIndex += 1) {
+  for (let rowIndex = 0; rowIndex < table.rows.length; rowIndex += 1) {
+    if (rowIndex === headerSourceRow) continue;
     const cells = Array.from({ length: columnCount }, (_, index) => cellText(table.rows[rowIndex]?.[index]));
     if (!cells.some(Boolean)) continue;
     rows.push({ cells });

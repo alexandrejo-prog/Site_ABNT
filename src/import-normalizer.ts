@@ -88,8 +88,24 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function stripSoftHyphens(value: string): string {
+  return value.replace(/[\u00AD\u200B]/g, "");
+}
+
+function normalizeQuotes(value: string): string {
+  const map: Record<string, string> = {
+    "\u201C": '"',
+    "\u201D": '"',
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u00AB": '"',
+    "\u00BB": '"',
+  };
+  return value.replace(/[\u201C\u201D\u2018\u2019\u00AB\u00BB]/g, (ch) => map[ch] ?? ch);
+}
+
 function cleanText(value: string): string {
-  return value
+  return normalizeQuotes(stripSoftHyphens(value))
     .replace(/\uFFFE|\uFEFF/g, "")
     .replace(/\[Imagem detectada:\s*[^\]]+\]/gi, "")
     .replace(/\[Imagem:\s*[^\]]+\]/gi, "")
@@ -97,22 +113,47 @@ function cleanText(value: string): string {
     .trim();
 }
 
-function textBlock(text: string, type: "paragraph" | "longQuote" = "paragraph"): ImportedBlock {
+function textBlock(
+  text: string,
+  type: "paragraph" | "longQuote" = "paragraph",
+  footnoteRefs?: string[],
+  commentIds?: string[],
+  moveIds?: string[],
+  permissionIds?: string[],
+): ImportedBlock {
   return {
     type,
     text,
     rawText: text,
     runs: [{ text }],
+    ...(footnoteRefs?.length ? { footnoteRefs } : {}),
+    ...(commentIds?.length ? { commentIds } : {}),
+    ...(moveIds?.length ? { moveIds } : {}),
+    ...(permissionIds?.length ? { permissionIds } : {}),
   };
 }
 
-function headingBlock(text: string, level: number): ImportedBlock {
+function stripHeadingTerminalPunctuation(value: string): string {
+  const trimmed = cleanText(value);
+  if (/\.{3}\s*$/.test(trimmed)) return trimmed; // preserva reticências
+  return trimmed
+    .replace(/[.]\s*$/, "")
+    .replace(/[…;:\-–—]\s*$/, "")
+    .trim();
+}
+
+function headingBlock(text: string, level: number, footnoteRefs?: string[], commentIds?: string[], moveIds?: string[], permissionIds?: string[]): ImportedBlock {
+  const clean = stripHeadingTerminalPunctuation(text);
   return {
     type: "heading",
     level,
-    text,
-    rawText: text,
-    runs: [{ text }],
+    text: clean,
+    rawText: clean,
+    runs: [{ text: clean }],
+    ...(footnoteRefs?.length ? { footnoteRefs } : {}),
+    ...(commentIds?.length ? { commentIds } : {}),
+    ...(moveIds?.length ? { moveIds } : {}),
+    ...(permissionIds?.length ? { permissionIds } : {}),
   };
 }
 
@@ -214,16 +255,62 @@ function shouldSuppressPageBreak(output: ImportedBlock[]): boolean {
   return !previous || previous.type === "pageBreak";
 }
 
-function splitInlineAcademicText(value: string, originalType: "paragraph" | "heading" | "longQuote"): ImportedBlock[] {
+function splitInlineAcademicText(
+  value: string,
+  originalType: "paragraph" | "heading" | "longQuote",
+  footnoteRefs: string[] = [],
+  hasMath = false,
+  ommlXml?: string,
+  commentIds: string[] = [],
+  moveIds: string[] = [],
+  permissionIds: string[] = [],
+): ImportedBlock[] {
   let remaining = cleanText(value);
   const output: ImportedBlock[] = [];
+  let refsPlaced = false;
+  const placeIds = (block: ImportedBlock): ImportedBlock => {
+    if (!refsPlaced) {
+      refsPlaced = true;
+      return {
+        ...block,
+        ...(commentIds.length ? { commentIds } : {}),
+        ...(moveIds.length ? { moveIds } : {}),
+        ...(permissionIds.length ? { permissionIds } : {}),
+      } as ImportedBlock;
+    }
+    return block;
+  };
+  const placeRefs = (block: ImportedBlock): ImportedBlock => {
+    if (footnoteRefs.length && !refsPlaced && block.type !== "pageBreak") {
+      refsPlaced = true;
+      return {
+        ...block,
+        footnoteRefs,
+        ...(commentIds.length ? { commentIds } : {}),
+        ...(moveIds.length ? { moveIds } : {}),
+        ...(permissionIds.length ? { permissionIds } : {}),
+      } as ImportedBlock;
+    }
+    return block;
+  };
+  const withMath = (block: ImportedBlock): ImportedBlock => {
+    if (block.type === "pageBreak") return block;
+    const withOmml = ommlXml && block.type === "paragraph" ? { ...block, ommlXml } : block;
+    return hasMath ? ({ ...withOmml, hasMath: true } as ImportedBlock) : withOmml;
+  };
 
   while (remaining) {
     const marker = findNextMarker(remaining);
 
     if (!marker) {
       output.push(
-        originalType === "longQuote" ? textBlock(remaining, "longQuote") : textBlock(remaining),
+        withMath(
+          placeRefs(
+            placeIds(
+              originalType === "longQuote" ? textBlock(remaining, "longQuote", footnoteRefs, commentIds, moveIds, permissionIds) : textBlock(remaining, "paragraph", footnoteRefs, commentIds, moveIds, permissionIds)
+            )
+          ),
+        ),
       );
       break;
     }
@@ -231,7 +318,13 @@ function splitInlineAcademicText(value: string, originalType: "paragraph" | "hea
     const before = cleanText(remaining.slice(0, marker.index));
     if (before) {
       output.push(
-        originalType === "longQuote" ? textBlock(before, "longQuote") : textBlock(before),
+        withMath(
+          placeRefs(
+            placeIds(
+              originalType === "longQuote" ? textBlock(before, "longQuote", footnoteRefs, commentIds, moveIds, permissionIds) : textBlock(before, "paragraph", footnoteRefs, commentIds, moveIds, permissionIds)
+            )
+          ),
+        ),
       );
     }
 
@@ -239,7 +332,7 @@ function splitInlineAcademicText(value: string, originalType: "paragraph" | "hea
       output.push(pageBreakBlock());
     }
 
-    output.push(headingBlock(marker.heading, marker.level));
+    output.push(withMath(placeRefs(placeIds(headingBlock(marker.heading, marker.level, footnoteRefs, commentIds, moveIds, permissionIds)))));
     remaining = cleanText(remaining.slice(marker.index + marker.length));
   }
 
@@ -247,18 +340,24 @@ function splitInlineAcademicText(value: string, originalType: "paragraph" | "hea
 }
 
 function normalizeBlock(block: ImportedBlock): ImportedBlock[] {
+  const footnoteRefs = (block as { footnoteRefs?: string[] }).footnoteRefs ?? [];
+  const hasMath = (block as { hasMath?: boolean }).hasMath === true;
+  const ommlXml = (block as { ommlXml?: string }).ommlXml;
+  const commentIds = (block as { commentIds?: string[] }).commentIds ?? [];
+  const moveIds = (block as { moveIds?: string[] }).moveIds ?? [];
+  const permissionIds = (block as { permissionIds?: string[] }).permissionIds ?? [];
   if (block.type === "paragraph" || block.type === "longQuote") {
     const text = cleanText(block.text);
     if (!text) return [];
-    return splitInlineAcademicText(text, block.type);
+    return splitInlineAcademicText(text, block.type, footnoteRefs, hasMath, ommlXml, commentIds, moveIds, permissionIds);
   }
 
   if (block.type === "heading") {
     const text = cleanText(block.text);
     if (!text) return [];
-    const split = splitInlineAcademicText(text, "heading");
+    const split = splitInlineAcademicText(text, "heading", footnoteRefs, hasMath, ommlXml, commentIds, moveIds, permissionIds);
     if (split.length === 1 && split[0]?.type === "paragraph") {
-      return [headingBlock(split[0].text, block.level)];
+      return [headingBlock(split[0].text, block.level, footnoteRefs, commentIds, moveIds, permissionIds)];
     }
     return split;
   }
@@ -289,7 +388,9 @@ function isStandalonePageNumber(text: string): boolean {
 }
 
 function isTocEntry(text: string): boolean {
-  const cleaned = cleanText(text);
+  // remove tokens de referência cruzada ([x:ANCHOR|texto]) antes do teste —
+  // entradas de sumário tokenizadas continuam sendo descartadas no import.
+  const cleaned = cleanText(text).replace(/\[x:[^\]]*\]/g, " ");
   const normalized = normalizeForDetection(cleaned);
   if (!normalized) return false;
   if (isStandalonePageNumber(cleaned)) return true;
@@ -360,6 +461,34 @@ function stripTableOfContents(blocks: ImportedBlock[]): ImportedBlock[] {
   return output;
 }
 
+function separateCaptionAndSource(blocks: ImportedBlock[]): ImportedBlock[] {
+  const output: ImportedBlock[] = [];
+  for (const block of blocks) {
+    if (block.type !== "paragraph" && block.type !== "heading" && block.type !== "longQuote") {
+      output.push(block);
+      continue;
+    }
+    const text = cleanText(block.text);
+    const match = text.match(
+      /^((?:Figura|Tabela|Quadro|Gráfico|Mapa|Imagem|Ilustração)\s+\d+[\s\-:.]+.*?)(\s*Fonte:.*)$/is,
+    );
+    if (!match) {
+      output.push(block);
+      continue;
+    }
+    const caption = match[1].trim();
+    const fonte = match[2].trim();
+    if (!caption || !fonte) {
+      output.push(block);
+      continue;
+    }
+    const blockType = block.type === "heading" ? "paragraph" : block.type;
+    output.push(textBlock(caption, blockType === "longQuote" ? "longQuote" : "paragraph"));
+    output.push(textBlock(fonte, "paragraph"));
+  }
+  return output;
+}
+
 function shouldForcePageBreakBefore(block: ImportedBlock): boolean {
   if (block.type !== "heading") return false;
   return /^(RESUMO|ABSTRACT|REFERÊNCIAS|REFERENCIAS)$/i.test(block.text) || /^1\s+Introdu/i.test(block.text);
@@ -368,9 +497,10 @@ function shouldForcePageBreakBefore(block: ImportedBlock): boolean {
 function normalizeBlocks(blocks: ImportedBlock[]): ImportedBlock[] {
   const split = blocks.flatMap(normalizeBlock);
   const withoutToc = stripTableOfContents(split);
+  const separated = separateCaptionAndSource(withoutToc);
   const normalized: ImportedBlock[] = [];
 
-  for (const block of withoutToc) {
+  for (const block of separated) {
     if (shouldForcePageBreakBefore(block) && !shouldSuppressPageBreak(normalized)) {
       normalized.push(pageBreakBlock());
     }
@@ -406,6 +536,8 @@ export function normalizePlainAcademicText(text: string): ImportNormalizationRes
       images: [],
       relationships: {},
       styleNames: {},
+      footnotes: {},
+      comments: {},
       text: normalizedText,
       hasNumbering: false,
     },

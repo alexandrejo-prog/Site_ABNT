@@ -19,6 +19,7 @@ import {
 import { repairHeadingFragments, repairRecordHeadingFragments } from "./heading-fragment-repair";
 import { sanitizeImportedTitle } from "./title-sanitizer";
 import { ImportedDocumentImage, importedImageMarker, looksLikeAcademicImageLabel, looksLikeAcademicImageCaption, looksLikeImageSource } from "./imported-images";
+import { ommlContentToken } from "./docx-render-core";
 import { ImportedTable, importedTableMarker, normalizePhantomColumns, isTableUnreadable, buildStructuredTextFromTable, removeTrailingEmptyColumn, detectGroupColumn, normalizeGroupColumn } from "./imported-tables";
 import { reconstructAcademicTable } from "./academic-table-reconstructor";
 
@@ -102,6 +103,7 @@ export interface ImportResult {
   blocks: ImportedBlock[];
   importedImages: ImportedDocumentImage[];
   importedTables: ImportedTable[];
+  footnotes: Record<string, string>;
   workTypeSuggestion?: WorkTypeSuggestion;
 }
 
@@ -160,6 +162,46 @@ function sanitizeConfidence(
     ...confidence,
     title: fields.title ? confidence.title : "nao-identificado",
   };
+}
+
+function collectChangeWarnings(structure: DocxStructure): string[] {
+  let insertions = 0;
+  let deletions = 0;
+  for (const block of structure.blocks) {
+    if (!("runs" in block)) continue;
+    for (const run of block.runs) {
+      if (run.changeKind === "insertion") insertions += 1;
+      if (run.changeKind === "deletion") deletions += 1;
+    }
+  }
+  const commentCount = Object.keys(structure.comments).length;
+  const warnings: string[] = [];
+  if (insertions > 0 || deletions > 0) {
+    warnings.push(
+      `Documento contém ${insertions} inserção(ões) e ${deletions} exclusão(ões) com controle de alterações (revisão do Word). ` +
+        "As alterações de texto são incorporadas, mas as MARCAÇÕES de revisão (w:ins/w:del) não são reemitidas no DOCX gerado — a versão exportada sai sem o histórico de revisão.",
+    );
+  }
+  if (commentCount > 0) {
+    warnings.push(
+      `Documento contém ${commentCount} comentário(s) do Word. Os comentários não são reemitidos no DOCX gerado — ` +
+        "resolva-os no original antes de importar ou revise o texto exportado no Word.",
+    );
+  }
+  return warnings;
+}
+
+/**
+ * Remove pontuação final de título de seção (ABNT/UFLA: títulos não terminam
+ * com ponto, dois-pontos ou hífen). Preserva reticências ("...").
+ */
+function stripHeadingTerminalPunctuation(value: string): string {
+  const trimmed = value.trim();
+  if (/\.{3}\s*$/.test(trimmed)) return trimmed; // preserva reticências
+  return trimmed
+    .replace(/[.]\s*$/, "")
+    .replace(/[…;:\-–—]\s*$/, "")
+    .trim();
 }
 
 function blockText(block: ImportedBlock): string {
@@ -294,7 +336,15 @@ function computeImageInsertionHint(
   return { hint: "original-position" };
 }
 
-function hasAmbiguousNeighbors(blocks: ImportedBlock[], index: number): boolean {
+/**
+ * Quando N imagens compartilham a MESMA legenda (janela ±3), o documento é uma
+ * figura composta (ex.: 4 logos de periódicos sob "Figura 2 ...") — todas as
+ * imagens do grupo pertencem à mesma figura e devem ser importadas, cada uma com
+ * a legenda compartilhada. Retorna true quando há pelo menos uma vizinha com o
+ * mesmo caption (usado apenas para decidir a mensagem de revisão, não para
+ * descartar: a importação agora preserva o grupo inteiro).
+ */
+function hasSharedCaptionNeighbor(blocks: ImportedBlock[], index: number): boolean {
   const windowSize = 3;
   const currentCaption = nearestAcademicImageContext(blocks, index).caption;
   if (!currentCaption) return false;
@@ -313,7 +363,7 @@ function classifyAcademicImage(block: ImportedBlock, index: number, blocks: Impo
   if (block.type !== "image") return false;
   if (isDecorativeImageBlock(block)) return false;
 
-  if (hasAmbiguousNeighbors(blocks, index)) return false;
+  void hasSharedCaptionNeighbor;
 
   const section = block.section;
   let inBody: boolean;
@@ -327,6 +377,11 @@ function classifyAcademicImage(block: ImportedBlock, index: number, blocks: Impo
     inBody = bodyStart >= 0 && index > bodyStart && (bodyEnd < 0 || index < bodyEnd);
   }
   if (!inBody) return false;
+
+  // Conteúdo de apêndice/anexo (seção post-textual) é sempre preservado, mesmo
+  // sem legenda/fonte — documentos anexados frequentemente têm imagens sem
+  // contexto acadêmico próprio (ex.: documento escaneado no apêndice).
+  if (section === "post-textual") return true;
 
   const { caption, source } = nearestAcademicImageContext(blocks, index);
   return Boolean(caption || source);
@@ -448,7 +503,11 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
   structure.blocks.forEach((block, index) => {
     if (block.type !== "table") return;
 
-    const rows = block.rows.filter((row) => row.some((cell) => cell.trim()));
+    const filteredRows = block.rows
+      .map((row, originalIndex) => ({ row, originalIndex }))
+      .filter(({ row }) => row.some((cell) => cell.trim()));
+    const rows = filteredRows.map(({ row }) => row);
+    const originalIndices = filteredRows.map(({ originalIndex }) => originalIndex);
     if (!rows.length) {
       imported.push({
         id: `tbl-${imported.length + 1}`,
@@ -477,6 +536,16 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
       normalizeRowLength(row.map((cell) => cleanCellText(cell)), columnCount).map((text) => ({ text })),
     );
 
+    const sourceHeaderRows = (block.headerRowIndices ?? []).filter((i) => originalIndices.includes(i));
+    const firstSourceHeader = sourceHeaderRows.length ? Math.min(...sourceHeaderRows) : undefined;
+    // Só declara headerRowIndex quando a ORIGEM declara w:tblHeader. Sem isso
+    // (baseline convertido de PDF), a linha de cabeçalho é INFERIDA na
+    // exportação (inferTableHeaderRow) — o fallback 0 aqui marcava o TÍTULO
+    // ("Tema: ...") como header em tabelas com 1ª linha-título + 2ª linha de
+    // rótulos (regressão corrigida 2026-08-15).
+    const headerRowIndex =
+      firstSourceHeader !== undefined ? originalIndices.indexOf(firstSourceHeader) : undefined;
+
     const rawTable: ImportedTable = {
       id: `tbl-${imported.length + 1}`,
       rows: tableRows,
@@ -486,6 +555,7 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
       source: source || undefined,
       position: index,
       origin: "docx-table",
+      orientation: block.orientation,
       status: hasLayoutWarning ? "preserved-with-layout-warning" : "preserved",
       estimatedColumnWidths,
       originalGridWidths: block.gridWidths,
@@ -493,6 +563,7 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
       hasGridSpan: block.hasGridSpan ?? false,
       hasVerticalMerge: block.hasVerticalMerge ?? false,
       cellMerges: block.cellMerges,
+      headerRowIndex,
       layoutWarning: hasLayoutWarning
         ? "Tabelas/quadros importados de DOCX convertido de PDF podem exigir revisao manual de layout."
         : undefined,
@@ -541,13 +612,32 @@ function isReferenceOrPostTextual(block: ImportedBlock): boolean {
   return /^(REFERENCIAS|ANEXOS|ANEXO|APENDICES|APENDICE)\b/.test(normalized);
 }
 
+function footnoteDefinitionLines(
+  footnotes: Record<string, string>,
+  usedIds: Set<string>,
+): string[] {
+  const ids = new Set<string>([...usedIds, ...Object.keys(footnotes)]);
+  return [...ids]
+    .sort((a, b) => Number(a) - Number(b))
+    .map((id) => {
+      const body = (footnotes[id] ?? "").trim();
+      if (!body) return `[^${id}]: nota sem texto preservado.`;
+      const firstLine = body.split(/\n/)[0];
+      const continuation = body.split(/\n/).slice(1);
+      return [`[^${id}]: ${firstLine}`, ...continuation.map((line) => `  ${line}`)].join("\n");
+    });
+}
+
 function editorTextWithImageMarkers(
   blocks: ImportedBlock[],
   fallbackEditorText: string,
   importedImages: ImportedDocumentImage[],
   importedTables: ImportedTable[],
+  footnotes: Record<string, string> = {},
 ): string {
-  if (!importedImages.length && !importedTables.length) return fallbackEditorText;
+  const hasFootnotes = Object.keys(footnotes).length > 0;
+  const hasMathBlocks = blocks.some((block) => (block as { hasMath?: boolean }).hasMath === true);
+  if (!importedImages.length && !importedTables.length && !hasFootnotes && !hasMathBlocks) return fallbackEditorText;
   const appendMissingPreserved = (
     output: string,
     emittedImageIds: Set<string>,
@@ -586,7 +676,9 @@ function editorTextWithImageMarkers(
     const normalized = normalizeForDetection(blockText(block));
     return normalized === "1 INTRODUCAO" || normalized === "INTRODUCAO";
   });
-  if (start < 0) return appendMissingPreserved(fallbackEditorText, new Set(), new Set());
+  // Sem INTRODUÇÃO detectada (ex.: documentos sintéticos), percorre todos os
+  // blocos para ainda posicionar as chamadas [^N] das notas de rodapé.
+  const walkStart = start >= 0 ? start : 0;
 
   const preservedTableTexts = new Set<string>();
   for (const table of importedTables) {
@@ -599,9 +691,10 @@ function editorTextWithImageMarkers(
   const lines: string[] = [];
   const emittedImageIds = new Set<string>();
   const emittedTableIds = new Set<string>();
+  const usedFootnoteIds = new Set<string>();
   let sawConclusion = false;
   let tocArtifactMode = false;
-  for (let index = start; index < blocks.length; index += 1) {
+  for (let index = walkStart; index < blocks.length; index += 1) {
     const block = blocks[index];
     const normalized = normalizeForDetection(blockText(block));
     if (/^(CONCLUSAO|CONCLUSÃO|CONSIDERACOES FINAIS|CONSIDERAÇÕES FINAIS)\b/.test(normalized)) {
@@ -657,7 +750,7 @@ function editorTextWithImageMarkers(
     }
 
     if (block.type === "heading") {
-      lines.push(`${block.level <= 1 || isEditorHeading(block) ? "#" : "##"} ${block.text}`);
+      lines.push(`${block.level <= 1 || isEditorHeading(block) ? "#" : "##"} ${stripHeadingTerminalPunctuation(block.text)}`);
       continue;
     }
 
@@ -667,8 +760,24 @@ function editorTextWithImageMarkers(
     }
 
     const text = blockText(block);
-    if (text && !preservedTableTexts.has(text)) lines.push(text);
+    if (text && !preservedTableTexts.has(text)) {
+      const footnoteRefs = (block as { footnoteRefs?: string[] }).footnoteRefs ?? [];
+      const hasMath = (block as { hasMath?: boolean }).hasMath === true;
+      const ommlXml = (block as { ommlXml?: string }).ommlXml;
+      const prefix = hasMath ? "[EQ] " : "";
+      const ommlToken = hasMath && ommlXml ? ommlContentToken(ommlXml) : "";
+      if (footnoteRefs.length) {
+        const markers = footnoteRefs.map((id) => `[^${id}]`).join("");
+        footnoteRefs.forEach((id) => usedFootnoteIds.add(id));
+        lines.push(`${prefix}${text}${markers}${ommlToken}`);
+      } else {
+        lines.push(`${prefix}${text}${ommlToken}`);
+      }
+    }
   }
+
+  const footnoteLines = footnoteDefinitionLines(footnotes, usedFootnoteIds);
+  if (footnoteLines.length) lines.push(...footnoteLines);
 
   const output = lines.join("\n\n").trim() || fallbackEditorText;
   return appendMissingPreserved(output, emittedImageIds, emittedTableIds);
@@ -682,11 +791,13 @@ function buildImportResult(
   const text = repairHeadingFragments(normalized.text);
   const importedImages = importedImagesFromStructure(normalized.structure);
   const importedTables = importedTablesFromStructure(normalized.structure);
+  const footnotes = normalized.structure.footnotes ?? {};
   const editorText = editorTextWithImageMarkers(
     normalized.structure.blocks,
     repairHeadingFragments(detected.editorText || text),
     importedImages,
     importedTables,
+    footnotes,
   );
   const fields = sanitizeFields(repairRecordHeadingFragments(detected.fields));
   const confidence = sanitizeConfidence(detected.confidence, fields);
@@ -698,6 +809,15 @@ function buildImportResult(
   const preservedTables = importedTables.filter((table) => table.status === "preserved" || table.status === "preserved-with-layout-warning").length;
   const missingTables = importedTables.filter((table) => table.status === "detected-but-not-preserved").length;
   const layoutWarningTables = importedTables.filter((table) => table.layoutWarning).length;
+  const mathBlocks = normalized.structure.blocks.filter(
+    (block) => (block as { hasMath?: boolean }).hasMath === true,
+  ).length;
+  const mathMessages: string[] = [];
+  if (mathBlocks > 0) {
+    mathMessages.push(
+      `${mathBlocks} equação(ões)/fórmula(s) detectada(s) no DOCX original e preservada(s) no rascunho como "[EQ]". A exportação regenera a equação nativa (OMML, m:oMath) centralizada com numeração à direita; revise a estrutura em equações com frações/raízes.`,
+    );
+  }
   const imageMessages = [
     preservedImages
       ? `${preservedImages} imagem(ns) importada(s) e preservada(s) no rascunho. Revise posicao, legenda e fonte antes da versao final.`
@@ -732,10 +852,11 @@ function buildImportResult(
     editorText,
     fields,
     confidence,
-    messages: [...nonImageMessages, ...imageMessages, ...tableMessages],
+    messages: [...nonImageMessages, ...imageMessages, ...tableMessages, ...mathMessages],
     blocks: normalized.structure.blocks,
     importedImages,
     importedTables,
+    footnotes,
     workTypeSuggestion,
   };
 }
@@ -753,6 +874,7 @@ export function identifyAcademicFields(
     fields,
     confidence,
     workTypeSuggestion,
+    footnotes: {},
   };
 }
 
@@ -782,6 +904,7 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
 
     try {
       const structure = await extractDocxStructure(arrayBuffer, { includeMediaData: true });
+      const changeWarnings = collectChangeWarnings(structure);
       const normalized = normalizeImportedStructure({
         ...structure,
         text: structure.text || mammothText,
@@ -790,6 +913,7 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
 
       return buildImportResult(normalized, detected, [
         ...messages,
+        ...changeWarnings,
         ...normalized.messages,
         ...detected.messages,
       ]);

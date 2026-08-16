@@ -7,6 +7,7 @@ import {
   isUflaCollectionWork,
 } from "./ufla-rules";
 import { validateReferencesText } from "./references-validator";
+import { hasCatalogCardContent, hasCutterNumber } from "./catalog-card";
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
 import {
   detectAbstractTopicConflict,
@@ -402,7 +403,9 @@ function referenceIssueMessage(code: string, message: string): string {
   if (code === "reference-author-spelling-review") return `${message} O sistema não altera nomes próprios automaticamente; confira na ficha catalográfica ou na fonte original.`;
   if (code === "reference-academic-pages-missing") return `${message} Informe o total de páginas se a fonte bibliográfica trouxer essa informação.`;
   if (code === "reference-legal-publisher-missing" || code === "reference-institutional-publisher-missing") return `${message} Confira órgão/editor responsável, publicação oficial e local.`;
-  if (code === "reference-access-missing" || code === "reference-highlight-missing") return `${message} Revise antes da versão final.`;
+  if (code === "reference-access-missing") return `${message} Referência online sem data de acesso bloqueia a versão final — informe 'Acesso em: <data>' (NBR 6023).`;
+  if (code === "reference-highlight-missing") return `${message} Revise antes da versão final.`;
+  if (code === "reference-order") return `${message} O DOCX reordena as referências alfabeticamente ao gerar, mas confira a sequência final no arquivo.`;
   return message;
 }
 
@@ -449,7 +452,15 @@ function addResearchProjectIssues(fields: AcademicFields, editorText: string, is
   issues.push({ severity: "info", code: "research-toc-update", message: "Após gerar o DOCX, abra no Word ou LibreOffice e atualize o sumário para preencher a paginação real.", what: "O sumário do Projeto de pesquisa é atualizável.", why: "O campo TOC precisa ser atualizado no editor de texto para refletir a paginação final.", action: "No Word: Ctrl+A e F9, depois 'Atualizar o índice inteiro'. No LibreOffice: Ferramentas > Atualizar > Atualizar tudo." });
 }
 
-function addUflaCollectionIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
+/** Rótulos de seção que satisfazem um requiredField da Coleção (mesmo critério do gate por tipo). */
+const PRODUCTION_SECTION_LABELS: Record<string, string[]> = {
+  introducao: ["INTRODUCAO"],
+  metodologia: ["METODOLOGIA", "MATERIAL E METODOS", "MATERIAIS E METODOS"],
+  conclusao: ["CONCLUSAO", "CONSIDERACOES FINAIS"],
+  referencialTeorico: ["REFERENCIAL TEORICO", "REVISAO DE LITERATURA", "REVISAO BIBLIOGRAFICA"],
+};
+
+function addUflaCollectionIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
   if (!isUflaCollectionWork(fields.workType)) return;
   const productionType = academicProductionTypeById(fields.workType);
   if (!productionType) return;
@@ -463,20 +474,97 @@ function addUflaCollectionIssues(fields: AcademicFields, issues: ValidationIssue
     action: "Confira estrutura, campos, sumário e paginação no DOCX final antes de exportar o PDF pelo Word ou LibreOffice.",
   });
 
+  const headingLines = editorText
+    .split(/\n+/)
+    .map(stripHeadingSyntax)
+    .map(normalizeForValidation);
+
   for (const fieldKey of productionType.requiredFields) {
     const fieldValue = fields[fieldKey];
     const valueString = Array.isArray(fieldValue) ? fieldValue.join(" ") : fieldValue;
-    if (!hasValue(valueString)) {
+    const sectionLabels = PRODUCTION_SECTION_LABELS[fieldKey];
+    const satisfiedByHeading = sectionLabels?.some((label) =>
+      headingLines.some((line) => line.includes(label)),
+    );
+    if (!hasValue(valueString) && !satisfiedByHeading) {
+      const viaSection = sectionLabels ? " ou insira a secao correspondente no editor" : "";
       issues.push({
         severity: "error",
         code: `ufla-collection-${fieldKey}-required`,
         fieldKey,
-        message: `Preencha o campo obrigatorio para ${productionType.label}: ${fieldKey}.`,
-        what: "Um campo minimo do formato selecionado esta vazio.",
+        message: `Preencha o campo obrigatorio para ${productionType.label}: ${fieldKey}${viaSection}.`,
+        what: "Um campo minimo do formato selecionado esta vazio (sem secao correspondente no editor).",
         why: "A Colecao Producao Academica UFLA exige revisao da estrutura e dos metadados antes da submissao.",
-        action: "Preencha o campo indicado ou confirme manualmente se o guia especifico dispensa esse item.",
+        action: "Preencha o campo indicado, insira a secao no editor ou confirme manualmente se o guia especifico dispensa esse item.",
       });
     }
+  }
+}
+
+function addDocumentStructureIssues(fields: AcademicFields, editorText: string, issues: ValidationIssue[]): void {
+  const requirements = getWorkTypeRequirements(fields.workType);
+  const hasHeadings = /^\s*#{1,3}\s+/m.test(editorText);
+  const headingLabels = editorText.split(/\n+/).map((line) => line.trim()).filter((line) => /^#{1,3}\s+/.test(line));
+
+  if (requirements.requiresTableOfContents && !hasHeadings) {
+    issues.push({
+      severity: "warning",
+      code: "document-structure-missing-headings",
+      fieldKey: FIELD_TARGET_EDITOR,
+      message: "O sumário será gerado, mas não há títulos de seção no texto principal.",
+      what: "O documento não contém cabeçalhos de nível 1-3 no editor.",
+      why: "O sumário automático do Word depende de estilos de título no corpo do texto para listar as seções.",
+      action: "Insira títulos de seção no editor (ex.: '# 1 Introdução', '## 1.1 Objetivos').",
+    });
+  }
+
+  if (fields.workType === "projeto_pesquisa") {
+    const missingSections: string[] = [];
+    if (!hasSectionHeading(editorText, ["PROBLEMA DE PESQUISA", "PROBLEMA"])) missingSections.push("Problema de pesquisa");
+    if (!hasSectionHeading(editorText, ["OBJETIVO GERAL"])) missingSections.push("Objetivo geral");
+    if (!hasSectionHeading(editorText, ["JUSTIFICATIVA"])) missingSections.push("Justificativa");
+    if (!hasSectionHeading(editorText, ["METODOLOGIA", "PROCEDIMENTOS METODOLÓGICOS", "PROCEDIMENTOS METODOLOGICOS"])) missingSections.push("Metodologia");
+    if (!hasSectionHeading(editorText, ["CRONOGRAMA"])) missingSections.push("Cronograma");
+    if (missingSections.length > 0) {
+      issues.push({
+        severity: "warning",
+        code: "document-structure-research-project-sections",
+        fieldKey: FIELD_TARGET_EDITOR,
+        message: `Seções obrigatórias do projeto de pesquisa não detectadas: ${missingSections.join(", ")}.`,
+        what: "O projeto de pesquisa não apresenta todas as seções estruturais esperadas.",
+        why: "A NBR 15287:2025 exige problema, objetivo, justificativa, metodologia e cronograma.",
+        action: `Adicione as seções ausentes no editor: ${missingSections.join(", ")}.`,
+      });
+    }
+  }
+
+  const normalizedHeadings = headingLabels.map((line) => stripHeadingSyntax(line));
+  const refHeadingIndex = normalizedHeadings.findIndex((line) => /^REFERENCIAS|BIBLIOGRAFICAS/.test(line));
+  if (refHeadingIndex >= 0 && refHeadingIndex < normalizedHeadings.length - 1) {
+    const afterRefs = normalizedHeadings.slice(refHeadingIndex + 1);
+    if (afterRefs.some((line) => line.length > 0 && !/^APENDICE|ANEXO|GLOSSARIO|INDICE/.test(line))) {
+      issues.push({
+        severity: "warning",
+        code: "document-structure-content-after-references",
+        fieldKey: FIELD_TARGET_EDITOR,
+        message: "Há conteúdo textual após a seção de referências.",
+        what: "O editor contém seções depois de REFERÊNCIAS.",
+        why: "As referências devem ser a última seção pós-textual antes de apêndices/anexos.",
+        action: "Mova conteúdo eventual para apêndices/anexos ou remova seções após REFERÊNCIAS.",
+      });
+    }
+  }
+
+  if (requirements.requiresCoverAndFrontMatter && !hasValue(fields.title)) {
+    issues.push({
+      severity: "error",
+      code: "document-structure-title-missing",
+      fieldKey: "title",
+      message: "Título obrigatório ausente para a estrutura pré-textual.",
+      what: "O trabalho não possui título informado.",
+      why: "Capa e folha de rosto dependem do título para compor a estrutura pré-textual.",
+      action: "Preencha o campo Título antes de gerar o DOCX.",
+    });
   }
 }
 
@@ -550,6 +638,7 @@ function applyProgramDegreeChecks(program: UflaPpgProgram, fields: AcademicField
 
 export function validateWork(fields: AcademicFields, editorText = ""): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
+  addDocumentStructureIssues(fields, editorText, issues);
   const requirements = getWorkTypeRequirements(fields.workType);
   const simpleArticle = fields.workType === "artigo";
 
@@ -569,7 +658,7 @@ export function validateWork(fields: AcademicFields, editorText = ""): Validatio
     issues.push({ severity, code: "resumo-required", fieldKey: "resumo", message: severity === "error" ? "Informe o resumo antes de gerar o DOCX." : "Inclua o resumo antes da versão final.", what: "O resumo está vazio.", why: "O resumo é elemento pré-textual obrigatório na maioria dos tipos de trabalho.", action: "Escreva o resumo no campo correspondente. Verifique extensão e palavras-chave." });
   }
   if (!hasValue(fields.referencias) && !isCpgWork(fields.workType)) issues.push({ severity: "warning", code: "references-required", fieldKey: "referencias", message: "Inclua as referências do trabalho.", what: "O bloco de referências está vazio.", why: "Referências são obrigatórias para a seção pós-textual.", action: "Adicione as referências no campo Referências, uma por linha." });
-  else if (hasValue(fields.referencias)) for (const referenceIssue of validateReferencesText(fields.referencias)) issues.push({ severity: "warning", code: referenceIssue.code, message: referenceIssueMessage(referenceIssue.code, referenceIssue.message), what: referenceIssue.code.includes("year-missing") ? "Há referência sem ano detectável." : referenceIssue.code.includes("access-missing") ? "Há referência online sem informação de acesso." : referenceIssue.code.includes("highlight-missing") ? "Há referência sem destaque de título detectado." : referenceIssue.code.includes("too-short") ? "Há referência muito curta para validação segura." : referenceIssue.code.includes("normative-preserved") ? "Há referência normativa preservada sem destaque automático." : referenceIssue.code.includes("academic-pages-missing") ? "Há trabalho acadêmico sem paginação detectável." : referenceIssue.code.includes("publisher-missing") ? "Há referência sem órgão/editor responsável detectável." : referenceIssue.code.includes("doi-url-normalized") ? "Há DOI informado como URL." : referenceIssue.code.includes("url-markup-normalized") ? "Há URL em markdown ou entre sinais." : referenceIssue.code.includes("author-spelling-review") ? "Há grafia de autor que exige conferência." : "Referência precisa de revisão.", why: "A conformidade ABNT/UFLA depende de autor, ano, acesso, editora/órgão, paginação e destaque corretos.", action: "Revise o item no campo Referências e confira a fonte bibliográfica original antes da versão final." });
+  else if (hasValue(fields.referencias)) for (const referenceIssue of validateReferencesText(fields.referencias)) issues.push({ severity: referenceIssue.code === "reference-access-missing" ? "error" : "warning", code: referenceIssue.code, message: referenceIssueMessage(referenceIssue.code, referenceIssue.message), what: referenceIssue.code.includes("year-missing") ? "Há referência sem ano detectável." : referenceIssue.code.includes("access-missing") ? "Há referência online sem informação de acesso." : referenceIssue.code.includes("highlight-missing") ? "Há referência sem destaque de título detectado." : referenceIssue.code.includes("too-short") ? "Há referência muito curta para validação segura." : referenceIssue.code.includes("normative-preserved") ? "Há referência normativa preservada sem destaque automático." : referenceIssue.code.includes("academic-pages-missing") ? "Há trabalho acadêmico sem paginação detectável." : referenceIssue.code.includes("publisher-missing") ? "Há referência sem órgão/editor responsável detectável." : referenceIssue.code.includes("doi-url-normalized") ? "Há DOI informado como URL." : referenceIssue.code.includes("url-markup-normalized") ? "Há URL em markdown ou entre sinais." : referenceIssue.code.includes("author-spelling-review") ? "Há grafia de autor que exige conferência." : "Referência precisa de revisão.", why: "A conformidade ABNT/UFLA depende de autor, ano, acesso, editora/órgão, paginação e destaque corretos.", action: "Revise o item no campo Referências e confira a fonte bibliográfica original antes da versão final." });
 if (!hasValue(fields.introducao) && !isCpgWork(fields.workType) && !simpleArticle) issues.push({ severity: "warning", code: "intro-required", fieldKey: "introducao", message: "A introdução não foi detectada ou está vazia.", what: "A seção de introdução não foi identificada.", why: "A introdução é a primeira seção textual obrigatória na estrutura UFLA.", action: "Insira a introdução no editor ou no campo Introdução." });
   if (!hasValue(fields.abstractText) && fields.workType !== "resumo_cpg" && !simpleArticle) {
     const severity = fields.workType === "projeto_pesquisa" ? "error" : "warning";
@@ -599,7 +688,7 @@ if (!hasValue(fields.introducao) && !isCpgWork(fields.workType) && !simpleArticl
 
   addCpgWarnings(fields, editorText, issues);
   addResearchProjectIssues(fields, editorText, issues);
-  addUflaCollectionIssues(fields, issues);
+  addUflaCollectionIssues(fields, editorText, issues);
   addRequiredFieldIssues(fields, issues);
   addPlaceholderIssues(fields, editorText, issues);
   addNaturalPlaceholderIssues(fields, editorText, issues);
@@ -614,7 +703,30 @@ if (!hasValue(fields.introducao) && !isCpgWork(fields.workType) && !simpleArticl
   issues.push(...validateShortCitation(editorText));
   if (hasValue(fields.imageWarnings)) issues.push({ severity: "warning", code: "imported-image-warning", message: fields.imageWarnings, what: "Imagens foram detectadas no arquivo original.", why: "A importacao preserva imagens quando os bytes estao acessiveis; quando isso nao e possivel, a imagem vira alerta revisavel, nao texto do trabalho.", action: "Confira imagens importadas, reinsira manualmente as ausentes e revise legendas e fontes." });
   if (hasValue(fields.anexos) && /\[Imagem detectada:/i.test(fields.anexos)) issues.push({ severity: "warning", code: "annex-image-partial", message: "Há imagem detectada em anexos; confira posição, qualidade e legenda antes da versão final.", what: "Imagens foram detectadas na seção de anexos.", why: "Anexos com imagens exigem verificação de legenda, fonte e qualidade.", action: "Revise a seção de anexos no DOCX gerado." });
+  addCatalogCardIssues(fields, issues);
   return issues;
+}
+
+function addCatalogCardIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
+  const needsCard = fields.workType === "monografia" || fields.workType === "dissertacao" || fields.workType === "tese";
+  if (!needsCard) return;
+  const content = fields.fichaCatalografica?.trim() ?? "";
+  if (!content) return; // ausência já é coberta pelas pendências de versão final
+  // Ficha em TEXTO com conteúdo real mas sem número de Cutter/CDU → bloqueia a
+  // versão final: toda ficha oficial da Biblioteca Universitária da UFLA traz o
+  // código de Cutter (ex.: S586f) — ausência indica cópia parcial ou texto não
+  // oficial. Ficha em IMAGEM (upload) não é validável por texto e não dispara.
+  if (hasCatalogCardContent(content) && !hasCutterNumber(content)) {
+    issues.push({
+      severity: "error",
+      code: "ficha-cutter-missing",
+      fieldKey: "fichaCatalografica",
+      message: "A ficha catalográfica em texto não contém número de Cutter (ex.: S586f) nem classificação CDU — confira se a ficha oficial da Biblioteca foi colada integralmente.",
+      what: "O conteúdo da ficha está presente, mas sem o código de classificação que toda ficha oficial traz.",
+      why: "A ficha catalográfica oficial inclui o número de Cutter e a classificação; a ausência indica cópia parcial ou texto não oficial.",
+      action: "Substitua o texto pela ficha oficial completa ou anexe a imagem da ficha oficial (upload na seção pré-textuais).",
+    });
+  }
 }
 
 export function hasBlockingErrors(issues: ValidationIssue[]): boolean {
