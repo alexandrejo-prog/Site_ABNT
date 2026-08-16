@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { normalizeReference, normalizeReferencesText } from "../../src/references-normalizer";
 import { validateReferencesText } from "../../src/references-validator";
+import { validateWork } from "../../src/validators";
 import { generateDocxBlob } from "../../src/export-docx";
 import { importDocumentFile } from "../../src/import-docx";
 import { emptyAcademicFields } from "../../src/ufla-rules";
@@ -62,6 +63,22 @@ describe("referencias online: normalizacao e validacao (automatica)", () => {
       "SILVA, M. Acesso aberto. 2024. Disponível em: https://exemplo.test/artigo.pdf.",
     );
     expect(issues.some((i) => i.code === "reference-access-missing")).toBe(true);
+  });
+
+  it("referencia online sem 'Acesso em:' BLOQUEIA (severity error) no validateWork", () => {
+    const fields = {
+      ...emptyAcademicFields(),
+      workType: "monografia" as const,
+      title: "Título",
+      author: "Maria Silva",
+      resumo: "Resumo com conteúdo suficiente para a validação do trabalho acadêmico.",
+      referencias: "SILVA, M. Acesso aberto. 2024. Disponível em: https://exemplo.test/artigo.pdf.",
+    };
+    const issues = validateWork(fields, "# 1 Introdução\nTexto.");
+    const access = issues.find((i) => i.code === "reference-access-missing");
+    expect(access).toBeDefined();
+    expect(access!.severity).toBe("error");
+    expect(access!.message).toMatch(/bloqueia/);
   });
 
   it("referencia online com 'Acesso em' nao gera falso positivo", () => {

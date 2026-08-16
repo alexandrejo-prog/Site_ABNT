@@ -10,6 +10,10 @@
  *    centralizado (x ≈ centro ± 10%); local+ano no 3º terço inferior.
  *  - FOLHA DE ROSTO: natureza do trabalho ("... apresentada à Universidade...")
  *    presente na metade inferior; autor/título no topo.
+ *  - FICHA CATALOGRÁFICA: no VERSO da folha de rosto (página imediatamente
+ *    seguinte contém "FICHA CATALOGRÁFICA") — Manual UFLA §3.1.3.
+ *  - FOLHA DE APROVAÇÃO: grade física da banca — membros em linhas de
+ *    assinatura com posições y distintas, na metade inferior — Manual UFLA §3.1.4.
  * A posição exata depende do renderizador; tolerâncias generosas evitam
  * falsos positivos — o objetivo é pegar regressões grosseiras (blocos fora da
  * área útil, título na margem inferior, etc.).
@@ -121,13 +125,13 @@ export async function validateCoverLayout(pdfPath: string): Promise<CoverLayoutR
     // --- folha de rosto: natureza do trabalho na página seguinte ---
     void joined;
     const natureRe = /APRESENTAD[OA]\s+(?:A|AO|AOS)\s+(?:UNIVERSIDADE|PROGRAMA)/;
-    let approvalDetected = false;
+    let titlePage: number | null = null;
     for (let i = coverPage + 1; i <= Math.min(coverPage + 2, doc.numPages); i++) {
       const page = await doc.getPage(i);
       const tc = await page.getTextContent();
       const text = normalize((tc.items as any[]).map((it) => it.str).join(" "));
       if (natureRe.test(text)) {
-        approvalDetected = true;
+        titlePage = i;
         // a natureza deve estar na metade inferior (y > PAGE_H/2)
         const natureItems = (tc.items as any[]).filter((it) => /APRESENTAD[OA]/i.test(it.str || ""));
         if (natureItems.length) {
@@ -139,8 +143,60 @@ export async function validateCoverLayout(pdfPath: string): Promise<CoverLayoutR
         break;
       }
     }
-    if (!approvalDetected) {
+    if (!titlePage) {
       errors.push("Folha de rosto sem natureza do trabalho ('apresentada à Universidade/Programa...') na página seguinte à capa.");
+    } else if (titlePage + 1 <= doc.numPages) {
+      // --- ficha catalográfica no VERSO da folha de rosto (Manual UFLA §3.1.3) ---
+      // A ficha ocupa a página imediatamente seguinte à folha de rosto (o verso
+      // no fluxo contínuo do documento; a capa não conta). O título do campo
+      // "Ficha catalográfica" é sempre texto, mesmo quando a ficha é imagem.
+      const next = await doc.getPage(titlePage + 1);
+      const tcNext = await next.getTextContent();
+      const nextText = normalize((tcNext.items as any[]).map((it) => it.str).join(" "));
+      if (!/FICHA CATALOGRAFICA/.test(nextText)) {
+        errors.push("Ficha catalográfica fora do verso da folha de rosto: a página imediatamente seguinte à folha de rosto não contém 'FICHA CATALOGRÁFICA'.");
+      }
+      // --- folha de aprovação: grade física da banca ---
+      // Busca a folha de aprovação nas páginas seguintes e valida que os membros
+      // da banca formam uma grade vertical (linhas de assinatura em posições y
+      // distintas) na metade inferior da página, como no Manual UFLA §3.1.4.
+      let approvalFound = false;
+      for (let i = titlePage + 2; i <= Math.min(titlePage + 5, doc.numPages); i++) {
+        const page = await doc.getPage(i);
+        const tc = await page.getTextContent();
+        const text = normalize((tc.items as any[]).map((it) => it.str).join(" "));
+        if (!/APROVADO EM/.test(text)) continue;
+        approvalFound = true;
+        const items = (tc.items as any[]).map((it) => ({
+          x: it.transform[4],
+          y: PAGE_H - it.transform[5],
+          w: it.width || 0,
+          fs: it.transform[0] || 0,
+          str: it.str || "",
+        }));
+        const memberItems = items.filter((it) => /^(PROF|DRA|DR)\.?\b/i.test(normalize(it.str)));
+        const ys = [...new Set(memberItems.map((it) => Math.round(it.y)))].sort((a, b) => a - b);
+        if (ys.length < 3) {
+          errors.push(`Folha de aprovação sem grade física da banca: apenas ${ys.length} linha(s) de membro em posições verticais distintas (esperado ≥ 3 linhas de assinatura).`);
+        } else {
+          const maxMemberY = ys[ys.length - 1];
+          const minMemberY = ys[0];
+          if (maxMemberY < PAGE_H / 2) {
+            errors.push(`Grade da banca concentrada acima da metade da página (última linha y=${Math.round(maxMemberY)}pt; esperado ≥ ${Math.round(PAGE_H / 2)}pt) — o Manual UFLA posiciona a banca na metade inferior.`);
+          }
+          if (minMemberY < PAGE_H / 3) {
+            warnings.push(`Primeira linha da banca acima do 1º terço (y=${Math.round(minMemberY)}pt) — verificar visualmente a posição da grade.`);
+          }
+        }
+        break;
+      }
+      if (!approvalFound) {
+        // a presença da folha de aprovação já é validada por conteúdo no OOXML;
+        // aqui registra aviso físico apenas.
+        warnings.push("Folha de aprovação ('APROVADO EM') não detectada nas páginas seguintes à folha de rosto — verificar visualmente.");
+      }
+    } else {
+      warnings.push("Documento termina na folha de rosto — não há página para a ficha catalográfica (verso).");
     }
 
     return {
