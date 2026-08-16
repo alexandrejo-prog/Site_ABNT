@@ -1,4 +1,29 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
+
+// axe-core injetado no navegador REAL (mesma versão dos testes jsdom) — o e2e
+// cobre o app compilado (vite build), não apenas o DOM de teste.
+const AXE_SOURCE = readFileSync(
+  fileURLToPath(new URL("../../node_modules/axe-core/axe.min.js", import.meta.url)),
+  "utf8",
+);
+
+/** Auditoria axe no documento atual; retorna violações critical/serious. */
+async function criticalSeriousViolations(page: import("@playwright/test").Page): Promise<string[]> {
+  await page.addScriptTag({ content: AXE_SOURCE });
+  return page.evaluate(async () => {
+    const results = await (window as unknown as { axe: { run: (ctx: unknown, opts: unknown) => Promise<{ violations: Array<{ id: string; help: string; impact: string | null }> }> } }).axe.run(document, {
+      rules: {
+        "color-contrast": { enabled: false },
+        "scrollable-region-focusable": { enabled: false },
+      },
+    });
+    return results.violations
+      .filter((v) => v.impact === "critical" || v.impact === "serious")
+      .map((v) => `${v.id}: ${v.help}`);
+  });
+}
 
 /**
  * E2E (governance-roadmap): fluxo real do app no navegador, parametrizado
@@ -307,5 +332,10 @@ for (const typeCase of TYPES) {
       await expect(page.locator("body")).toContainText(fragment, { timeout: 10_000 });
     }
     expect(errors.filter((e) => !/favicon|net::ERR/i.test(e))).toEqual([]);
+
+    // 6) A11y — axe no navegador real (formulário + preview abertos): sem
+    //    violações critical/serious (governança de regressão visual/estrutural)
+    const violations = await criticalSeriousViolations(page);
+    expect(violations, `axe: ${typeCase.workType}`).toEqual([]);
   });
 }
