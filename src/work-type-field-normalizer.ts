@@ -151,6 +151,7 @@ function sanitizeArticleFields(fields: AcademicFields): AcademicFields {
     epigrafe: "",
     indicadoresImpacto: "",
     impactIndicators: "",
+    indice: "",
   };
 }
 
@@ -165,6 +166,7 @@ function sanitizeCpgFields(fields: AcademicFields): AcademicFields {
     impactIndicators: "",
     anexos: "",
     apendices: "",
+    indice: "",
   };
 }
 

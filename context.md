@@ -350,6 +350,16 @@ Sete passos executados. **Merge do PR #20 (RAMO-20) em `main` (`6cd1e73`), prote
 6. **Limpeza de branches** — **80 branches merged deletadas** (front/*, sug/*, wt-* antigas, nomes aleatórios). 29 não-merged **avaliadas e preservadas**: todas têm +1 commit redundante (markers de worktree ou conteúdo já no main — confirmado `wt-alias-vitest`, `validate-omml.test.ts` existem no main). 10 worktrees ativas intactas.
 7. **`docs/CHECKLIST.md` marcado HISTÓRICO** — aponta para `docs/STATUS_ATUAL.md` (canônico) e `artifacts/ufla-compliance/report.md`; números 15/08 preservados sem edição à mão (regra 5 da IA).
 
+## 6s. ELEMENTOS OPCIONAIS DO MANUAL — ÍNDICE REMISSIVO (16/08/2026)
+Avaliação dos elementos **opcionais** do Manual UFLA 6ª ed. contra o gerador (PDF oficial conferido via PyMuPDF — hash `49929de3…ca66` íntegro, 150 pág). Todos os demais opcionais já existiam (errata §3.1.2.1.3, dedicatória §3.1.2.1.5, agradecimentos §3.1.2.1.6, epígrafe §3.1.2.1.7, listas de ilustrações/tabelas/abreviaturas/símbolos §3.1.2.1.11–13, glossário §3.1.2.4.2, apêndices/anexos §3.1.2.4.3, lombada §3.1.1.2 = física, NBR 12225). **Faltava apenas o Índice remissivo (§3.1.2.4.4 / NBR 6034/2004): impresso no final do documento, após o anexo, em paginação consecutiva; título "ÍNDICE" centralizado/maiúsculas/negrito; termos em ordem alfabética com páginas separadas por vírgula (não consecutivo) ou hífen (contínuo); remissivas "termo ver termo".**
+
+1. **Campo `indice`** — novo em `ufla-rules.ts` (interface `AcademicFields`, default `indice: ""`; fora de `ACADEMIC_FIELD_KEYS`/`AcademicFieldKey` por mesma razão de `glossario` — campos pós-textuais opcionais não entram no tipo de union de confiança). Label "Índice remissivo" em `app-constants.ts` e oculto para artigo/CPG via `HIDDEN_PRETEXTUAL`. Key de navegação em `field-navigation.ts`.
+2. **DOCX** — `export-docx.ts`: bloco `pushRun` após `Anexos` → `pageBreak() + sectionTitle("Índice")` (centralizado/negrito/maiúsculas via `ufla_titulo_sem_indicativo`) + corpo simples; entrada "ÍNDICE" adicionada ao sumário (`collectSummaryEntries`, após referências/anexos/apêndices).
+3. **Preview** — `preview-html.ts`: `indice` propagado por `summaryHtml`/`collectPreviewSummaryEntries`/`calculateRealPages` (com default `""` para não quebrar artigo/CPG/projeto) e página pós-textual após `Anexos` com `pageNumberHeader(indicePage)`.
+4. **Sanitização** — `work-type-field-normalizer.ts` limpa `indice` em `sanitizeArticleFields`/`sanitizeCpgFields`; nota do bloco pós-textual em `validators.ts` atualizada ("glossário e índice são suportados").
+5. **Testes** — `tests/unit/indice-remissivo.test.ts` (4): renderiza após anexos, não emite quando vazio, preview pós-anexo, título centralizado (`<w:jc w:val="center">`).
+6. **Verify** — `npm run ufla:audit` regenerate com Word (141s, **11/11 gates**) atualizou `sourceFingerprint` (`4e4c5c3…`→`06090a55…`) e resolveu os 3 testes de freshness; `npm test` **210 arquivos, 1688 testes (10 skipped)**, lint 0/0, build OK.
+
 ---
 
 ## 7. COMANDOS ÚTEIS

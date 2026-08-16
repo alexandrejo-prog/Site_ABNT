@@ -9,6 +9,7 @@ export const FIELD_LABELS: Record<string, string> = {
   referencias: "Referências", anexos: "Anexos", apendices: "Apêndices",
   dedicatoria: "Dedicatória", agradecimentos: "Agradecimentos", epigrafe: "Epígrafe", errata: "Errata",
   listaAbreviaturas: "Lista de abreviaturas", listaSimbolos: "Lista de símbolos", glossario: "Glossário",
+  indice: "Índice remissivo",
   indicadoresImpacto: "Indicadores de impacto", impactIndicators: "Impact indicators",
   imageWarnings: "Avisos de imagens", tema: "Tema", delimitacaoTema: "Delimitação do Tema",
   problemaPesquisa: "Problema de Pesquisa", hipotese: "Hipótese",
@@ -44,7 +45,7 @@ export function rowsForField(key: string): number {
   return LONG_FIELDS.has(key) ? 5 : 1;
 }
 
-const HIDDEN_PRETEXTUAL = ["dedicatoria", "agradecimentos", "epigrafe", "errata", "listaSiglas", "listaQuadros", "listaGraficos", "listaTabelas", "listaAbreviaturas", "listaSimbolos", "glossario", "indicadoresImpacto", "impactIndicators"];
+const HIDDEN_PRETEXTUAL = ["dedicatoria", "agradecimentos", "epigrafe", "errata", "listaSiglas", "listaQuadros", "listaGraficos", "listaTabelas", "listaAbreviaturas", "listaSimbolos", "glossario", "indice", "indicadoresImpacto", "impactIndicators"];
 
 export function visibleField(key: string, workType: string): boolean {
   if (key === "fichaCatalografica") return workType === "monografia" || workType === "dissertacao" || workType === "tese";

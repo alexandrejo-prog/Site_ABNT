@@ -59,7 +59,7 @@ export const ADHERENCE_CATEGORIES: AdherenceCategory[] = [
   { key: "body", label: "Corpo do texto", status: "implemented", statusLabel: "Implementado", note: "Editor com títulos, citações longas, negrito e itálico. Espaçamento 1,5 aplicado no DOCX." },
   { key: "illustrations", label: "Ilustrações e tabelas", status: "partial", statusLabel: "Parcial", note: "Imagens importadas são preservadas como marcadores. Legendas e fontes devem ser conferidas manualmente." },
   { key: "references", label: "Referências", status: "partial", statusLabel: "Parcial", note: "Normalização de destaque (negrito) implementada com detecção de tipo. Itens ambíguos exigem revisão manual." },
-  { key: "posttextual", label: "Elementos pós-textuais", status: "partial", statusLabel: "Parcial", note: "Referências, apêndices e anexos são suportados. Glossário e índice não foram implementados." },
+  { key: "posttextual", label: "Elementos pós-textuais", status: "partial", statusLabel: "Parcial", note: "Referências, apêndices, anexos, glossário e índice (remissivo, NBR 6034) são suportados." },
   { key: "export", label: "Exportação DOCX", status: "implemented", statusLabel: "Implementado", note: "Gera DOCX editável com margens, fonte, espaçamento e sumário atualizável. PDF deve ser gerado externamente." },
   { key: "research-project", label: "Projeto de pesquisa / NBR 15287", status: "partial", statusLabel: "Parcial", note: "Suporte inicial para projeto de pesquisa com estrutura básica e validações parciais. A revisão final pelo usuário é obrigatória." },
 ];

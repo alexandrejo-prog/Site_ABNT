@@ -1668,6 +1668,7 @@ function collectSummaryEntries(bodyBlocks: EditorBlock[], references: string[], 
   if (references.length > 0) addSummaryEntry(entries, seen, "REFERÊNCIAS", 1);
   if (fields.anexos) addSummaryEntry(entries, seen, "ANEXOS", 1);
   if (fields.apendices) addSummaryEntry(entries, seen, appendixTitle(fields), 1);
+  if (fields.indice) addSummaryEntry(entries, seen, "ÍNDICE", 1);
 
   return entries;
 }
@@ -2869,6 +2870,13 @@ export function createDocxDocument(input: DocxGenerationInput): Document {
   pushRun(
     hasAnexos
       ? [pageBreak(), sectionTitle("Anexos", "ufla_anexo_titulo"), ...buildSimpleParagraphs(fields.anexos)]
+      : [],
+    false,
+  );
+  const hasIndice = Boolean(fields.indice?.trim());
+  pushRun(
+    hasIndice
+      ? [pageBreak(), sectionTitle("Índice"), ...buildSimpleParagraphs(fields.indice)]
       : [],
     false,
   );
