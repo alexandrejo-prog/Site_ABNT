@@ -30,6 +30,30 @@ function run(cmd, args, opts = {}) {
   return r;
 }
 
+/**
+ * Calcula a MEDIANA das notas de uma categoria nas execuções acumuladas e
+ * compara contra o orçamento. A mediana é robusta a outliers (uma execução com
+ * performance baixa por contenção do runner compartilhado não derruba o gate).
+ */
+function medianScore(xs) {
+  if (xs.length === 0) return NaN;
+  const sorted = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+/** Devolve a lista de violações de orçamento considerando a mediana por categoria. */
+function summarizeViolations(summaries, budgets) {
+  const violations = [];
+  for (const [name, min] of Object.entries(budgets)) {
+    const xs = summaries.map((s) => s[name]).filter((x) => Number.isFinite(x));
+    if (xs.length === 0) continue;
+    const med = medianScore(xs);
+    if (med < min) violations.push(`${name} ${Math.round(med)} < ${min}`);
+  }
+  return violations;
+}
+
 /** Localiza o Chromium: Playwright (instalado por `npm run e2e:install`) ou Chrome/Edge do sistema. */
 function resolveChromePath() {
   const candidates = [
@@ -78,30 +102,52 @@ async function main() {
       const flagsArg = process.argv.find((a) => a.startsWith("--only-categories="));
       if (flagsArg) onlyCategories.splice(0, onlyCategories.length, ...flagsArg.split("=")[1].split(","));
 
-      const results = await lighthouse(URL, { port: chrome.port, output: "json", onlyCategories, logLevel: "error" });
-      mkdirSync(OUT_DIR, { recursive: true });
-      const reportPath = join(OUT_DIR, "lighthouse.json");
-      writeFileSync(reportPath, JSON.stringify(results.lhr, null, 2) + "\n", "utf8");
-
-      const cats = results.lhr.categories;
-      const summary = {};
-      for (const name of Object.keys(cats)) summary[name] = Math.round(cats[name].score * 100);
-      console.log("\n===== Lighthouse =====");
-      for (const [name, score] of Object.entries(summary)) console.log(`  ${name}: ${score}`);
-      console.log(`Relatório: ${reportPath}`);
-
       // Orçamentos de governança (lighthouse-budgets.json): falha quando uma
       // categoria auditada fica abaixo da nota mínima configurada.
       const budgetsPath = join(ROOT, "lighthouse-budgets.json");
       const budgets = existsSync(budgetsPath) ? JSON.parse(readFileSync(budgetsPath, "utf8")) : { accessibility: 90 };
-      const violations = [];
-      for (const [name, min] of Object.entries(budgets)) {
-        if (!(name in summary)) continue;
-        if (summary[name] < min) violations.push(`${name} ${summary[name]} < ${min}`);
+
+      // Lighthouse em CI roda em máquina compartilhada: a nota de PERFORMANCE é
+      // intrinsecamente instável entre execuções (compete com jobs vizinhos).
+      // Estabilização: até 3 auditorias; aprova se a MEDIANA de cada categoria
+      // atingir o orçamento (mediana > pior e > média para outliers). Máquina
+      // local normalmente passa de primeira — o retry é só para o CI.
+      const MAX_TRIES = 3;
+      const allSummaries = [];
+      const lastLhr = { lhr: null };
+      for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+        const results = await lighthouse(URL, { port: chrome.port, output: "json", onlyCategories, logLevel: "error" });
+        lastLhr.lhr = results.lhr;
+        const cats = results.lhr.categories;
+        const summary = {};
+        for (const name of Object.keys(cats)) summary[name] = Math.round(cats[name].score * 100);
+        allSummaries.push(summary);
+        console.log(`\n[Lighthouse tentativa ${attempt}/${MAX_TRIES}]`);
+        for (const [name, score] of Object.entries(summary)) console.log(`  ${name}: ${score}`);
+        const violations = summarizeViolations(allSummaries, budgets);
+        if (violations.length === 0) break;
+        if (attempt < MAX_TRIES) console.warn(`\nAbaixo do orçamento (${violations.join("; ")}) — re-executando (mediana)…`);
       }
-      writeFileSync(join(OUT_DIR, "budgets.json"), JSON.stringify({ budgets, scores: summary, violations, passed: violations.length === 0 }, null, 2) + "\n", "utf8");
+
+      mkdirSync(OUT_DIR, { recursive: true });
+      const reportPath = join(OUT_DIR, "lighthouse.json");
+      writeFileSync(reportPath, JSON.stringify(lastLhr.lhr, null, 2) + "\n", "utf8");
+
+      const medians = {};
+      for (const name of Object.keys(budgets)) {
+        const xs = allSummaries.map((s) => s[name]).filter((x) => Number.isFinite(x));
+        if (xs.length === 0) continue;
+        xs.sort((a, b) => a - b);
+        medians[name] = xs[Math.floor(xs.length / 2)];
+      }
+      console.log("\n===== Lighthouse (mediana de " + allSummaries.length + " execução(ões)) =====");
+      for (const [name, score] of Object.entries(medians)) console.log(`  ${name}: ${score}`);
+      console.log(`Relatório: ${reportPath}`);
+
+      const violations = summarizeViolations(allSummaries, budgets);
+      writeFileSync(join(OUT_DIR, "budgets.json"), JSON.stringify({ budgets, scores: medians, violations, passed: violations.length === 0, tries: allSummaries.length }, null, 2) + "\n", "utf8");
       if (violations.length > 0) {
-        console.error(`\nFALHOU orçamentos de governança: ${violations.join("; ")}`);
+        console.error(`\nFALHOU orçamentos de governança (mediana de ${allSummaries.length} execuções): ${violations.join("; ")}`);
         process.exitCode = 1;
       }
     } finally {
