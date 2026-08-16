@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pathToFileURL } from "node:url";
@@ -17,15 +17,29 @@ interface Bbox {
 }
 
 interface PageElement {
-  kind: "footnote" | "footer" | "table-source" | "figure-source" | "page-number" | "header" | "table" | "image" | "text";
+  page: number;
+  kind: "footnote" | "footer" | "table-source" | "figure-source" | "page-number" | "header" | "table" | "image" | "equation" | "text";
   text: string;
   bbox: Bbox;
   withinPage: boolean;
   overlaps: string[];
   cutoff: boolean;
   fontSize: number | null;
+  masked?: boolean;
   status: "passed" | "failed" | "not-detected";
 }
+
+/**
+ * Glifos matemáticos que o Word usa para renderizar equações OMML no PDF:
+ * o exportador converte OMML em texto com símbolos matemáticos Unicode —
+ * alfanuméricos matemáticos (U+1D400–U+1D7FF, ex.: 𝑟𝑎𝑐𝑎𝑏), operadores
+ * (U+2200–U+22FF), operadores suplementares (U+2A00–U+2AFF), primos
+ * (U+2032–U+2057) e símbolos comuns (×, ÷, √, ∑, ∫, ≠, ≤, ≥, ≈, ±). A
+ * presença de um run com esses glifos é evidência física de que a equação
+ * declarada no OOXML foi de fato renderizada no PDF.
+ */
+const MATH_GLYPH_RE =
+  /[\u{1D400}-\u{1D7FF}\u{2200}-\u{22FF}\u{2A00}-\u{2AFF}\u{2032}-\u{2057}\u{00D7}\u{00F7}\u{221A}\u{2211}\u{222B}\u{2260}\u{2264}\u{2265}\u{2248}\u{00B1}]/u;
 
 interface PageAnalysis {
   page: number;
@@ -35,6 +49,7 @@ interface PageAnalysis {
   elements: PageElement[];
   tables: PageElement[];
   images: PageElement[];
+  equations: PageElement[];
   overlaps: Array<{ kind1: string; kind2: string; bbox1: Bbox; bbox2: Bbox }>;
   cutoffs: PageElement[];
   status: "passed" | "failed" | "not-detected";
@@ -54,6 +69,7 @@ interface PhysicalAnalysis {
     headers: string;
     images: string;
     tables: string;
+    equations: string;
     overlap: string;
     cutoff: string;
     blankPages: string;
@@ -67,6 +83,13 @@ interface PhysicalAnalysis {
     blankPages: Array<{ page: number; classification: string; cause: string }>;
     totalCutoffs: number;
     totalOverlaps: number;
+    totalImages: number;
+    totalTables: number;
+    totalEquations: number;
+    maskedImages: number;
+    imagesByPage: Record<number, number>;
+    tablesByPage: Record<number, number>;
+    equationsByPage: Record<number, number>;
   };
 }
 
@@ -151,7 +174,7 @@ function classifyElement(text: string, bbox: Bbox, pageHeight: number): { kind: 
  */
 function detectTableRegions(
   textItems: Array<{ x: number; y: number; str: string }>,
-  pageWidth: number,
+  _pageWidth: number,
   pageHeight: number,
 ): Array<{ bbox: Bbox; cols: number; rows: number }> {
   // 1) agrupa itens por linha visual (tolerância de 3pt em y)
@@ -294,7 +317,6 @@ export async function analyzePdf(pdfPath: string): Promise<PhysicalAnalysis> {
     });
 
     const pageElements: PageElement[] = [];
-    const pageBounds = { x0: 0, y0: 0, x1: pw, y1: ph };
     const imageElements: PageElement[] = [];
 
     // --- detecção real de imagens via lista de operadores (opList) + CTM ---
@@ -332,15 +354,17 @@ export async function analyzePdf(pdfPath: string): Promise<PhysicalAnalysis> {
           y1: Math.min(ph, ph - yPdfMin),
         };
         const withinPage = bbox.x0 >= 0 && bbox.y0 >= 0 && bbox.x1 <= pw && bbox.y1 <= ph;
+        const masked = fn === OPS.paintImageMaskXObject;
         const imageElement: PageElement = {
           page: i,
           kind: "image",
-          text: `Imagem ${name} (${Math.round(bbox.x1 - bbox.x0)}x${Math.round(bbox.y1 - bbox.y0)} pt)`,
+          text: `Imagem ${name} (${Math.round(bbox.x1 - bbox.x0)}x${Math.round(bbox.y1 - bbox.y0)} pt)${masked ? " [máscara]" : ""}`,
           bbox,
           withinPage,
           overlaps: [],
           cutoff: !withinPage,
           fontSize: null,
+          masked,
           status: "passed",
         };
         imageElements.push(imageElement);
@@ -348,6 +372,26 @@ export async function analyzePdf(pdfPath: string): Promise<PhysicalAnalysis> {
         allElements.push(imageElement);
         if (imageElement.cutoff) totalCutoffs++;
       }
+    }
+
+    // --- detecção real de equações OMML renderizadas (glifos matemáticos) ---
+    const equationElements: PageElement[] = [];
+    for (const item of pageTextItems) {
+      if (!MATH_GLYPH_RE.test(item.str || "")) continue;
+      const bbox = heuristicBbox(item.x, item.y, item.w, item.h, pw, ph);
+      const el: PageElement = {
+        page: i,
+        kind: "equation",
+        text: `Equação renderizada (glifos matemáticos: ${item.str.trim().slice(0, 32)})`,
+        bbox,
+        withinPage: true,
+        overlaps: [],
+        cutoff: false,
+        fontSize: item.fontSize,
+        status: "passed",
+      };
+      equationElements.push(el);
+      allElements.push(el);
     }
 
     // --- detecção real de tabelas via grade de colunas alinhadas ---
@@ -432,6 +476,7 @@ export async function analyzePdf(pdfPath: string): Promise<PhysicalAnalysis> {
       elements: pageElements,
       tables: tableElements,
       images: imageElements,
+      equations: equationElements,
       overlaps,
       cutoffs,
       status: hasFailed ? "failed" : cutoffs.length > 0 ? "failed" : overlaps.length > 0 ? "failed" : "passed",
@@ -445,6 +490,16 @@ export async function analyzePdf(pdfPath: string): Promise<PhysicalAnalysis> {
   const notDetected = allElements.filter((e) => e.status === "not-detected").length;
   const totalImages = allElements.filter((e) => e.kind === "image").length;
   const totalTables = allElements.filter((e) => e.kind === "table").length;
+  const totalEquations = allElements.filter((e) => e.kind === "equation").length;
+  const maskedImages = allElements.filter((e) => e.kind === "image" && e.masked).length;
+  const imagesByPage: Record<number, number> = {};
+  const tablesByPage: Record<number, number> = {};
+  const equationsByPage: Record<number, number> = {};
+  for (const el of allElements) {
+    if (el.kind === "image") imagesByPage[el.page] = (imagesByPage[el.page] ?? 0) + 1;
+    if (el.kind === "table") tablesByPage[el.page] = (tablesByPage[el.page] ?? 0) + 1;
+    if (el.kind === "equation") equationsByPage[el.page] = (equationsByPage[el.page] ?? 0) + 1;
+  }
 
   return {
     pages: doc.numPages,
@@ -460,15 +515,16 @@ export async function analyzePdf(pdfPath: string): Promise<PhysicalAnalysis> {
       headers: allElements.some((e) => e.kind === "header") ? "passed" : "not-detected",
       images: allElements.some((e) => e.kind === "image") ? "passed" : "not-detected",
       tables: allElements.some((e) => e.kind === "table") ? "passed" : "not-detected",
+      equations: allElements.some((e) => e.kind === "equation") ? "passed" : "not-detected",
       overlap: totalOverlaps > 0 ? "failed" : "passed",
       cutoff: totalCutoffs > 0 ? "failed" : "passed",
       blankPages: blankPages.length > 0 ? "failed" : "passed",
       limitations: [
-        "Imagens detectadas via opList (paintImageXObject/paintInlineImageXObject) com bbox do CTM — contagem real por página.",
-        "Tabelas detectadas por grade de colunas alinhadas (colunas persistentes em >= 3 linhas com >= 2 colunas) — a validação semântica de w:tblHeader é feita no nível OOXML (ooxml-checks).",
-        "Equações OMML não são extraídas como texto matemático pelo pdfjs-dist — verificadas no nível OOXML/document.xml.",
-        "Falsos positivos possíveis: linhas de referência longas no rodapé podem ser classificadas como footnote; 'Fonte:' no corpo pode ser contado como table-source.",
-        "Falsos negativos possíveis: tabelas cujas linhas tenham < 2 colunas persistentes em 3+ linhas não são detectadas; imagens em máscara (logo de cabeçalho) contam como image quando pintadas.",
+        "Imagens detectadas via opList (paintImageXObject/paintInlineImageXObject/paintImageMaskXObject) com bbox do CTM — contagem real por página (imagesByPage); imagens em máscara são sinalizadas (maskedImages).",
+        "Tabelas detectadas por grade de colunas alinhadas (colunas persistentes em >= 3 linhas com >= 2 colunas) — contagem por página em tablesByPage; a validação semântica de w:tblHeader é feita no nível OOXML (ooxml-checks).",
+        "Equações OMML detectadas no PDF pelos glifos matemáticos Unicode que o Word emite (alfanuméricos U+1D400–U+1D7FF, operadores, √, ∫, ∑ etc.) — contagem por página em equationsByPage; a estrutura OMML (m:f, m:rad, m:sSup) é validada no OOXML (validate-omml).",
+        "Falsos positivos possíveis: linhas de referência longas no rodapé podem ser classificadas como footnote; 'Fonte:' no corpo pode ser contado como table-source; caracteres matemáticos isolados no texto corrido (ex.: '±' em texto) podem ser contados como equation.",
+        "Falsos negativos possíveis: tabelas cujas linhas tenham < 2 colunas persistentes em 3+ linhas não são detectadas; equações com símbolos fora dos ranges mapeados não são contadas.",
       ],
     },
     summary: {
@@ -481,6 +537,11 @@ export async function analyzePdf(pdfPath: string): Promise<PhysicalAnalysis> {
       totalOverlaps,
       totalImages,
       totalTables,
+      totalEquations,
+      maskedImages,
+      imagesByPage,
+      tablesByPage,
+      equationsByPage,
     },
   };
 }
@@ -489,7 +550,7 @@ async function main() {
   const mainAnalysis = await analyzePdf(pdfPath);
   writeFileSync(outputPath, JSON.stringify(mainAnalysis, null, 2), "utf-8");
   console.log(`Análise física salva em: ${outputPath}`);
-  console.log(`Páginas: ${mainAnalysis.pages}, Elementos relevantes: ${mainAnalysis.summary.totalElements}, Passed: ${mainAnalysis.summary.passed}, Not-detected: ${mainAnalysis.summary.notDetected}, Cutoffs: ${mainAnalysis.summary.totalCutoffs}, Overlaps: ${mainAnalysis.summary.totalOverlaps}, Blank: ${mainAnalysis.summary.blankPages.length}, Imagens: ${mainAnalysis.summary.totalImages}, Tabelas: ${mainAnalysis.summary.totalTables}`);
+  console.log(`Páginas: ${mainAnalysis.pages}, Elementos relevantes: ${mainAnalysis.summary.totalElements}, Passed: ${mainAnalysis.summary.passed}, Not-detected: ${mainAnalysis.summary.notDetected}, Cutoffs: ${mainAnalysis.summary.totalCutoffs}, Overlaps: ${mainAnalysis.summary.totalOverlaps}, Blank: ${mainAnalysis.summary.blankPages.length}, Imagens: ${mainAnalysis.summary.totalImages} (${mainAnalysis.summary.maskedImages} máscara), Tabelas: ${mainAnalysis.summary.totalTables}, Equações: ${mainAnalysis.summary.totalEquations}`);
 
   if (existsSync(fixturesDir)) {
     const { readdirSync } = await import("node:fs");
@@ -513,7 +574,12 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error("Falha na análise física do PDF:", err);
-  process.exit(1);
-});
+const isDirectRun =
+  typeof process.argv[1] === "string" &&
+  process.argv[1].replace(/\\/g, "/").endsWith("analyze-pdf-physical.ts");
+if (isDirectRun) {
+  main().catch((err) => {
+    console.error("Falha na análise física do PDF:", err);
+    process.exit(1);
+  });
+}

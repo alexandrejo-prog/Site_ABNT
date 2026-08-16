@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { normalizeReference, normalizeReferencesText } from "../../src/references-normalizer";
+import {
+  normalizeReference,
+  normalizeReferencesText,
+  appendAccessDatesToOnlineReferences,
+  countOnlineReferencesMissingAccessDate,
+  formatAccessDate,
+} from "../../src/references-normalizer";
 import { validateReferencesText } from "../../src/references-validator";
 import { validateWork } from "../../src/validators";
 import { generateDocxBlob } from "../../src/export-docx";
@@ -86,6 +92,41 @@ describe("referencias online: normalizacao e validacao (automatica)", () => {
       "SILVA, M. Acesso aberto. 2024. Disponível em: https://exemplo.test/artigo.pdf. Acesso em: 10 jan. 2026.",
     );
     expect(issues.some((i) => i.code === "reference-access-missing")).toBe(false);
+  });
+});
+
+describe("referencias online: assistencia 'Acesso em' no editor", () => {
+  it("conta referencias online sem data de acesso", () => {
+    const refs = [
+      "SILVA, M. Acesso aberto. 2024. Disponível em: https://exemplo.test/a.pdf.",
+      "SOUZA, J. Relatorio. 2025. Disponível em: https://exemplo.test/b.pdf. Acesso em: 10 jan. 2026.",
+      "LIMA, C. Livro. Lavras: UFLA, 2024.",
+    ].join("\n");
+    expect(countOnlineReferencesMissingAccessDate(refs)).toBe(1);
+  });
+
+  it("anexa Acesso em com a data informada em cada referencia online sem acesso", () => {
+    const refs = [
+      "SILVA, M. Acesso aberto. 2024. Disponível em: https://exemplo.test/a.pdf.",
+      "SOUZA, J. Relatorio. 2025. Disponível em: https://exemplo.test/b.pdf. Acesso em: 10 jan. 2026.",
+      "LIMA, C. Livro. Lavras: UFLA, 2024.",
+    ].join("\n");
+    const { text, fixed } = appendAccessDatesToOnlineReferences(refs, new Date(2026, 0, 10));
+    expect(fixed).toBe(1);
+    expect(text).toContain("Acesso em: 10 jan. 2026.");
+    // não duplica nem altera as demais linhas
+    expect(text).toContain("LIMA, C. Livro. Lavras: UFLA, 2024.");
+    expect(text.match(/Acesso em:/g)).toHaveLength(2); // 1 original + 1 inserida
+  });
+
+  it("formatAccessDate segue o padrao NBR 6023 (d mmm. aaaa)", () => {
+    expect(formatAccessDate(new Date(2026, 7, 16))).toBe("16 ago. 2026");
+    expect(formatAccessDate(new Date(2024, 11, 1))).toBe("1 dez. 2024");
+  });
+
+  it("referencias vazias ou sem URL nao mudam", () => {
+    expect(appendAccessDatesToOnlineReferences("").fixed).toBe(0);
+    expect(appendAccessDatesToOnlineReferences("SILVA, M. Livro. Lavras: UFLA, 2024.").fixed).toBe(0);
   });
 });
 

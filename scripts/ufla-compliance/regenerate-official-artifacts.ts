@@ -11,7 +11,7 @@
 import { execSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pathToFileURL } from "node:url";
 import AdmZip from "adm-zip";
@@ -83,7 +83,66 @@ const physicalPath = join(ROOT, "artifacts", "ufla-compliance", "pdf-physical-an
 
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8").replace(/^\uFEFF/, ""));
 const manifestCompleto = JSON.parse(readFileSync(manifestCompletoPath, "utf8").replace(/^\uFEFF/, ""));
-const physical = JSON.parse(readFileSync(physicalPath, "utf8"));
+// --- Word disponível? (cheap) — decide re-render + manifest + análise física ---
+function hasWord(): boolean {
+  try {
+    execSync(
+      "powershell.exe -NoProfile -Command \"(Get-Command WINWORD.EXE -ErrorAction SilentlyContinue) -ne $null\"",
+      { stdio: "pipe", timeout: 20000 },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// --- Re-renderiza o PDF de referência do DOCX ATUAL (anti-stale) ---
+// O rendered/normalized-dissertacao.pdf pode ficar desatualizado quando o DOCX
+// muda (layout/paginação) sem re-exportar o PDF. Com Word disponível, re-rendere
+// o PDF principal para que TODA a evidência física (PDF, manifest, análise,
+// snapshot) venha da MESMA versão do documento — o page-count-consistency test
+// exige Word COM == PDF físico (tolerância zero).
+if (hasWord() && existsSync(docx) && existsSync(pdf)) {
+  try {
+    const psRender = join(ROOT, "scripts", "ufla-compliance", "render-docx-to-pdf.ps1");
+    execSync(
+      `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${psRender}" -DocxPath "${resolve(docx)}" -PdfPath "${resolve(pdf)}"`,
+      { stdio: "pipe", timeout: 180000 },
+    );
+    console.log("PDF DE REFERÊNCIA re-renderizado:", pdf);
+    // Re-mede a contagem de páginas do Word e alinha o manifest ao documento
+    // ATUAL (o manifest pode ficar stale quando o PDF é re-renderizado sem
+    // re-executar o validate-word).
+    const psCount = join(ROOT, "scripts", "ufla-compliance", "word-page-count.ps1");
+    const out = execSync(
+      `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${psCount}" -DocxPath "${resolve(docx)}"`,
+      { encoding: "utf8", timeout: 120000 },
+    );
+    const match = /PAGES:(\d+)/.exec(out ?? "");
+    if (match) {
+      const freshPages = Number(match[1]);
+      const stale = (manifest.pagesBeforeFields ?? manifest.pagesAfterToc ?? 0) !== freshPages;
+      if (stale) {
+        manifest.pagesBeforeFields = freshPages;
+        manifest.pagesAfterFields = freshPages;
+        manifest.pagesAfterToc = freshPages;
+        manifest.manifestRefreshedAt = new Date().toISOString();
+        writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+        console.log(`MANIFEST REFRESH: páginas do Word re-medidas (${freshPages}) — manifest atualizado.`);
+      }
+    }
+  } catch (err) {
+    console.log("PDF DE REFERÊNCIA: Word falhou ao re-renderizar/re-medir — PDF e manifest existentes mantidos.", err instanceof Error ? err.message : String(err));
+  }
+}
+
+// Análise física RECOMPUTADA a cada regeneração (anti-stale): o artefato antigo
+// era apenas relido e podia divergir do PDF atual. Com o PDF presente, roda o
+// analyze-pdf-physical (sobre o PDF re-renderizado quando o Word está
+// disponível); sem o PDF, cai para o artefato commitado (sinalizado pela guarda
+// de frescor).
+const { analyzePdf } = await import(pathToFileURL(join(ROOT, "scripts", "ufla-compliance", "analyze-pdf-physical.ts")).href);
+const physical = existsSync(pdf) ? await analyzePdf(pdf) : JSON.parse(readFileSync(physicalPath, "utf8"));
 
 // ---------------------------------------------------------------------------
 // Evidência dinâmica (anti-workslop: nunca repetir números fixos de rodadas
@@ -237,6 +296,7 @@ const perTypePhysicalEvidence = perTypePhysical.wordAvailable
 const previewDiff = await runPreviewDocxCompare();
 writeJson("artifacts/ufla-compliance/preview-docx-diff.json", previewDiff.result);
 const previewDiffPassed = previewDiff.passed;
+
 // Snapshot de paginação (commitado): o lado preview + digest do DOCX são
 // Word-free e revalidados no CI por check-preview-snapshot; o lado PDF
 // (páginas/assinaturas renderizadas pelo Word) é a REFERÊNCIA validada pelo
@@ -323,7 +383,7 @@ const overallStatus =
     : "failed";
 
 const renderedLayoutEvidence =
-  `Renderização EXECUTADA com sucesso (Word COM: abriu sem reparo, campos+TOC atualizados, ${renderedPages} páginas, 0 overlaps, 0 cutoffs, 0 páginas em branco; PAGEREF resolvido no PDF: FIGURA 1→23, GRÁFICO 1→77, FIGURA 2→83; SUMÁRIO populado; notas de rodapé detectadas no PDF com status passed). Análise física real via pdfjs-dist: ${physical.summary.totalImages} imagens e ${physical.summary.totalTables} tabelas detectadas no PDF (imagens do DOCX re-exportadas; tabelas 37 regiões físicas vs 35 no OOXML). Cobertura: ${coverageGaps.length === 0 ? "completa — nenhum item crítico not-detected/failed" : `parcial: ${coverageGaps.join(", ")}`}. ${tblHeaderSummary}.`;
+  `Renderização EXECUTADA com sucesso (Word COM: abriu sem reparo, campos+TOC atualizados, ${renderedPages} páginas, 0 overlaps, 0 cutoffs, 0 páginas em branco; PAGEREF resolvido no PDF: FIGURA 1→23, GRÁFICO 1→77, FIGURA 2→83; SUMÁRIO populado; notas de rodapé detectadas no PDF com status passed). Análise física real via pdfjs-dist: ${physical.summary.totalImages} imagens e ${physical.summary.totalTables} tabelas detectadas no PDF (imagens do DOCX re-exportadas; ${physical.summary.totalTables} regiões físicas vs ${tableCount} no OOXML; equações renderizadas: ${physical.summary.totalEquations}; máscaras: ${physical.summary.maskedImages}; contagens por página em imagesByPage/tablesByPage/equationsByPage). Cobertura: ${coverageGaps.length === 0 ? "completa — nenhum item crítico not-detected/failed" : `parcial: ${coverageGaps.join(", ")}`}. ${tblHeaderSummary}.`;
 
 const fullComplianceEvidence =
   fullComplianceStatus === "passed"
@@ -331,7 +391,7 @@ const fullComplianceEvidence =
     : `Gate expandido: ${testSummary.status === "failed" ? `suíte de testes com falhas (codeGate failed) — conformidade NÃO declarada. ${testSummary.evidence}` : `Gaps atuais: ${fullCompliance.gaps.join("; ")}.`} ${tblHeaderSummary}; UFLA-AMBIGUOUS-1 (paginação: contínua vs reinício em 1). Equações com OMML nativo (m:oMath) — UFLA-023 coberto. Rodapés condicionais implementados e validados (FINDING-FOOTER-001..008 covered). Conformidade UFLA NÃO declarada.`;
 
 const conclusion = fullComplianceStatus === "passed" && renderedLayoutStatus === "passed"
-  ? "Renderização, preservação, OOXML e análise física revalidados com evidência atual (Word + PDF + OOXML). FULL COMPLIANCE GATE APROVADO — DOCX gerado conforme o Manual de Normalização da UFLA: pré-textuais, textuais, pós-textuais, referências/citações, figuras, seções, tabelas com w:tblHeader, equações OMML nativas, paginação e física PDF com detecção real de imagens (6) e tabelas (37)."
+  ? `Renderização, preservação, OOXML e análise física revalidados com evidência atual (Word + PDF + OOXML). FULL COMPLIANCE GATE APROVADO — DOCX gerado conforme o Manual de Normalização da UFLA: pré-textuais, textuais, pós-textuais, referências/citações, figuras, seções, tabelas com w:tblHeader, equações OMML nativas, paginação e física PDF com detecção real de imagens (${physical.summary.totalImages}), tabelas (${physical.summary.totalTables}) e equações (${physical.summary.totalEquations}; física OMML validada na fixture eq-fixture).`
   : `Renderização, preservação e OOXML revalidados com evidência atual (Word + PDF + OOXML). Conformidade UFLA NÃO CONCLUÍDA: ${fullCompliance.gaps.join("; ")}. Rodapés condicionais (FINDING-FOOTER-001..008) cobertos.`;
 
 // ---------------------------------------------------------------------------

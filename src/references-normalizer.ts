@@ -480,6 +480,60 @@ export function hasAccessDate(value: string): boolean {
   return /\bacesso\s+em\s*:?/iu.test(text) && /\b\d{1,2}\s+(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z.]*\s+\d{4}\b/iu.test(text);
 }
 
+/**
+ * Indica se a linha é uma referência ONLINE (URL ou "Disponível em:") que ainda
+ * não tem "Acesso em:" — o padrão é o mesmo do validator
+ * (reference-access-missing): URL presente e nenhuma menção a "acesso em".
+ */
+function isOnlineReferenceMissingAccessDate(line: string): boolean {
+  const text = fold(line);
+  if (!/https?:\/\/|dispon[ií]vel\s+em\s*:/iu.test(text)) return false;
+  if (/\bacesso\s+em\b/iu.test(text)) return false;
+  return true;
+}
+
+/** Formata a data de acesso no padrão NBR 6023: "10 jan. 2026". */
+export function formatAccessDate(date: Date): string {
+  const MONTHS = ["jan.", "fev.", "mar.", "abr.", "mai.", "jun.", "jul.", "ago.", "set.", "out.", "nov.", "dez."];
+  return `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+/**
+ * Quantas referências online (linhas) ainda estão sem "Acesso em:".
+ * Usado pelo editor de referências para sugerir a correção automática.
+ */
+export function countOnlineReferencesMissingAccessDate(references: string): number {
+  if (!references) return 0;
+  return references
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter(isOnlineReferenceMissingAccessDate).length;
+}
+
+/**
+ * Anexa "Acesso em: <data>" ao final de cada referência online sem data de
+ * acesso (NBR 6023) — assistência no editor de referências: resolve o erro
+ * reference-access-missing sem digitação manual. Preserva a formatação das
+ * linhas que já têm acesso ou não são online.
+ */
+export function appendAccessDatesToOnlineReferences(references: string, accessDate?: Date): { text: string; fixed: number } {
+  if (!references) return { text: references, fixed: 0 };
+  const date = formatAccessDate(accessDate ?? new Date());
+  let fixed = 0;
+  const text = references
+    .split(/\r?\n/)
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed || !isOnlineReferenceMissingAccessDate(trimmed)) return line;
+      fixed += 1;
+      // remove pontuação final e anexa a data de acesso
+      return `${trimmed.replace(/[.;\s]+$/u, "")}. Acesso em: ${date}.`;
+    })
+    .join("\n");
+  return { text, fixed };
+}
+
 function detect(value: string): { highlight?: string; confidence: ReferenceConfidence; detectedType: NormalizedReference["detectedType"] } {
   if (isLegislation(value)) return { highlight: legislationTitle(value), confidence: "media", detectedType: "legislacao" };
   // Referência online explícita (Disponível em: URL) tem tipo dedicado — antes

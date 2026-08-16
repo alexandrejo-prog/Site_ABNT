@@ -24,6 +24,16 @@ interface TypeCase {
   previewContains?: string[];
 }
 
+/** Slugify espelhando src/download-filename.ts (o e2e não importa o app). */
+function slugify(value: string): string {
+  return (value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase() || "sem-titulo");
+}
+
 /** Preenche um campo, abrindo o <details> da seção quando ele está recolhido. */
 async function fillField(page: import("@playwright/test").Page, key: string, value: string): Promise<void> {
   const field = page.locator(`#${key}`);
@@ -138,6 +148,118 @@ const TYPES: TypeCase[] = [
     editorText: "# Introdução\n\nCorpo do projeto de pesquisa.",
     previewContains: ["Projeto", "problema"],
   },
+  // ---- 7 formatos restantes da Coleção Produção Acadêmica UFLA ----
+  // (artigo_cientifico_ufla já é o 1º caso; patente, revisão sistemática,
+  // estudo de caso, software, cultivar, relatório de estágio e proposta de
+  // intervenção exercitam os requiredFields PRÓPRIOS de cada formato — os
+  // campos como objetivoGeral/justificativa/cronograma ficam visíveis no
+  // formulário via visibleField + requiredFields.)
+  {
+    workType: "patente_ufla",
+    filenamePrefix: "patente",
+    fields: [
+      ["author", "Bruno Martins"],
+      ["title", "Composição de substrato para cultivo de café em vasos"],
+      ["resumo", "Resumo da patente sobre composição de substrato."],
+      ["palavrasChave", "substrato; café; patente"],
+      ["referencias", "MARTINS, B. Substratos para cafeicultura. Lavras: UFLA, 2024."],
+      ["introducao", "O campo da invenção refere-se a substratos para cafeicultura."],
+      ["referencialTeorico", "Estado da técnica em substratos e drenagem."],
+    ],
+    editorText: "# 1 Introdução\n\nCorpo da patente.\n\n# 2 Reivindicações\n\nReivindicação principal do invento.",
+    previewContains: ["Resumo da patente"],
+  },
+  {
+    workType: "revisao_sistematica_ufla",
+    filenamePrefix: "",
+    fields: [
+      ["author", "Carla Nogueira"],
+      ["title", "Revisão sistemática sobre irrigação na cafeicultura"],
+      ["resumo", "Resumo da revisão sistemática sobre irrigação."],
+      ["palavrasChave", "irrigação; revisão; café"],
+      ["referencias", "NOGUEIRA, C. Irrigação do cafeeiro. Lavras: UFLA, 2024."],
+      ["objetivoGeral", "Sintetizar a literatura sobre irrigação do cafeeiro."],
+      ["metodologia", "Busca sistemática nas bases Scopus e Web of Science."],
+    ],
+    editorText: "# 1 Introdução\n\nCorpo da revisão sistemática.\n\n# 2 Metodologia\n\nEstratégia de busca e critérios de elegibilidade.",
+    previewContains: ["Resumo da revisão sistemática"],
+  },
+  {
+    workType: "estudo_caso_ufla",
+    filenamePrefix: "estudo-de-caso-ou-casos-multiplos",
+    fields: [
+      ["author", "Débora Almeida"],
+      ["title", "Estudo de caso da cooperativa cafeeira do sul de Minas"],
+      ["resumo", "Resumo do estudo de caso da cooperativa."],
+      ["palavrasChave", "cooperativa; café; estudo de caso"],
+      ["referencias", "ALMEIDA, D. Cooperativismo cafeeiro. Lavras: UFLA, 2023."],
+      ["introducao", "Contexto do caso da cooperativa cafeeira."],
+      ["metodologia", "Coleta de dados por entrevistas e análise documental."],
+    ],
+    editorText: "# 1 Introdução\n\nCorpo do estudo de caso.\n\n# 2 Análise\n\nEvidências coletadas na cooperativa.",
+    previewContains: ["Resumo do estudo de caso"],
+  },
+  {
+    workType: "software_aplicativo_ufla",
+    filenamePrefix: "desenvolvimento-de-software-e-aplicativos",
+    fields: [
+      ["author", "Eduardo Rocha"],
+      ["title", "Aplicativo de apoio à decisão na cafeicultura irrigada"],
+      ["resumo", "Resumo do aplicativo de apoio à decisão."],
+      ["palavrasChave", "software; irrigação; café"],
+      ["referencias", "ROCHA, E. Sistemas de apoio à decisão. Lavras: UFLA, 2024."],
+      ["objetivoGeral", "Desenvolver um aplicativo de apoio à decisão."],
+      ["metodologia", "Desenvolvimento ágil com testes em campo."],
+    ],
+    editorText: "# 1 Introdução\n\nCorpo do desenvolvimento do software.\n\n# 2 Arquitetura\n\nArquitetura e tecnologias utilizadas.",
+    previewContains: ["Resumo do aplicativo"],
+  },
+  {
+    workType: "cultivar_ufla",
+    filenamePrefix: "cultivar",
+    fields: [
+      ["author", "Fernanda Lima"],
+      ["title", "Caracterização agronômica de nova cultivar de cafeeiro"],
+      ["resumo", "Resumo da caracterização da nova cultivar."],
+      ["palavrasChave", "cultivar; café; melhoramento"],
+      ["referencias", "LIMA, F. Melhoramento do cafeeiro. Lavras: UFLA, 2022."],
+      ["metodologia", "Ensaios de campo em delineamento em blocos casualizados."],
+    ],
+    editorText: "# 1 Introdução\n\nCorpo da caracterização da cultivar.\n\n# 2 Desempenho agronômico\n\nResultados dos ensaios de campo.",
+    previewContains: ["Resumo da caracterização"],
+  },
+  {
+    workType: "relatorio_estagio_ufla",
+    filenamePrefix: "relatorio-de-estagio",
+    fields: [
+      ["author", "Gabriel Souza"],
+      ["title", "Relatório de estágio na Fazenda Experimental da UFLA"],
+      ["resumo", "Resumo das atividades do estágio."],
+      ["course", "Bacharelado em Agronomia"],
+      ["introducao", "Introdução do relatório de estágio."],
+      ["metodologia", "Atividades desenvolvidas durante o estágio."],
+      ["conclusao", "Considerações finais sobre o estágio."],
+    ],
+    editorText: "# 1 Introdução\n\nCorpo do relatório de estágio.",
+    previewContains: ["Resumo das atividades"],
+  },
+  {
+    workType: "proposta_intervencao_ufla",
+    filenamePrefix: "",
+    fields: [
+      ["author", "Helena Costa"],
+      ["title", "Proposta de intervenção no manejo da ferrugem do cafeeiro"],
+      ["resumo", "Resumo da proposta de intervenção no manejo da ferrugem."],
+      ["palavrasChave", "intervenção; ferrugem; café"],
+      ["referencias", "COSTA, H. Manejo integrado de doenças do cafeeiro. Lavras: UFLA, 2024."],
+      ["justificativa", "A ferrugem reduz a produtividade e exige manejo planejado."],
+      ["objetivoGeral", "Planejar uma intervenção no manejo da ferrugem."],
+      ["metodologia", "Diagnóstico situacional e plano de execução."],
+      ["cronograma", "Quadro 1 - Cronograma\n1o semestre: diagnóstico.\nFonte: elaborado pela autora (2026)."],
+    ],
+    editorText: "# 1 Introdução\n\nCorpo da proposta de intervenção.",
+    previewContains: ["Resumo da proposta de intervenção"],
+  },
 ];
 
 for (const typeCase of TYPES) {
@@ -168,7 +290,14 @@ for (const typeCase of TYPES) {
     const download = await downloadPromise;
     const suggested = download.suggestedFilename().toLowerCase();
     expect(suggested).toContain(".docx");
-    expect(suggested).toContain(typeCase.filenamePrefix);
+    if (typeCase.filenamePrefix) {
+      expect(suggested).toContain(typeCase.filenamePrefix);
+    } else {
+      // formatos da Coleção: o nome deriva do slug do título (robusto à
+      // duplicação do mapa de rótulos do app)
+      const title = typeCase.fields.find(([key]) => key === "title")?.[1] ?? "";
+      expect(suggested).toContain(slugify(title));
+    }
 
     // 5) Preview — sem erros de console e com conteúdo esperado
     await page.getByRole("button", { name: "Visualizar" }).click();

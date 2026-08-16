@@ -1,4 +1,5 @@
 import { isCpgWork, isResearchProject, isUflaCollectionWork } from "./ufla-rules";
+import { academicProductionTypeById } from "./academic-production-types";
 
 export const FIELD_LABELS: Record<string, string> = {
   author: "Autor", title: "Título", subtitle: "Subtítulo", englishTitle: "Título em inglês", workNature: "Natureza do trabalho",
@@ -47,11 +48,19 @@ const HIDDEN_PRETEXTUAL = ["dedicatoria", "agradecimentos", "epigrafe", "errata"
 
 export function visibleField(key: string, workType: string): boolean {
   if (key === "fichaCatalografica") return workType === "monografia" || workType === "dissertacao" || workType === "tese";
+  // Formato da Coleção Produção Acadêmica: os requiredFields PRÓPRIOS do
+  // formato (ex.: objetivoGeral, justificativa, cronograma, referencialTeorico)
+  // precisam estar editáveis no formulário — sem isso o usuário não consegue
+  // satisfazer a validação ufla-collection-*-required.
+  if (isUflaCollectionWork(workType as any)) {
+    const productionType = academicProductionTypeById(workType as any);
+    if (productionType && productionType.requiredFields.includes(key as never)) return true;
+    return !HIDDEN_PRETEXTUAL.includes(key);
+  }
   if (RESEARCH_PROJECT_FIELD_KEYS.includes(key)) return isResearchProject(workType as any);
   if (IMPACT_KEYS.includes(key)) return false;
   if (key === "englishTitle") return workType === "dissertacao" || workType === "tese";
   if (workType === "artigo") return !HIDDEN_PRETEXTUAL.includes(key);
-  if (isUflaCollectionWork(workType as any)) return !HIDDEN_PRETEXTUAL.includes(key);
   if (isCpgWork(workType as any)) return ![...HIDDEN_PRETEXTUAL, "workNature", "anexos", "apendices"].includes(key);
   return true;
 }
