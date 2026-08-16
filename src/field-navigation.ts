@@ -25,7 +25,7 @@ const METADATA_KEYS: ReadonlySet<string> = new Set([
   "advisor", "coadvisor", "location", "year", "resumo", "palavrasChave",
   "abstractText", "keywords", "introducao", "conclusao", "referencias",
   "anexos", "apendices", "dedicatoria", "agradecimentos", "epigrafe", "errata",
-  "listaAbreviaturas", "listaSimbolos", "glossario",
+  "listaAbreviaturas", "listaSimbolos", "glossario", "indice",
   "indicadoresImpacto", "impactIndicators",
 ]);
 

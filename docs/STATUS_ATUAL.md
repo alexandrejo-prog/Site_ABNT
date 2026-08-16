@@ -5,15 +5,15 @@
 
 ## Última Atualização
 - Data: 2026-08-16
-- Hora: ~13:30 (WIP fechado em 5 commits granulares: preview de equações importadas OMML→LaTeX, conciliação física DOCX→PDF página-a-página, evidência no gate + snapshot, axe no e2e real, DECISION-010 stub histórico; `null` removido; auditoria 146s com 11 gates)
-- Branch: `feat/ufla-render-validation`
-- Evidência: `npm run ufla:audit` completo — lint + typecheck:scripts + regenerate (Word COM + PDF físico + **11 gates**) all passed em **146s** (suíte 1× + re-render da referência pulado quando o digest do DOCX não muda); overall=passed (FULL COMPLIANCE GATE APROVADO); `npx tsx ci-checks.ts` PASSED (18 formatos × 15 tipos + frescor estrito); `npm run e2e` 13/13 passed; lint 0/0
+- Hora: ~15:10 (Índice remissivo implementado — último elemento opcional do Manual UFLA §3.1.2.4.4 / NBR 6034; decisão DECISION-012; auditoria 141s com 11 gates)
+- Branch: `feat/indice-remissivo`
+- Evidência: `npm run ufla:audit` completo — lint + typecheck:scripts + regenerate (Word COM + PDF físico + **11 gates**) all passed em **141s** (suíte 1× + re-render da referência pulado quando o digest do DOCX não muda); overall=passed (FULL COMPLIANCE GATE APROVADO); `npm run e2e` 13/13 passed; lint 0/0; `sourceFingerprint` `06090a55…`
 
 ## Suíte de Testes
-- Passed: 1684
+- Passed: 1688
 - Failed: 0
 - Skipped: 10
-- Arquivos: 209
+- Arquivos: 210
 - Build: OK (tsc + vite)
 - tsc --noEmit: 0 erros (src + tests)
 - typecheck:scripts: 0 erros (tsconfig.scripts.json checa scripts/ufla-compliance — antes fora do include e só parcialmente checado por imports de testes)
@@ -122,6 +122,7 @@
 1. FATIA 2: Equações OMML (UFLA-023) — CONCLUÍDA (OMML cru re-injetado)
 2. FATIA 3: Rodapés + paginação (FINDING-FOOTER-001..008; UFLA-AMBIGUOUS-1) — CONCLUÍDA
 3. FATIA 6: Regenerar artefatos oficiais e declarar conformidade — **CONCLUÍDA** (FULL COMPLIANCE GATE APROVADO, report.md declara CONFORMIDADE UFLA APROVADA)
+4. Elementos opcionais do Manual — **CONCLUÍDO** (16/08): faltava apenas o **Índice remissivo §3.1.2.4.4 / NBR 6034** (DECISION-012); os demais opcionais já existiam (errata, dedicatória, agradecimentos, epígrafe, listas, glossário, apêndices/anexos, lombada física)
 
 ## Evidências (2026-08-16 ~13:30, HEAD `93254ac`)
 - DOCX: `artifacts/ufla-compliance/normalized-dissertacao.docx`
@@ -133,8 +134,8 @@
 - Gates: `artifacts/ufla-audit/gates.json` (overall=passed; **11/11 gates** incluindo coverageDocxPdfGate; meta `generatedAt` da rodada de 2026-08-16 ~13:30)
 - Testes: 1684 passed, 0 failed, 10 skipped (209 arquivos); e2e 13/13 (axe no navegador real); ci-checks PASSED; lint 0/0
 - Preservação: content-preservation.json RECOMPUTADO — imagens 11/11 (F-007 encerrado), tabelas 35/35, referências 138/138
-- Auditoria: suíte 1× por rodada (frescor ativo); renders per-type paralelos (pool 3); re-render da referência pulado quando o digest do DOCX não muda — **146s**
-- Paisagem: confirmada end-to-end — tabela de 7 colunas → página 9 em A4-paisagem (842×595) no PDF real do Word; UFLA-equacoes covered sem gap stale
+- Auditoria: suíte 1× por rodada (frescor ativo); renders per-type paralelos (pool 3); re-render da referência pulado quando o digest do DOCX não muda — **141s** (11/11 gates, `sourceFingerprint` `06090a55…`)
+- Índice remissivo (16/08): campo `indice` novo (ufla-rules.ts, default `""`; fora de `ACADEMIC_FIELD_KEYS` como `glossario`); DOCX `sectionTitle("Índice")` após anexos + sumário; preview página pós-textual; sanitizado em artigo/CPG; `tests/unit/indice-remissivo.test.ts` (4); DECISION-012 em `docs/decisions/012-indice-remissivo-opcional.md`
 - Fechamento WIP (16/08): 5 commits `de96890` (OMML→LaTeX preview), `2c5457e` (conciliação página-a-página + margem inferior), `41b568c` (evidência no gate + snapshot), `0eab8e8` (axe no e2e), `93254ac` (DECISION-010 stub histórico); `null` (0 bytes) removido; `update-fingerprints.ts` arquivado (redundante)
 
 ## Regras para IAs

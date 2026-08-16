@@ -169,6 +169,8 @@ export interface AcademicFields {
   listaAbreviaturas: string;
   listaSimbolos: string;
   glossario: string;
+  /** Índice remissivo (Manual UFLA §3.1.2.4.4 / NBR 6034 — elemento opcional pós-textual, impresso após anexos). */
+  indice: string;
   referencesPlacement: "bibliography" | "footnote";
   /** Texto da ficha catalográfica oficial (Manual UFLA §6.1: colar texto ou inserir imagem/PDF). */
   fichaCatalografica: string;
@@ -435,6 +437,7 @@ export function emptyAcademicFields(): AcademicFields {
     listaAbreviaturas: "",
     listaSimbolos: "",
     glossario: "",
+    indice: "",
     referencesPlacement: "bibliography",
     fichaCatalografica: "",
   };

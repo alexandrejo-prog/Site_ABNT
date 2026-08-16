@@ -152,6 +152,7 @@ function calculateRealPages(
   importedImages: ImportedDocumentImage[],
   importedTables: ImportedTable[],
   bodyStartPage: number,
+  indice = "",
 ): Map<string, number> {
   const pageMap = new Map<string, number>();
   const record = (text: string, page: number): void => {
@@ -191,6 +192,10 @@ function calculateRealPages(
   if (hasText(anexos)) {
     currentPage += 1;
     record("ANEXOS", currentPage);
+  }
+  if (hasText(indice)) {
+    currentPage += 1;
+    record("ÍNDICE", currentPage);
   }
   return pageMap;
 }
@@ -485,6 +490,7 @@ function collectPreviewSummaryEntries(
   references: string[],
   apendices: string,
   anexos: string,
+  indice = "",
 ): SummaryEntry[] {
   const entries: SummaryEntry[] = [];
   const seen = new Set<string>();
@@ -503,6 +509,7 @@ function collectPreviewSummaryEntries(
   if (references.length > 0) push("REFERÊNCIAS", 1);
   if (hasText(anexos)) push("ANEXOS", 1);
   if (hasText(apendices)) push("APÊNDICE A", 1);
+  if (hasText(indice)) push("ÍNDICE", 1);
   return entries;
 }
 
@@ -515,15 +522,16 @@ function summaryHtml(
   importedImages: ImportedDocumentImage[] = [],
   importedTables: ImportedTable[] = [],
   preTextual: Array<{ title: string; page: number }> = [],
+  indice = "",
 ): string {
   // Entradas pré-textuais (FICHA CATALOGRÁFICA, RESUMO, ABSTRACT, listas…): o
   // TOC do Word lista esses títulos (fidelidade ao baseline UFLA) antes do corpo.
   const entries: SummaryEntry[] = [
     ...preTextual.map((p) => ({ text: p.title, level: 1 as const })),
-    ...collectPreviewSummaryEntries(bodyBlocks, references, apendices, anexos),
+    ...collectPreviewSummaryEntries(bodyBlocks, references, apendices, anexos, indice),
   ];
   if (!entries.length) return "";
-  const pageMap = calculateRealPages(bodyBlocks, references, apendices, anexos, importedImages, importedTables, bodyStartPage);
+  const pageMap = calculateRealPages(bodyBlocks, references, apendices, anexos, importedImages, importedTables, bodyStartPage, indice);
   for (const p of preTextual) pageMap.set(normalizeForDetection(cleanMojibakeText(p.title)), p.page);
   const entriesHtml = entries
     .map((entry) => {
@@ -818,7 +826,7 @@ function generalPreview(input: DocxGenerationInput): string {
   // o próprio SUMÁRIO no TOC (estilo de título com outline level).
   if (hasSummary) {
     tocPre.push({ title: "SUMÁRIO", page: prePageCount + 1 });
-    preTextual.push(page(summaryHtml(bodyBlocks, references, fields.apendices, fields.anexos, calculateTextualStartPage(fields, hasSummary, bodyBlocks, importedImages, importedTables), importedImages, importedTables, tocPre)));
+    preTextual.push(page(summaryHtml(bodyBlocks, references, fields.apendices, fields.anexos, calculateTextualStartPage(fields, hasSummary, bodyBlocks, importedImages, importedTables), importedImages, importedTables, tocPre, fields.indice)));
   }
 
   // Numeração visível inicia na primeira página textual com o VALOR CONTADO
@@ -828,10 +836,11 @@ function generalPreview(input: DocxGenerationInput): string {
   const bodyStartPage = calculateTextualStartPage(fields, hasSummary, bodyBlocks, importedImages, importedTables);
   // Referências/apêndices/anexos continuam a numeração após as páginas reais do
   // corpo (mesmo cálculo do sumário — calculateRealPages), como o Word faz.
-  const postPages = calculateRealPages(bodyBlocks, references, fields.apendices, fields.anexos, importedImages, importedTables, bodyStartPage);
+  const postPages = calculateRealPages(bodyBlocks, references, fields.apendices, fields.anexos, importedImages, importedTables, bodyStartPage, fields.indice);
   const refsPage = postPages.get(normalizeForDetection("REFERÊNCIAS")) ?? bodyStartPage + 1;
   const appendixPage = postPages.get(normalizeForDetection("APÊNDICE A")) ?? refsPage + 1;
   const anexosPage = postPages.get(normalizeForDetection("ANEXOS")) ?? appendixPage + 1;
+  const indicePage = postPages.get(normalizeForDetection("ÍNDICE")) ?? anexosPage + 1;
   const postTextual: string[] = [];
   postTextual.push(
     page(
@@ -844,6 +853,9 @@ function generalPreview(input: DocxGenerationInput): string {
   }
   if (hasText(fields.anexos)) {
     postTextual.push(page(pageNumberHeader(anexosPage) + unnumberedTitle("Anexos") + simpleParagraph(fields.anexos)));
+  }
+  if (hasText(fields.indice)) {
+    postTextual.push(page(pageNumberHeader(indicePage) + unnumberedTitle("Índice") + simpleParagraph(fields.indice)));
   }
 
   return [
