@@ -397,8 +397,13 @@ const { computeCoverage } = await import(pathToFileURL(join(ROOT, "scripts", "uf
 const coverageDocxPdf = await computeCoverage();
 writeJson("artifacts/ufla-compliance/coverage-docx-pdf.json", coverageDocxPdf);
 const coverageDocxPdfPassed = coverageDocxPdf.passed;
+const pageMapSummary =
+  Object.entries(coverageDocxPdf.pageMapping ?? {})
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([page, idx]) => `${page}:${(idx as number[]).join("+")}`)
+    .join(" ");
 const coverageDocxPdfEvidence = coverageDocxPdf.wordAvailable
-  ? `Cobertura DOCX→PDF: ${coverageDocxPdf.tables.matched}/${coverageDocxPdf.tables.total} tabelas OOXML casadas textualmente com regiões físicas detectadas (razão físico/OOXML ${coverageDocxPdf.tableRatio.toFixed(2)} na banda [0.7, 1.8]); imagens ${coverageDocxPdf.physical.images}/${coverageDocxPdf.ooxml.images} (${coverageDocxPdf.imageRatio.toFixed(2)}); equações ${coverageDocxPdf.ooxml.equations}→${coverageDocxPdf.physical.equations}.`
+  ? `Cobertura DOCX→PDF: ${coverageDocxPdf.tables.matched}/${coverageDocxPdf.tables.total} tabelas OOXML casadas textualmente com regiões físicas detectadas (razão físico/OOXML ${coverageDocxPdf.tableRatio.toFixed(2)} na banda [0.7, 1.8]); imagens ${coverageDocxPdf.physical.images}/${coverageDocxPdf.ooxml.images} (${coverageDocxPdf.imageRatio.toFixed(2)}); equações ${coverageDocxPdf.ooxml.equations}→${coverageDocxPdf.physical.equations}. Conciliação página-a-página: ${Object.keys(coverageDocxPdf.pageMapping ?? {}).length} páginas físicas com tabelas — ${pageMapSummary}.`
   : `Cobertura DOCX→PDF: PDF/artefato de referência indisponível — gate considerado passed (evidência em coverage-docx-pdf.json).`;
 let overallStatus: "passed" | "failed" =
   testSummary.status === "passed" &&
@@ -418,7 +423,7 @@ const renderedLayoutEvidence =
 let fullComplianceEvidence =
   fullComplianceStatus === "passed"
     ? `Gate expandido executado com evidência atual: pré-textuais, textuais, pós-textuais, referências/citações ABNT, figuras, seções, tabelas (w:tblHeader), equações (OMML nativo), paginação e física PDF (imagens e tabelas detectadas) — 0 gaps. Rodapés condicionais (FINDING-FOOTER-001..008) covered; UFLA-023 covered; ${tblHeaderSummary}. CONFORMIDADE UFLA APROVADA.`
-    : `Gate expandido: ${testSummary.status === "failed" ? `suíte de testes com falhas (codeGate failed) — conformidade NÃO declarada. ${testSummary.evidence}` : `Gaps atuais: ${fullCompliance.gaps.join("; ")}.`} ${tblHeaderSummary}; UFLA-AMBIGUOUS-1 (paginação: contínua vs reinício em 1). Equações com OMML nativo (m:oMath) — UFLA-023 coberto. Rodapés condicionais implementados e validados (FINDING-FOOTER-001..008 covered). Conformidade UFLA NÃO declarada.`;
+    : `Gate expandido: ${testSummary.status === "failed" ? `suíte de testes com falhas (codeGate failed) — conformidade NÃO declarada. ${testSummary.evidence}` : `Gaps atuais: ${fullCompliance.gaps.join("; ")}.`} ${tblHeaderSummary}; Paginação validada (DECISION-010 — contagem contínua a partir da folha de rosto, sem reinício em 1). Equações com OMML nativo (m:oMath) — UFLA-023 coberto. Rodapés condicionais implementados e validados (FINDING-FOOTER-001..008 covered). Conformidade UFLA NÃO declarada.`;
 
 let conclusion = fullComplianceStatus === "passed" && renderedLayoutStatus === "passed"
   ? `Renderização, preservação, OOXML e análise física revalidados com evidência atual (Word + PDF + OOXML). FULL COMPLIANCE GATE APROVADO — DOCX gerado conforme o Manual de Normalização da UFLA: pré-textuais, textuais, pós-textuais, referências/citações, figuras, seções, tabelas com w:tblHeader, equações OMML nativas, paginação e física PDF com detecção real de imagens (${physical.summary.totalImages}), tabelas (${physical.summary.totalTables}) e equações (${physical.summary.totalEquations}; física OMML validada na fixture eq-fixture).`
@@ -487,7 +492,7 @@ const gates = {
       status: "passed",
       evidence:
         "ESTRUTURA OOXML válida: Word abriu sem reparo (openedByRepair=false) e exportou PDF; 22 estilos aplicados e todos definidos (27 ufla_* + Heading1-3 + TOC1-3); outlineLvl 0/1/2 com basedOn Heading1/2/3; bookmarks 39 pareados com 31 PAGEREF, 0 alvos ausentes; 0 mojibake. Achados NÃO-estruturais do checker registrados em separado: toc-style (falso positivo — campo TOC presente, TOC1-3 populados no update), appendices-after-references (fidelidade à ordem da fonte importada). Paginação validada em DECISION-010 (contagem contínua a partir da folha de rosto; OOXML pgNumType start=13 ↔ PDF físico folha 18=13; sem reinício em 1).",
-      finding: "UFLA-AMBIGUOUS-1 (não-estrutural)",
+      finding: "Resolvido em DECISION-010 — paginação validada em OOXML + PDF físico.",
     },
     contentPreservationGate: {
       status: "passed",
@@ -859,7 +864,7 @@ overallStatus =
 fullComplianceEvidence =
   fullComplianceStatus === "passed"
     ? `Gate expandido executado com evidência atual: pré-textuais, textuais, pós-textuais, referências/citações ABNT, figuras, seções, tabelas (w:tblHeader), equações (OMML nativo), paginação e física PDF (imagens e tabelas detectadas) — 0 gaps. Rodapés condicionais (FINDING-FOOTER-001..008) covered; UFLA-023 covered; ${tblHeaderSummary}. CONFORMIDADE UFLA APROVADA.`
-    : `Gate expandido: ${testSummary.status === "failed" ? `suíte de testes com falhas (codeGate failed) — conformidade NÃO declarada. ${testSummary.evidence}` : `Gaps atuais: ${fullCompliance.gaps.join("; ")}.`} ${tblHeaderSummary}; UFLA-AMBIGUOUS-1 (paginação: contínua vs reinício em 1). Equações com OMML nativo (m:oMath) — UFLA-023 coberto. Rodapés condicionais implementados e validados (FINDING-FOOTER-001..008 covered). Conformidade UFLA NÃO declarada.`;
+    : `Gate expandido: ${testSummary.status === "failed" ? `suíte de testes com falhas (codeGate failed) — conformidade NÃO declarada. ${testSummary.evidence}` : `Gaps atuais: ${fullCompliance.gaps.join("; ")}.`} ${tblHeaderSummary}; Paginação validada (DECISION-010 — contagem contínua a partir da folha de rosto, sem reinício em 1). Equações com OMML nativo (m:oMath) — UFLA-023 coberto. Rodapés condicionais implementados e validados (FINDING-FOOTER-001..008 covered). Conformidade UFLA NÃO declarada.`;
 conclusion =
   fullComplianceStatus === "passed" && renderedLayoutStatus === "passed"
     ? `Renderização, preservação, OOXML e análise física revalidados com evidência atual (Word + PDF + OOXML). FULL COMPLIANCE GATE APROVADO — DOCX gerado conforme o Manual de Normalização da UFLA: pré-textuais, textuais, pós-textuais, referências/citações, figuras, seções, tabelas com w:tblHeader, equações OMML nativas, paginação e física PDF com detecção real de imagens (${physical.summary.totalImages}), tabelas (${physical.summary.totalTables}) e equações (${physical.summary.totalEquations}; física OMML validada na fixture eq-fixture).`
