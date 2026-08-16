@@ -192,6 +192,28 @@ function collectChangeWarnings(structure: DocxStructure): string[] {
 }
 
 /**
+ * Aviso de perda de formatação de caracteres (A2 do checklist-14): o rascunho
+ * preserva o TEXTO dos runs, mas não o destaque (negrito/itálico/sublinhado) —
+ * o usuário deve revisar o destaque no documento gerado.
+ */
+function collectFormattingLossWarning(structure: DocxStructure): string[] {
+  let formattedRuns = 0;
+  for (const block of structure.blocks) {
+    if (!("runs" in block)) continue;
+    for (const run of block.runs) {
+      if (run.bold || run.italic || run.underline) {
+        formattedRuns += 1;
+      }
+    }
+  }
+  if (formattedRuns === 0) return [];
+  return [
+    `${formattedRuns} run(s) com formatação de destaque (negrito/itálico/sublinhado) no DOCX original. ` +
+      "O rascunho preserva o texto, mas NÃO a formatação de caracteres — revise o destaque no documento final (o texto importado sai sem negrito/itálico/sublinhado).",
+  ];
+}
+
+/**
  * Remove pontuação final de título de seção (ABNT/UFLA: títulos não terminam
  * com ponto, dois-pontos ou hífen). Preserva reticências ("...").
  */
@@ -905,6 +927,7 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
     try {
       const structure = await extractDocxStructure(arrayBuffer, { includeMediaData: true });
       const changeWarnings = collectChangeWarnings(structure);
+      const formattingWarnings = collectFormattingLossWarning(structure);
       const normalized = normalizeImportedStructure({
         ...structure,
         text: structure.text || mammothText,
@@ -914,6 +937,7 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
       return buildImportResult(normalized, detected, [
         ...messages,
         ...changeWarnings,
+        ...formattingWarnings,
         ...normalized.messages,
         ...detected.messages,
       ]);

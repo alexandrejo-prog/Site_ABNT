@@ -946,8 +946,20 @@ function scheduleTableBlock(text: string): Array<Paragraph | Table> {
   return result;
 }
 
-export function importedImageParagraph(image: ImportedDocumentImage | undefined): Paragraph[] {
-  if (!image) return [];
+export function importedImageParagraph(
+  image: ImportedDocumentImage | undefined,
+  markerText?: string,
+): Paragraph[] {
+  if (!image) {
+    // A3 do checklist-14: id inválido/stale NÃO pode sumir do DOCX — emite
+    // placeholder visível (mantendo o id do marcador do rascunho).
+    const id = markerText?.trim() ? ` (id: ${markerText.trim()})` : "";
+    return [
+      simpleParagraph(
+        `[Imagem importada: dados originais indisponíveis${id} — reinsira manualmente esta imagem no documento final]`,
+      ),
+    ];
+  }
 
   const result: Paragraph[] = [];
 
@@ -1547,7 +1559,10 @@ function blockToParagraph(
   }
 
   if (block.type === "importedImage") {
-    return importedImageParagraph(importedImages.find((image) => image.id === block.text));
+    return importedImageParagraph(
+      importedImages.find((image) => image.id === block.text),
+      block.text,
+    );
   }
 
   if (block.type === "importedTable") {
