@@ -5,6 +5,7 @@ import {
 } from "./docx-render-core";
 import { escapeHtml, inlineMarkupToHtml } from "./editor-markup";
 import katex from "katex";
+import { ommlToLatex } from "./omml-to-latex";
 import {
   calculateTextualStartPage,
   extractReferencesSection,
@@ -252,17 +253,20 @@ function longQuoteHtml(text: string): string {
   return `<blockquote class="preview-long-quote" data-font-size="${LONG_QUOTE_SIZE_PT}pt">${inlineMarkupToHtml(cleanMojibakeText(text || " "))}</blockquote>`;
 }
 
-function equationHtml(text: string): string {
+function equationHtml(text: string, ommlXml?: string): string {
   const cleaned = cleanMojibakeText(text || " ").trim();
   const numberMatch = cleaned.match(/\s*\((\d+(?:\.\d+)?)\)\s*$/);
   const body = numberMatch ? cleaned.slice(0, numberMatch.index).trim() : cleaned;
   const number = numberMatch ? `(${numberMatch[1]})` : "";
   // Renderiza o LaTeX do bloco [EQ] com KaTeX (o Word renderiza OMML; o KaTeX
   // é a aproximação web mais fiel — frações, raízes, ∑/∫/lim com índices).
-  // Fallback: texto com glifos quando o KaTeX falha ou o corpo não é LaTeX.
+  // Equações IMPORTADAS trazem o OMML cru (token \uF001OMML:...) — o OMML é
+  // convertido para LaTeX (omml-to-latex.ts) e renderizado com a MESMA
+  // fidelidade do Word. Fallback: texto com glifos quando o KaTeX falha.
+  const latexSource = ommlXml ? ommlToLatex(ommlXml) : body;
   let bodyHtml: string;
   try {
-    bodyHtml = katex.renderToString(body || " ", {
+    bodyHtml = katex.renderToString(latexSource || " ", {
       displayMode: false,
       throwOnError: false,
       strict: false,
@@ -452,7 +456,7 @@ function bodyBlockHtml(
     case "longQuote":
       return longQuoteHtml(block.text);
     case "equation":
-      return equationHtml(block.text);
+      return equationHtml(block.text, block.ommlXml);
     case "scheduleTable":
     case "plainScheduleTable":
     case "markdownTable":

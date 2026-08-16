@@ -412,4 +412,19 @@ describe("buildPreviewHtml - regressões dos bugs corrigidos", () => {
     expect(html).toContain('mop');
     expect(html).toContain("(1.2)");
   });
+
+  it("equação IMPORTADA (OMML cru, token \\uF001OMML) renderiza a fração do Word no preview", () => {
+    // O que o import-docx grava no rascunho: texto + token base64 do m:oMath
+    const omml = "<m:oMath><m:f><m:num><m:r><m:t>x</m:t></m:r></m:num><m:den><m:r><m:t>2</m:t></m:r></m:den></m:f><m:r><m:t> + </m:t></m:r><m:r><m:t>y</m:t></m:r></m:oMath>";
+    const token = `\uF001OMML:${btoa(omml)}\uF001`;
+    const html = buildPreviewHtml({
+      fields: baseFields(),
+      editorText: `# 1 Introducao\n\n[EQ] x/2 + y ${token}\n\nProsa.`,
+    });
+    // O OMML virou LaTeX e o KaTeX emitiu a estrutura frac (fração real, não
+    // texto achatado "x/2") — o MESMO resultado visual do Word
+    expect(html).toContain('class="katex"');
+    expect(html).toContain('class="mfrac"');
+    expect(html).not.toContain('x/2');
+  });
 });
