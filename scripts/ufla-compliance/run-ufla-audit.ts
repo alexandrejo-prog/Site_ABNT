@@ -67,6 +67,7 @@ async function main(): Promise<void> {
   try {
     const steps: Array<[string, string]> = [
       ["LINT", "npm run lint"],
+      ["TYPECHECK (scripts/ufla-compliance)", "npm run typecheck:scripts"],
       ["REGENERATE (Word COM + PDF físico + gates + artefatos)", "npx tsx scripts/ufla-compliance/regenerate-official-artifacts.ts"],
       ["VERIFY (testes + build)", "npm run verify"],
     ];

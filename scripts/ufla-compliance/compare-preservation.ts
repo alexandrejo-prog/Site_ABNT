@@ -24,8 +24,8 @@ const [baselineImport, outputImport] = await Promise.all([
   importDocumentFile(outputFile),
 ]);
 
-const inputRefs = (baselineImport.fields.referencias || "").split("\n").map((l) => l.trim()).filter(Boolean);
-const outputRefs = (outputImport.fields.referencias || "").split("\n").map((l) => l.trim()).filter(Boolean);
+const inputRefs = (baselineImport.fields.referencias || "").split("\n").map((l: string) => l.trim()).filter(Boolean);
+const outputRefs = (outputImport.fields.referencias || "").split("\n").map((l: string) => l.trim()).filter(Boolean);
 
 const inputNormalized = normalizeReferences(inputRefs);
 const outputNormalized = normalizeReferences(outputRefs);

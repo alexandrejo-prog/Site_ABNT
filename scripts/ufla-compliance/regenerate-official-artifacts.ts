@@ -572,9 +572,9 @@ const outputLines = (output.editorText || "").split(/\r?\n/).filter((l: string) 
 const mojibakeRe = /Ã[¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿]/u;
 const norm = (s: string) => s.normalize("NFC").toUpperCase().replace(/\s+/g, " ").trim();
 const inSet = new Map<string, number>();
-inputLines.forEach((l) => inSet.set(norm(l), (inSet.get(norm(l)) ?? 0) + 1));
+inputLines.forEach((l: string) => inSet.set(norm(l), (inSet.get(norm(l)) ?? 0) + 1));
 const outSet = new Map<string, number>();
-outputLines.forEach((l) => outSet.set(norm(l), (outSet.get(norm(l)) ?? 0) + 1));
+outputLines.forEach((l: string) => outSet.set(norm(l), (outSet.get(norm(l)) ?? 0) + 1));
 let matched = 0;
 for (const [k, n] of inSet) matched += Math.min(n, outSet.get(k) ?? 0);
 
@@ -589,7 +589,7 @@ writeJson("artifacts/ufla-compliance/content-diff.json", {
     rawSplitDelta: (input.editorText || "").split(/\r?\n/).length - (output.editorText || "").split(/\r?\n/).length,
     preservedNormalized: matched,
     lostCandidates: inputLines.length - matched,
-    mojibakeOutputLines: outputLines.filter((l) => mojibakeRe.test(l) || l.includes("\uFFFD")).length,
+    mojibakeOutputLines: outputLines.filter((l: string) => mojibakeRe.test(l) || l.includes("\uFFFD")).length,
     referencesInputRawLines: (input.fields.referencias || "").split("\n").filter((l: string) => l.trim()).length,
     referencesOutputItems: (output.fields.referencias || "").split("\n").filter((l: string) => l.trim()).length,
     referencesRoundTrip: "138/138 preservados, 0 perdidos (tests/references-preservation.test.ts)",

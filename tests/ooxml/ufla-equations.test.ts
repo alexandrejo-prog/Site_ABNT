@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import JSZip from "jszip";
 import { emptyAcademicFields } from "../../src/ufla-rules";
-import { generateDocxBlob, parseEditorContent } from "../../src/export-docx";
+import { generateDocxBlob, numberEquationsInBlocks, parseEditorContent } from "../../src/export-docx";
 import { importDocumentFile } from "../../src/import-docx";
 import { equationParagraph, parseLatexMath } from "../../src/docx-render-core";
 import { Document, Packer, Paragraph } from "docx";
@@ -75,6 +75,39 @@ describe("UFLA-023 equacoes e formulas (§3.2.8 Manual UFLA): importacao OMML", 
     const blocks = parseEditorContent("[EQ] f(x) = x² + 2x - 1 (1.1)\n\nParagrafo comum.");
     expect(blocks[0].type).toBe("equation");
     expect(blocks[0].text).toContain("f(x) = x² + 2x - 1");
+  });
+
+  it("numberEquationsInBlocks: numera equacoes por secao (secao.seq) — Manual UFLA §3.2.8", () => {
+    const blocks = parseEditorContent(
+      "# 1 Introducao\n\n[EQ] \\frac{a}{b}\n\n# 2 Metodologia\n\n[EQ] x^2\n[EQ] \\sqrt{x}\n",
+    );
+    const numbered = numberEquationsInBlocks(blocks);
+    const eqs = numbered.filter((b) => b.type === "equation").map((b) => b.text);
+    expect(eqs[0]).toMatch(/\(1\.1\)$/);
+    expect(eqs[1]).toMatch(/\(2\.1\)$/);
+    expect(eqs[2]).toMatch(/\(2\.2\)$/);
+  });
+
+  it("numberEquationsInBlocks: secao sem numero usa ordinal; antes de qualquer secao usa sequencia simples", () => {
+    const blocks = parseEditorContent("[EQ] F = ma\n\n# Introducao\n\n[EQ] x^2\n");
+    const numbered = numberEquationsInBlocks(blocks);
+    const eqs = numbered.filter((b) => b.type === "equation").map((b) => b.text);
+    expect(eqs[0]).toMatch(/\(1\)$/);
+    expect(eqs[1]).toMatch(/\(1\.1\)$/);
+  });
+
+  it("numberEquationsInBlocks: equacao com numero explicito nao e renumerada", () => {
+    const blocks = parseEditorContent("# 1 Introducao\n\n[EQ] y = ax + b (3.7)\n");
+    const numbered = numberEquationsInBlocks(blocks);
+    const eqs = numbered.filter((b) => b.type === "equation").map((b) => b.text);
+    expect(eqs[0]).toMatch(/\(3\.7\)$/);
+  });
+
+  it("parseEditorContent aplica a numeracao automaticamente (preview e DOCX consistentes)", () => {
+    const blocks = parseEditorContent("# 1 Introducao\n\n[EQ] \\frac{a}{b}\n");
+    expect(blocks[0].type).toBe("heading1");
+    expect(blocks[1].type).toBe("equation");
+    expect(blocks[1].text).toMatch(/\(1\.1\)$/);
   });
 
   it("parseLatexMath: \\frac gera MathFraction (m:f) com numerador/denominador", () => {

@@ -271,6 +271,116 @@ function regionBbox(lines: Array<{ y: number; cols: number[] }>): Bbox {
   };
 }
 
+/** Composição manual de matriz CTM 2×3 (Util.transform do pdf.js depende de
+ * DOMMatrix/Path2D, indisponíveis no Node puro — retorna NaN). */
+function mulMatrix(m: number[], t: number[]): number[] {
+  const [a, b, c, d, e, f] = m;
+  const [ta, tb, tc, td, te, tf] = t;
+  return [
+    a * ta + c * tb,
+    b * ta + d * tb,
+    a * tc + c * td,
+    b * tc + d * td,
+    a * te + c * tf + e,
+    b * te + d * tf + f,
+  ];
+}
+
+/**
+ * Detecção complementar de tabelas por BORDAS DESENHADAS no PDF.
+ *
+ * Descoberta empírica (DECISION-009): o Word exporta as bordas de células de
+ * tabela como RETÂNGULOS FINOS PREENCHIDOS — um `re` (constructPath ops=[19])
+ * seguido de `eoFill` standalone — um retângulo por aresta de célula
+ * (horizontal h≈1pt e vertical w≈1pt). As bordas de um grid C×R geram
+ * ~2·C·R retângulos H e ~2·C·R retângulos V, com posições x (colunas) e y
+ * (linhas) consistentes. Recupera o grid e o reporta como região de tabela —
+ * cobre as tabelas de 2 linhas (header + 1 linha) que a grade de texto exige
+ * >= 3 linhas para detectar.
+ */
+export function detectBorderedTableRegions(
+  opList: { fnArray: number[]; argsArray: unknown[] },
+  OPS: typeof pdfjsLib.OPS,
+  pageHeight: number,
+): Array<{ bbox: Bbox; cols: number; rows: number }> {
+  let ctm = [1, 0, 0, 1, 0, 0];
+  const stack: number[][] = [];
+  const filled: Array<{ x: number; y: number; w: number; h: number }> = [];
+
+  for (let j = 0; j < opList.fnArray.length; j++) {
+    const fn = opList.fnArray[j];
+    const args = opList.argsArray[j] as any[];
+    if (fn === OPS.transform) {
+      ctm = mulMatrix(ctm, args as number[]);
+      continue;
+    }
+    if (fn === OPS.save) {
+      stack.push(ctm);
+      continue;
+    }
+    if (fn === OPS.restore) {
+      ctm = stack.pop() ?? ctm;
+      continue;
+    }
+    if (fn !== OPS.constructPath) continue;
+    const [ops, pts] = args as [number[], number[]];
+    // apenas retângulo puro [re] — clips de texto do Word também são re (página
+    // inteira 595×842) mas NÃO são seguidos de eoFill; a geometria filtra depois.
+    if (ops.length !== 1 || ops[0] !== OPS.rectangle || pts.length !== 4) continue;
+    const [rx, ry, rw, rh] = pts;
+    const [x0, y0] = mulMatrix(ctm, [rx, ry]);
+    const [x1, y1] = mulMatrix(ctm, [rx + rw, ry + rh]);
+    const r = {
+      x: Math.min(x0, x1),
+      y: Math.min(y0, y1),
+      w: Math.abs(x1 - x0),
+      h: Math.abs(y1 - y0),
+    };
+    // preenchido? eoFill (23) nos próximos ops (permite save/restore/endPath entre);
+    // eoClip (30) interrompe — são os clips de texto do Word, não preenchidos.
+    let isFilled = false;
+    for (let k = j + 1; k <= j + 3 && k < opList.fnArray.length; k++) {
+      const f2 = opList.fnArray[k];
+      if (f2 === OPS.eoFill) {
+        isFilled = true;
+        break;
+      }
+      if (f2 === OPS.eoClip) break;
+      if (f2 !== OPS.save && f2 !== OPS.restore && f2 !== OPS.endPath) break;
+    }
+    if (isFilled) filled.push(r);
+  }
+
+  // linhas de borda: retângulos finos (h < 2.5pt para horizontais, w < 2.5pt
+  // para verticais), dentro da página, com comprimento de célula (>= 30pt).
+  const horiz = filled.filter((r) => r.h < 2.5 && r.w > 30 && r.y > 0 && r.y + r.h < pageHeight);
+  const vert = filled.filter((r) => r.w < 2.5 && r.h > 15 && r.y > 0 && r.y + r.h < pageHeight);
+  if (horiz.length < 4 || vert.length < 4) return [];
+
+  // colunas (x das linhas verticais) e linhas (y das horizontais), tolerância 4pt
+  const cols = [...new Set(vert.map((r) => Math.round(r.x / 4) * 4))].sort((a, b) => a - b);
+  const rows = [...new Set(horiz.map((r) => Math.round(r.y / 4) * 4))].sort((a, b) => a - b);
+  if (cols.length < 2 || rows.length < 2) return [];
+
+  // bbox da grade em espaço de tela (y para baixo)
+  const xMin = cols[0];
+  const xMax = cols[cols.length - 1];
+  const yPdfMin = rows[0];
+  const yPdfMax = rows[rows.length - 1];
+  return [
+    {
+      bbox: {
+        x0: Math.max(0, xMin - 2),
+        y0: Math.max(0, pageHeight - yPdfMax - 2),
+        x1: Math.min(595, xMax + 4),
+        y1: Math.min(pageHeight, pageHeight - yPdfMin + 2),
+      },
+      cols: cols.length,
+      rows: rows.length,
+    },
+  ];
+}
+
 function bboxIntersects(a: Bbox, b: Bbox): boolean {
   const x0 = Math.max(a.x0, b.x0);
   const y0 = Math.max(a.y0, b.y0);
@@ -394,17 +504,31 @@ export async function analyzePdf(pdfPath: string): Promise<PhysicalAnalysis> {
       allElements.push(el);
     }
 
-    // --- detecção real de tabelas via grade de colunas alinhadas ---
+    // --- detecção real de tabelas: grade de colunas alinhadas + bordas desenhadas ---
     const tableRegions = detectTableRegions(
       pageTextItems.map((it) => ({ x: it.x, y: it.y, str: it.str })),
       pw,
       ph,
     );
-    const tableElements: PageElement[] = tableRegions.map((r) => {
+    // Complemento por bordas (retângulos preenchidos do Word): cobre tabelas de
+    // 2 linhas (header + 1 linha) que a grade de texto exige >= 3 linhas.
+    const borderedRegions = detectBorderedTableRegions(opList, OPS, ph);
+    const mergedTableRegions: Array<{
+      bbox: Bbox;
+      cols: number;
+      rows: number;
+      via: "bordas" | "grade";
+    }> = borderedRegions.map((r) => ({ ...r, via: "bordas" }));
+    for (const gr of tableRegions) {
+      if (!mergedTableRegions.some((m) => bboxIntersects(m.bbox, gr.bbox))) {
+        mergedTableRegions.push({ ...gr, via: "grade" });
+      }
+    }
+    const tableElements: PageElement[] = mergedTableRegions.map((r) => {
       const el: PageElement = {
         page: i,
         kind: "table",
-        text: `Tabela ${r.cols} colunas x ${r.rows} linhas (grade alinhada)`,
+        text: `Tabela ${r.cols} colunas x ${r.rows} linhas (${r.via === "bordas" ? "bordas desenhadas no PDF" : "grade alinhada"})`,
         bbox: r.bbox,
         withinPage: true,
         overlaps: [],
@@ -521,10 +645,10 @@ export async function analyzePdf(pdfPath: string): Promise<PhysicalAnalysis> {
       blankPages: blankPages.length > 0 ? "failed" : "passed",
       limitations: [
         "Imagens detectadas via opList (paintImageXObject/paintInlineImageXObject/paintImageMaskXObject) com bbox do CTM — contagem real por página (imagesByPage); imagens em máscara são sinalizadas (maskedImages).",
-        "Tabelas detectadas por grade de colunas alinhadas (colunas persistentes em >= 3 linhas com >= 2 colunas) — contagem por página em tablesByPage; a validação semântica de w:tblHeader é feita no nível OOXML (ooxml-checks).",
+        "Tabelas detectadas por grade de colunas alinhadas (colunas persistentes em >= 3 linhas com >= 2 colunas) COMPLEMENTADA por bordas desenhadas: o Word exporta bordas de célula como retângulos finos preenchidos (re + eoFill) — o detector de bordas recupera grids com >= 2 colunas e >= 2 linhas a partir das posições x/y consistentes, cobrindo tabelas de 2 linhas (header + 1 linha) que a grade de texto exige >= 3 linhas. Contagem por página em tablesByPage; a validação semântica de w:tblHeader é feita no nível OOXML (ooxml-checks).",
         "Equações OMML detectadas no PDF pelos glifos matemáticos Unicode que o Word emite (alfanuméricos U+1D400–U+1D7FF, operadores, √, ∫, ∑ etc.) — contagem por página em equationsByPage; a estrutura OMML (m:f, m:rad, m:sSup) é validada no OOXML (validate-omml).",
         "Falsos positivos possíveis: linhas de referência longas no rodapé podem ser classificadas como footnote; 'Fonte:' no corpo pode ser contado como table-source; caracteres matemáticos isolados no texto corrido (ex.: '±' em texto) podem ser contados como equation.",
-        "Falsos negativos possíveis: tabelas cujas linhas tenham < 2 colunas persistentes em 3+ linhas não são detectadas; equações com símbolos fora dos ranges mapeados não são contadas.",
+        "Falsos negativos possíveis: tabelas SEM bordas (grade só de texto) com < 2 colunas persistentes em 3+ linhas não são detectadas pela grade, e tabelas com borda mais larga que 2.5pt ou células menores que 30pt escapam do detector de bordas; equações com símbolos fora dos ranges mapeados não são contadas.",
       ],
     },
     summary: {

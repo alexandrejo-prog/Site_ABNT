@@ -105,6 +105,9 @@ export default function AcademicTiptapEditor({
       case "reference":
         chain.insertContent("[REF] ").run();
         break;
+      case "equation":
+        chain.insertContent("[EQ] \\frac{}{}").run();
+        break;
       case "bulletList":
         chain.toggleBulletList().run();
         break;

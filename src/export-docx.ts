@@ -362,7 +362,42 @@ export function parseEditorContent(editorText: string): EditorBlock[] {
     blocks.push({ type: "paragraph", text: trimmed });
   }
 
-  return blocks;
+  return numberEquationsInBlocks(blocks);
+}
+
+/**
+ * Numeração automática de equações por seção (Manual UFLA §3.2.8): equações
+ * `[EQ]` sem número explícito `(n.n)` recebem `(seção.seq)` — a seção é o
+ * número do último título primário (`# 1 Introdução` → "1"); sem seção
+ * numerada, a sequência é simples `(1), (2)...`. Aplica-se a TODAS as linhas de
+ * equação (inclusive as com OMML re-injetado da importação), e o número é
+ * extraído pelo renderizador a partir do fim do texto — preview e DOCX
+ * compartilham o mesmo resultado (parseEditorContent é a fonte única).
+ */
+export function numberEquationsInBlocks(blocks: EditorBlock[]): EditorBlock[] {
+  let sectionNumber = "";
+  let sectionOrdinal = 0;
+  let eqIndex = 0;
+  return blocks.map((block) => {
+    if (block.type === "heading1") {
+      sectionOrdinal += 1;
+      const num = block.text.match(/^(\d+(?:\.\d+)*)/);
+      sectionNumber = num ? num[1] : String(sectionOrdinal);
+      eqIndex = 0;
+      return block;
+    }
+    if (block.type === "heading2" || block.type === "heading3") return block;
+    if (block.type === "equation") {
+      const hasNumber = /\s*\(\d+(?:\.\d+)?\)\s*$/.test(block.text.trim());
+      if (!hasNumber) {
+        eqIndex += 1;
+        const number = sectionNumber ? `${sectionNumber}.${eqIndex}` : String(eqIndex);
+        return { ...block, text: `${block.text.replace(/\s+$/u, "")} (${number})` };
+      }
+      return block;
+    }
+    return block;
+  });
 }
 
 function plainRun(text: string, size = BODY_SIZE): TextRun {

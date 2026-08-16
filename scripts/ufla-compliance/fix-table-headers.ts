@@ -163,7 +163,7 @@ export async function fixTableHeadersFromBlob(blob: Blob): Promise<{ blob: Blob;
 
   zip.file("word/document.xml", fixedXml);
   const outputBuffer = await zip.generateAsync({ type: "nodebuffer" });
-  const fixedBlob = new Blob([outputBuffer], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+  const fixedBlob = new Blob([new Uint8Array(outputBuffer)], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
 
   return { blob: fixedBlob, fixes };
 }

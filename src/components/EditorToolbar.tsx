@@ -67,6 +67,7 @@ export default function EditorToolbar({ editorMode, setEditorMode, isTiptapEdito
             <ToolButton title="Título 2" glyph="T2" onClick={() => runEditorAction("heading2", () => applyBlockStyle("## "))} />
             <ToolButton title="Citação" glyph="❝" onClick={() => runEditorAction("blockquote", () => applyBlockStyle("> "))} />
             <ToolButton title="Ref. ABNT" glyph="Ref" tooltip="Marca o parágrafo como referência bibliográfica para a seção REFERÊNCIAS do DOCX." onClick={() => runEditorAction("reference", () => applyBlockStyle("[REF] "))} />
+            <ToolButton title="Equação" glyph="ƒx" tooltip="Insere equação [EQ] no cursor — LaTeX: \\frac{a}{b}, \\sqrt[3]{x}, x^2, x_i. Numeração (seção.seq) automática no DOCX e no preview (Manual UFLA §3.2.8)." onClick={() => runEditorAction("equation", () => applyBlockStyle("[EQ] " ))} />
             <ToolButton title="Nota de rodapé" glyph="¹" tooltip="Insere chamada [^N] no cursor e a definição [^N]: ao fim do corpo (Manual UFLA §21)." onClick={() => runEditorAction("footnote", () => insertFootnote(editorRef, handleEditorInput))} />
           </div></div>
           <div className="tiptap-toolbar-group"><span className="tiptap-toolbar-label">Listas</span><div className="tiptap-toolbar-row">
@@ -95,6 +96,7 @@ export default function EditorToolbar({ editorMode, setEditorMode, isTiptapEdito
             <ToolButton title="Título 2" glyph="T2" onClick={() => runEditorAction("heading2", () => applyBlockStyle("## "))} />
             <ToolButton title="Citação longa" glyph="❝" onClick={() => runEditorAction("blockquote", () => applyBlockStyle("> "))} />
             <ToolButton title="Marcar como referência bibliográfica" glyph="Ref. ABNT" className="tool-reference" tooltip="Marca o parágrafo como referência bibliográfica para a seção REFERÊNCIAS do DOCX." onClick={() => runEditorAction("reference", () => applyBlockStyle("[REF] "))} />
+            <ToolButton title="Equação" glyph="ƒx" tooltip="Marca o parágrafo como equação [EQ] — LaTeX: \\frac{a}{b}, \\sqrt[3]{x}, x^2, x_i. Numeração (seção.seq) automática no DOCX e no preview (Manual UFLA §3.2.8)." onClick={() => runEditorAction("equation", () => applyBlockStyle("[EQ] " ))} />
           </div><span className="word-tool-group-label">Estrutura</span></div>
           <div className="word-tool-group" aria-label="Fonte e tamanho"><div className="word-tool-row">
             <FontSelector title="Fonte padrão UFLA/ABNT: Times New Roman (definida no DOCX)">Times New Roman</FontSelector>

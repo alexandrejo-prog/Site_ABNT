@@ -7,6 +7,7 @@ import {
   isUflaCollectionWork,
 } from "./ufla-rules";
 import { validateReferencesText } from "./references-validator";
+import { hasCatalogCardContent, hasCutterNumber } from "./catalog-card";
 import { ACADEMIC_PRODUCTION_INITIAL_SUPPORT_NOTICE, academicProductionTypeById } from "./academic-production-types";
 import {
   detectAbstractTopicConflict,
@@ -702,7 +703,30 @@ if (!hasValue(fields.introducao) && !isCpgWork(fields.workType) && !simpleArticl
   issues.push(...validateShortCitation(editorText));
   if (hasValue(fields.imageWarnings)) issues.push({ severity: "warning", code: "imported-image-warning", message: fields.imageWarnings, what: "Imagens foram detectadas no arquivo original.", why: "A importacao preserva imagens quando os bytes estao acessiveis; quando isso nao e possivel, a imagem vira alerta revisavel, nao texto do trabalho.", action: "Confira imagens importadas, reinsira manualmente as ausentes e revise legendas e fontes." });
   if (hasValue(fields.anexos) && /\[Imagem detectada:/i.test(fields.anexos)) issues.push({ severity: "warning", code: "annex-image-partial", message: "Há imagem detectada em anexos; confira posição, qualidade e legenda antes da versão final.", what: "Imagens foram detectadas na seção de anexos.", why: "Anexos com imagens exigem verificação de legenda, fonte e qualidade.", action: "Revise a seção de anexos no DOCX gerado." });
+  addCatalogCardIssues(fields, issues);
   return issues;
+}
+
+function addCatalogCardIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
+  const needsCard = fields.workType === "monografia" || fields.workType === "dissertacao" || fields.workType === "tese";
+  if (!needsCard) return;
+  const content = fields.fichaCatalografica?.trim() ?? "";
+  if (!content) return; // ausência já é coberta pelas pendências de versão final
+  // Ficha em TEXTO com conteúdo real mas sem número de Cutter/CDU → bloqueia a
+  // versão final: toda ficha oficial da Biblioteca Universitária da UFLA traz o
+  // código de Cutter (ex.: S586f) — ausência indica cópia parcial ou texto não
+  // oficial. Ficha em IMAGEM (upload) não é validável por texto e não dispara.
+  if (hasCatalogCardContent(content) && !hasCutterNumber(content)) {
+    issues.push({
+      severity: "error",
+      code: "ficha-cutter-missing",
+      fieldKey: "fichaCatalografica",
+      message: "A ficha catalográfica em texto não contém número de Cutter (ex.: S586f) nem classificação CDU — confira se a ficha oficial da Biblioteca foi colada integralmente.",
+      what: "O conteúdo da ficha está presente, mas sem o código de classificação que toda ficha oficial traz.",
+      why: "A ficha catalográfica oficial inclui o número de Cutter e a classificação; a ausência indica cópia parcial ou texto não oficial.",
+      action: "Substitua o texto pela ficha oficial completa ou anexe a imagem da ficha oficial (upload na seção pré-textuais).",
+    });
+  }
 }
 
 export function hasBlockingErrors(issues: ValidationIssue[]): boolean {

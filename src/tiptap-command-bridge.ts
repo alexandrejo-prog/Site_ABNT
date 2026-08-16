@@ -8,6 +8,7 @@
   | "heading3"
   | "blockquote"
   | "reference"
+  | "equation"
   | "bulletList"
   | "orderedList"
   | "alignLeft"

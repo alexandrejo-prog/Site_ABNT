@@ -4,18 +4,19 @@
 > Conformidade completa: `artifacts/ufla-compliance/report.md` (canônico).
 
 ## Última Atualização
-- Data: 2026-08-15
-- Hora: ~19:50 (GOVERNANCE ROADMAP: física PDF nos 15 tipos do gate; e2e Playwright; Lighthouse; CI com axe + ufla:audit; `perTypePhysicalGate`)
+- Data: 2026-08-16
+- Hora: ~07:30 (editor de equações com numeração por seção; Cutter bloqueante no app; tabelas de 2 linhas por bordas desenhadas no PDF; typecheck de scripts no CI)
 - Branch: `feat/ufla-render-validation`
-- Evidência: `npm run ufla:audit` completo — lint + verify + regenerate (Word COM + PDF físico + 8 gates) all passed; resumoStatus 48/48 covered, 0 partial, 0 not-covered; `npm run e2e` (Playwright, fluxo real do app) passed; `npm run ufla:lh` (Lighthouse: a11y 100, performance 86, best-practices 92)
+- Evidência: `npm run ufla:audit` completo — lint + typecheck:scripts + regenerate (Word COM + PDF físico + 10 gates) all passed; overall=passed (FULL COMPLIANCE GATE APROVADO); `npx tsx ci-checks.ts` PASSED (18 formatos × 15 tipos + frescor estrito); `npm run e2e` 13/13 passed; lint 0/0
 
 ## Suíte de Testes
-- Passed: 1589
+- Passed: 1643
 - Failed: 0
 - Skipped: 10
-- Arquivos: 202
+- Arquivos: 207
 - Build: OK (tsc + vite)
-- tsc --noEmit: 0 erros (inclui scripts/ufla-compliance via alias @scripts)
+- tsc --noEmit: 0 erros (src + tests)
+- typecheck:scripts: 0 erros (tsconfig.scripts.json checa scripts/ufla-compliance — antes fora do include e só parcialmente checado por imports de testes)
 - lint: 0 erros, 0 warnings
 
 ## Gates (scripts/ufla-compliance)
@@ -78,6 +79,12 @@
 23q. [x] **Assistência 'Acesso em:' no editor de referências (NBR 6023)** — com o `reference-access-missing` bloqueante (23m), o editor no modo referências agora detecta online references sem data de acesso (`countOnlineReferencesMissingAccessDate`) e exibe uma barra de sugestão: "Inserir 'Acesso em: <hoje>' em N referência(s)" aplica `appendAccessDatesToOnlineReferences` (anexa "Acesso em: d mmm. aaaa" ao fim de cada referência online sem acesso, preservando as demais linhas) — resolve o bloqueio sem digitação manual. 4 testes novos (contagem, anexo, formato NBR 6023 da data, casos vazios).
 23r. [x] **E2E dos 8 formatos da Coleção Produção Acadêmica no navegador** — `app-workflow.spec.ts` passou de 6 para **13 fluxos**: além dos 6 anteriores, patente, revisão sistemática, estudo de caso, software, cultivar, relatório de estágio e proposta de intervenção — cada um selecionado no UI, com requiredFields PRÓPRIOS preenchidos (objetivoGeral, justificativa, cronograma, referencialTeórico...), corpo no editor, download verificado (slug do título quando o rótulo excede o limite) e preview sem erros. Para isso, **corrigido um gap de UX real**: `visibleField` escondia os requiredFields da Coleção (objetivoGeral/justificativa/cronograma ficavam ocultos para esses tipos — o usuário não conseguia satisfazer a validação `ufla-collection-*-required`); agora os requiredFields do formato selecionado são sempre editáveis no formulário. **13/13 passed.**
 
+23s. [x] **Editor de equações: botão na toolbar + numeração automática por seção (Manual §3.2.8)** — a toolbar ganhou o botão **ƒx Equação** (`insertEquation` no bridge; sem seleção insere o molde `[EQ] \frac{a}{b}`, com seleção usa `[EQ] {seleção}`) e o `parseEditorContent` agora NUMERA cada bloco de equação como **(seção.eq)** — (2.1), (2.2)... por seção textual — no PREVIEW e no DOCX (fonte única; o número é texto do parágrafo à direita da equação, não OMML). O Manual UFLA §3.2.8 descreve a numeração das equações; antes só existia o `parseLatexMath` (23j) sem UI nem numeração. 5 testes novos (molde do botão, numeração por seção no OOXML, renumeração ao mudar de seção, preview e DOCX consistentes).
+23t. [x] **Cutter bloqueante no app (ficha catalográfica)** — o `hasCutterNumber` de `catalog-card.ts` (23k) agora é ligado ao `validateWork`: quando o tipo exige ficha catalográfica (monografia/dissertação/tese — `requiresCatalogCard`) e a ficha está em TEXTO (sem os marcadores de imagem preservada), a AUSÊNCIA de número de Cutter (`[A-Z]\d{1,4}[a-z]?` ou CDU) vira **erro** `catalog-card-cutter-missing` que bloqueia a versão final (rascunho continua liberado via "Gerar mesmo com pendências") — o Cutter é o identificador da ficha oficial (padrão Cutter-Sanborn) e o Manual UFLA §3.1.3 exige a ficha completa. 5 testes novos (erro com ficha em texto sem Cutter; Cutter presente não bloqueia; ficha por imagem não bloqueia; CDU aceita; caso de dissertação).
+
+23u. [x] **Tabelas de 2 linhas no PDF: detecção complementar por BORDAS DESENHADAS (fecha os falsos negativos da grade de texto)** — descoberta empírica: o Word exporta cada aresta de célula de tabela como um RETÂNGULO FINO PREENCHIDO (`re` em constructPath seguido de `eoFill` standalone — ~2·C·R retângulos horizontais e ~2·C·R verticais por grid C×R, com posições x/y consistentes; os clips de texto do Word também são `re` mas seguidos de `eoClip`, não contam). `detectBorderedTableRegions` (opList + CTM manual com save/restore — o `Util.transform` do pdf.js retorna NaN sem DOMMatrix) recupera o grid por colunas/linhas das linhas de borda (≥2 colunas × ≥2 linhas, H≥4 e V≥4) e é MESCLADO com a grade de texto (interseção 30%): a detecção passou de ~7 páginas com tabelas para **40 páginas** — tabelas de questionário (8 col × 16 linhas), Likert, lista de abreviaturas e as de 2 linhas (header + 1 linha) agora são detectadas fisicamente, sem falsos positivos nas páginas de texto corrido (19/50/51/225/232 continuam limpas). 5 testes novos do detector (grid 2×2, clips não contam, caixa única não conta, poucas linhas não conta, CTM com save/restore) + artefato real atualizado.
+23v. [x] **Typecheck de scripts/ufla-compliance no CI (tsconfig próprio + npm script + wiring)** — o `tsconfig.json` principal inclui só src+tests: scripts standalone escapavam da checagem (erros de tipo latentes — implicit any, `TextMarkedContent` sem transform, Buffer→BlobPart, import.meta.env, JSZipObject sem size — só apareciam quando um teste importava o arquivo). Criado `tsconfig.scripts.json` (extends base, `types: [node, vite/client]`, noUnused* relaxados para scripts operacionais; exclui `analyze-word.ts` que é PowerShell com extensão .ts), script `typecheck:scripts` e passo **TYPECHECK (scripts/ufla-compliance)** no `ufla:audit` entre LINT e REGENERATE. Todos os erros latentes corrigidos (7 arquivos).
+
 ## Resolução UFLA-AMBIGUOUS-1
 - **Decisão (DECISION-010, complementa DECISION_003):** contagem contínua a partir da folha de rosto (folha de rosto = 1); pré-textuais contadas sem número visível; numeração visível inicia na Introdução com o **valor contado** (pré-textuais + 1) — **nunca reinício em 1**; "(1, 2, 3, ...)" do Manual = sistema de numeração arábico, não reinício
 - **Base:** Manual UFLA § paginação; ABNT NBR 14724; evidência do documento real (pgNumType start=13 ↔ PDF físico folha 18 = 13)
@@ -88,14 +95,14 @@
 2. FATIA 3: Rodapés + paginação (FINDING-FOOTER-001..008; UFLA-AMBIGUOUS-1) — CONCLUÍDA
 3. FATIA 6: Regenerar artefatos oficiais e declarar conformidade — **CONCLUÍDA** (FULL COMPLIANCE GATE APROVADO, report.md declara CONFORMIDADE UFLA APROVADA)
 
-## Evidências (2026-08-15 17:35)
+## Evidências (2026-08-16 ~07:30)
 - DOCX: `artifacts/ufla-compliance/normalized-dissertacao.docx`
-- PDF: `artifacts/ufla-compliance/rendered/normalized-dissertacao.pdf` (236 p.)
+- PDF: `artifacts/ufla-compliance/rendered/normalized-dissertacao.pdf` (238 p., re-renderizado na auditoria)
 - OOXML: 35 tabelas (w:tblHeader semântico nas declaráveis), 39 bookmarks/31 PAGEREF, 0 alvos ausentes, 0 mojibake
-- Física PDF: 0 overlaps/cutoffs/blank; **6 imagens (opList/CTM) e 37 regiões de tabela (grade de colunas) detectadas**
+- Física PDF: 0 overlaps/cutoffs/blank; **11 imagens (opList/CTM) e 45 regiões de tabela em 40 páginas (grade de texto + BORDAS desenhadas re+eoFill — tabelas de 2 linhas/questiónário incluídas); equações 0 no doc de referência (física OMML validada na fixture eq-fixture)**
 - Report: `artifacts/ufla-compliance/report.md` (canônico, mesma rodada; declara CONFORMIDADE UFLA APROVADA)
-- Gates: `artifacts/ufla-audit/gates.json` (overall=passed; meta `generatedAt` 2026-08-15T17:35Z)
-- Resumo status: 48 itens (33 covered, 8 partial, 7 not-covered)
+- Gates: `artifacts/ufla-audit/gates.json` (overall=passed; 10/10 gates; meta `generatedAt` da rodada de 2026-08-16)
+- Testes: 1643 passed, 0 failed, 10 skipped (207 arquivos); e2e 13/13; ci-checks PASSED
 
 ## Regras para IAs
 1. Nunca editar números de evidência à mão: rodar `scripts/ufla-compliance/regenerate-official-artifacts.ts` (computa tudo da mesma rodada).

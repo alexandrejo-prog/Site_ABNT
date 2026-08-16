@@ -37,5 +37,5 @@ try {
   });
   console.log(result.trim());
 } catch (error) {
-  console.error("Render failed:", error.message);
+  console.error("Render failed:", error instanceof Error ? error.message : String(error));
 }

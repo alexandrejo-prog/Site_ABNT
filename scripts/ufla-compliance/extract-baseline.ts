@@ -174,7 +174,8 @@ for (const p of coverParas) {
 
 const parts = Object.keys(zip.files).map((name) => ({
   name,
-  size: zip.files[name]?.size || 0,
+  // JSZipObject não expõe `size` no tipo público — usa o tamanho descomprimido interno
+  size: (zip.files[name] as any)?._data?.uncompressedSize ?? 0,
 }));
 
 const bodyOrder = sections.map((s) => {

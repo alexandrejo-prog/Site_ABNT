@@ -111,10 +111,10 @@ export function monografiaFixture(): UflaFixture {
   const importedImages: ImportedDocumentImage[] = [
     {
       id: "img-repositorio",
-      marker: "[[Imagem importada preservada: img-repositorio]]",
-      altText: "Captura de tela do repositório institucional",
       width: 500,
       height: 300,
+      position: 0,
+      status: "preserved",
       data: new Uint8Array(
         Buffer.from(
           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",

@@ -96,6 +96,8 @@ async function analyzePdfFooter(pdfPath: string, footerThreshold: number = 0.85)
     const textContent = await page.getTextContent();
     
     for (const item of textContent.items) {
+      // TextMarkedContent não tem geometria/texto — só TextItem interessa
+      if (!("str" in item)) continue;
       const tx = item.transform[4];
       const ty = item.transform[5];
       const w = item.width;

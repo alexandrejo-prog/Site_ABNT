@@ -77,7 +77,7 @@ const TYPES: TypeCase[] = [
       ["course", "Bacharelado em Biologia"],
       ["advisor", "Prof. Dr. Joao Silva"],
       ["introducao", "Texto introdutório da monografia."],
-      ["fichaCatalografica", "Ficha catalográfica elaborada pela Biblioteca Universitária da UFLA."],
+      ["fichaCatalografica", "Ficha catalográfica elaborada pela Biblioteca Universitária da UFLA. S586f Silva, M. A. Qualidade do café. Lavras: UFLA, 2024."],
     ],
     editorText: "# 1 Introdução\n\nCorpo da monografia.\n\n# 2 Desenvolvimento\n\nSegunda seção com conteúdo.",
     previewContains: ["Ficha catalográfica", "Bacharelado em Biologia"],

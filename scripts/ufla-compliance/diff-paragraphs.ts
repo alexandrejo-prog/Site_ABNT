@@ -53,7 +53,7 @@ const outputParas = (outputImport.editorText || "")
 const outputRefsNorm = (outputImport.fields?.referencias || "")
   .split("\n").map((l: string) => l.trim()).filter(Boolean)
   .map(normKey)
-  .flatMap((k) => {
+  .flatMap((k: string) => {
     // acrescenta pedaços normalizados para casar continuações/linhas curtas
     return [k];
   });
@@ -86,7 +86,7 @@ function firstAuthorKey(text: string): string {
 }
 
 const outputNorm = new Map<string, number[]>();
-outputParas.forEach((p, i) => {
+outputParas.forEach((p: string, i: number) => {
   const k = normKey(p);
   if (!k) return;
   if (!outputNorm.has(k)) outputNorm.set(k, []);
@@ -153,7 +153,7 @@ function assignLost(
   if (para.trim().length >= 3) {
     // 5.1) Bloco do autor (início da referência).
     const authorKey = firstAuthorKey(para);
-    if (authorKey && outputRefAuthorKeys.some((k) => k.startsWith(authorKey.slice(0, 12)))) {
+    if (authorKey && outputRefAuthorKeys.some((k: string) => k.startsWith(authorKey.slice(0, 12)))) {
       return { status: "normalized", candidates: [], reason: "referencia_migrada_para_campo_referencias" };
     }
     // 5.2) Forma sem pontuação/acentos/excesso (título, ano, "In:", URL, página) contida
@@ -235,7 +235,7 @@ for (let i = 0; i < inputParas.length; i++) {
 const matchedOutput = new Set<number>();
 for (const r of rows) for (const c of r.outputCandidates) if (c !== undefined) matchedOutput.add(c as number);
 const newOutputs: Array<{ outputIndex: number; reason: string; sample: string }> = [];
-outputParas.forEach((p, i) => {
+outputParas.forEach((p: string, i: number) => {
   if (matchedOutput.has(i)) return;
   if (hasMojibake(p)) {
     newOutputs.push({ outputIndex: i, reason: "mojibake_na_saida", sample: p.slice(0, 80) });
