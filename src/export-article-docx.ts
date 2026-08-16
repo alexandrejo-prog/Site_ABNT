@@ -19,7 +19,7 @@ import { DOCUMENT_STYLES } from "./docx-styles";
 import type { ImportedDocumentImage } from "./imported-images";
 import { UFLA_RULES, cmToTwip } from "./ufla-rules";
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
-import { cleanMojibakeText, clearRawOmmlRegistry, longQuoteParagraph, rawOmmlMarkerParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, tabbedTableBlock } from "./docx-render-core";
+import { cleanMojibakeText, longQuoteParagraph, rawOmmlMarkerParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, textRunsFromMarkup as coreTextRunsFromMarkup, tabbedTableBlock } from "./docx-render-core";
 
 const BLACK = "000000";
 const BODY_SIZE = UFLA_RULES.typography.bodyFontSizePt * 2;
@@ -362,6 +362,7 @@ function createArticleDocument(input: DocxGenerationInput): Document {
 }
 
 export async function generateArticleDocxBlob(input: DocxGenerationInput): Promise<Blob> {
-  clearRawOmmlRegistry();
+  // SEM clearRawOmmlRegistry(): marcadores OMML únicos por geração, consumidos
+  // pelo patch pós-Packer (A4 do checklist-14).
   return Packer.toBlob(createArticleDocument(input));
 }

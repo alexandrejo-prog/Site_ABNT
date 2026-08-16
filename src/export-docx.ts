@@ -33,7 +33,7 @@ import { getWorkTypeRequirements } from "./work-type-requirements";
 import { normalizeReferences, type NormalizedReference, type ReferenceRun } from "./references-normalizer";
 import { buildFlowingImpactText } from "./impact-indicators";
 import { normalizeForDetection } from "./word-structure-extractor";
-import { cleanMojibakeText, clearRawOmmlRegistry, clearXrefRegistry, detectCaption, detectTabbedTableBlock, OMML_CONTENT_TOKEN_PATTERN, ommlContentTokenDecode, rawOmmlMarkerParagraph, registerXrefResolver, resolveXrefTarget, sectionBookmarkId, sourceParagraph, tabbedTableBlock, tokenizeMarkup, type CaptionKind, type XrefResolver } from "./docx-render-core";
+import { cleanMojibakeText, clearXrefRegistry, detectCaption, detectTabbedTableBlock, OMML_CONTENT_TOKEN_PATTERN, ommlContentTokenDecode, rawOmmlMarkerParagraph, registerXrefResolver, resolveXrefTarget, sectionBookmarkId, sourceParagraph, tabbedTableBlock, tokenizeMarkup, type CaptionKind, type XrefResolver } from "./docx-render-core";
 import { ImportedDocumentImage, IMPORTED_IMAGE_MARKER_PATTERN } from "./imported-images";
 import { ImportedTable, IMPORTED_TABLE_MARKER_PATTERN, buildStructuredTextFromTable } from "./imported-tables";
 
@@ -2980,7 +2980,9 @@ export async function loadDefaultLogoAsset(): Promise<DocxLogoAsset | undefined>
 }
 
 export async function generateDocxBlob(input: DocxGenerationInput): Promise<Blob> {
-  clearRawOmmlRegistry();
+  // SEM clearRawOmmlRegistry() aqui: os marcadores OMML usam IDs únicos e são
+  // consumidos pelo patch pós-Packer. Limpar no início limparia os registros de
+  // outra geração em voo — corrida em geração paralela (A4 do checklist-14).
   // Todos os formatos da Coleção Produção Acadêmica UFLA são estruturados como
   // artigo (sem capa/folha de rosto/ficha/aprovação) — DOCUMENT_TYPE_MATRIX.
   const isArticleStructured =

@@ -18,7 +18,7 @@ import { isResearchProjectProvisionalText, normalizeKeywordSentence, normalizeRe
 import { normalizeReferences, type ReferenceRun } from "./references-normalizer";
 import { UFLA_RULES, cmToTwip } from "./ufla-rules";
 import { normalizeFieldsForSelectedModel } from "./work-type-field-normalizer";
-import { cleanMojibakeText, clearRawOmmlRegistry, rawOmmlMarkerParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, tabbedTableBlock, textRunsFromMarkup } from "./docx-render-core";
+import { cleanMojibakeText, rawOmmlMarkerParagraph, sourceParagraph, splitParagraphs as coreSplitParagraphs, tabbedTableBlock, textRunsFromMarkup } from "./docx-render-core";
 
 function hasValue(value: string): boolean {
   return value.trim().length > 0;
@@ -440,7 +440,8 @@ function createProjectDocument(input: DocxGenerationInput): Document {
 }
 
 export async function generateResearchProjectDocxBlob(input: DocxGenerationInput): Promise<Blob> {
-  clearRawOmmlRegistry();
+  // SEM clearRawOmmlRegistry(): marcadores OMML únicos por geração, consumidos
+  // pelo patch pós-Packer (A4 do checklist-14).
   const fields = normalizeFieldsForSelectedModel(input.fields);
   const logo = input.logo ?? (await loadDefaultLogoAsset());
   return Packer.toBlob(createProjectDocument({ ...input, fields, logo }));

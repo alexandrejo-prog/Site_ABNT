@@ -1,6 +1,6 @@
 import JSZip from "jszip";
 import { Packer } from "docx";
-import { rawOmmlForMarker } from "./docx-render-core";
+import { rawOmmlDeleteMarker, rawOmmlForMarker } from "./docx-render-core";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const TOC_FIELD_PATTERN = /<w:instrText[^>]*>\s*TOC\b|<w:fldSimple[^>]*w:instr="\s*TOC\b/i;
@@ -59,6 +59,10 @@ function patchRawOmml(xml: string): { xml: string; changed: boolean } {
   const patchedXml = xml.replace(RAW_OMML_RUN_PATTERN, (fullRun, markerId) => {
     const entry = rawOmmlForMarker(markerId);
     if (!entry) return fullRun;
+    // Consome a entrada: cada marcador pertence a UMA geração e é substituído
+    // exatamente uma vez. Deletar no consumo mantém o registry limitado e
+    // impede que uma geração paralela resolva marcadores alheios (A4).
+    rawOmmlDeleteMarker(markerId);
     changed = true;
     // Numeração real como CAMPO SEQ (Manual UFLA §3.2.8): o Word recalcula ao
     // abrir (updateFields=true) e a tabulação à direita alinha o número com a

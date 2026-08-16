@@ -845,11 +845,15 @@ interface RawOmmlEntry {
   seqInstr: string;
 }
 const rawOmmlRegistry = new Map<string, RawOmmlEntry>();
+// Contador global MONOTÔNICO (nunca resetado): IDs de marcador são únicos
+// entre gerações — dois `generateXxxDocxBlob` em paralelo não colidem nem
+// apagam os registros um do outro (A4 do checklist-14).
 let rawOmmlSeq = 0;
 
 export function clearRawOmmlRegistry(): void {
+  // Utilidade de reset (testes/limpeza manual). NÃO reseta rawOmmlSeq:
+  // reutilizar IDs reintroduziria a corrida entre gerações paralelas.
   rawOmmlRegistry.clear();
-  rawOmmlSeq = 0;
 }
 
 export function rawOmmlRegistrySize(): number {
@@ -885,6 +889,11 @@ export function rawOmmlForMarker(markerId: string): RawOmmlEntry | undefined {
   return rawOmmlRegistry.get(markerId);
 }
 
+/** Remove a entrada do marcador após o consumo pelo patch pós-Packer (A4). */
+export function rawOmmlDeleteMarker(markerId: string): void {
+  rawOmmlRegistry.delete(markerId);
+}
+
 /**
  * Codifica o OMML cru num token ASCII seguro para viajar dentro do texto do
  * editor (rascunho). O token é `\uF001OMML:<base64>\uF001`, invisível para o
@@ -897,11 +906,24 @@ export function ommlContentToken(ommlXml: string): string {
   return `\uF001OMML:${btoa(binary)}\uF001`;
 }
 
-/** Decodifica um token `ommlContentToken` de volta para o XML OMML cru. */
+/**
+ * Decodifica um token `ommlContentToken` de volta para o XML OMML cru.
+ * Token editado/corrompido (base64 inválido) NÃO lança: degrada para `""`
+ * e o chamador cai no OMML achatado (m:r/m:t) — export e preview seguem
+ * sem crash (A1 do checklist-14).
+ */
 export function ommlContentTokenDecode(token: string): string {
-  const binary = atob(token);
-  const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
+  try {
+    const binary = atob(token);
+    const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  } catch (error) {
+    console.warn(
+      "Token OMML inválido (base64 corrompido) — equação será emitida como texto achatado.",
+      error,
+    );
+    return "";
+  }
 }
 
 /** Padrão que localiza o token OMML no final de uma linha `[EQ]` do rascunho. */
