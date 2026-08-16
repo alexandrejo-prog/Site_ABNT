@@ -79,7 +79,7 @@ emitindo `<w:tblHeader/>` na exportação.
 
 - Manual UFLA 6ª ed. (2025): NBR 17225/2025 (WCAG 1.3.1 — cabeçalho de tabela)
 - ECMA-376: `<w:tblHeader/>` em `w:trPr`
-- `checkpoint/workslop-assessment.md` (WORKSLOP-001/004)
+- `docs/historico/checkpoint/workslop-assessment.md` (WORKSLOP-001/004)
 
 ## Status
 
