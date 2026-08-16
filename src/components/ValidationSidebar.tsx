@@ -7,8 +7,6 @@ import { type OutputTypeResult } from "../output-type";
 interface ValidationSidebarProps {
   status: string;
   outputType?: OutputTypeResult;
-  generateAnyway: boolean;
-  onToggleGenerateAnyway: (value: boolean) => void;
   onNavigateToField: (fieldKey: string) => void;
   fields: AcademicFields;
   editorText: string;
@@ -29,8 +27,6 @@ function IssueAction({ fieldKey, label, onNavigateToField }: { fieldKey: string 
 export function ValidationSidebar({
   status,
   outputType,
-  generateAnyway,
-  onToggleGenerateAnyway,
   onNavigateToField,
   fields,
   editorText,
@@ -81,10 +77,6 @@ export function ValidationSidebar({
           </ul>
         </div>
       )}
-      <label className="force-generate">
-        <input type="checkbox" checked={generateAnyway} onChange={(event) => onToggleGenerateAnyway(event.target.checked)} />
-        <span>Gerar rascunho mesmo com pendências</span>
-      </label>
       <details className="diagnostic-panel-details">
         <summary>Análise do texto</summary>
         <TextDiagnosticPanel fields={fields} editorText={editorText} />

@@ -116,7 +116,17 @@ export default function MetadataFields({ fields, confidence, updateField, assist
           )}
         </div>
         {LONG_FIELDS.has(key) ? (
-          <textarea id={key} value={(fields as any)[key]} onChange={(e) => updateField(key as any, e.target.value)} rows={rowsForField(key)} />
+          <textarea
+            id={key}
+            value={(fields as any)[key]}
+            onChange={(e) => updateField(key as any, e.target.value)}
+            rows={rowsForField(key)}
+            placeholder={
+              key === "indicadoresImpacto"
+                ? "Este trabalho apresenta impacto social, científico, educacional, ambiental e tecnológico, além do público beneficiado e da aderência a ODS/objetivos institucionais. Edite conforme o seu trabalho — o texto é inserido na página de indicadores de impacto do DOCX."
+                : undefined
+            }
+          />
         ) : key === "program" ? (
           <input id={key} value={(fields as any)[key]} onChange={(e) => updateField(key as any, e.target.value)} list="ufla-ppg-programs" />
         ) : (

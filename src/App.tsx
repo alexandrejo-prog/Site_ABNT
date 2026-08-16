@@ -554,6 +554,10 @@ export default function App() {
           />
           <button className="primary-action" type="button" onClick={triggerValidation}><FileCheck2 size={18} aria-hidden="true" />Validar trabalho</button>
           <button className="primary-action" type="button" onClick={handleOpenPreview}><Eye size={18} aria-hidden="true" />Visualizar</button>
+          <label className="force-generate" title="Gera o DOCX mesmo com pendências (rascunho técnico) — o Word/LibreOffice deve ser usado para conferir o resultado final.">
+            <input type="checkbox" checked={generateAnyway} onChange={(event) => setGenerateAnyway(event.target.checked)} />
+            <span>Gerar rascunho mesmo com pendências</span>
+          </label>
           <button className="primary-action strong" type="button" onClick={() => handleGenerateDocx()} disabled={isGenerating} title="O DOCX é rascunho técnico. Sumário, ficha catalográfica, paginação final e PDF devem ser conferidos no Word/LibreOffice."><FileDown size={18} aria-hidden="true" />{isGenerating ? "Gerando..." : "Gerar DOCX editável"}</button>
         </div>
       </header>
@@ -565,7 +569,7 @@ export default function App() {
           <MetadataFields fields={fields} confidence={confidence} updateField={updateField} assistedMode={assistedMode} setAssistedMode={setAssistedMode} handleBuildDraft={handleBuildDraft} confirmReplaceDraft={confirmReplaceDraft} setConfirmReplaceDraft={setConfirmReplaceDraft} fichaCatalograficaImage={fichaCatalograficaImage} onFichaCatalograficaImageChange={setFichaCatalograficaImage} onFichaCatalograficaImageRemove={() => setFichaCatalograficaImage(null)} />
         </section>
         <EditorSection editorMode={editorMode} setEditorMode={setEditorMode} isTiptapEditorEnabled={isTiptapEditorEnabled} editorRef={editorRef} handleEditorInput={handleEditorInput} runEditorAction={runEditorAction as (cmd: string, fn: () => void) => void} applyBlockStyle={applyBlockStyle} activeEditorText={activeEditorText} updateField={updateField} setEditorText={setEditorText} tiptapCommandSignal={tiptapCommandSignal} adherenceExpanded={adherenceExpanded} setAdherenceExpanded={setAdherenceExpanded} showWelcome={showWelcome} onWelcomeAction={handleWelcomeAction} />
-        <ValidationSidebar status={status} outputType={outputType} generateAnyway={generateAnyway} onToggleGenerateAnyway={setGenerateAnyway} onNavigateToField={handleNavigateToField} fields={fields} editorText={editorText} errors={errors} warnings={warnings} finalPending={finalPending} />
+        <ValidationSidebar status={status} outputType={outputType} onNavigateToField={handleNavigateToField} fields={fields} editorText={editorText} errors={errors} warnings={warnings} finalPending={finalPending} />
       </main>
       {isPreviewOpen && (
         <Suspense fallback={<div className="preview-loading" role="status">Carregando pré-visualização...</div>}>
