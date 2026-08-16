@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { auditFormatsCross } from "./audit-formats-cross";
 import { runPerTypeGates } from "./run-gate-per-type";
 import { runPerTypePhysical } from "./analyze-per-type-pdfs";
-import { runPreviewSnapshotCheck, readCommittedPreviewSnapshot } from "./check-preview-snapshot";
+import { runPreviewSnapshotCheck, readCommittedPreviewSnapshot, validateSnapshotOoxmlCoherence } from "./check-preview-snapshot";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -65,7 +65,9 @@ async function main(): Promise<void> {
 
   // 5) Referência do PDF do Word (previewPdfReferenceGate): sem Word o CI não
   //    re-renderiza — o gate roda na máquina com Word (regenerate). Aqui valida-se
-  //    a COERÊNCIA da referência commitada (páginas × numeração × assinaturas).
+  //    a COERÊNCIA da referência commitada (páginas × numeração × assinaturas) e
+  //    a coerência OOXML↔PDF (pgNumType w:start do DOCX gerado ↔ primeiro número
+  //    visível da referência — DECISION-010).
   const committedSnap = readCommittedPreviewSnapshot();
   const pdfCoherenceFailures: string[] = [];
   if (committedSnap) {
@@ -75,6 +77,8 @@ async function main(): Promise<void> {
         pdfCoherenceFailures.push(`referência PDF de ${id} incoerente: ${t.pdfPages} páginas vs ${t.pdfSignatures?.length} assinaturas / ${t.pdfPageNumbers?.length} numerações.`);
       }
     }
+    const ooxmlCoherence = await validateSnapshotOoxmlCoherence(committedSnap);
+    if (ooxmlCoherence.length > 0) pdfCoherenceFailures.push(...ooxmlCoherence);
   } else {
     pdfCoherenceFailures.push("snapshot de paginação não encontrado — rode o regenerate local com Word para criá-lo.");
   }

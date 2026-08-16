@@ -9,6 +9,7 @@ import {
   comparePdfReference,
   compareSnapshots,
   docxDigestFor,
+  validateSnapshotOoxmlCoherence,
   type PreviewSnapshot,
   type PreviewSnapshotTemplate,
 } from "../../scripts/ufla-compliance/check-preview-snapshot";
@@ -164,6 +165,25 @@ describeWithArtifacts(
       const d = classifyPdfChange(committed, structuredClone(committed));
       expect(d.pdfFailures).toEqual([]);
       expect(d.action).toBe("match");
+    });
+
+    it("coerência OOXML↔PDF: w:start do DOCX coincide com o primeiro número visível da referência (DECISION-010)", async () => {
+      const committed = JSON.parse(readFileSync(SNAPSHOT, "utf8")).templates as PreviewSnapshot;
+      const failures = await validateSnapshotOoxmlCoherence(committed);
+      expect(failures).toEqual([]);
+    });
+
+    it("coerência OOXML↔PDF: detecta numeração visível divergente do w:start", async () => {
+      const committed = JSON.parse(readFileSync(SNAPSHOT, "utf8")).templates as PreviewSnapshot;
+      const broken: PreviewSnapshot = structuredClone(committed);
+      const tpl = broken.monografia as PreviewSnapshotTemplate;
+      // primeiro número VISÍVEL (não-nulo) diferente do w:start=6 do DOCX
+      tpl.pdfPageNumbers = [...(tpl.pdfPageNumbers ?? [])];
+      const firstVisible = tpl.pdfPageNumbers.findIndex((n) => n !== null);
+      expect(firstVisible, "monografia deve ter numeração visível na referência").toBeGreaterThanOrEqual(0);
+      tpl.pdfPageNumbers[firstVisible] = 42;
+      const failures = await validateSnapshotOoxmlCoherence(broken);
+      expect(failures.some((f) => f.includes("Coerência OOXML↔PDF monografia") && f.includes("w:start=6"))).toBe(true);
     });
   },
 );

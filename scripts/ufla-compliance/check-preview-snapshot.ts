@@ -249,6 +249,43 @@ export function readCommittedPreviewSnapshot(): PreviewSnapshot | null {
   }
 }
 
+/**
+ * Coerência OOXML↔PDF da referência commitada (Word-free): gera o DOCX de cada
+ * template e valida que o `w:pgNumType w:start` da seção textual (DECISION-010:
+ * folha de rosto=1, numeração visível inicia com o valor contado) coincide com o
+ * PRIMEIRO número visível registrado na referência do PDF do Word. Se o código
+ * mudou o w:start (ou o start foi removido) sem atualizar o snapshot, falha.
+ */
+export async function validateSnapshotOoxmlCoherence(snapshot: PreviewSnapshot): Promise<string[]> {
+  const failures: string[] = [];
+  for (const tpl of TEMPLATES) {
+    const entry = snapshot[tpl.id];
+    if (!entry || entry.pdfPageNumbers == null) continue; // sem referência do Word (CI/primeira rodada)
+    const visible = entry.pdfPageNumbers.filter((n): n is number => n !== null);
+    let start: number | null = null;
+    try {
+      const blob = await tpl.generate(tpl.input);
+      const zip = new AdmZip(Buffer.from(await blob.arrayBuffer()));
+      const xml = zip.readAsText("word/document.xml");
+      for (const m of xml.matchAll(/<w:pgNumType[^>]*w:start="(\d+)"/g)) {
+        start = parseInt(m[1], 10);
+        break;
+      }
+    } catch {
+      start = null;
+    }
+    if (start === null) continue; // sem declaração explícita — coberto pelo digest
+    if (visible.length === 0) continue;
+    const firstVisible = visible[0];
+    if (firstVisible !== start) {
+      failures.push(
+        `Coerência OOXML↔PDF ${tpl.id}: pgNumType w:start=${start} no DOCX gerado, mas a referência do PDF mostra o primeiro número visível ${firstVisible} — o snapshot está desatualizado ou o w:start regrediu (DECISION-010).`, 
+      );
+    }
+  }
+  return failures;
+}
+
 /** Valida o preview atual contra o snapshot commitado. Sem Word: só o lado preview. */
 export async function runPreviewSnapshotCheck(): Promise<{ passed: boolean; failures: string[] }> {
   if (!existsSync(SNAPSHOT_PATH)) {

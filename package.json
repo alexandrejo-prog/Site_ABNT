@@ -16,6 +16,8 @@
     "acceptance:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run-docx-acceptance.ps1",
     "skill:validate": "npx tsx skills/ufla-docx-compliance/src/index.ts",
     "ufla:audit": "npx tsx scripts/ufla-compliance/run-ufla-audit.ts",
+    "ufla:pdfref": "npx tsx scripts/ufla-compliance/check-pdf-reference.ts",
+    "ufla:pdfref:refresh": "npx tsx scripts/ufla-compliance/check-pdf-reference.ts --refresh",
     "ufla:lh": "node scripts/audit-lighthouse.mjs",
     "e2e": "playwright test",
     "e2e:install": "playwright install chromium",

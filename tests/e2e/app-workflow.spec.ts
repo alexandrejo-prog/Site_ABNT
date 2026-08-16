@@ -2,12 +2,15 @@ import { expect, test } from "@playwright/test";
 
 /**
  * E2E (governance-roadmap): fluxo real do app no navegador, parametrizado
- * pelos tipos de trabalho que o sistema exporta:
+ * pelos tipos de trabalho que o sistema exporta — os 6 templates do diff
+ * preview↔DOCX mais o artigo da Coleção:
  *
  *   1. Artigo científico UFLA (Coleção Produção Acadêmica)
  *   2. Monografia (com ficha catalográfica)
- *   3. Resumo expandido CPG
- *   4. Projeto de pesquisa (campos próprios: problema, objetivo, cronograma)
+ *   3. Dissertação (rascunho editável — programa PPG + orientador)
+ *   4. Tese (rascunho editável — programa PPG + orientador)
+ *   5. Resumo expandido CPG
+ *   6. Projeto de pesquisa (campos próprios: problema, objetivo, cronograma)
  *
  * Para cada tipo: seleciona no UI, preenche os requiredFields próprios,
  * escreve o corpo no editor, gera o DOCX (download verificado pelo nome) e
@@ -68,6 +71,38 @@ const TYPES: TypeCase[] = [
     ],
     editorText: "# 1 Introdução\n\nCorpo da monografia.\n\n# 2 Desenvolvimento\n\nSegunda seção com conteúdo.",
     previewContains: ["Ficha catalográfica", "Bacharelado em Biologia"],
+  },
+  {
+    workType: "dissertacao",
+    filenamePrefix: "dissertacao",
+    fields: [
+      ["author", "Renata Oliveira"],
+      ["title", "Manejo da irrigação na cafeicultura do sul de Minas"],
+      ["resumo", "Resumo da dissertação sobre manejo da irrigação."],
+      ["palavrasChave", "irrigação; café; manejo"],
+      ["referencias", "OLIVEIRA, R. Manejo da irrigação. Lavras: UFLA, 2024."],
+      ["program", "Programa de Pós-Graduação em Agronomia/Fitotecnia"],
+      ["advisor", "Prof. Dr. Ricardo Alves"],
+      ["introducao", "Texto introdutório da dissertação."],
+    ],
+    editorText: "# 1 Introdução\n\nCorpo da dissertação.\n\n# 2 Revisão de literatura\n\nRevisão sobre manejo da irrigação.",
+    previewContains: ["Dissertação", "Prof. Dr. Ricardo Alves"],
+  },
+  {
+    workType: "tese",
+    filenamePrefix: "tese",
+    fields: [
+      ["author", "Paulo Henrique Costa"],
+      ["title", "Modelagem climática aplicada à cafeicultura do Cerrado Mineiro"],
+      ["resumo", "Resumo da tese sobre modelagem climática."],
+      ["palavrasChave", "clima; café; modelagem"],
+      ["referencias", "COSTA, P. H. Modelagem climática. Lavras: UFLA, 2025."],
+      ["program", "Programa de Pós-Graduação em Agronomia/Fitotecnia"],
+      ["advisor", "Prof. Dr. Marina Ferreira"],
+      ["introducao", "Texto introdutório da tese."],
+    ],
+    editorText: "# 1 Introdução\n\nCorpo da tese.\n\n# 2 Material e métodos\n\nMétodos da modelagem climática.",
+    previewContains: ["Tese", "Prof. Dr. Marina Ferreira"],
   },
   {
     workType: "resumo_expandido_cpg",
