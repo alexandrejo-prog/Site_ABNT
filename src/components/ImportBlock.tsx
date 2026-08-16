@@ -1,6 +1,5 @@
 import { forwardRef, useImperativeHandle, useRef, useState, type ChangeEvent } from "react";
 import { Upload, XCircle } from "lucide-react";
-import { importDocumentFile } from "../import-docx";
 import type { ImportedDocumentImage } from "../imported-images";
 import { emptyAcademicFields, emptyConfidenceMap, WORK_TYPE_LABELS } from "../ufla-rules";
 
@@ -41,6 +40,10 @@ export const ImportBlock = forwardRef<ImportBlockHandle, ImportBlockProps>(
       if (!file) return;
       try {
         setStatus("Importando arquivo...");
+        // Import dinâmico: a cadeia de importação (mammoth, jszip, docx-render-core)
+        // só é carregada quando o usuário realmente importa um arquivo, mantendo-a
+        // fora do caminho crítico da primeira pintura.
+        const { importDocumentFile } = await import("../import-docx");
         const result = await importDocumentFile(file);
         onImport({ ...result, fileName: file.name });
         setStatus(`Arquivo importado: ${file.name}`);

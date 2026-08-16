@@ -1,5 +1,5 @@
 import { UFLA_MANUAL_REFERENCE } from "./ufla-rules";
-import { cleanMojibakeText } from "./docx-render-core";
+import { cleanMojibakeText } from "./text-utils";
 
 export type ReferenceConfidence = "alta" | "media" | "baixa";
 

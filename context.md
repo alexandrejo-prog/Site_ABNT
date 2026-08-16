@@ -360,6 +360,17 @@ Avaliação dos elementos **opcionais** do Manual UFLA 6ª ed. contra o gerador 
 5. **Testes** — `tests/unit/indice-remissivo.test.ts` (4): renderiza após anexos, não emite quando vazio, preview pós-anexo, título centralizado (`<w:jc w:val="center">`).
 6. **Verify** — `npm run ufla:audit` regenerate com Word (141s, **11/11 gates**) atualizou `sourceFingerprint` (`4e4c5c3…`→`06090a55…`) e resolveu os 3 testes de freshness; `npm test` **210 arquivos, 1688 testes (10 skipped)**, lint 0/0, build OK.
 
+## 6t. OTIMIZAÇÃO DE BUNDLE — LIGHTHOUSE PERF 65→99 (16/08/2026)
+Ogate Lighthouse flakou no PR #21 (mediana 65 < 70 por contenção do runner). Investigação do caminho crítico revelou que o **preload inicial baixava 1.36 MB de JS** desnecessariamente e o JS crítico foi reduzido **−76%**:
+
+1. **Causa raiz 1 — `main.tsx` puxava `docx-libs` (428 KB) no preload** — `import "./docx-toc-field-patch"` era feito estaticamente no entry, e o patch (monkey-patch do `Packer.toBlob`) é reaplicado/importado dentro do `export-docx.ts` (chunk lazy). Remover o import do entry transferiu `docx` + `jszip` para o chunk de exportação, carregado só ao "Gerar DOCX". **Comportamento preservado (patch idempotente).**
+2. **Causa raiz 2 — `import-docx` (mammoth, ~490 KB) estava no bundle crítico** — `ImportBlock.tsx` importava `importDocumentFile` estaticamente; agora o import é **dinâmico** (`await import("../import-docx")`) dentro do `handleChange`, carregando mammoth + `docx-render-core` + `jszip` só quando o usuário importa um arquivo. Os mocks de `vi.mock("../../src/import-docx")` nos testes .tsx continuam válidos (interceptam o import interceptável).
+3. **Causa raiz 3 — `docx-render-core` (importa `docx` em runtime) vazava para o caminho eager** via `references-normalizer`→`references-validator`→`validators`. Extraído `cleanMojibakeText` para **`src/text-utils.ts`** (módulo puro, sem a lib `docx`); `docx-render-core` re-exporta por compatibilidade (importadores existentes intactos). `references-normalizer` agora importa de `text-utils`.
+4. **`vite.config.ts` — manualChunks em forma de função** — antes `manualChunks: { 'import-libs': ['mammoth'] }` não casava com `mammoth/mammoth.browser` (o chunk saía vazio e mammoth caía no `index.js`). Agora prefixos de pacote (`/node_modules/docx|jszip/`, `/node_modules/mammoth/`, `/node_modules/lucide-react/`, `/node_modules/react/…`) recebem vendor chunks próprios.
+5. **Resultado do bundle** — `index.js` **773 KB → 187 KB (−76%)**; preload inicial `index + docx-libs + icons + react-vendor` (1.36 MB) → `index + react-vendor + icons` (0.34 MB, −75%); `import-libs` (mammoth 487 KB) e `docx-libs` (428 KB) só carregam sob demanda. Código do app permanece o mesmo (nenhum teste de comportamento alterado).
+6. **Lighthouse** — local: perf **85→99**, a11y 100, best-practices 92-96 (na 1ª execução, sem retry). Projeção: mediana ≥ 90 no CI.
+7. **Validação** — `npm test` 210/1688 green; `npm run e2e` 13/13; lint 0/0; `npm run ufla:audit` **11/11 gates** (fingerprint regenerado `9f7798a7…`); `npm run verify` OK. Snapshot de paginação regenerado na auditoria.
+
 ---
 
 ## 7. COMANDOS ÚTEIS
