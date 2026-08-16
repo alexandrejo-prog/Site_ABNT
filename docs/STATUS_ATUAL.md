@@ -5,15 +5,15 @@
 
 ## Última Atualização
 - Data: 2026-08-16
-- Hora: ~09:15 (paisagem de seção confirmada coberta end-to-end; UFLA-equacoes sem gap stale; auditoria em 135s com skip por digest)
+- Hora: ~13:30 (WIP fechado em 5 commits granulares: preview de equações importadas OMML→LaTeX, conciliação física DOCX→PDF página-a-página, evidência no gate + snapshot, axe no e2e real, DECISION-010 stub histórico; `null` removido; auditoria 146s com 11 gates)
 - Branch: `feat/ufla-render-validation`
-- Evidência: `npm run ufla:audit` completo — lint + typecheck:scripts + regenerate (Word COM + PDF físico + **11 gates**) all passed em **135s** (suíte 1× + re-render da referência pulado quando o digest do DOCX não muda); overall=passed (FULL COMPLIANCE GATE APROVADO); `npx tsx ci-checks.ts` PASSED (18 formatos × 15 tipos + frescor estrito); `npm run e2e` 13/13 passed; lint 0/0
+- Evidência: `npm run ufla:audit` completo — lint + typecheck:scripts + regenerate (Word COM + PDF físico + **11 gates**) all passed em **146s** (suíte 1× + re-render da referência pulado quando o digest do DOCX não muda); overall=passed (FULL COMPLIANCE GATE APROVADO); `npx tsx ci-checks.ts` PASSED (18 formatos × 15 tipos + frescor estrito); `npm run e2e` 13/13 passed; lint 0/0
 
 ## Suíte de Testes
-- Passed: 1665
+- Passed: 1684
 - Failed: 0
 - Skipped: 10
-- Arquivos: 208
+- Arquivos: 209
 - Build: OK (tsc + vite)
 - tsc --noEmit: 0 erros (src + tests)
 - typecheck:scripts: 0 erros (tsconfig.scripts.json checa scripts/ufla-compliance — antes fora do include e só parcialmente checado por imports de testes)
@@ -104,6 +104,7 @@
 
 26a. [x] **Paisagem/rotação de seção CONFIRMADA coberta end-to-end (evidência física A4-paisagem)** — a análise anterior apontava "tabela larga → seção paisagem" como único gap de correção do DOCX; a investigação desta rodada confirmou que a cadeia COMPLETA já está implementada e testada: importação extrai orientação/largura do sectPr (`word-structure-extractor` → `ImportedTable.orientation/tableWidthTwips`), `tableNeedsLandscape` decide por orientação de origem / largura OOXML > retrato útil / 6+ colunas (LANDSCAPE_MIN_COLUMNS), a exportação quebra o corpo em seções (`sectionRuns` + `landscapePage` com w/h trocadas) e o checker OOXML aceita A4-paisagem. **Validação física real nesta rodada**: monografia com tabela de 7 colunas renderizada pelo Word produziu a página **9 em A4-paisagem (842×595 pt)** com todas as demais em A4-retrato — confirmado no PDF via pdfjs (o perTypePhysicalGate já aceita retrato OU paisagem). Testes: `landscape-sections.test.ts` 4/4 (export, checker, tabela estreita não vira paisagem, import extrai orientação).
 26b. [x] **UFLA-equacoes sem gap stale no manual** — o `manual-ufla-requirements.json` marcava UFLA-equacoes como covered mas carregava o gap histórico "estrutura matemática avançada achatada em texto"; com OMML n-ário nativo (∫/∑/∏/lim, 23w), numeração por campo SEQ (24a) e preview KaTeX (25d), o regenerate agora limpa o gap (undefined) — a evidência e o checklist ficam coerentes com a implementação.
+26c. [x] **Fechamento do WIP + higiene de governança** — preview de equações importadas com OMML→LaTeX (`omml-to-latex.ts`, 16/08) renderizando com KaTeX a MESMA fração do Word; conciliação física DOCX→PDF **página-a-página** (`coverage-docx-pdf.ts`: `tables.pageMap` + `pageMapping` — 20 páginas físicas com tabelas, ex.: 67:[1,3,21,22,23,24,28,29]); `analyze-per-type-pdfs.ts` detecta conteúdo na margem inferior (área do rodapé) e registra a posição exata do 1º número visível (`headerNumber`); axe-core no e2e real (13 fluxos, violações critical/serious = 0). Higiene: `null` (0 bytes) removido, `update-fingerprints.ts` arquivado (redundante), DECISION-010 consolidada no canônico `docs/decisions/010`. 5 commits (de96890, 2c5457e, 41b568c, 0eab8e8, 93254ac); auditoria 146s, 11/11 gates, 1684 testes.
 
 ## Resolução UFLA-AMBIGUOUS-1
 - **Decisão (DECISION-010, complementa DECISION_003):** contagem contínua a partir da folha de rosto (folha de rosto = 1); pré-textuais contadas sem número visível; numeração visível inicia na Introdução com o **valor contado** (pré-textuais + 1) — **nunca reinício em 1**; "(1, 2, 3, ...)" do Manual = sistema de numeração arábico, não reinício
@@ -115,18 +116,19 @@
 2. FATIA 3: Rodapés + paginação (FINDING-FOOTER-001..008; UFLA-AMBIGUOUS-1) — CONCLUÍDA
 3. FATIA 6: Regenerar artefatos oficiais e declarar conformidade — **CONCLUÍDA** (FULL COMPLIANCE GATE APROVADO, report.md declara CONFORMIDADE UFLA APROVADA)
 
-## Evidências (2026-08-16 ~08:55)
+## Evidências (2026-08-16 ~13:30, HEAD `93254ac`)
 - DOCX: `artifacts/ufla-compliance/normalized-dissertacao.docx`
 - PDF: `artifacts/ufla-compliance/rendered/normalized-dissertacao.pdf` (re-renderizado na auditoria)
 - OOXML: 35 tabelas (w:tblHeader semântico nas declaráveis), 39 bookmarks/31 PAGEREF, 0 alvos ausentes, 0 mojibake
 - Física PDF: 0 overlaps/cutoffs/blank; **11 imagens (opList/CTM) e 45 regiões de tabela em 40 páginas (grade de texto + BORDAS desenhadas re+eoFill — tabelas de 2 linhas/questiónário incluídas); equações 0 no doc de referência (física OMML validada na fixture eq-fixture)**
-- Cobertura DOCX→PDF: `artifacts/ufla-compliance/coverage-docx-pdf.json` — **35/35 tabelas OOXML casadas com regiões físicas** (razão 1.29), imagens 11/11, equações consistentes
+- Cobertura DOCX→PDF: `artifacts/ufla-compliance/coverage-docx-pdf.json` — **35/35 tabelas OOXML casadas com regiões físicas** (razão 1.29), imagens 11/11, equações consistentes; **conciliação página-a-página** (`tables.pageMap`/`pageMapping`): 20 páginas físicas com tabelas (ex.: 67:[1,3,21,22,23,24,28,29], 14:[33]) — evidência de LAYOUT, não só presença
 - Report: `artifacts/ufla-compliance/report.md` (canônico, mesma rodada; declara CONFORMIDADE UFLA APROVADA)
-- Gates: `artifacts/ufla-audit/gates.json` (overall=passed; **11/11 gates** incluindo coverageDocxPdfGate; meta `generatedAt` da rodada de 2026-08-16)
-- Testes: 1665 passed, 0 failed, 10 skipped (208 arquivos); e2e 13/13; ci-checks PASSED; lint 0/0
+- Gates: `artifacts/ufla-audit/gates.json` (overall=passed; **11/11 gates** incluindo coverageDocxPdfGate; meta `generatedAt` da rodada de 2026-08-16 ~13:30)
+- Testes: 1684 passed, 0 failed, 10 skipped (209 arquivos); e2e 13/13 (axe no navegador real); ci-checks PASSED; lint 0/0
 - Preservação: content-preservation.json RECOMPUTADO — imagens 11/11 (F-007 encerrado), tabelas 35/35, referências 138/138
-- Auditoria: suíte 1× por rodada (frescor ativo); renders per-type paralelos (pool 3); re-render da referência pulado quando o digest do DOCX não muda — **135s**
+- Auditoria: suíte 1× por rodada (frescor ativo); renders per-type paralelos (pool 3); re-render da referência pulado quando o digest do DOCX não muda — **146s**
 - Paisagem: confirmada end-to-end — tabela de 7 colunas → página 9 em A4-paisagem (842×595) no PDF real do Word; UFLA-equacoes covered sem gap stale
+- Fechamento WIP (16/08): 5 commits `de96890` (OMML→LaTeX preview), `2c5457e` (conciliação página-a-página + margem inferior), `41b568c` (evidência no gate + snapshot), `0eab8e8` (axe no e2e), `93254ac` (DECISION-010 stub histórico); `null` (0 bytes) removido; `update-fingerprints.ts` arquivado (redundante)
 
 ## Regras para IAs
 1. Nunca editar números de evidência à mão: rodar `scripts/ufla-compliance/regenerate-official-artifacts.ts` (computa tudo da mesma rodada).
