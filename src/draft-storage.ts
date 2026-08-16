@@ -223,6 +223,90 @@ export function listNamedDrafts(storage: Storage = globalThis.localStorage): Nam
   return sortedDrafts(readDraftsIndex(storage));
 }
 
+export interface DraftCorruptionIssue {
+  key: string;
+  reason: string;
+  rawLength: number;
+}
+
+/**
+ * C14 — detecta rascunhos corrompidos (JSON inválido, shape inesperado ou
+ * entradas inválidas no índice) e devolve avisos para a UI. NUNCA apaga nada:
+ * o dado original permanece no localStorage até uma decisão explícita do
+ * usuário (discardCorruptedDraftData).
+ */
+export function draftCorruptionIssues(storage: Storage = globalThis.localStorage): DraftCorruptionIssue[] {
+  const issues: DraftCorruptionIssue[] = [];
+  const inspect = (key: string, label: string, expectIndex: boolean): void => {
+    let raw: string | null;
+    try {
+      raw = storage.getItem(key);
+    } catch {
+      issues.push({ key, reason: `Não foi possível ler ${label} do armazenamento.`, rawLength: 0 });
+      return;
+    }
+    if (!raw) return;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      issues.push({
+        key,
+        reason: `${label} está corrompido (JSON inválido) e não foi carregado — o dado original foi preservado.`,
+        rawLength: raw.length,
+      });
+      return;
+    }
+    if (expectIndex) {
+      if (!Array.isArray(parsed)) {
+        issues.push({
+          key,
+          reason: `${label} tem formato inesperado e não foi carregado — o dado original foi preservado.`,
+          rawLength: raw.length,
+        });
+        return;
+      }
+      const invalid = parsed.filter((entry) => !isValidNamedDraft(entry)).length;
+      if (invalid > 0) {
+        issues.push({
+          key,
+          reason: `${label} contém ${invalid} entrada(s) inválida(s) que foram ignoradas na listagem — o dado original foi preservado.`,
+          rawLength: raw.length,
+        });
+      }
+      return;
+    }
+    if (!isValidDraft(parsed)) {
+      issues.push({
+        key,
+        reason: `${label} tem conteúdo inválido e não foi carregado — o dado original foi preservado.`,
+        rawLength: raw.length,
+      });
+    }
+  };
+  inspect(DRAFTS_INDEX_KEY, "O índice de rascunhos", true);
+  inspect(DRAFT_KEY, "O rascunho ativo", false);
+  for (const key of LEGACY_DRAFT_KEYS) inspect(key, "Um rascunho antigo", false);
+  return issues;
+}
+
+/**
+ * C14 — remove APENAS os dados corrompidos, por decisão explícita do usuário
+ * (botão "Descartar dados corrompidos" na UI). Retorna as chaves removidas.
+ */
+export function discardCorruptedDraftData(storage: Storage = globalThis.localStorage): string[] {
+  const removed: string[] = [];
+  for (const issue of draftCorruptionIssues(storage)) {
+    try {
+      storage.removeItem(issue.key);
+      removed.push(issue.key);
+    } catch (error) {
+      logDraftStorageError("descartar dados corrompidos", error);
+    }
+  }
+  return removed;
+}
+
 export function createNamedDraft(name: string, payload: DraftPayload, storage: Storage = globalThis.localStorage): NamedDraftResult {
   const normalized = name.trim();
   if (!normalized) return { ok: false, kind: "invalid-name", drafts: listNamedDrafts(storage) };

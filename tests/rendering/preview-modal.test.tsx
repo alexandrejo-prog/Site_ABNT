@@ -87,6 +87,32 @@ describe("PreviewModal - abrir/fechar e ações", () => {
     renderPreview();
     expect(screen.getByText(/\d+ página\(s\) simulada/)).toBeTruthy();
   });
+
+  it("devolve o foco ao elemento que abriu o modal ao fechar (C13 / WCAG 2.4.3)", () => {
+    // C13: o foco deve voltar ao gatilho ("Visualizar") depois de fechar o modal.
+    const triggerRender = render(<button type="button">Visualizar</button>);
+    const trigger = triggerRender.getByRole("button", { name: "Visualizar" });
+    trigger.focus();
+    expect(document.activeElement).toBe(trigger);
+
+    const modalRender = render(
+      <PreviewModal
+        input={{ fields: baseFields(), editorText: EDITOR_TEXT, importedImages: [], importedTables: [] }}
+        onClose={vi.fn()}
+        onCommitEditorText={vi.fn()}
+        onUpdateField={vi.fn()}
+        onGenerate={vi.fn()}
+      />,
+    );
+    // o foco inicial entrou no modal (focus trap funcional — o modal é um
+    // createPortal para document.body, então miramos o role="dialog")
+    const dialog = screen.getByRole("dialog", { name: /Pré-visualização/i });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).not.toBe(trigger);
+
+    modalRender.unmount();
+    expect(document.activeElement).toBe(trigger);
+  });
 });
 
 describe("PreviewModal - edição inline", () => {

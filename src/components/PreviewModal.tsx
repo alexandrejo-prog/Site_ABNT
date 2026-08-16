@@ -95,12 +95,17 @@ export function PreviewModal({
     // Foco inicial inline para evitar dependência instável (ref é estável).
     const container = dialogRef.current;
     if (!container) return;
+    // C13 (WCAG 2.4.3): guarda quem abriu o modal e devolve o foco ao fechar.
+    const previouslyFocused = document.activeElement as HTMLElement | null;
     const focusable = container.querySelectorAll(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
     );
     if (focusable.length > 0) {
       (focusable[0] as HTMLElement).focus();
     }
+    return () => {
+      previouslyFocused?.focus?.();
+    };
   }, []);
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { Eraser, FolderOpen, Save, X } from "lucide-react";
-import { draftRetentionDays, type NamedDraft } from "../draft-storage";
+import { draftRetentionDays, type DraftCorruptionIssue, type NamedDraft } from "../draft-storage";
 import { friendlyStorageError, type DraftStorageErrorKind } from "../draft-storage-error";
 
 interface DraftStatusProps {
@@ -22,6 +22,8 @@ interface DraftStatusProps {
   onDeleteDraft?: (id: string) => void;
   onExportBackup?: () => void;
   onImportBackup?: (jsonText: string) => void;
+  corruptionWarnings?: DraftCorruptionIssue[];
+  onDiscardCorrupted?: () => void;
 }
 
 function formatSavedTime(date: Date): string {
@@ -53,6 +55,8 @@ function DraftStatusComponent({
   onDeleteDraft,
   onExportBackup,
   onImportBackup,
+  corruptionWarnings = [],
+  onDiscardCorrupted,
 }: DraftStatusProps) {
   const canClearDraft = hasDraft || draftStatus === "saved" || draftStatus === "restored";
   const retention = draftRetentionDays();
@@ -228,6 +232,30 @@ function DraftStatusComponent({
               </button>
             </header>
             <div className="draft-manager-body">
+              {corruptionWarnings.length > 0 && (
+                <div
+                  role="alert"
+                  className="draft-feedback draft-feedback--error"
+                  style={{ marginBottom: 10 }}
+                >
+                  <strong>Atenção:</strong>{" "}
+                  {corruptionWarnings.length === 1
+                    ? "Um item do armazenamento de rascunhos está corrompido e não foi carregado."
+                    : `${corruptionWarnings.length} itens do armazenamento de rascunhos estão corrompidos e não foram carregados.`}{" "}
+                  O dado original foi preservado — nada foi apagado.
+                  <ul style={{ margin: "6px 0 0 18px" }}>
+                    {corruptionWarnings.map((issue) => (
+                      <li key={issue.key}>{issue.reason}</li>
+                    ))}
+                  </ul>
+                  <div className="draft-manager-row" style={{ marginTop: 8 }}>
+                    <button type="button" className="secondary-action draft-action" onClick={onDiscardCorrupted}>
+                      Descartar dados corrompidos
+                    </button>
+                    <span className="draft-shortcut-hint">Decisão sua — nada é apagado automaticamente.</span>
+                  </div>
+                </div>
+              )}
               {panelFeedback && (
                 <p role="status" className={`draft-feedback ${managerError ? "draft-feedback--error" : "draft-feedback--notice"}`}>
                   {panelFeedback}
@@ -391,6 +419,8 @@ export const DraftStatus = memo(DraftStatusComponent, (prev, next) => {
     prev.activeDraftId === next.activeDraftId &&
     prev.managerError === next.managerError &&
     prev.managerNotice === next.managerNotice &&
-    prev.openSignal === next.openSignal
+    prev.openSignal === next.openSignal &&
+    prev.corruptionWarnings === next.corruptionWarnings &&
+    prev.onDiscardCorrupted === next.onDiscardCorrupted
   );
 });

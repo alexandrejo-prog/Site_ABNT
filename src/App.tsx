@@ -24,6 +24,8 @@ import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import {
   createNamedDraft,
   deleteNamedDraft,
+  discardCorruptedDraftData,
+  draftCorruptionIssues,
   exportDraftsBackup,
   getNamedDraft,
   importDraftsFromBackup,
@@ -31,6 +33,7 @@ import {
   mergeDraftsBackup,
   renameNamedDraft,
   saveNamedDraft,
+  type DraftCorruptionIssue,
   type DraftPayload,
   type NamedDraft,
   type NamedDraftErrorKind,
@@ -114,6 +117,10 @@ export default function App() {
   const [confirmReplaceDraft, setConfirmReplaceDraft] = useState(false);
   const [showFirstUseGuide, setShowFirstUseGuide] = useState(() => !isOnboardingDismissed(window.localStorage));
   const [namedDrafts, setNamedDrafts] = useState<NamedDraft[]>([]);
+  // C14 — rascunhos corrompidos nunca somem em silêncio: aviso na UI + descarte explícito.
+  const [draftCorruption, setDraftCorruption] = useState<DraftCorruptionIssue[]>(() =>
+    draftCorruptionIssues(window.localStorage),
+  );
   const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
   const [draftManagerError, setDraftManagerError] = useState<string | null>(null);
   const [draftManagerNotice, setDraftManagerNotice] = useState<string | null>(null);
@@ -164,6 +171,7 @@ export default function App() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carrega o índice de rascunhos locais na montagem (com migração idempotente do rascunho legado)
     setNamedDrafts(listNamedDrafts(window.localStorage));
+    setDraftCorruption(draftCorruptionIssues(window.localStorage));
   }, []);
 
   const handleEditorInput = useCallback(() => {
@@ -477,6 +485,14 @@ export default function App() {
     setStatus("Rascunho local removido e formulário limpo.");
   }, [handleClearDraft, resetFields, resetEditor, setImportedFileName, setImportedImages, setImportedTables]);
 
+  // C14 — descarte explícito (botão na UI) dos dados corrompidos detectados.
+  const handleDiscardCorruptedDrafts = useCallback(() => {
+    discardCorruptedDraftData(window.localStorage);
+    setDraftCorruption([]);
+    setNamedDrafts(listNamedDrafts(window.localStorage));
+    setStatus("Dados corrompidos de rascunho descartados.");
+  }, []);
+
   const saveStateClass = draftSaving
     ? "saving"
     : draftStatus === "error"
@@ -533,6 +549,8 @@ export default function App() {
             onExportBackup={handleExportBackup}
             onImportBackup={handleImportBackup}
             openSignal={draftManagerOpenSignal}
+            corruptionWarnings={draftCorruption}
+            onDiscardCorrupted={handleDiscardCorruptedDrafts}
           />
           <button className="primary-action" type="button" onClick={triggerValidation}><FileCheck2 size={18} aria-hidden="true" />Validar trabalho</button>
           <button className="primary-action" type="button" onClick={handleOpenPreview}><Eye size={18} aria-hidden="true" />Visualizar</button>
