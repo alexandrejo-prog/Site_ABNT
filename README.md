@@ -46,7 +46,7 @@ npm run verify
 
 ## Status normativo
 
-O status real de cobertura, limitacoes conhecidas e pontos que exigem validacao manual esta registrado em `STATUS_NORMATIVO.md`.
+O status real de cobertura, limitacoes conhecidas, pendências e números da rodada estão registrados em `docs/STATUS_ATUAL.md` (canônico); evidência em `artifacts/ufla-compliance/report.md`.
 
 ## Acessibilidade
 

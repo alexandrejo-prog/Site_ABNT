@@ -8,8 +8,8 @@ description: Instruções do projeto Site_ABNT (abrangente). Fonte narrativa: co
 Instruções abrangentes do projeto. **Fonte única de narrativa:**
 
 - **Manual de bordo (SEMPRE ler):** `context.md` — estrutura, regras, pendências,
-  rodadas recentes (seções 6q–6w), comandos; histórico 6a–6p arquivado em
-  `docs/historico/contexto-rodadas/contexto-6a-6p.md`.
+  rodada atual (seção 6x), comandos; histórico de rodadas (6a–6p e 6q–6w) arquivado
+  em `docs/historico/contexto-rodadas/`.
 - **Status canônico:** `docs/STATUS_ATUAL.md` (contagens/gates/números da rodada).
 - **Mapa da documentação:** `docs/README.md` (o que ler por tarefa).
 

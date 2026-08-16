@@ -54,5 +54,5 @@ npx tsx scripts/ufla-compliance/regenerate-official-artifacts.ts
 - Rodar sem suíte verde propaga evidência falsa (WORKSLOP-001/003).
 
 ## Referências
-- `checkpoint/workslop-assessment.md` (WORKSLOP-001..004)
+- `docs/historico/checkpoint/workslop-assessment.md` (WORKSLOP-001..004)
 - `docs/decisions/001..003`
