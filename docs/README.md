@@ -22,11 +22,14 @@
 docs/
 ├── README.md                 ← este mapa (LEIA SEMPRE)
 ├── STATUS_ATUAL.md           ← canônico (números/gates/estado da rodada)
+├── checklist-15-melhorias.md ← checklist ATIVO (melhorias da rodada 29)
 ├── RUNNER_WORD.md            ← operação do runner self-hosted com Word
 ├── decisions/                ← decisões canônicas NNN-*.md (001–012)
 └── historico/                ← estado antigo, NÃO é fonte (seções restantes)
     ├── auditoria/            ← relatórios de auditorias anteriores (14/08)
     ├── checkpoint/           ← workslop-assessment (estado 14/08)
+    ├── checklists/           ← checklist-14 (14/14 concluído — arquivado)
+    ├── contexto-rodadas/     ← context.md 6a–6p e 6q–6w (histórico de rodadas)
     ├── manuais/              ← MANUAL_DE_NORMALIZACAO_2024.md (extração bruta),
     │                           NBR15287_PROJETO_PESQUISA.md (referência avulsa)
     ├── CHECKLIST.md          ← status das fatias 15/08 (HISTÓRICO)
