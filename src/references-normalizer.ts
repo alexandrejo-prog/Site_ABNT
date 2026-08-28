@@ -152,14 +152,19 @@ function isOrphanYearFragment(value: string): boolean {
 }
 
 // Uma linha parece inicio de uma nova referencia quando comeca com o padrao de
-// autor pessoal (SOBRENOME, A.), autor institucional (lista curta conhecida) ou
-// nome de evento. Tudo o que nao se encaixa e tratado como continuacao da
-// referencia anterior.
+// autor pessoal (SOBRENOME, A.; SOBRENOME, B.), autor institucional (lista
+// curta conhecida, sigla em caixa alta ou nome de evento). Tudo o que nao se
+// encaixa e tratado como continuacao da referencia anterior.
 function isReferenceStartLine(line: string): boolean {
   const l = line.trim();
   if (!l) return false;
-  if (/^[\p{Lu}A-ZÀ-Ú][\p{L}.\-' ]{1,60},\s*[\p{Lu}A-ZÀ-Ú][\p{L}.\-' ]{0,60}\./u.test(l)) return true;
+  // Autor pessoal ABNT, com supporte para múltiplos autores separados por ";"
+  // (ex.: "DARDOT, Pierre; LAVAL, Christian.") e para a forma com dois-pontos.
+  if (/^[\p{Lu}A-ZÀ-Ú][\p{L}.\-' ]{1,60},\s*[\p{Lu}A-ZÀ-Ú][\p{L}.\-' ]{0,60}(?:\s*;\s*[\p{Lu}A-ZÀ-Ú][\p{L}.\-' ]{1,60},\s*[\p{Lu}A-ZÀ-Ú][\p{L}.\-' ]{0,60})*\./u.test(l)) return true;
   if (/^[\p{Lu}A-ZÀ-Ú][\p{L}.\-' ]{1,60};\s/u.test(l)) return true;
+  // Sigla institucional em caixa alta seguida de ponto e texto com letra
+  // maiúscula inicial (ex.: "CAPES. Relatório Quadrienal…", "IBGE. Atlas…").
+  if (/^[A-ZÀ-Ú]{2,8}\.\s+\p{Lu}/u.test(l)) return true;
   if (/^(?:BRASIL|MINAS\s+GERAIS|LAVRAS|UNIVERSIDADE|INSTITUTO|MINISTERIO|ASSOCIACAO|FUNDACAO|CONSELHO|CAMARA|SECRETARIA|EUROPEAN|REGISTRY)\b/iu.test(l)) return true;
   if (/^[A-ZÀ-Ú][\p{Lu}A-ZÀ-Ú -]{3,45},\s*\d+\.?\s*,\s*(?:19|20)\d{2}/u.test(l)) return true;
   if (isAllCapsInstitutional(l)) return true;

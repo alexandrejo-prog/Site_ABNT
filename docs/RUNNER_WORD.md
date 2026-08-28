@@ -98,6 +98,29 @@ Para fechar o ciclo:
   divergir sem mudança de preview/digest. Investigue na máquina do runner com
   `npm run ufla:pdfref` e o `pdf-reference-check.json`.
 
+## Check local antes de fechar a rodada (checklist-15 C1)
+
+Toda rodada que toca **exportadores** (`src/export-*.ts`, `docx-render-core`, estilos
+ou física da capa/folha de rosto) deve rodar o gate da referência do PDF **localmente**
+antes de fechar — o CI Word-free não renderiza:
+
+```bash
+npm run ufla:pdfref            # gate: compara o PDF do Word com a referência commitada
+npm run ufla:pdfref:refresh    # só quando a mudança de layout É intencional (regenera a referência)
+```
+
+- **Saída esperada (sem regressão):** `Referência do PDF do Word: PASSED` com
+  `match` por template (monografia, dissertação, tese, artigo, CPG, projeto).
+- **`update`** (exit 1): o preview/digest do DOCX mudou — rode o regenerate local
+  (`npm run ufla:audit`) e commite o snapshot atualizado.
+- **`fail`** (exit 1): REGRESSÃO — o PDF mudou sem mudança de preview/digest;
+  investigue versão do Word/fontes/pipeline antes de fechar.
+- **Evidência:** `artifacts/ufla-compliance/pdf-reference-check.json` (registrar o
+  resultado na rodada do STATUS_ATUAL).
+
+Rodada 30 (16/08/2026, bloco A/B do checklist-15): `ufla:pdfref` executado —
+**PASSED**, 6/6 templates em sincronia (sim 0.96–1.00, Δpágs ≤ 1).
+
 ## Validação contínua
 
 - O `verify.yml` (CI Word-free, roda em todo PR) cobre preview + digest do

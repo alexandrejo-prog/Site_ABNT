@@ -217,7 +217,7 @@ describe("PF8 - normalização de acentos e regex", () => {
 });
 
 describe("PF13 - regressão com caso real de resumo expandido", () => {
-  it("caso real coerente passa sem conflitos e gera DOCX na ordem Resumo/Palavras-chave/Abstract/Keywords", async () => {
+  it("caso real coerente passa sem conflitos e gera DOCX na ordem Abstract/Keywords/Resumo/Palavras-chave", async () => {
     const issues = validateWork(ppgecaBase());
     expect(issues.find((i) => i.code === "program-conflict")).toBeUndefined();
     expect(issues.find((i) => i.code === "abstract-topic-conflict")).toBeUndefined();
@@ -232,10 +232,10 @@ describe("PF13 - regressão com caso real de resumo expandido", () => {
     const pk = xml.indexOf("Palavras-chave");
     const a = xml.indexOf("Abstract");
     const k = xml.indexOf("Keywords");
-    expect(r).toBeGreaterThan(-1);
-    expect(pk).toBeGreaterThan(r);
-    expect(a).toBeGreaterThan(pk);
+    expect(a).toBeGreaterThan(-1);
     expect(k).toBeGreaterThan(a);
+    expect(r).toBeGreaterThan(k);
+    expect(pk).toBeGreaterThan(r);
   });
 
   it("mesmo título/resumo mas abstract sobre agriculture gera abstract-topic-conflict", () => {

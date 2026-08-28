@@ -764,6 +764,77 @@ function extractTableWidthTwips(tableXml: string): number | undefined {
   return twipValue(tblWMatch[0]);
 }
 
+function cellHasBold(cellXml: string): boolean {
+  const rPrs = [...cellXml.matchAll(/<w:rPr\b[^>]*>[\s\S]*?<\/w:rPr>/g)].map((m) => m[0]);
+  if (!rPrs.length) return false;
+  return rPrs.some((rPr) => hasEnabledRunProperty(rPr, "b"));
+}
+
+function cellCentered(cellXml: string): boolean {
+  return /<w:jc\b[^>]*w:val="center"/i.test(cellXml);
+}
+
+/**
+ * Detecta a linha de cabeçalho de tabela importada por FORMATAÇÃO quando a
+ * origem não declara w:tblHeader (checklist-15 A1 / NBR 17225 / WCAG 1.3.1):
+ *  1) primeira linha com 2+ células não-vazias em que a MAIORIA é negrito ou
+ *     centralizada ("negrito/centralizada/tipo difere das demais");
+ *  2) estrutural — 1ª linha de célula única (título/largura total, comum em
+ *     DOCX convertido de PDF) seguida de linha com 2+ células → a 1ª linha
+ *     multi-célula é o cabeçalho.
+ * Retorna índices no espaço das linhas MANTIDAS (mesmo espaço de
+ * extractTableHeaderRows).
+ */
+/** Padrões de linha-título (alinhados com TABLE_TITLE_ROW_PATTERNS do
+ * export-docx; mantidos aqui para a inferência de importação não depender
+ * do exportador — sem import circular). */
+const IMPORT_TABLE_TITLE_PATTERNS = [
+  /^Tema\s*[:\\-–]/i,
+  /^Tema\s+geral\s*[:\\-–]/i,
+  /^Cronograma\s+de\s+ações/i,
+  /^Cronograma\s+de\s+acoes/i,
+  /^Política\s+Institucional\s+de\s+Informação/i,
+  /^Politica\s+Institucional\s+de\s+Informacao/i,
+  /^Objetivos?\s+do\s+RI/i,
+  /^Quadro\s*\d+\s*[:\\-–]/i,
+  /^Tabela\s*\d+\s*[:\\-–]/i,
+];
+
+function inferFormattingHeaderRows(tableXml: string): number[] {
+  const rows = [...tableXml.matchAll(/<w:tr\b[^>]*>[\s\S]*?<\/w:tr>/g)];
+  const kept = keptTableRowIndices(tableXml);
+  if (kept.length < 2) return [];
+
+  const rowInfo = kept.map((ri) => {
+    const cells = [...rows[ri][0].matchAll(/<w:tc\b[^>]*>[\s\S]*?<\/w:tc>/g)].map((m) => m[0]);
+    const nonEmpty = cells.filter((c) => extractTextFromXml(c).text.trim().length > 0);
+    const nE = nonEmpty.length;
+    const boldNE = nonEmpty.filter((c) => cellHasBold(c)).length;
+    const centerNE = nonEmpty.filter((c) => cellCentered(c)).length;
+    const text = nonEmpty.map((c) => extractTextFromXml(c).text.trim()).join(" ").replace(/\s+/g, " ");
+    return { keptIndex: kept.indexOf(ri), nE, boldNE, centerNE, text };
+  });
+
+  // 1) Formatação: maioria negrito/centralizada (célula única/título não passa).
+  for (const info of rowInfo) {
+    if (info.nE < 2) continue;
+    const majority = Math.ceil(info.nE * 0.6);
+    if (info.boldNE >= majority || info.centerNE >= majority) return [info.keptIndex];
+  }
+
+  // 2) Estrutural: título de célula única (1ª linha) + 1ª linha multi-célula.
+  if (rowInfo[0].nE === 1 && rowInfo[1].nE >= 2) return [rowInfo[1].keptIndex];
+
+  // 3) Último recurso: 1ª linha é TÍTULO (padrão) e a 2ª não é multi-célula
+  //    (não há linha de rótulos): o título serve de cabeçalho semântico
+  //    (única referência da tabela). Nunca marca título quando há rótulos.
+  if (rowInfo[0].text && IMPORT_TABLE_TITLE_PATTERNS.some((p) => p.test(rowInfo[0].text)) && rowInfo[1].nE < 2) {
+    return [rowInfo[0].keptIndex];
+  }
+
+  return [];
+}
+
 function extractTableHeaderRows(tableXml: string): number[] {
   const rows = [...tableXml.matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)];
   const kept = keptTableRowIndices(tableXml);
@@ -779,6 +850,9 @@ function extractTableHeaderRows(tableXml: string): number[] {
     if (val !== undefined && val.toLowerCase() === "false") continue;
     headerRows.push(kept.indexOf(rowIndex));
   }
+  // A1: quando a origem não declara w:tblHeader (DOCX convertido de PDF),
+  // INFERE pela formatação/estrutura para o exportador propagar a intenção.
+  if (headerRows.length === 0) return inferFormattingHeaderRows(tableXml);
   return headerRows;
 }
 

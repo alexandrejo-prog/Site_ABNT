@@ -75,10 +75,14 @@ async function collectPdfPageNumbers(pdfPath: string): Promise<{ pages: Array<{ 
 /** Tipos com parte pré-textual contada a partir da folha de rosto (DECISION-010). */
 const PRETEXTUAL_COUNTED_TYPES = new Set(["dissertacao", "tese", "tcc", "monografia"]);
 
+/** Tipos CPG: sem cabeçalho/paginação visível — ausência de w:headerReference é esperada. */
+const CPG_SUPPRESSED_TYPES = new Set(["resumo_cpg", "resumo_expandido_cpg", "artigo_completo_cpg"]);
+
 export async function validatePagination(docxPath: string, pdfPath?: string, documentType?: string): Promise<PaginationValidation> {
   const result: PaginationValidation = { isValid: true, errors: [], warnings: [], totalPages: 0, preTextualPages: 0 };
   const type = documentType ?? "dissertacao";
   const countedFromTitlePage = PRETEXTUAL_COUNTED_TYPES.has(type);
+  const suppressedPageNumbers = CPG_SUPPRESSED_TYPES.has(type);
 
   if (!existsSync(docxPath)) {
     result.isValid = false;
@@ -100,9 +104,14 @@ export async function validatePagination(docxPath: string, pdfPath?: string, doc
     }
 
     if (textual.length === 0) {
-      result.isValid = false;
-      result.errors.push("Nenhuma seção referencia cabeçalho com número de página (w:headerReference ausente).");
-      return result;
+      if (suppressedPageNumbers) {
+        result.warnings.push("Tipo CPG: paginação suprimida (sem w:headerReference) — ausência é esperada.");
+        return result;
+      } else {
+        result.isValid = false;
+        result.errors.push("Nenhuma seção referencia cabeçalho com número de página (w:headerReference ausente).");
+        return result;
+      }
     }
 
     result.declaredStart = textual[0].start;
@@ -128,9 +137,14 @@ export async function validatePagination(docxPath: string, pdfPath?: string, doc
       const { pages, numPages } = await collectPdfPageNumbers(effectivePdf);
       result.totalPages = numPages;
       if (pages.length === 0) {
-        result.isValid = false;
-        result.errors.push("Nenhum número de página visível no canto superior direito do PDF renderizado.");
-        return result;
+        if (suppressedPageNumbers) {
+          result.warnings.push("Tipo CPG: nenhuma numeração visível no PDF — esperado para tipo com paginação suprimida.");
+          return result;
+        } else {
+          result.isValid = false;
+          result.errors.push("Nenhum número de página visível no canto superior direito do PDF renderizado.");
+          return result;
+        }
       }
 
       const first = pages[0];

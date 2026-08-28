@@ -133,11 +133,13 @@ function DraftStatusComponent({
   };
 
   // Foco acessível + teclado dentro do diálogo: fecha no Escape, cicla no Tab
-  // e devolve o foco ao botão que abriu o gerenciador.
+  // e devolve o foco ao botão que abriu o gerenciador. O elemento focado ANTES
+  // de abrir (o gatilho) é capturado ANTES de focar o botão X — senão a
+  // restauração devolveria o foco ao próprio X, que some com o diálogo (B4).
   useEffect(() => {
     if (!isManagerOpen) return;
-    closeRef.current?.focus();
     const previouslyFocused = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();

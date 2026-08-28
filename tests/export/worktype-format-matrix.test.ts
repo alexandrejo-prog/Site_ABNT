@@ -150,9 +150,9 @@ describe("Matriz de formato por tipo de trabalho", () => {
     ["tese", "MARIA SILVA"],
     ["artigo", "MARIA SILVA"],
     ["projeto_pesquisa", "MARIA SILVA"],
-    ["resumo_cpg", "MARIA SILVA"],
-    ["resumo_expandido_cpg", "MARIA SILVA"],
-    ["artigo_completo_cpg", "MARIA SILVA"],
+    ["resumo_cpg", "Maria Silva"],
+    ["resumo_expandido_cpg", "Maria Silva"],
+    ["artigo_completo_cpg", "Maria Silva"],
   ] as const)("%s mostra o autor REAL na capa/cabeçalho (sem placeholder AUTOR)", async (workType, author) => {
     const documentXml = await documentXmlFor(workType);
 

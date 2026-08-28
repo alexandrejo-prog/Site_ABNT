@@ -302,8 +302,8 @@ describe("DOCX export", () => {
       course: "maria@ufla.br",
     });
 
-    expect(documentXml).toContain("QUALIDADE DO CAFE NO SUL DE MINAS");
-    expect(documentXml).toContain("MARIA SILVA");
+    expect(documentXml).toContain("Qualidade do cafe no sul de Minas");
+    expect(documentXml).toContain("Maria Silva");
     expect(documentXml).toContain("Resumo do trabalho.");
     expect(documentXml).toContain("Palavras-chave");
     expect(documentXml).not.toContain("PageNumber");
@@ -320,28 +320,28 @@ describe("DOCX export", () => {
       course: "maria@ufla.br, joao@ufla.br",
     });
 
-    expect(documentXml).toContain("QUALIDADE DO CAFE NO SUL DE MINAS");
-    expect(documentXml).toContain("MARIA SILVA, JOAO SOUZA");
+    expect(documentXml).toContain("Qualidade do cafe no sul de Minas");
+    expect(documentXml).toContain("Maria Silva, Joao Souza");
     expect(documentXml).toContain("Universidade Federal de Lavras");
     expect(documentXml).toContain("Abstract");
     expect(documentXml).toContain("Keywords");
     expect(documentXml).toContain("Resumo");
     expect(documentXml).toContain("Palavras-chave");
-    expect(documentXml.indexOf("Resumo")).toBeLessThan(documentXml.indexOf("Palavras-chave"));
-    expect(documentXml.indexOf("Palavras-chave")).toBeLessThan(documentXml.indexOf("Abstract"));
     expect(documentXml.indexOf("Abstract")).toBeLessThan(documentXml.indexOf("Keywords"));
+    expect(documentXml.indexOf("Keywords")).toBeLessThan(documentXml.indexOf("Resumo"));
+    expect(documentXml.indexOf("Resumo")).toBeLessThan(documentXml.indexOf("Palavras-chave"));
     expectNoGraduateOnlyElements(documentXml);
     expectCpgMargins(documentXml);
 
-    const title = paragraphXmlContaining(documentXml, "QUALIDADE DO CAFE NO SUL DE MINAS");
-    const authors = paragraphXmlContaining(documentXml, "MARIA SILVA, JOAO SOUZA");
+    const title = paragraphXmlContaining(documentXml, "Qualidade do cafe no sul de Minas");
+    const authors = paragraphXmlContaining(documentXml, "Maria Silva, Joao Souza");
     const affiliation = paragraphXmlContaining(documentXml, "Universidade Federal de Lavras");
     const abstract = paragraphXmlContaining(documentXml, "Abstract");
-    const section = paragraphXmlContainingStyle(documentXml, "INTRODUCAO", "Heading1");
+    const section = paragraphXmlContainingStyle(documentXml, "Introducao", "Heading1");
     const body = paragraphXmlContaining(documentXml, "Texto comum.");
 
     expect(title).toContain('w:sz w:val="32"');
-    expect(authors).toContain("MARIA SILVA, JOAO SOUZA");
+    expect(authors).toContain("Maria Silva, Joao Souza");
     expect(paragraphText(authors).split(",")).toHaveLength(2);
     expect(affiliation).toContain('w:jc w:val="center"');
     expect(abstract).toContain('w:left="454"');
@@ -536,8 +536,8 @@ describe("DOCX export", () => {
       advisor: "Prof. Dr. Orientador",
     });
 
-    const titlePos = documentXml.indexOf("TITULO REAL DO TRABALHO");
-    const authorPos = documentXml.indexOf("ANA, BRUNO");
+    const titlePos = documentXml.indexOf("Titulo Real do Trabalho");
+    const authorPos = documentXml.indexOf("Ana, Bruno");
     const programPos = documentXml.indexOf("Programa de Pos-Graduacao");
     const advisorPos = documentXml.indexOf("Prof. Dr. Orientador");
 
@@ -548,10 +548,10 @@ describe("DOCX export", () => {
     expect(advisorPos).toBe(-1);
   });
 
-  it("CPG resumo page places resumo before abstract", async () => {
+  it("CPG resumo page places abstract before resumo in expanded type", async () => {
     const documentXml = await generatedCpgXml("", {
       ...fields,
-      workType: "resumo_cpg",
+      workType: "resumo_expandido_cpg",
       abstractText: "Abstract text.",
       keywords: "keyword1; keyword2",
       resumo: "Resumo texto do resumo.",
@@ -567,9 +567,9 @@ describe("DOCX export", () => {
     expect(keywordsPos).toBeGreaterThan(-1);
     expect(resumoPos).toBeGreaterThan(-1);
     expect(palavrasPos).toBeGreaterThan(-1);
-    expect(resumoPos).toBeLessThan(palavrasPos);
-    expect(palavrasPos).toBeLessThan(abstractPos);
     expect(abstractPos).toBeLessThan(keywordsPos);
+    expect(keywordsPos).toBeLessThan(resumoPos);
+    expect(resumoPos).toBeLessThan(palavrasPos);
   });
 
   it("formata legendas basicas no exportador geral usando nucleo compartilhado", async () => {
@@ -612,16 +612,34 @@ describe("DOCX export", () => {
       course: "ana@ufla.br, bruno@ufla.br",
     });
 
-    const title = paragraphXmlContaining(documentXml, "TITULO REAL DO TRABALHO");
-    const authors = paragraphXmlContaining(documentXml, "ANA, BRUNO");
+    const title = paragraphXmlContaining(documentXml, "Titulo Real do Trabalho");
+    const authors = paragraphXmlContaining(documentXml, "Ana, Bruno");
     const affiliation = paragraphXmlContaining(documentXml, "Universidade Federal de Lavras");
 
     expect(title).toContain('w:sz w:val="32"');
     expect(title).toMatch(/<w:b\s*\/?>|w:b w:val="1"/);
     expect(authors).toContain('w:sz w:val="24"');
     expect(authors).toMatch(/<w:b\s*\/?>|w:b w:val="1"/);
-    expect(affiliation).toContain('w:sz w:val="22"');
+    expect(affiliation).toContain('w:sz w:val="24"');
     expect(affiliation).not.toMatch(/<w:b\s*\/?>|w:b w:val="1"/);
+  });
+
+  it("CPG references are not bold (template exigencia) but keep italics", async () => {
+    const documentXml = await generatedCpgXml("", {
+      ...fields,
+      workType: "resumo_expandido_cpg",
+      referencias:
+        "DARDOT, Pierre; LAVAL, Christian. A nova razão do mundo: ensaio sobre a sociedade neoliberal. São Paulo: Boitempo, 2016.\nSILVA, M. Livro comum. Lavras: UFLA, 2024.",
+    });
+
+    const dardot = paragraphsIn(documentXml).find((p) => paragraphText(p).includes("DARDOT, Pierre; LAVAL, Christian")) ?? "";
+    const silva = paragraphsIn(documentXml).find((p) => paragraphText(p).includes("SILVA, M. Livro comum")) ?? "";
+    expect(dardot).toBeTruthy();
+    expect(silva).toBeTruthy();
+    expect(dardot).toContain("A nova razão do mundo");
+    expect(silva).toContain("Livro comum");
+    expect(dardot).not.toMatch(/<w:b\s*\/?>|w:b w:val="1"/);
+    expect(silva).not.toMatch(/<w:b\s*\/?>|w:b w:val="1"/);
   });
 
   it("App.tsx keeps DOCX-only CPG generation and no PDF workflow", () => {

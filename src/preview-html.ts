@@ -30,6 +30,7 @@ import {
 import { normalizeWorkType } from "./work-type-resolver";
 import { getWorkTypeRequirements } from "./work-type-requirements";
 import { normalizeForDetection } from "./word-structure-extractor";
+import { dedupeCpgAffiliations, splitCpgReferences, stripCpgForbiddenSections } from "./cpg-content-filter";
 
 const BODY_SIZE_PT = UFLA_RULES.typography.bodyFontSizePt;
 const COVER_AUTHOR_SIZE_PT = UFLA_RULES.typography.coverAuthorFontSizePt;
@@ -241,8 +242,8 @@ function unnumberedTitle(text: string): string {
   return `<h2 class="preview-unnumbered-title">${escapeHtml(cleanMojibakeText(text).toUpperCase())}</h2>`;
 }
 
-function centeredLine(text: string, bold = false, sizePt: number = BODY_SIZE_PT): string {
-  const cls = bold ? "preview-centered preview-bold" : "preview-centered";
+function centeredLine(text: string, bold = false, sizePt: number = BODY_SIZE_PT, extraClass = ""): string {
+  const cls = [bold ? "preview-centered preview-bold" : "preview-centered", extraClass].filter(Boolean).join(" ");
   return `<p class="${cls}" data-font-size="${sizePt}pt">${inlineMarkupToHtml(cleanMojibakeText(text || " "))}</p>`;
 }
 
@@ -313,11 +314,11 @@ function labeledParagraph(label: string, value: string, separator: "." | ":" = "
     .join("");
 }
 
-function referenceRunHtml(run: ReferenceRun): string {
+function referenceRunHtml(run: ReferenceRun, options: { noBold?: boolean } = {}): string {
   const text = escapeHtml(cleanMojibakeText(run.text));
   let html = text;
   if (run.italics) html = `<em>${html}</em>`;
-  if (run.bold) html = `<strong>${html}</strong>`;
+  if (run.bold && !options.noBold) html = `<strong>${html}</strong>`;
   return html;
 }
 
@@ -329,7 +330,7 @@ function referenceAuthorKey(text: string): string {
   return firstSpace > 0 ? trimmed.substring(0, firstSpace) : trimmed;
 }
 
-function referencesHtml(references: string[]): string {
+function referencesHtml(references: string[], options: { noBold?: boolean } = {}): string {
   const normalized = normalizeReferences(references);
   const seen = new Set<string>();
   const deduped = normalized.filter((ref) => {
@@ -346,7 +347,7 @@ function referencesHtml(references: string[]): string {
   return sorted
     .map((ref) => {
       const runs = ref.runs.length
-        ? ref.runs.map(referenceRunHtml).join("")
+        ? ref.runs.map((run) => referenceRunHtml(run, options)).join("")
         : escapeHtml(cleanMojibakeText(ref.text || " "));
       return `<p class="preview-reference">${runs}</p>`;
     })
@@ -918,12 +919,9 @@ function normalizeSemicolonKeywords(value: string): string {
 
 function cpgPreview(input: DocxGenerationInput): string {
   const { fields } = input;
-  const blocks = parseEditorContent(input.editorText);
-  const bodyBlocks = blocks.filter((block) => block.type !== "reference" && block.type !== "importedImage");
-  const references = [
-    ...splitParagraphs(fields.referencias),
-    ...blocks.filter((block) => block.type === "reference").map((block) => block.text),
-  ];
+  const blocks = parseEditorContent(stripCpgForbiddenSections(input.editorText));
+  const { bodyBlocks, referenceTitle, references: editorReferences } = splitCpgReferences(blocks);
+  const references = [...splitParagraphs(fields.referencias), ...editorReferences];
 
   const bodyHtml = bodyBlocks
     .map((block) => bodyBlockHtml(block, input.importedImages ?? [], input.importedTables ?? [], bodyTextsInBody(bodyBlocks)))
@@ -933,8 +931,12 @@ function cpgPreview(input: DocxGenerationInput): string {
   const header = [
     centeredLine((fields.title || "Título do trabalho").toUpperCase(), true, COVER_TITLE_SIZE_PT),
     centeredLine((fields.author || "Autores").toUpperCase(), true, BODY_SIZE_PT),
-    ...splitParagraphs(fields.program).map((line) => centeredLine(line, false, 11)),
-    fields.course ? centeredLine(fields.course, false, BODY_SIZE_PT) : "",
+    ...splitParagraphs(dedupeCpgAffiliations(fields.program)).map((line) =>
+      centeredLine(line, false, BODY_SIZE_PT, fields.workType === "resumo_cpg" ? "preview-affiliation-1-5" : "preview-affiliation-single"),
+    ),
+    fields.course
+      ? centeredLine(fields.course, false, CPG_RULES.typography.emailFontSizePt, "preview-monospace")
+      : "",
     labeledParagraph("Resumo", fields.resumo),
     labeledParagraph("Palavras-chave", fields.palavrasChave, ":"),
     labeledParagraph("Abstract", fields.abstractText),
@@ -943,9 +945,9 @@ function cpgPreview(input: DocxGenerationInput): string {
     .filter(Boolean)
     .join("");
 
-  const referencesSection = referencesHtml(references);
+  const referencesSection = referencesHtml(references, { noBold: true });
   const referencesBlock = referencesSection
-    ? `<section class="preview-page preview-references">${pageNumberHeader(2)}<h2 class="preview-unnumbered-title">REFERÊNCIAS</h2>${referencesSection}</section>`
+    ? `<section class="preview-page preview-references">${pageNumberHeader(2)}<h2 class="preview-unnumbered-title">${escapeHtml(referenceTitle || "REFERÊNCIAS")}</h2>${referencesSection}</section>`
     : "";
 
   return [

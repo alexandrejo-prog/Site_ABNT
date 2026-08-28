@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { dismissOnboarding, FIRST_USE_STEPS } from "../onboarding";
 
@@ -9,16 +9,41 @@ interface FirstUseGuideProps {
 
 export function FirstUseGuide({ visible, onDismiss }: FirstUseGuideProps) {
   const [stepIndex, setStepIndex] = useState(0);
+  const sectionRef = useRef<HTMLElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  // B4 (checklist-15): o guia é uma região NÃO-modal — ao aparecer não rouba
+  // o foco; guarda quem estava focado antes para devolver ao fechar.
+  useEffect(() => {
+    if (!visible) return;
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+  }, [visible]);
+
+  const restoreFocusOnDismiss = useCallback(() => {
+    const main = document.querySelector<HTMLElement>("[role='main'], main, .editor-section");
+    (main ?? document.body).focus?.();
+  }, []);
 
   const handleDismiss = useCallback(() => {
     dismissOnboarding(window.localStorage);
     onDismiss();
-  }, [onDismiss]);
+    // Após o unmount (onDismiss → visible=false), devolve o foco para quem o
+    // usuário estava usando antes do guia aparecer (se ainda existir), senão
+    // para a área principal de edição — nunca órfão no <body>.
+    requestAnimationFrame(() => {
+      const prev = previouslyFocusedRef.current;
+      if (prev && document.contains(prev)) {
+        prev.focus();
+      } else {
+        restoreFocusOnDismiss();
+      }
+    });
+  }, [onDismiss, restoreFocusOnDismiss]);
 
   if (!visible) return null;
 
   return (
-    <section className="first-use-guide" role="region" aria-label="Primeiros passos">
+    <section ref={sectionRef} className="first-use-guide" role="region" aria-label="Primeiros passos">
       <div className="first-use-guide-header">
         <h2>Comece por aqui</h2>
         <button className="first-use-guide-close" type="button" onClick={handleDismiss} aria-label="Fechar guia de primeiros passos"><X size={18} aria-hidden="true" /></button>

@@ -122,7 +122,7 @@ export function analyzeTableHeaders(documentXml: string): TableHeaderFinding[] {
   return findings;
 }
 
-export function runOoxmlChecks(parts: DocxParts): ComplianceIssue[] {
+export function runOoxmlChecks(parts: DocxParts, opts?: { requireLongQuote?: boolean }): ComplianceIssue[] {
   const issues: ComplianceIssue[] = [];
   const { documentXml, stylesXml, settingsXml, headerXmls, relsXml } = parts;
   const paras = paragraphsOf(documentXml);
@@ -192,10 +192,42 @@ export function runOoxmlChecks(parts: DocxParts): ComplianceIssue[] {
 
   // ---------------------------------------------------------------------
   // Citação longa: 4 cm (2268), 11 pt (sz 22), espaço simples (240)
+  // Verificada OCORRÊNCIA a OCORRÊNCIA: cada parágrafo ufla_citacao_longa
+  // deve carregar o trio (recuo/letra/espaço). A exigência de existência
+  // (long-quote-recuo) pode ser desligada com { requireLongQuote: false }
+  // para conteúdos sem citação direta (A4 — sem falso-positivo por tipo).
   // ---------------------------------------------------------------------
-  const longQuotes = paras.filter((p) => p.includes('w:left="2268"') && p.includes('w:sz w:val="22"'));
-  if (longQuotes.length === 0) {
+  const requireLongQuote = opts?.requireLongQuote !== false;
+  const longQuoteParas = paras.filter((p) => p.includes("ufla_citacao_longa"));
+  const longQuoteTrio = (p: string) =>
+    p.includes('w:left="2268"') && p.includes('w:sz w:val="22"') && p.includes('w:line="240"');
+  const longQuoteMalformed = longQuoteParas.filter((p) => !longQuoteTrio(p));
+  if (longQuoteParas.length === 0 && requireLongQuote) {
     issues.push(issue("long-quote-recuo", "Nenhuma citação longa com recuo de 4 cm (w:left=2268), 11 pt (sz=22) e espaço simples detectada.", "error", "Manual UFLA 8.8 / NBR 10520", "citações longas"));
+  }
+  if (longQuoteMalformed.length > 0) {
+    issues.push(issue("long-quote-format", `${longQuoteMalformed.length} citação(ões) longa(s) sem o trio recuo 4 cm (w:left=2268) / 11 pt (sz=22) / espaço simples (w:line=240).`, "error", "Manual UFLA 8.8 / NBR 10520", "citações longas"));
+  }
+
+  // ---------------------------------------------------------------------
+  // Ficha catalográfica em IMAGEM (B2, Manual UFLA §6.1): Cutter/CDU não
+  // são validáveis por texto numa imagem — por isso o alt-text (descr do
+  // docPr) deve identificar a imagem como a ficha OFICIAL da Biblioteca
+  // Universitária da UFLA. Sem a descrição, a evidência de ficha oficial
+  // some (regressão de acessibilidade/evidência).
+  // ---------------------------------------------------------------------
+  const fichaImageDocPr = documentXml.match(/<wp:docPr\b[^>]*name="ficha-catalografica"[^>]*>/g) || [];
+  if (fichaImageDocPr.length > 0) {
+    const officialDesc = fichaImageDocPr.some((d) => /descr="[^"]*Ficha catalogr[áa]fica[^"]*[Oo]ficial[^"]*Biblioteca[^"]*"/.test(d));
+    if (!officialDesc) {
+      issues.push(issue(
+        "ficha-image-official",
+        "Imagem da ficha catalográfica sem texto alternativo que a identifique como a ficha OFICIAL da Biblioteca Universitária da UFLA (Cutter/CDU não validáveis por texto em imagem).",
+        "error",
+        "Manual UFLA 6.1",
+        "ficha catalográfica",
+      ));
+    }
   }
 
   // ---------------------------------------------------------------------

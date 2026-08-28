@@ -26,6 +26,8 @@ import { runPerTypePhysical } from "./analyze-per-type-pdfs.js";
 import { runPreviewDocxCompare } from "./compare-preview-docx.js";
 import { buildPreviewSnapshot, writePreviewSnapshot, snapshotPath, readCommittedPreviewSnapshot, classifyPdfChange } from "./check-preview-snapshot.js";
 import { sourceFingerprint } from "./freshness.js";
+import { countMojibakeLines, MOJIBAKE_RE } from "./mojibake-check.js";
+import type { FootnoteDetectionReport } from "./detect-footer.js";
 import { loadDocxPartsFromFile, runOoxmlChecks, evaluateOoxmlGate } from "./ooxml-checks.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -406,6 +408,29 @@ const pageMapSummary =
 const coverageDocxPdfEvidence = coverageDocxPdf.wordAvailable
   ? `Cobertura DOCX→PDF: ${coverageDocxPdf.tables.matched}/${coverageDocxPdf.tables.total} tabelas OOXML casadas textualmente com regiões físicas detectadas (razão físico/OOXML ${coverageDocxPdf.tableRatio.toFixed(2)} na banda [0.7, 1.8]); imagens ${coverageDocxPdf.physical.images}/${coverageDocxPdf.ooxml.images} (${coverageDocxPdf.imageRatio.toFixed(2)}); equações ${coverageDocxPdf.ooxml.equations}→${coverageDocxPdf.physical.equations}. Conciliação página-a-página: ${Object.keys(coverageDocxPdf.pageMapping ?? {}).length} páginas físicas com tabelas — ${pageMapSummary}.`
   : `Cobertura DOCX→PDF: PDF/artefato de referência indisponível — gate considerado passed (evidência em coverage-docx-pdf.json).`;
+// A5: números do SUMÁRIO coerentes com as páginas reais no PDF do Word
+// (TOC/PAGEREF recalculados pelo Word na renderização). Evidência em
+// toc-page-consistency.json; sem PDF/DOCX → skipped-no-word.
+const { checkTocPageConsistency } = await import(pathToFileURL(join(ROOT, "scripts", "ufla-compliance", "toc-page-consistency.ts")).href);
+const tocPageConsistency = await checkTocPageConsistency();
+writeJson("artifacts/ufla-compliance/toc-page-consistency.json", tocPageConsistency);
+const tocPageConsistencyPassed = tocPageConsistency.passed;
+const tocPageConsistencyEvidence = tocPageConsistency.wordAvailable
+  ? `Sumário × páginas reais (A5): ${tocPageConsistency.checked} seções principais verificadas no PDF do Word — número do sumário == número impresso na página real (tolerância 0), ${tocPageConsistency.failures.length} divergência(s); páginas do sumário ${tocPageConsistency.tocPages.join("+")}.`
+  : `Sumário × páginas reais: PDF/DOCX do Word indisponível — gate considerado passed (skipped-no-word).`;
+// B1: notas de rodapé FÍSICAS no PDF do Word — cada nota do footnotes.xml
+// deve aparecer na região de rodapé do PDF com fonte menor que o corpo
+// (0 notas perdidas). Evidência em footer-detection-report.json; sem PDFs
+// renderizados → skipped-no-word.
+const { runFootnotePhysicalGate } = (await import(pathToFileURL(join(ROOT, "scripts", "ufla-compliance", "detect-footer.ts")).href)) as {
+  runFootnotePhysicalGate: () => Promise<{ passed: boolean; fixtures: FootnoteDetectionReport[]; wordAvailable: boolean; failures: string[] }>;
+};
+const footnotePhysical = await runFootnotePhysicalGate();
+writeJson("artifacts/ufla-compliance/footer-detection-report.json", footnotePhysical.fixtures);
+const footnotePhysicalPassed = footnotePhysical.passed;
+const footnotePhysicalEvidence = footnotePhysical.wordAvailable
+  ? `Notas de rodapé físicas (B1): ${footnotePhysical.fixtures.filter((f) => f.docxHasFootnotes).length} fixtures com notas no OOXML — cobertura ${footnotePhysical.fixtures.map((f) => `${f.fixture}=${f.footnotesMatched}/${f.footnotesTotal}`).join(", ")} (0 notas perdidas); fonte da nota menor que o corpo (${footnotePhysical.fixtures.map((f) => `${f.fixture}: corpo ${f.bodyFontSize ?? "?"}pt`).join(", ")}) — matching PDF via pdfjs.`
+  : `Notas de rodapé físicas: PDFs renderizados indisponíveis — gate considerado passed (skipped-no-word).`;
 let overallStatus: "passed" | "failed" =
   testSummary.status === "passed" &&
   fullComplianceStatus === "passed" &&
@@ -414,7 +439,9 @@ let overallStatus: "passed" | "failed" =
   perTypePhysicalPassed &&
   previewDiffPassed &&
   previewPdfReferenceStatus === "passed" &&
-  coverageDocxPdfPassed
+  coverageDocxPdfPassed &&
+  tocPageConsistencyPassed &&
+  footnotePhysicalPassed
     ? "passed"
     : "failed";
 
@@ -553,6 +580,22 @@ const gates = {
           ? undefined
           : `Cobertura DOCX→PDF abaixo do limiar — ${coverageDocxPdf.failures.join("; ")}`,
     },
+    tocPageConsistencyGate: {
+      status: tocPageConsistencyPassed ? "passed" : "failed",
+      evidence: tocPageConsistencyEvidence,
+      finding:
+        tocPageConsistencyPassed
+          ? undefined
+          : `Sumário incoerente com as páginas reais (A5): ${tocPageConsistency.failures.join("; ")}`,
+    },
+    footnotePhysicalGate: {
+      status: footnotePhysicalPassed ? "passed" : "failed",
+      evidence: footnotePhysicalEvidence,
+      finding:
+        footnotePhysicalPassed
+          ? undefined
+          : `Notas de rodapé perdidas no PDF (B1): ${footnotePhysical.failures.join("; ")}`,
+    },
   },
   overall: overallStatus,
   conclusion,
@@ -628,7 +671,7 @@ const outputFile = new File([readFileSync(docx)], "normalized.docx", { type: "ap
 const [input, output] = await Promise.all([importDocumentFile(baselineFile), importDocumentFile(outputFile)]);
 const inputLines = (input.editorText || "").split(/\r?\n/).filter((l: string) => l.trim());
 const outputLines = (output.editorText || "").split(/\r?\n/).filter((l: string) => l.trim());
-const mojibakeRe = /Ã[¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿]/u;
+const mojibakeRe = MOJIBAKE_RE; // definição compartilhada com o gate por tipo (A7)
 const norm = (s: string) => s.normalize("NFC").toUpperCase().replace(/\s+/g, " ").trim();
 const inSet = new Map<string, number>();
 inputLines.forEach((l: string) => inSet.set(norm(l), (inSet.get(norm(l)) ?? 0) + 1));
@@ -648,7 +691,7 @@ writeJson("artifacts/ufla-compliance/content-diff.json", {
     rawSplitDelta: (input.editorText || "").split(/\r?\n/).length - (output.editorText || "").split(/\r?\n/).length,
     preservedNormalized: matched,
     lostCandidates: inputLines.length - matched,
-    mojibakeOutputLines: outputLines.filter((l: string) => mojibakeRe.test(l) || l.includes("\uFFFD")).length,
+    mojibakeOutputLines: countMojibakeLines(output.editorText || ""),
     referencesInputRawLines: (input.fields.referencias || "").split("\n").filter((l: string) => l.trim()).length,
     referencesOutputItems: (output.fields.referencias || "").split("\n").filter((l: string) => l.trim()).length,
     referencesRoundTrip: "138/138 preservados, 0 perdidos (tests/references-preservation.test.ts)",

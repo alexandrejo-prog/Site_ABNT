@@ -167,7 +167,7 @@ export default function App() {
 
   useEffect(() => installEditorScrollFix(), []);
   useEffect(() => { if (restoredDraft) { replaceFieldsRef.current(restoredDraft.fields as any); if (restoredDraft.editorText) setEditorText(restoredDraft.editorText); } }, [restoredDraft, setEditorText]);
-  useEffect(() => { runValidation(fields, editorText, editorMode); }, [runValidation, fields, editorText, editorMode]);
+  useEffect(() => { runValidation(fields, editorText, editorMode, Boolean(fichaCatalograficaImage)); }, [runValidation, fields, editorText, editorMode, fichaCatalograficaImage]);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carrega o índice de rascunhos locais na montagem (com migração idempotente do rascunho legado)
     setNamedDrafts(listNamedDrafts(window.localStorage));
@@ -235,11 +235,11 @@ export default function App() {
     setStatus("Importação removida. Escolha outro arquivo ou preencha manualmente.");
   }, [resetFields, resetEditor, resetValidation, setGenerateAnyway, setImportedFileName, setImportedImages, setImportedTables, setFichaCatalograficaImage]);
 
-  const triggerValidation = useCallback(() => { const { issues: r, hasBlocking } = runValidation(fields, editorText, editorMode); setStatus(hasBlocking ? `Validação concluída: ${r.filter(i => i.severity === "error").length} erro(s), ${r.filter(i => i.severity === "warning" || i.severity === "info").length} alerta(s). Há erros essenciais antes da geração.` : `Validação concluída: ${r.filter(i => i.severity === "error").length} erro(s), ${r.filter(i => i.severity === "warning" || i.severity === "info").length} alerta(s). Pode gerar o DOCX como rascunho editável.`); }, [runValidation, fields, editorText, editorMode]);
+  const triggerValidation = useCallback(() => { const { issues: r, hasBlocking } = runValidation(fields, editorText, editorMode, Boolean(fichaCatalograficaImage)); setStatus(hasBlocking ? `Validação concluída: ${r.filter(i => i.severity === "error").length} erro(s), ${r.filter(i => i.severity === "warning" || i.severity === "info").length} alerta(s). Há erros essenciais antes da geração.` : `Validação concluída: ${r.filter(i => i.severity === "error").length} erro(s), ${r.filter(i => i.severity === "warning" || i.severity === "info").length} alerta(s). Pode gerar o DOCX como rascunho editável.`); }, [runValidation, fields, editorText, editorMode, fichaCatalograficaImage]);
 
   const handleGenerateDocx = useCallback(async (fieldOverrides?: Partial<AcademicFields>) => {
     const generationFields = fieldOverrides ? { ...fields, ...fieldOverrides } : fields;
-    const { canGenerate } = runValidation(generationFields, editorText, editorMode);
+    const { canGenerate } = runValidation(generationFields, editorText, editorMode, Boolean(fichaCatalograficaImage));
     if (!canGenerate && !generateAnyway) { setStatus("Corrija as pendências para gerar a versão final."); return; }
     try {
       setIsGenerating(true); setStatus("Gerando DOCX...");

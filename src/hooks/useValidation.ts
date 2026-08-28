@@ -28,14 +28,14 @@ export function useValidation() {
   const errors = useMemo(() => issues.filter((i) => i.severity === "error"), [issues]);
   const warnings = useMemo(() => issues.filter((i) => i.severity === "warning" || i.severity === "info"), [issues]);
 
-  const runValidation = useCallback((fields: AcademicFields, editorText: string, editorMode: EditorMode) => {
+  const runValidation = useCallback((fields: AcademicFields, editorText: string, editorMode: EditorMode, fichaImageProvided?: boolean) => {
     const textToValidate = editorMode === "references" ? fields.referencias : editorText;
     const rawText = textToValidate;
     let processedText = textToValidate;
     if (isCpgWork(fields.workType) && editorMode !== "references") {
       processedText = stripCpgForbiddenSections(textToValidate);
     }
-    const nextIssues = [...validateWork(fields, processedText)];
+    const nextIssues = [...validateWork(fields, processedText, { fichaImageProvided: fichaImageProvided === true })];
     const autoFilterIssue = cpgAutoFilterIssue(fields.workType, rawText, processedText);
     if (autoFilterIssue) nextIssues.push(autoFilterIssue);
     setIssues(nextIssues);

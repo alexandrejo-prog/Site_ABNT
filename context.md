@@ -13,8 +13,8 @@ description: Desenvolvimento do Site_ABNT - editor e normalizador acadêmico con
 
 Editor/normalizador acadêmico que exporta DOCX em **conformidade plena com o Manual de Normalização da UFLA (6ª ed.)** e ABNT vigente — diretiva principal (§8, regra 9). Página padrão: **A4** (outros tamanhos cancelados por ora — pendência opcional futura).
 
-- **Números (16/08):** 217 arquivos, 1731 testes (10 skipped), lint 0/0, e2e 13/13, auditoria **11/11 gates**, `sourceFingerprint a0eb33bd…`. Canônico: `docs/STATUS_ATUAL.md` (números); evidência: `artifacts/ufla-compliance/report.md`.
-- **Como ler (TOC):** §1 visão · §2 estrutura de diretórios · §3 tipos de trabalho · §4 regras UFLA/ABNT · §5 ferramenta de conformidade · §6 pendências + rodada atual (6x) · §7 comandos · §8 regras para a IA.
+- **Números (27/08):** 228 arquivos, 1801 testes (10 skipped), lint 0/0, e2e 13/13, auditoria **13/13 gates**, `sourceFingerprint 5c8fd96d70a81f61`. Canônico: `docs/STATUS_ATUAL.md` (números); evidência: `artifacts/ufla-compliance/report.md`. (Rodada 16/08: 217 arquivos, 1731 testes, `a0eb33bd…` — histórico no git.)
+- **Como ler (TOC):** §1 visão · §2 estrutura de diretórios · §3 tipos de trabalho · §4 regras UFLA/ABNT · §5 ferramenta de conformidade · §6 pendências + rodada atual (7a) · §7 comandos · §8 regras para a IA.
 - **Histórico de rodadas:** arquivado (6a–6p e 6q–6w) — ler sob demanda em `docs/historico/contexto-rodadas/` (`contexto-6a-6p.md` e `contexto-6q-6w.md`).
 
 ---
@@ -24,7 +24,7 @@ Editor/normalizador acadêmico que exporta DOCX em **conformidade plena com o Ma
 - **Objetivo:** Editor e normalizador de trabalhos acadêmicos que exporta documentos DOCX em conformidade estrita com o Manual de Normalização da UFLA (6ª edição) e normas ABNT vigentes.
 - **Tecnologias:** React 18, TypeScript 5, Vite, biblioteca `docx`, Tiptap (editor rich-text), Vitest, KaTeX (equações no preview), Playwright (e2e), pdf.js (análise física de PDF), Word COM (renderização/PDF de referência).
 - **Deploy:** Vercel (SPA)
-- **Testes:** 212 arquivos, 1699 testes (10 skipped) — `npm run verify`, `npm test`, `npm run e2e` (Playwright 13 fluxos), `npm run ufla:audit` (11 gates). Estado completo: `docs/STATUS_ATUAL.md` (canônico).
+- **Testes:** 212 arquivos, 1699 testes (10 skipped) — `npm run verify`, `npm test`, `npm run e2e` (Playwright 13 fluxos), `npm run ufla:audit` (13 gates). Estado completo: `docs/STATUS_ATUAL.md` (canônico).
 
 ---
 
@@ -163,6 +163,49 @@ Todas as 14 correções do `docs/historico/checklists/checklist-14-correcoes.md`
 
 ---
 
+## 6y. CPG CONFORME AO TEMPLATE TEXTUAL — MARGEM 2,5 cm + LEGENDA HELVETICA 10 pt (27/08/2026)
+
+Fechamento das correções da rodada CPG (resumo expandido/artigo completo) usando **as instruções textuais oficiais do CPG da UFLA** (`docs/Templates_CPG/`) como fonte primária para estas verificações — a extração Word COM dos `.doc` deixa de ser autoritativa nas divergências. `npm test` **228 arquivos, 1797 testes (10 skipped)**, lint 0/0, auditoria **13/13 gates**, `sourceFingerprint f891c194cd…`, FULL COMPLIANCE APROVADO (canônico: `docs/STATUS_ATUAL.md`).
+
+1. **Margem inferior CPG 2,5 cm** — `CPG_RULES.margins` (`src/ufla-rules.ts`): `bottomCm 1.7 → 2.5` (`bottomTwip` 1418). Template §1: sup. 3,5 / **inf. 2,5** / lat. 3,0 cm, A4 coluna única, sem cabeçalhos/rodapés, números de página suprimidos.
+2. **Legenda de figura/tabela = Helvetica 10 pt negrito** — template §4 (centralizada, recuada 0,8 cm, 6 pt antes/depois). `CPG_RULES.typography` ganhou `captionFontFamily: "Helvetica"` e `captionFontSizePt: 10`; `cpgCaptionParagraph` (`src/export-cpg-docx.ts`): `bold`, `size 20` (10 pt×2), Helvetica.
+3. **Legenda de TABELA também no padrão CPG** — o caminho `tabbedTableBlock` (tabelas tabuladas, ex. "Tabela 1 …") usava a legenda UFLA (Times 12). `src/docx-render-core.ts` ganhou opção `captionRenderer` em `tabbedTableBlock` (sem mudança no default UFLA/artigo/research-project); CPG injeta `cpgCaptionParagraph`. Verificado em XML: `w:sz w:val="20"` + `w:rFonts ascii=Helvetica` + `<w:b/>` para figura E tabela.
+4. **Checagem CPG permanente** — `scripts/cpg-compliance-check.mjs`: 2 novos checks `CAPTION_FONT_BOLD` e `CAPTION_CENTERED`; 5 DOCX de exemplo → **90/90 PASS** (margens bottom 1418 twips confirmadas).
+5. **Extras da rodada (fase anterior 26/08)** — logo institucional nas capas (monografia/dissertação/tese/TCC/projeto-pesquisa): `logoParagraph` em `src/export-docx.ts` e `src/docx-shared.ts` agora emite imagem + texto "UNIVERSIDADE FEDERAL DE LAVRAS" (pdf.js não lê texto de imagem); bug A3 em `analyze-per-type-pdfs.ts` (`pageTwoNumbered` agora é a página física 2). CPG não usa logo (usuário confirmou).
+
+---
+
+## 6z. CPG — PRIMEIRA PÁGINA CORRIGIDA (AFILIAÇÃO ÚNICA + REFERÊNCIAS SEM DUPLICAÇÃO) (27/08/2026)
+
+Correção do cabeçalho do DOCX CPG que saía "desconfigurado" quando a afiliação era repetida por autor (¹/²/³ com o mesmo texto) e as referências entravam tanto no campo quanto no editor. `npm test` **228 arquivos, 1797 testes (10 skipped)**, lint 0/0, auditoria **13/13 gates** (147s), `sourceFingerprint 4841352398a47e12`, FULL COMPLIANCE APROVADO (canônico: `docs/STATUS_ATUAL.md`).
+
+1. **Unidade do template é "Departamento"** — instruções textuais/template CPG (`tmp/cpg-comparison/templates/`, Word COM): P003–P005 = `1Departamento de Ciência da Computação/ICET – Universidade Federal de Lavras (UFLA)`, `2Departamento de Agronomia/ESAL…`, `3Departamento de Zootecnia/FZMV…` (uma linha de afiliação por autor, centralizada, Times 12; e-mails Courier New 10). Quando o autor escreve "Instituto de Ciências Naturais/ICN" (ex. PPGECA), mantém-se o texto do autor — o que importa é não duplicar.
+2. **Afiliação deduplicada** — `dedupeCpgAffiliations` (`src/cpg-content-filter.ts`): remove linhas repetidas de `fields.program` quando a identidade é idêntica após ignorar o marcador sobrescrito/numeral (`AFFILIATION_MARKER_PATTERN`, `affiliationIdentity`). Aplicado no exportador (`affiliationParagraphs`, `src/export-cpg-docx.ts`) e no preview (`cpgPreview`, `src/preview-html.ts`).
+3. **Referências sem duplicação** — `splitCpgReferences` (`src/cpg-content-filter.ts`): se o editor contém a seção "Referências Bibliográficas" (título + parágrafos), remove-a do corpo e usa o título do editor; senão, mantém apenas blocos `type:"reference"`. Ambos os fluxos concatenam campo (`fields.referencias`) + editor e deduplicam (`dedupeReferences`, sorteio ABNT — `referenceParagraphs` em `src/export-cpg-docx.ts` recebe o título do editor).
+4. **Preview alinhado ao exportador** — `cpgPreview` agora também passa por `stripCpgForbiddenSections` + `splitCpgReferences` + `dedupeCpgAffiliations` e preserva o campo referencias (corrigido um bug intermediário que omitia `fields.referencias` — o snapshot de paginação voltou a 2 páginas no resumo expandido).
+5. **Raiz da duplicidade** — `src/field-detector.ts:1528` grava as linhas de afiliação repetidas do DOCX importado em `fields.program` (que outros fluxos usam como "Programa…"); no modo CPG `program` = linhas de afiliação e `course` = e-mails (rótulo já tratado). Validação end-to-end do repro `tmp/repro-cpg-header.mts` (3 autores/afiliações iguais + referência duplicada) → XML com 1 afiliação, 1 seção de referências e sem "Referências Bibliográficas" no corpo.
+
+## 7a. CPG — VETTING DE 4 PONTOS DO USUÁRIO (27/08/2026)
+
+Fechamento dos 4 apontamentos do usuário sobre o DOCX/preview CPG (cirílico: rodada 6z), com as instruções textuais/template CPG como fonte primária. `npm test` **228 arquivos, 1799 testes (10 skipped)**, lint 0/0, auditoria **13/13 gates** (149s), `sourceFingerprint 75f8fb47e8a283b8`, FULL COMPLIANCE APROVADO (canônico: `docs/STATUS_ATUAL.md`; check CPG `cpg-compliance-check.mjs` 90/90 PASS).
+
+1. **Referências consecutivas MESCLADAS (lei + órgão + livro viram um item)** — causa em `isReferenceStartLine` (`src/references-normalizer.ts:158`): (a) autor institucional de palavra única fora da lista curta (`CAPES.`) falhava — regex de all-caps exigia `\s`; (b) autoria ABNT múltipla (`DARDOT, Pierre; LAVAL, Christian.`) falhava — regex de autor pessoal exigia período logo após o 1º autor. Corrigido: 1º regex aceita múltiplos autores `NOME, X; NOME, X.` (`(?:\s*;\s*…)*\.`) e novo regex `/^[A-ZÀ-Ú]{2,8}\.\s+\p{Lu}/u` cobre sigla institucional de palavra única. Teste de regressão em `tests/unit/references-normalizer.test.ts` (exemplo literal: `BRASIL. Lei nº 11.091…` + `CAPES. Relatório Quadrienal…` + `DARDOT, Pierre; LAVAL, Christian.…` → **3** referências, nenhuma mesclada).
+2. **Referências CPG SEM negrito** (template P045–P049 = Times 12 plano; UFLA mantém título em negrito) — `referenceParagraphs` (`src/export-cpg-docx.ts:338`): `referenceRunToTextRun({ ...item, bold: false }, …)`; preview: `referencesHtml(references, { noBold: true })` no `cpgPreview` via novo parâmetro de `referencesHtml`/`referenceRunHtml` (`src/preview-html.ts`). Itálico do título preservado. Teste em `tests/export/export-docx.test.ts` (para `DARDOT` e `SILVA`: sem `<w:b/>` no parágrafo).
+3. **E-mails do CPG = Courier New 10** (template P006; usuário confirmou manter) — DOCX já correto (`emailFontFamily`/`emailFontSizePt`); o **preview** estava Times 12: `cpgPreview` agora chama `centeredLine(fields.course, false, CPG_RULES.typography.emailFontSizePt, "preview-monospace")` e o CSS ganhou `.preview-centered.preview-monospace` (`src/preview-styles.css`). Afiliações do preview corrigidas de 11 pt → **12 pt** (template P003–P005 = Times 12), alinhando com o `BODY_SIZE_PT`.
+4. **Fontes dos subtítulos 12 pt — só confirmação** — `sectionTitleFontSizePt: 13` / `subsectionTitleFontSizePt: 12` (`CPG_RULES`, `src/ufla-rules.ts`) já coincidem com o template (P021 seções 13 / P022–P023 subtítulos 12): **nenhuma mudança de código**.
+
+## 7b. CPG — AFILIAÇÕES SEGUEM O ESPAÇAMENTO DO TEMPLATE POR TIPO (27/08/2026)
+
+Apontamento do usuário sobre o espaçamento 1,5 nas afiliações CPG com a instrução de seguir o template. `npm test` **228 arquivos, 1801 testes (10 skipped)**, lint 0/0, auditoria **13/13 gates** (143s), `sourceFingerprint 5c8fd96d70a81f61`, FULL COMPLIANCE APROVADO (canônico: `docs/STATUS_ATUAL.md`; check CPG `cpg-compliance-check.mjs` **94/94 PASS**).
+
+1. **Template oficial difere por tipo** — Resumo Simples P003–P007 = afiliações **1,5** (`wdLineSpace1pt5`); Resumo Expandido P003–P005 e Artigo Completo P003–P005 = afiliações **espaço simples** (`wdLineSpaceSingle`). O código forçava `BODY_LINE` (360) para todos.
+2. **Correção** — `affiliationParagraphs` (`src/export-cpg-docx.ts:114`): `const affiliationLine = workType === "resumo_cpg" ? BODY_LINE : SINGLE_LINE;` (termo tipográfico: afiliação/filiação = "affiliation/departamento" no cabeçalho), aplicado nos 2 fluxos (resumo e completo).
+3. **Preview alinhado** — `cpgPreview` (`src/preview-html.ts`) usa `preview-affiliation-1-5` (resumo simples) vs `preview-affiliation-single` (expansado/artigo); CSS novo em `src/preview-styles.css`.
+4. **Check reforçado** — `scripts/cpg-compliance-check.mjs`: `AFFILIATION_1_5_SPACING` valida 360 nas afiliações centralizadas (resumo simples); novos `NO_1_5_SPACING_ANYWHERE` e `AFFILIATION_SINGLE_SPACING` (zero 360 + afiliações simples nos demais). 5 DOCX de exemplo → **94/94 PASS** (antes 90, +4 checks).
+5. **Testes novos** — `tests/export/cpg-first-page.test.ts`: afiliação `w:line="240"` no resumo expandido e sem `w:line="360"`; afiliação `w:line="360"` no resumo simples.
+
+---
+
 ## 7. COMANDOS ÚTEIS
 ```bash
 npm run dev              # Inicia o servidor de desenvolvimento SPA
@@ -170,7 +213,7 @@ npm test                 # Executa testes unitários e de integração com Vites
 npm run build            # Executa o build de produção (tsc build + vite compile)
 npm run verify           # Executa testes e build (validador oficial de PR)
 npm run e2e              # Playwright 13 fluxos no navegador real (axe incluído)
-npm run ufla:audit       # Auditoria completa UFLA (lint → typecheck → regenerate Word COM → gates; 11 gates)
+npm run ufla:audit       # Auditoria completa UFLA (lint → typecheck → regenerate Word COM → gates; 13 gates)
 npm run ufla:pdfref      # Gate de regressão do PDF de referência (requer Word; runner self-hosted)
 npm run skill:validate   # Valida um DOCX; use --type para classificar itens estruturais: --type=artigo|resumo_cpg|projeto_pesquisa|...
 ```

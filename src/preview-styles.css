@@ -194,6 +194,24 @@
   line-height: 1.5;
 }
 
+.preview-centered.preview-monospace {
+  font-family: "Courier New", Courier, monospace;
+}
+
+.preview-affiliation-1-5,
+.preview-affiliation-single {
+  font-family: "Times New Roman", Times, serif;
+  margin: 0;
+}
+
+.preview-affiliation-1-5 {
+  line-height: 1.5;
+}
+
+.preview-affiliation-single {
+  line-height: 1;
+}
+
 .preview-bold {
   font-weight: 700;
 }

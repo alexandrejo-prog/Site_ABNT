@@ -154,9 +154,10 @@ function looksLikePrimaryHeading(block: ImportedBlock, text = blockText(block)):
 function looksLikePersonalThanks(text: string): boolean {
   const normalized = normalizeForDetection(text);
   if (text.length < 25) return false;
+  if (isAcademicBodyText(normalized)) return false;
   const startsWithThanks = /^(agrade[çc]o|a\s+deus|aos\s+meus|ao\s+meu|a\s+minha|[àa]\s+minha|a\s+todos|aos\s+|[àa]\s+luiza|[àa]\s+universidade|ao\s+programa)/i.test(normalized);
   if (!startsWithThanks) return false;
-  const hasThanksContent = /(esposo|filhos|pais|familiares|orientador|agradecimento|dedicatoria|amigos|colegas|equipe|trabalho|apoio|incentivo|carinho|paci[eê]ncia|universidade|programa|sustentar|guiar|caminhada|oportunidade|vivenciar|colabora[cç][aã]o|contribui[cç][aã]o|parceria|companheirismo|est[íi]mulo|acolhimento|qualidade|forma|processo|ensin[oa]|aprendizado|experi[eê]ncia)/i.test(normalized);
+  const hasThanksContent = /(esposo|filhos|pais|familiares|orientador|agradecimento|dedicatoria|amigos|colegas|equipe|apoio|incentivo|carinho|paci[eê]ncia|sustentar|guiar|caminhada|oportunidade|vivenciar|colabora[cç][aã]o|contribui[cç][aã]o|parceria|companheirismo|est[íi]mulo|acolhimento)/i.test(normalized);
   return hasThanksContent;
 }
 
@@ -772,8 +773,10 @@ function looksLikePdfConvertedDocx(structure: DocxStructure, lines: string[]): b
   const hasDelimiterWithoutHeading =
     (/PALAVRAS[- ]CHAVE:/.test(normalized) && !/^RESUMO$/m.test(normalized)) ||
     (/KEYWORDS:/.test(normalized) && !/^ABSTRACT$/m.test(normalized));
+  // INDICADORES DE IMPACTO and IMPACT INDICATORS are normal sections in
+  // dissertações/teses — they should NOT be used as evidence of PDF conversion.
   const hasDisplacedPreTextual =
-    /INDICADORES DE IMPACTO|IMPACT INDICATORS|LISTA DE QUADROS|LISTA DE GRAFICOS|LISTA DE SIGLAS/.test(normalized);
+    /LISTA DE QUADROS|LISTA DE GRAFICOS|LISTA DE SIGLAS/.test(normalized);
   return hasDelimiterWithoutHeading || (structure.images.length > 0 && hasDisplacedPreTextual);
 }
 
@@ -957,12 +960,35 @@ function cleanPreTextualList(value: string, labels: string[]): string {
   return kept.join("\n").trim();
 }
 
+/**
+ * Detects paragraphs that are clearly academic body text rather than
+ * agradecimentos/thanks. Returns true for text containing:
+ * - Academic citations: (AUTHOR, YEAR)
+ * - Numbered subsections: 1.2, 2.3
+ * - Long paragraphs with academic transition words
+ * Agradecimentos never contain these patterns.
+ */
+function isAcademicBodyText(normalized: string): boolean {
+  // Academic citation pattern: (SILVA, 2024) or (SILVA; 2024)
+  if (/\(\s*[A-ZÀ-Ú]{2,}[;,\s]*\d{4}/.test(normalized)) return true;
+  // Numbered subsections: 1.2 Problema, 2.3 Resultados, etc.
+  if (/\b\d+\.\d+\s/.test(normalized)) return true;
+  // Very long paragraph with academic transition words
+  if (
+    normalized.length > 300 &&
+    /(PORTANTO|ENTRETANTO|DESMODO|DESSEMODO|NESSESENTIDO|NESTECONTEXTO|SEGUNDO\s|ACIMADESCRITO|DEACORDO|AARTIRDE)/.test(normalized)
+  ) return true;
+  return false;
+}
+
 function looksLikeThanksBlock(text: string): boolean {
   const normalized = normalizeForDetection(text);
   if (text.length < 25) return false;
+  // Reject academic body text that may coincidentally start with "A universidade", "Ao programa", etc.
+  if (isAcademicBodyText(normalized)) return false;
   const startsWithThanks = /^(agrade[çc]o|a\s+deus|aos\s+meus|ao\s+meu|a\s+minha|[àa]\s+minha|a\s+todos|aos\s+|[àa]\s+luiza|[àa]\s+universidade|ao\s+programa)/i.test(normalized);
   if (!startsWithThanks) return false;
-  const hasThanksContent = /(esposo|filhos|pais|familiares|orientador|agradecimento|dedicatoria|amigos|colegas|equipe|trabalho|apoio|incentivo|carinho|paci[eê]ncia|universidade|programa|sustentar|guiar|caminhada|oportunidade|vivenciar|colabora[cç][aã]o|contribui[cç][aã]o|parceria|companheirismo|est[íi]mulo|acolhimento|qualidade|forma|processo|ensin[oa]|aprendizado|experi[eê]ncia)/i.test(normalized);
+  const hasThanksContent = /(esposo|filhos|pais|familiares|orientador|agradecimento|dedicatoria|amigos|colegas|equipe|apoio|incentivo|carinho|paci[eê]ncia|sustentar|guiar|caminhada|oportunidade|vivenciar|colabora[cç][aã]o|contribui[cç][aã]o|parceria|companheirismo|est[íi]mulo|acolhimento)/i.test(normalized);
   return hasThanksContent;
 }
 
@@ -994,7 +1020,7 @@ function collectPreTextualByContent(blocks: ImportedBlock[]): {
 
     if (agradecimentosStart >= 0 && agradecimentosEnd < 0) {
       if (
-        /^(PALAVRAS[- ]CHAVE|KEYWORDS|RESUMO|ABSTRACT|INDICADORES DE IMPACTO|IMPACT INDICATORS|LISTA DE|SUMARIO|1\s+INTRODUCAO|INTRODUCAO|REFERENCIAS)/i.test(normalized) ||
+        /^(PALAVRAS[- ]CHAVE|KEYWORDS|RESUMO|ABSTRACT|INDICADORES DE IMPACTO|IMPACT INDICATORS|LISTA DE|SUMARIO|\d+\s+\S+|INTRODUCAO|REFERENCIAS)/i.test(normalized) ||
         /^(A PRESENTE PESQUISA TEVE COMO OBJETIVO|THIS STUDY AIMED)\b/.test(normalized)
       ) {
         agradecimentosEnd = i;

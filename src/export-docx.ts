@@ -653,6 +653,10 @@ function logoParagraph(logo?: DocxLogoAsset): Paragraph[] {
         }),
       ],
     }),
+    centeredParagraph("UNIVERSIDADE FEDERAL DE LAVRAS", true, COVER_AUTHOR_SIZE, {
+      after: 0,
+      line: SINGLE_LINE,
+    }),
   ];
 }
 
@@ -1128,6 +1132,22 @@ export function semanticReconstructedTableParagraph(table: ImportedTable): Array
   }
 
   const hasRealHeaders = reconstructed.headers.some((header) => header.trim());
+
+  // A1: tabela reconstruída sem headers semânticos — se a importação inferiu
+  // headerRowIndex (formatação/estrutura), marca a linha correspondente no
+  // corpo reconstruído como w:tblHeader (WCAG 1.3.1 / NBR 17225).
+  const inferredHeaderRow = table.headerRowIndex !== undefined ? table.rows[table.headerRowIndex] : undefined;
+  const normRowText = (cells: Array<{ text?: string } | string | undefined>): string =>
+    cells
+      .map((c) => (typeof c === "string" ? c : c?.text ?? ""))
+      .join("|")
+      .replace(/\s+/g, " ")
+      .trim();
+  const bodyHeaderIndex =
+    inferredHeaderRow && !hasRealHeaders
+      ? reconstructed.rows.findIndex((row) => normRowText(row.cells) === normRowText(inferredHeaderRow))
+      : -1;
+
   const headerRow = hasRealHeaders
     ? new TableRow({
         tableHeader: true,
@@ -1148,6 +1168,7 @@ export function semanticReconstructedTableParagraph(table: ImportedTable): Array
   const bodyRows = reconstructed.rows.map((row, rowIndex) => {
     const cells = Array.from({ length: reconstructed.headers.length }, (_, index) => row.cells[index] ?? "");
     return new TableRow({
+      ...(rowIndex === bodyHeaderIndex ? { tableHeader: true } : {}),
       children: cells.map((cellText, columnIndex) => {
         let displayText = cellText;
         if (columnIndex === 0 && rowIndex > 0 && cellText && reconstructed.rows[rowIndex - 1]?.cells[0] === cellText) {

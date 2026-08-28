@@ -1,6 +1,6 @@
 {
   "schema": "ufla-audit/preview-snapshot/v1",
-  "generatedAt": "2026-08-16T21:19:26.824Z",
+  "generatedAt": "2026-08-27T19:32:08.568Z",
   "templates": {
     "monografia": {
       "previewPages": 9,
@@ -200,15 +200,15 @@
         "da037b6fce314d70",
         "54e94f7be60ffbbd"
       ],
-      "docxDigest": "5995e3d46cbfa705",
+      "docxDigest": "02c4a94950f10d07",
       "pdfPages": 1,
       "pdfSignatures": [
-        "7a04ab2e668e14c5"
+        "7605139a089da353"
       ],
       "pdfPageNumbers": [
-        1
+        null
       ],
-      "similarity": 1,
+      "similarity": 0.92,
       "pageDelta": 1
     },
     "projeto_pesquisa": {

@@ -121,9 +121,38 @@ function isLikelyZipFile(arrayBuffer: ArrayBuffer): boolean {
   return bytes[0] === 0x50 && bytes[1] === 0x4b;
 }
 
+/**
+ * B3 (checklist-15): magic bytes OLE2 (D0 CF 11 E0 A1 B1 1A E1) identificam
+ * arquivo .doc binário antigo — inclusive renomeado para .docx. O DOCX é um
+ * ZIP (PK); um arquivo OLE2 com extensão .docx é DOC renomeado.
+ */
+export function isOle2Binary(arrayBuffer: ArrayBuffer): boolean {
+  const bytes = new Uint8Array(arrayBuffer.slice(0, 8));
+  if (bytes.length < 8) return false;
+  return (
+    bytes[0] === 0xd0 &&
+    bytes[1] === 0xcf &&
+    bytes[2] === 0x11 &&
+    bytes[3] === 0xe0 &&
+    bytes[4] === 0xa1 &&
+    bytes[5] === 0xb1 &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0xe1
+  );
+}
+
 function docxOpenError(fileName: string): Error {
   return new Error(
     `Nao foi possivel abrir "${fileName}" como DOCX valido. O arquivo pode estar corrompido, incompleto ou em formato .doc antigo renomeado para .docx. Abra o arquivo no Word ou LibreOffice, use "Salvar como" > "Documento do Word (.docx)" e tente importar novamente.`,
+  );
+}
+
+function oldDocBinaryError(fileName: string, renamed: boolean): Error {
+  const hint = renamed
+    ? ".doc ANTIGO renomeado para .docx (formato OLE2 binario, nao ZIP)"
+    : ".doc ANTIGO (formato OLE2 binario)";
+  return new Error(
+    `Este arquivo ("${fileName}") e um ${hint}. O importador nao le .doc. Abra no Word ou LibreOffice e use "Salvar como" > "Documento do Word (.docx)" e tente novamente.`,
   );
 }
 
@@ -562,11 +591,12 @@ function importedTablesFromStructure(structure: DocxStructure): ImportedTable[] 
 
     const sourceHeaderRows = (block.headerRowIndices ?? []).filter((i) => originalIndices.includes(i));
     const firstSourceHeader = sourceHeaderRows.length ? Math.min(...sourceHeaderRows) : undefined;
-    // Só declara headerRowIndex quando a ORIGEM declara w:tblHeader. Sem isso
-    // (baseline convertido de PDF), a linha de cabeçalho é INFERIDA na
-    // exportação (inferTableHeaderRow) — o fallback 0 aqui marcava o TÍTULO
-    // ("Tema: ...") como header em tabelas com 1ª linha-título + 2ª linha de
-    // rótulos (regressão corrigida 2026-08-15).
+    // headerRowIndex vem da ORIGEM (w:tblHeader declarado) OU da INFERÊNCIA
+    // por formatação/estrutura na extração (A1 — tabelas de DOCX convertido
+    // de PDF: maioria negrito/centralizada, ou título de célula única + 1ª
+    // linha multi-célula). A inferência nunca marca o TÍTULO ("Tema: ...")
+    // como header em tabelas com 1ª linha-título + 2ª linha de rótulos
+    // (regressão corrigida 2026-08-15).
     const headerRowIndex =
       firstSourceHeader !== undefined ? originalIndices.indexOf(firstSourceHeader) : undefined;
 
@@ -920,6 +950,7 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
     let mammothText = "";
 
     if (!arrayBuffer.byteLength || !isLikelyZipFile(arrayBuffer)) {
+      if (isOle2Binary(arrayBuffer)) throw oldDocBinaryError(file.name, true);
       throw docxOpenError(file.name);
     }
 
@@ -986,6 +1017,12 @@ export async function importDocumentFile(file: File): Promise<ImportResult> {
       ...normalized.messages,
       ...detected.messages,
     ]);
+  }
+
+  if (extension === "doc") {
+    const arrayBuffer = await file.arrayBuffer();
+    if (isOle2Binary(arrayBuffer)) throw oldDocBinaryError(file.name, false);
+    throw new Error("Formato nao suportado. Use .docx, .txt ou .md.");
   }
 
   throw new Error("Formato nao suportado. Use .docx, .txt ou .md.");

@@ -71,6 +71,7 @@ export function logoParagraph(logo?: DocxLogoAsset): Paragraph[] {
         }),
       ],
     }),
+    centered("UNIVERSIDADE FEDERAL DE LAVRAS", true, AUTHOR_SIZE, 0, 0),
   ];
 }
 

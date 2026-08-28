@@ -438,9 +438,10 @@ export function tabbedTableBlock(
     sourceSize?: number;
     font?: string;
     sourceFallback?: string;
+    captionRenderer?: (captionText: string, kind: CaptionKind, bookmarkId?: string) => Paragraph;
   } = {},
 ): Array<Paragraph | Table> {
-  const { captionPrefix = "", bodySize = 24, sourceSize = UFLA_RULES.typography.sourceFontSizePt * 2, font = "Times New Roman", sourceFallback } = options;
+  const { captionPrefix = "", bodySize = 24, sourceSize = UFLA_RULES.typography.sourceFontSizePt * 2, font = "Times New Roman", sourceFallback, captionRenderer } = options;
   const detected = detectTabbedTableBlock(text);
   if (!detected) return splitParagraphs(text).map((line) => simpleParagraph(line));
 
@@ -476,8 +477,9 @@ export function tabbedTableBlock(
   const SOLID_BORDER = { style: BorderStyle.SINGLE, size: 4, color: "000000" };
 
   const kind: CaptionKind = /^(quadro|tabela)\s+\d+/i.test(detected.caption.trim()) ? "table" : "illustration";
+  const renderCaption = captionRenderer ?? captionParagraph;
   const result: Array<Paragraph | Table> = [
-    captionParagraph(captionPrefix + detected.caption, kind, captionBookmarkIdFromText(captionPrefix + detected.caption)),
+    renderCaption(captionPrefix + detected.caption, kind, captionBookmarkIdFromText(captionPrefix + detected.caption)),
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       borders: {

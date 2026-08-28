@@ -18,6 +18,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { validatePagination } from "./validate-pagination";
+import { PER_TYPE_FIELDS } from "./per-type-fixtures";
+import { PER_PRODUCTION_FIXTURES } from "./per-production-fixtures";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -46,6 +48,76 @@ function renderPdf(docxPath: string, pdfPath: string): void {
   );
 }
 
+export interface CoverPhysical {
+  /** Texto das linhas da página 1 (capa), em ordem de cima para baixo. */
+  page1Lines: Array<{ text: string; y: number }>;
+  /** Imagens detectadas na página 1 (logo da capa). */
+  page1Images: number;
+  /** A página 2 (folha de rosto) exibe número visível no canto superior direito? */
+  pageTwoNumbered: boolean;
+}
+
+export interface CoverVerification {
+  passed: boolean;
+  institutional: boolean;
+  author: boolean;
+  title: boolean;
+  localYear: boolean;
+  ordered: boolean;
+  logo: boolean;
+  reasons: string[];
+}
+
+const normCover = (s: string) =>
+  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
+
+/**
+ * A2: verifica a capa física (página 1) — institucional → autor → título →
+ * local/ano, nessa ordem vertical, com o logo presente. Os textos esperados
+ * vêm das fixtures por tipo (author/title) e o institucional é fixo da UFLA.
+ */
+export function verifyCoverPhysical(page1Lines: Array<{ text: string; y: number }>, page1Images: number, expected: { author: string; title: string }): CoverVerification {
+  const reasons: string[] = [];
+  const inst = page1Lines.find((l) => normCover(l.text).includes("UNIVERSIDADE FEDERAL DE LAVRAS"));
+  const author = page1Lines.find((l) => normCover(l.text) === normCover(expected.author));
+  const title = page1Lines.find((l) => normCover(l.text) === normCover(expected.title));
+  // Local da capa: linha com "LAVRAS" que NÃO seja o institucional
+  // ("UNIVERSIDADE FEDERAL DE LAVRAS" também contém a cidade).
+  const local = page1Lines.find((l) => normCover(l.text).includes("LAVRAS") && !normCover(l.text).includes("UNIVERSIDADE FEDERAL"));
+  const year = page1Lines.find((l) => /20\d\d/.test(l.text));
+  const logo = page1Images >= 1;
+  if (!inst) reasons.push("institucional ausente na capa");
+  if (!author) reasons.push("autor ausente na capa");
+  if (!title) reasons.push("título ausente na capa");
+  if (!local || !year) reasons.push("local/ano ausentes na capa");
+  if (!logo) reasons.push("logo (imagem) ausente na capa");
+  // y = yTop (distância do topo da página, cresce para baixo): a ordem UFLA é
+  // institucional (mais alto) → autor → título → local/ano (mais baixo).
+  const hasAll = Boolean(inst && author && title && local && year);
+  const ordered =
+    hasAll &&
+    inst!.y < author!.y &&
+    author!.y < title!.y &&
+    title!.y < local!.y &&
+    local!.y < year!.y;
+  if (!ordered && reasons.length === 0) reasons.push("ordem vertical incorreta (institucional → autor → título → local/ano)");
+  return {
+    passed: reasons.length === 0,
+    institutional: Boolean(inst),
+    author: Boolean(author),
+    title: Boolean(title),
+    localYear: Boolean(local && year),
+    ordered,
+    logo,
+    reasons,
+  };
+}
+
+/** Tipos com capa e folha de rosto físicas (A2/A3). */
+export const COVER_TYPES = new Set(["tcc", "monografia", "dissertacao", "tese", "projeto_pesquisa"]);
+/** Tipos com contagem contínua a partir da folha de rosto (A3: Introdução ≥ 2). */
+export const COUNTED_TYPES = new Set(["tcc", "monografia", "dissertacao", "tese"]);
+
 async function analyzePdf(pdfPath: string): Promise<{
   pages: number;
   images: number;
@@ -57,6 +129,8 @@ async function analyzePdf(pdfPath: string): Promise<{
   bottomMarginViolations: number[];
   /** Coordenadas do 1º número de página visível (cabeçalho corrente) — evidência de posição. */
   headerNumber: { page: number; value: number; x: number; yTop: number } | null;
+  /** A2/A3: física da capa e da folha de rosto. */
+  cover: CoverPhysical;
 }> {
   const doc = await pdfjsLib.getDocument({ data: new Uint8Array(readFileSync(pdfPath)) }).promise;
   const pageNumbers: number[] = [];
@@ -66,6 +140,9 @@ async function analyzePdf(pdfPath: string): Promise<{
   let landscapePages = 0;
   const bottomMarginViolations: number[] = [];
   let headerNumber: { page: number; value: number; x: number; yTop: number } | null = null;
+  let page1Images = 0;
+  let page1Lines: Array<{ text: string; y: number }> = [];
+  let pageTwoHasNumber = false;
 
   // Margem inferior ABNT = 2 cm = 56.7 pt. Conteúdo abaixo de (PAGE_H - 40) pt
   // (1.4 cm — folga de 0.6 cm para o que o Word renderiza perto da margem)
@@ -83,7 +160,9 @@ async function analyzePdf(pdfPath: string): Promise<{
     // Imagens: opList — contagem de ops paintImageXObject (técnica DECISION-009).
     const OPS = pdfjsLib.OPS;
     const ops = (await page.getOperatorList()).fnArray;
-    images += ops.filter((fn) => fn === OPS.paintImageXObject || fn === OPS.paintInlineImageXObject || fn === OPS.paintImageMaskXObject).length;
+    const pageImageCount = ops.filter((fn) => fn === OPS.paintImageXObject || fn === OPS.paintInlineImageXObject || fn === OPS.paintImageMaskXObject).length;
+    images += pageImageCount;
+    if (p === 1) page1Images = pageImageCount;
 
     // Texto: número de página (canto superior direito) + grade de colunas p/ tabelas.
     const tc = await page.getTextContent();
@@ -95,10 +174,24 @@ async function analyzePdf(pdfPath: string): Promise<{
     const nums = items.filter((it) => /^\d{1,3}$/.test(it.t) && it.yTop < 70 && it.x > PAGE_W * 0.7).map((it) => parseInt(it.t, 10));
     if (nums.length > 0) {
       pageNumbers.push(nums[0]);
+      if (p === 2) pageTwoHasNumber = true;
       if (!headerNumber) {
         const first = items.find((it) => /^\d{1,3}$/.test(it.t) && it.yTop < 70 && it.x > PAGE_W * 0.7);
         if (first) headerNumber = { page: p, value: parseInt(first.t, 10), x: first.x, yTop: first.yTop };
       }
+    }
+
+    // A2: linhas da página 1 (capa) com posição vertical (yTop do topo p/ baixo).
+    if (p === 1) {
+      const lineMap = new Map<number, Array<{ text: string; y: number }>>();
+      for (const it of items) {
+        const key = Math.round(it.yTop / 4);
+        if (!lineMap.has(key)) lineMap.set(key, []);
+        lineMap.get(key)!.push({ text: it.t, y: it.yTop });
+      }
+      page1Lines = [...lineMap.values()]
+        .map((arr) => ({ text: arr.map((i) => i.text).join(" ").replace(/\s+/g, " ").trim(), y: Math.max(...arr.map((i) => i.y)) }))
+        .filter((l) => l.text.length > 0);
     }
 
     // Margem inferior: qualquer item de texto abaixo da área útil = violação.
@@ -141,6 +234,12 @@ async function analyzePdf(pdfPath: string): Promise<{
     landscapePages,
     bottomMarginViolations,
     headerNumber,
+    cover: {
+      page1Lines,
+      page1Images,
+      // A3: a folha de rosto (página 2) NÃO pode exibir número no cabeçalho corrente.
+      pageTwoNumbered: pageTwoHasNumber,
+    },
   };
 }
 
@@ -181,6 +280,16 @@ export async function runPerTypePhysical(): Promise<{ rendered: Record<string, u
         if (physical.bottomMarginViolations.length > 0) {
           failures.push(`${file}: conteúdo na margem inferior (área do rodapé) nas páginas ${physical.bottomMarginViolations.join(", ")} — yTop > altura - 40pt`);
         }
+
+        // A2/A3: física da capa e da folha de rosto por tipo (tipos com parte
+        // pré-textual — tcc/monografia/dissertação/tese/projeto). As ASSERÇÕES
+        // ficam após o cálculo da paginação (dependem de firstVisibleValue).
+        const entryType = entryTypeFor(file);
+        entry.cover = {
+          page1Lines: physical.cover.page1Lines,
+          page1Images: physical.cover.page1Images,
+          pageTwoNumbered: physical.cover.pageTwoNumbered,
+        };
         // Papel A4 (595.32 × 841.92 pt) ou A4 paisagem (841.92 × 595.32 pt) —
         // checagem física real do layout; toda página deve ser A4 em qualquer
         // orientação (gap P0: tabela larga → seção paisagem).
@@ -200,6 +309,27 @@ export async function runPerTypePhysical(): Promise<{ rendered: Record<string, u
         };
         if (physical.pages === 0) failures.push(`${file}: PDF sem páginas`);
         if (!pagination.isValid) failures.push(`${file}: paginação — ${pagination.errors.join("; ")}`);
+
+        // A2: capa física (institucional → autor → título → local/ano + logo).
+        if (entryType && COVER_TYPES.has(entryType)) {
+          const cover = verifyCoverPhysical(physical.cover.page1Lines, physical.cover.page1Images, fixtureFieldsFor(file));
+          (entry.cover as { verified?: boolean }).verified = cover.passed;
+          if (!cover.passed) {
+            failures.push(`${file}: capa física (A2) — ${cover.reasons.join("; ")}`);
+          }
+        }
+        // A3: folha de rosto sem número visível + Introdução com o valor contado.
+        if (entryType && COVER_TYPES.has(entryType) && physical.cover.pageTwoNumbered) {
+          failures.push(`${file}: folha de rosto (página 2) exibe número visível (A3/DECISION-010)`);
+        }
+        if (
+          entryType &&
+          COUNTED_TYPES.has(entryType) &&
+          pagination.firstVisibleValue !== undefined &&
+          pagination.firstVisibleValue < 2
+        ) {
+          failures.push(`${file}: Introdução deve exibir o valor contado (≥ 2); exibe ${pagination.firstVisibleValue} (A3/DECISION-010)`);
+        }
         entry.status = "passed";
       }
     } catch (err) {
@@ -235,6 +365,26 @@ export function entryTypeFor(file: string): string | undefined {
   if (base === "resumo-expandido-cpg") return "resumo_expandido_cpg";
   if (base === "projeto-pesquisa") return "projeto_pesquisa";
   return undefined;
+}
+
+/** Campos esperados (author/title) da fixture do DOCX por arquivo (A2). */
+export function fixtureFieldsFor(file: string): { author: string; title: string } {
+  const base = basename(file, ".docx");
+  const keyMap: Record<string, string> = {
+    artigo: "artigo",
+    tcc: "tcc",
+    "monografia-draft": "monografia_draft",
+    "dissertacao-draft": "dissertacao_draft",
+    "tese-draft": "tese_draft",
+    "resumo-expandido-cpg": "resumo_expandido_cpg",
+    "projeto-pesquisa": "projeto_pesquisa",
+  };
+  const key = keyMap[base] ?? base;
+  const direct = PER_TYPE_FIELDS[key as keyof typeof PER_TYPE_FIELDS];
+  if (direct) return { author: direct.author, title: direct.title };
+  const prod = PER_PRODUCTION_FIXTURES.find((f) => f.def.id === base);
+  if (prod) return { author: prod.fields.author, title: prod.fields.title };
+  return { author: "", title: "" };
 }
 
 async function main(): Promise<void> {

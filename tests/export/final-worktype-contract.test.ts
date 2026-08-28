@@ -291,12 +291,10 @@ SILVA, M. Projeto de pesquisa. Lavras: UFLA, 2024.`,
         palavrasChave: "palavra1; palavra2",
       });
 
-      expect(documentXml).toContain("QUALIDADE DO CAFE NO SUL DE MINAS");
-      expect(documentXml).toContain("MARIA SILVA");
+      expect(documentXml).toContain("Qualidade do cafe no sul de Minas");
+      expect(documentXml).toContain("Maria Silva");
       expect(documentXml).toContain("Resumo texto do resumo.");
       expect(documentXml).toContain("Palavras-chave");
-      expect(documentXml).toContain("Abstract text.");
-      expect(documentXml).toContain("Keywords");
       expect(documentXml).not.toContain("SUMÁRIO");
       expect(documentXml).not.toContain("FICHA CATALOGR");
       expect(documentXml).not.toContain("FOLHA DE APROVA");

@@ -123,6 +123,21 @@ describe("references normalizer", () => {
     ]);
   });
 
+  it("nao junta lei, orgao e livro em uma unica referencia (CAPES + autores com ponto e virgula)", () => {
+    const normalized = normalizeReferencesText(
+      [
+        "BRASIL. Lei nº 11.091, de 12 de janeiro de 2005. Dispõe sobre a estruturação do Plano de Carreira dos Cargos Técnico-Administrativos em Educação. Disponível em: https://www.planalto.gov.br/ccivil_03/_Ato2004-2006/2005/Lei/L11091.htm. Acesso em: 25 ago. 2026.",
+        "CAPES. Relatório Quadrienal 2017 - Área de Ensino. Brasília: CAPES, 2017.",
+        "DARDOT, Pierre; LAVAL, Christian. A nova razão do mundo: ensaio sobre a sociedade neoliberal. São Paulo: Boitempo, 2016.",
+      ].join("\n"),
+    );
+
+    expect(normalized).toHaveLength(3);
+    expect(normalized[0].text).toContain("BRASIL. Lei nº 11.091");
+    expect(normalized[1].text).toContain("CAPES. Relatório Quadrienal");
+    expect(normalized[2].text).toContain("DARDOT, Pierre; LAVAL, Christian");
+  });
+
   it("descarta fragmento orfao iniciado por ano", () => {
     const normalized = normalizeReferencesText(
       "1995. Secao 1.\nSILVA, M. Livro comum. Lavras: UFLA, 2024.",

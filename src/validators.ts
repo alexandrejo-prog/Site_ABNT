@@ -651,7 +651,7 @@ function applyProgramDegreeChecks(program: UflaPpgProgram, fields: AcademicField
   }
 }
 
-export function validateWork(fields: AcademicFields, editorText = ""): ValidationIssue[] {
+export function validateWork(fields: AcademicFields, editorText = "", opts?: { fichaImageProvided?: boolean }): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   addDocumentStructureIssues(fields, editorText, issues);
   const requirements = getWorkTypeRequirements(fields.workType);
@@ -718,14 +718,28 @@ if (!hasValue(fields.introducao) && !isCpgWork(fields.workType) && !simpleArticl
   issues.push(...validateShortCitation(editorText));
   if (hasValue(fields.imageWarnings)) issues.push({ severity: "warning", code: "imported-image-warning", message: fields.imageWarnings, what: "Imagens foram detectadas no arquivo original.", why: "A importacao preserva imagens quando os bytes estao acessiveis; quando isso nao e possivel, a imagem vira alerta revisavel, nao texto do trabalho.", action: "Confira imagens importadas, reinsira manualmente as ausentes e revise legendas e fontes." });
   if (hasValue(fields.anexos) && /\[Imagem detectada:/i.test(fields.anexos)) issues.push({ severity: "warning", code: "annex-image-partial", message: "Há imagem detectada em anexos; confira posição, qualidade e legenda antes da versão final.", what: "Imagens foram detectadas na seção de anexos.", why: "Anexos com imagens exigem verificação de legenda, fonte e qualidade.", action: "Revise a seção de anexos no DOCX gerado." });
-  addCatalogCardIssues(fields, issues);
+  addCatalogCardIssues(fields, issues, opts?.fichaImageProvided === true);
   return issues;
 }
 
-function addCatalogCardIssues(fields: AcademicFields, issues: ValidationIssue[]): void {
+function addCatalogCardIssues(fields: AcademicFields, issues: ValidationIssue[], fichaImageProvided = false): void {
   const needsCard = fields.workType === "monografia" || fields.workType === "dissertacao" || fields.workType === "tese";
   if (!needsCard) return;
   const content = fields.fichaCatalografica?.trim() ?? "";
+  // B2: ficha em IMAGEM (upload) — não validável por texto; a decisão de que
+  // a imagem é a ficha OFICIAL (Cutter/CDU visíveis) fica explícita na UI
+  // (aviso não-bloqueante) e o DOCX valida o texto alternativo (ficha-image-official).
+  if (!content && fichaImageProvided) {
+    issues.push({
+      severity: "warning",
+      code: "ficha-image-confirm",
+      fieldKey: "fichaCatalografica",
+      message: "Ficha catalográfica em imagem anexada — confirme que é a ficha OFICIAL da Biblioteca Universitária da UFLA (Cutter e CDU visíveis) antes da versão final.",
+      what: "A ficha foi anexada como imagem e não pôde ser validada por texto.",
+      why: "O DOCX final registra o texto alternativo da imagem como ficha oficial; a conferência visual é do autor.",
+      action: "Confira Cutter (ex.: S586f) e CDU na imagem antes da versão final, ou cole a ficha em texto.",
+    });
+  }
   if (!content) return; // ausência já é coberta pelas pendências de versão final
   // Ficha em TEXTO com conteúdo real mas sem número de Cutter/CDU → bloqueia a
   // versão final: toda ficha oficial da Biblioteca Universitária da UFLA traz o

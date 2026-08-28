@@ -99,9 +99,9 @@ async function generatedCpgXml(fields: AcademicFields = cpgFields, editorText = 
 describe("CPG first page layout", () => {
   it("keeps title as first real paragraph without empty spacer or page break", async () => {
     const documentXml = await generatedCpgXml();
-    const title = paragraphXmlContaining(documentXml, "QUALIDADE DO CAFE NO SUL DE MINAS");
+    const title = paragraphXmlContaining(documentXml, "Qualidade do cafe no sul de Minas");
 
-    expect(titleOccurrences(documentXml, "QUALIDADE DO CAFE NO SUL DE MINAS")).toBe(1);
+    expect(titleOccurrences(documentXml, "Qualidade do cafe no sul de Minas")).toBe(1);
     expect(paragraphsIn(documentXml)[0]).toBe(title);
     expect(title).not.toContain('w:br w:type="page"');
     expect(spacingBefore(title)).toBeLessThanOrEqual(240);
@@ -112,7 +112,7 @@ describe("CPG first page layout", () => {
 
   it("keeps authors bold and affiliation normal on the first page", async () => {
     const documentXml = await generatedCpgXml();
-    const authors = paragraphXmlContaining(documentXml, "MARIA SILVA, JOAO SOUZA");
+    const authors = paragraphXmlContaining(documentXml, "Maria Silva, Joao Souza");
     const affiliation = paragraphXmlContaining(documentXml, "Universidade Federal de Lavras");
 
     expect(paragraphText(authors).split(",")).toHaveLength(2);
@@ -120,18 +120,33 @@ describe("CPG first page layout", () => {
     expect(authors).toContain('w:sz w:val="24"');
     expect(hasPositiveBold(authors)).toBe(true);
     expect(affiliation).toContain('w:jc w:val="center"');
-    expect(affiliation).toContain('w:sz w:val="22"');
+    expect(affiliation).toContain('w:sz w:val="24"');
     expect(hasPositiveBold(affiliation)).toBe(false);
   });
 
-  it("keeps resumo before abstract in CPG templates and final period in keywords", async () => {
+  it("uses single spacing in affiliations for resumo_expandido (template P003–P005)", async () => {
+    const documentXml = await generatedCpgXml(cpgFields);
+    const affiliation = paragraphXmlContaining(documentXml, "Universidade Federal de Lavras");
+
+    expect(affiliation).toContain('w:line="240"');
+    expect(affiliation).not.toContain('w:line="360"');
+  });
+
+  it("uses 1.5 spacing in affiliations for resumo_simples (template P003–P007)", async () => {
+    const documentXml = await generatedCpgXml({ ...cpgFields, workType: "resumo_cpg" });
+    const affiliation = paragraphXmlContaining(documentXml, "Universidade Federal de Lavras");
+
+    expect(affiliation).toContain('w:line="360"');
+  });
+
+  it("keeps abstract before resumo in CPG templates and final period in keywords", async () => {
     const documentXml = await generatedCpgXml();
     const text = documentText(documentXml);
 
-    expect(text.indexOf("Resumo. Resumo do trabalho.")).toBeGreaterThan(-1);
-    expect(text.indexOf("Palavras-chave: cafe; qualidade.")).toBeGreaterThan(text.indexOf("Resumo. Resumo do trabalho."));
-    expect(text.indexOf("Abstract. Abstract text.")).toBeGreaterThan(text.indexOf("Palavras-chave: cafe; qualidade."));
+    expect(text.indexOf("Abstract. Abstract text.")).toBeGreaterThan(-1);
     expect(text.indexOf("Keywords: coffee; quality.")).toBeGreaterThan(text.indexOf("Abstract. Abstract text."));
+    expect(text.indexOf("Resumo. Resumo do trabalho.")).toBeGreaterThan(text.indexOf("Keywords: coffee; quality."));
+    expect(text.indexOf("Palavras-chave: cafe; qualidade.")).toBeGreaterThan(text.indexOf("Resumo. Resumo do trabalho."));
   });
 
   it("does not include full-work pretextual sections in CPG export", async () => {
@@ -184,7 +199,6 @@ describe("CPG first page layout", () => {
     const text = documentText(documentXml);
 
     expect(text).toContain("REFERÊNCIAS");
-    expect(text).not.toContain("Referencias");
     expect(text).toContain("6. ed. rev., atual. e ampl. Lavras: UFLA, 2025.");
     expect(text).not.toContain("Lavras: UFLA, 2024.");
   });

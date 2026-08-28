@@ -185,17 +185,17 @@ export function cmToTwip(valueInCm: number): number {
 export const CPG_RULES = {
   source: "Templates do Congresso de Pós-Graduação da UFLA (CPG)",
   margins: {
-    topCm: 3,
-    bottomCm: 2,
+    topCm: 3.5,
+    bottomCm: 2.5,
     leftCm: 3,
-    rightCm: 2,
-    topTwip: cmToTwip(3),
-    bottomTwip: cmToTwip(2),
+    rightCm: 3,
+    topTwip: cmToTwip(3.5),
+    bottomTwip: cmToTwip(2.5),
     leftTwip: cmToTwip(3),
-    rightTwip: cmToTwip(2),
+    rightTwip: cmToTwip(3),
   },
   typography: {
-    fontFamily: "Times New Roman",
+    fontFamily: "Times",
     bodyFontSizePt: 12,
     paragraphBeforePt: 6,
     titleFontSizePt: 16,
@@ -203,6 +203,8 @@ export const CPG_RULES = {
     subsectionTitleFontSizePt: 12,
     emailFontFamily: "Courier New",
     emailFontSizePt: 10,
+    captionFontFamily: "Helvetica",
+    captionFontSizePt: 10,
     abstractSideIndentCm: 0.8,
     paragraphFirstLineCm: 1.27,
     referenceHangingCm: 0.5,
@@ -212,6 +214,7 @@ export const CPG_RULES = {
     resumo_expandido_cpg: { min: 4, max: 6 },
     artigo_completo_cpg: { min: 8, max: 14 },
   },
+  pageNumbersSuppressed: true,
   output: "PDF obrigatório para submissão no CPG.",
 } as const;
 
